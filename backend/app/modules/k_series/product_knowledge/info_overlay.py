@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 from io import BytesIO
 from pathlib import Path
 from statistics import median
@@ -47,7 +48,7 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from .buyer_display import imperial_measurement
+from .buyer_display import buyer_english_text, imperial_measurement
 
 OVERLAY_SCHEMA_VERSION = "k-info-overlay-v1"
 OVERLAY_ROLES = frozenset({"feature_callout", "dimension", "spec"})
@@ -58,7 +59,33 @@ MAX_OVERLAY_ITEMS = 12
 # Only verified, customer-meaningful evidence leaves may reach the image.
 # Source metadata, raw evidence, and container-level fields are never valid
 # display paths even though they live in the same JSON document.
-OVERLAY_SOURCE_FIELDS = frozenset(
+_ADDITIONAL_SPEC_SOURCE_PREFIX = "additional_specs."
+_STABLE_ADDITIONAL_SPEC_KEY = re.compile(
+    r"[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,126}[A-Za-z0-9])?\Z"
+)
+
+
+def _additional_spec_source_key(source_field: Any) -> str | None:
+    if not isinstance(source_field, str) or not source_field.startswith(
+        _ADDITIONAL_SPEC_SOURCE_PREFIX
+    ):
+        return None
+    key = source_field[len(_ADDITIONAL_SPEC_SOURCE_PREFIX) :]
+    if not key or _STABLE_ADDITIONAL_SPEC_KEY.fullmatch(key) is None:
+        return None
+    return key
+
+
+class _OverlaySourceFields(frozenset[str]):
+    """Finite standard vocabulary plus keyed additional-spec references."""
+
+    def __contains__(self, source_field: object) -> bool:
+        return super().__contains__(source_field) or (
+            _additional_spec_source_key(source_field) is not None
+        )
+
+
+OVERLAY_SOURCE_FIELDS = _OverlaySourceFields(
     {
         "lumens",
         "color_temperature_k",
@@ -228,6 +255,19 @@ def _verified_specs_root(value: Any) -> dict[str, Any] | None:
 
 def _lookup_path(specs: dict[str, Any], source_field: str) -> tuple[Any, Any]:
     """Return (resolved evidence leaf, parent) from the exact v1 root."""
+    additional_key = _additional_spec_source_key(source_field)
+    if additional_key is not None:
+        rows = specs.get("additional_specs")
+        if not isinstance(rows, list):
+            return None, None
+        normalized_key = additional_key.casefold()
+        for item in rows:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("key") or "").strip().casefold() == normalized_key:
+                return item, rows
+        return None, None
+
     current: Any = specs
     parent: Any = None
     for segment in source_field.split("."):
@@ -242,6 +282,7 @@ def _verified_evidence_leaf(value: Any) -> bool:
     return (
         isinstance(value, dict)
         and "value" in value
+        and value.get("value") not in (None, "", [], {})
         and isinstance(value.get("raw_value"), str)
         and bool(value["raw_value"].strip())
         and isinstance(value.get("source_label"), str)
@@ -323,7 +364,14 @@ def resolve_structured_spec_text(
     rendered_unit = _display_scalar(unit)
     if rendered_unit:
         rendered = f"{rendered} {rendered_unit}"
-    return f"{OVERLAY_FIELD_LABELS[source_field]}: {rendered}"
+    additional_key = _additional_spec_source_key(source_field)
+    if additional_key is not None:
+        field_label = buyer_english_text(node.get("label_en"), limit=255)
+        if not field_label:
+            return None
+    else:
+        field_label = OVERLAY_FIELD_LABELS[source_field]
+    return f"{field_label}: {rendered}"
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:

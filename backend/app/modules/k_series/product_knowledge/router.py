@@ -162,6 +162,10 @@ from ....services.module_execution_gate import ModuleExecutionGateError
 from .generation_jobs import enqueue_generation_jobs, jobs_status
 from .buyer_display import buyer_display_structured_specs
 from .evidence_guard import canonical_package_includes, package_claim_error
+from .faq_research import (
+    evidence_number_tokens,
+    imperial_equivalent_number_tokens,
+)
 from .image_render_jobs import (
     KImageRenderError,
     download_reference_image,
@@ -1482,14 +1486,21 @@ def _structured_spec_evidence_snapshot(
     ):
         return None
     current: Any = specs
+    parent: Any = None
     found = True
     for segment in cleaned.split("."):
         if isinstance(current, dict) and segment in current:
+            parent = current
             current = current[segment]
         else:
             found = False
             break
     if found and current not in (None, "", [], {}):
+        unit = (
+            current.get("unit")
+            if isinstance(current, dict)
+            else None
+        ) or (parent.get("unit") if isinstance(parent, dict) else None)
         if isinstance(current, dict):
             raw_value = current.get("raw_value")
             value = current.get("value")
@@ -1498,7 +1509,7 @@ def _structured_spec_evidence_snapshot(
             label = str(current.get("source_label") or cleaned).strip()
             value_text = _evidence_value_text(
                 raw_value if raw_value not in (None, "") else value,
-                current.get("unit"),
+                unit,
             )
         else:
             label = cleaned
@@ -1512,6 +1523,7 @@ def _structured_spec_evidence_snapshot(
             "label": label,
             "value": value,
             "raw_value": raw_value,
+            "unit": unit,
             "value_text": value_text,
         }
     # Extensible manual/supplier fields are addressed by their stable key or
@@ -1552,6 +1564,7 @@ def _structured_spec_evidence_snapshot(
                 "label": str(item.get("label") or item.get("key") or cleaned),
                 "value": value,
                 "raw_value": raw_value,
+                "unit": item.get("unit"),
                 "value_text": value_text,
             }
     return None
@@ -1843,8 +1856,26 @@ def _selling_point_support_error(
     )
     support = f"{fact} {operator_bridge}".strip()
 
-    claim_numbers = set(re.findall(r"\d+(?:\.\d+)?", claim))
-    support_numbers = set(re.findall(r"\d+(?:\.\d+)?", support))
+    claim_numbers = evidence_number_tokens(bullet.text)
+    support_numbers = evidence_number_tokens(
+        " ".join(
+            str(snapshot.get(key) or "")
+            for key in (
+                "path",
+                "label",
+                "key",
+                "value_text",
+                "value",
+                "raw_value",
+            )
+        )
+    )
+    metric_value = snapshot.get("value")
+    if metric_value in (None, "", [], {}):
+        metric_value = snapshot.get("raw_value")
+    support_numbers.update(
+        imperial_equivalent_number_tokens(metric_value, snapshot.get("unit"))
+    )
     package_items = canonical_package_includes(package_includes, structured_specs)
     if re.search(r"\b\d+\s*(?:-|\s)?\s*(?:piece|pieces|pc|pcs)\b", claim):
         support_numbers.add(str(len(package_items)))

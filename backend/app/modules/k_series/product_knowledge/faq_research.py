@@ -13,7 +13,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlparse
 
-from .buyer_display import buyer_display_structured_specs
+from .buyer_display import buyer_display_structured_specs, imperial_measurement
 
 
 _FORUM_DOMAINS = (
@@ -301,6 +301,35 @@ def _canonical_number(value: str) -> str:
     return "0" if rendered in {"-0", ""} else rendered
 
 
+def evidence_number_tokens(value: Any) -> set[str]:
+    """Return canonical decimal tokens without splitting decimal values."""
+
+    if value is None or isinstance(value, bool):
+        return set()
+    return {
+        _canonical_number(match.group(0))
+        for match in _SPEC_NUMBER.finditer(str(value))
+    }
+
+
+def imperial_equivalent_number_tokens(value: Any, unit: Any) -> set[str]:
+    """Project one verified metric value through the buyer-display converter."""
+
+    converted = imperial_measurement(value, unit)
+    if converted is not None:
+        return evidence_number_tokens(converted[0])
+
+    # Normalized specs occasionally retain a compound/raw string while keeping
+    # the unit separately (for example ``17×17×12`` + ``cm``). Convert each
+    # factual scalar through the same public converter and rounding path.
+    output: set[str] = set()
+    for token in evidence_number_tokens(value):
+        scalar = imperial_measurement(token, unit)
+        if scalar is not None:
+            output.update(evidence_number_tokens(scalar[0]))
+    return output
+
+
 def structured_spec_number_tokens(structured_specs: Any) -> set[str]:
     """Collect only factual spec values plus their US buyer-display numbers.
 
@@ -323,10 +352,24 @@ def structured_spec_number_tokens(structured_specs: Any) -> set[str]:
             return
         if value is None or isinstance(value, bool):
             return
-        output.update(_canonical_number(match.group(0)) for match in _SPEC_NUMBER.finditer(str(value)))
+        output.update(evidence_number_tokens(value))
 
-    def visit(value: Any) -> None:
+    def visit(value: Any, inherited_unit: Any = None) -> None:
         if isinstance(value, dict):
+            unit = value.get("unit") or inherited_unit
+            metric_value: Any = value.get("value")
+            if metric_value in (None, "", [], {}):
+                if value.get("min") is not None or value.get("max") is not None:
+                    metric_value = {
+                        "min": value.get("min"),
+                        "max": value.get("max"),
+                    }
+                else:
+                    metric_value = value.get("raw_value")
+            if unit and metric_value not in (None, "", [], {}):
+                output.update(
+                    imperial_equivalent_number_tokens(metric_value, unit)
+                )
             for nested_key, nested in value.items():
                 key = str(nested_key).casefold()
                 if key in _SPEC_METADATA_SUBTREE_KEYS:
@@ -334,11 +377,11 @@ def structured_spec_number_tokens(structured_specs: Any) -> set[str]:
                 if key in _SPEC_FACT_VALUE_KEYS:
                     collect_fact_value(nested)
                 elif isinstance(nested, (dict, list)):
-                    visit(nested)
+                    visit(nested, unit)
             return
         if isinstance(value, list):
             for nested in value:
-                visit(nested)
+                visit(nested, inherited_unit)
 
     visit(structured_specs or {})
     buyer_display = buyer_display_structured_specs(
@@ -474,6 +517,19 @@ def validate_generated_faq(
             for ref in (raw.get("evidence_refs") or [])
             if str(ref).strip() in sources
         ]
+        ref_clusters: set[str] = set()
+        for ref in refs:
+            source_cluster = str(sources[ref].get("intent_cluster") or "").strip()
+            if source_cluster:
+                ref_clusters.add(source_cluster)
+            else:
+                ref_clusters.update(source_clusters.get(ref, set()))
+        resolved_cluster = (
+            next(iter(ref_clusters))
+            if len(ref_clusters) == 1
+            else str(raw.get("intent_cluster") or "buyer_concern").strip()
+            or "buyer_concern"
+        )
         key = _question_key(question)
         reason = ""
         if not question or not answer:
@@ -486,9 +542,13 @@ def validate_generated_faq(
             reason = "missing_serper_evidence"
         elif not any(_matches_source(question, str(sources[ref].get("question") or "")) for ref in refs):
             reason = "question_does_not_match_evidence"
+        elif len(ref_clusters) > 1:
+            reason = "evidence_refs_cross_intent_clusters"
         elif any(
             _matches_source(question, accepted_item["question"])
             for accepted_item in accepted
+            if str(accepted_item.get("intent_cluster") or "buyer_concern")
+            == resolved_cluster
         ):
             reason = "duplicate_question_intent"
         else:
@@ -507,9 +567,7 @@ def validate_generated_faq(
                 "question": question,
                 "answer": answer,
                 "evidence_refs": refs,
-                "intent_cluster": raw.get("intent_cluster")
-                or sources[refs[0]].get("intent_cluster")
-                or "buyer_concern",
+                "intent_cluster": resolved_cluster,
             }
         )
 

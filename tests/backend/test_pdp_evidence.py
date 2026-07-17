@@ -430,6 +430,27 @@ def test_manual_approval_rejects_duplicate_ids_and_freezes_evidence_snapshot() -
         business_context="independent_store",
         scope_mode="production",
         canonical_language="en",
+        target_market="US",
+        structured_specs_json={
+            "schema_version": "1.0",
+            "source": {
+                "platform": "1688",
+                "offer_id": "123456",
+                "url": "https://detail.1688.com/offer/123456.html",
+            },
+            "additional_specs": [
+                {
+                    "key": "capacity_pot",
+                    "label": "主锅容量",
+                    "label_en": "Main Pot Capacity",
+                    "value": 1.4,
+                    "value_en": "1.4",
+                    "unit": "L",
+                    "raw_value": "1.4升",
+                    "source_label": "主锅容量",
+                }
+            ],
+        },
     )
     db.add(product)
     db.commit()
@@ -468,12 +489,11 @@ def test_manual_approval_rejects_duplicate_ids_and_freezes_evidence_snapshot() -
         ApproveSellingPointsRequest(
             bullets=[
                 SellingPointBullet(
-                    id="manual-unique",
-                    category="operator",
-                    text="Compact storage",
+                    id="additional-spec-unique",
+                    category="capacity",
+                    text="1.5 qt main pot capacity",
                     importance_score=1,
-                    evidence="operator_fact",
-                    evidence_excerpt="Operator verified compact storage",
+                    evidence="spec:additional_specs.capacity_pot",
                     review_decision="approve",
                 )
             ]
@@ -483,11 +503,11 @@ def test_manual_approval_rejects_duplicate_ids_and_freezes_evidence_snapshot() -
         user,
     )
     assert response.bullets[0].verification_status == "verified"
-    assert response.bullets[0].evidence_snapshot == {
-        "evidence": "operator_fact",
-        "kind": "operator_fact",
-        "value_text": "Operator verified compact storage",
-    }
+    assert response.bullets[0].evidence == "spec:additional_specs.capacity_pot"
+    assert response.bullets[0].evidence_excerpt == "1.5 qt"
+    assert response.bullets[0].evidence_snapshot is not None
+    assert response.bullets[0].evidence_snapshot["path"] == "capacity_pot"
+    assert response.bullets[0].evidence_snapshot["value_text"] == "1.5 qt"
     assert len(response.bullets[0].evidence_digest or "") == 64
     db.refresh(product)
     assert _selling_points_snapshot(product)["digest"] == (

@@ -57,6 +57,7 @@ from .category_resolver import bind_google_category_id, category_is_bound
 from .buyer_display import buyer_display_structured_specs
 from .errors import KProductNotFoundError
 from .evidence_guard import (
+    TitleEvidenceConsistencyError,
     canonical_package_includes,
     enforce_package_evidence_consistency,
     enforce_title_evidence_consistency,
@@ -3499,6 +3500,86 @@ def _i_system_asset_id(asset: KProductKnowledgeMediaAsset) -> str | None:
     return None
 
 
+def _faq_question_clusters(research: Any) -> list[dict[str, Any]]:
+    """Project FAQ research into deterministic, source-backed question clusters.
+
+    The copy provider receives this compact contract instead of having to infer
+    cluster membership from two loosely-related maps.  Source IDs and questions
+    stay server-owned; the model is only allowed to author an answer.
+    """
+
+    if not isinstance(research, dict):
+        return []
+    raw_sources = research.get("sources")
+    if not isinstance(raw_sources, list):
+        return []
+    sources = [
+        source
+        for source in raw_sources
+        if isinstance(source, dict)
+        and str(source.get("id") or "").strip()
+        and str(source.get("question") or "").strip()
+    ]
+    sources_by_id = {
+        str(source.get("id")).strip(): source
+        for source in sources
+    }
+    ordered_clusters: list[tuple[str, list[str]]] = []
+    seen_clusters: set[str] = set()
+    raw_clusters = research.get("clusters")
+    if isinstance(raw_clusters, dict):
+        for raw_cluster, raw_ids in raw_clusters.items():
+            cluster = str(raw_cluster or "").strip()
+            if not cluster or cluster in seen_clusters or not isinstance(raw_ids, list):
+                continue
+            source_ids = [
+                str(source_id).strip()
+                for source_id in raw_ids
+                if str(source_id).strip() in sources_by_id
+            ]
+            if not source_ids:
+                continue
+            seen_clusters.add(cluster)
+            ordered_clusters.append((cluster, source_ids))
+    for source in sources:
+        cluster = str(source.get("intent_cluster") or "buyer_concern").strip()
+        if not cluster or cluster in seen_clusters:
+            continue
+        source_ids = [
+            str(candidate.get("id")).strip()
+            for candidate in sources
+            if str(candidate.get("intent_cluster") or "buyer_concern").strip()
+            == cluster
+        ]
+        if source_ids:
+            seen_clusters.add(cluster)
+            ordered_clusters.append((cluster, source_ids))
+
+    output: list[dict[str, Any]] = []
+    for cluster, source_ids in ordered_clusters:
+        cluster_sources = []
+        for source_id in source_ids:
+            source = sources_by_id[source_id]
+            cluster_sources.append(
+                {
+                    "id": source_id,
+                    "question": str(source.get("question") or "").strip(),
+                    "snippet": str(source.get("snippet") or "").strip(),
+                    "source_type": str(source.get("source_type") or "").strip(),
+                }
+            )
+        if cluster_sources:
+            output.append(
+                {
+                    "intent_cluster": cluster,
+                    "sources": cluster_sources,
+                    "preferred_question": cluster_sources[0]["question"],
+                    "preferred_evidence_refs": [cluster_sources[0]["id"]],
+                }
+            )
+    return output
+
+
 class KWorkflowOrchestratorV1(KProductKnowledgeWorkflowEngine):
     """K-series product knowledge orchestrator with image-system separation."""
 
@@ -4234,7 +4315,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         key: ModuleExecutionKey,
         gate_context: ModuleExecutionContext,
     ) -> dict[str, Any]:
-        """Rewrite spec-number-parroting FAQ once, then fail-safe by dropping it."""
+        """Regenerate missing/invalid FAQ once from server-owned research clusters."""
 
         validated = validate_generated_faq(
             result,
@@ -4252,20 +4333,69 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             and item.get("reason") == "answer_repeats_product_specification_number"
             and str(item.get("question") or "").strip()
         }
-        raw_faq = result.get("page_faq")
-        if not numeric_questions or not isinstance(raw_faq, list):
-            return validated
-        rewrite_items = [
-            item
-            for item in raw_faq
+        clusters = _faq_question_clusters(research)
+        accepted = [
+            dict(item)
+            for item in (validated.get("page_faq") or [])
             if isinstance(item, dict)
-            and str(item.get("question") or "").strip() in numeric_questions
         ]
+        target_count = min(3, len(clusters))
+        quality_ready = research.get("quality_ready") is True
+        eligible = isinstance(quality, dict) and quality.get("eligible_for_schema") is True
+        if not quality_ready or target_count < 2 or (
+            eligible and len(accepted) >= target_count
+        ):
+            return validated
+
+        accepted_clusters = {
+            str(item.get("intent_cluster") or "buyer_concern").strip()
+            for item in accepted
+        }
+        accepted_questions = {
+            str(item.get("question") or "").strip().casefold()
+            for item in accepted
+        }
+        requested_count = max(
+            target_count - len(accepted),
+            2 - len(accepted_clusters),
+            1 if not eligible else 0,
+        )
+        rewrite_items: list[dict[str, Any]] = []
+        for cluster in clusters:
+            intent_cluster = str(cluster.get("intent_cluster") or "").strip()
+            question = str(cluster.get("preferred_question") or "").strip()
+            refs = cluster.get("preferred_evidence_refs")
+            evidence_refs = (
+                [str(ref).strip() for ref in refs if str(ref).strip()]
+                if isinstance(refs, list)
+                else []
+            )
+            if (
+                not intent_cluster
+                or not question
+                or not evidence_refs
+                or intent_cluster in accepted_clusters
+                or question.casefold() in accepted_questions
+            ):
+                continue
+            rewrite_items.append(
+                {
+                    "question": question,
+                    "answer": "",
+                    "evidence_refs": evidence_refs,
+                    "intent_cluster": intent_cluster,
+                }
+            )
+            if len(rewrite_items) >= requested_count:
+                break
         if not rewrite_items:
             return validated
         rewrite_audit: dict[str, Any] = {
             "attempted": True,
             "requested_count": len(rewrite_items),
+            "target_count": target_count,
+            "initial_accepted_count": len(accepted),
+            "initial_dropped": list(dropped or []),
             "status": "failed",
         }
         try:
@@ -4276,15 +4406,18 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 gate_context=gate_context,
                 payload={
                     "module_id": MODULE_KEY,
-                    "task": "faq_answer_rewrite",
+                    "task": "faq_cluster_rewrite",
                     "instruction": (
-                        "Rewrite only each FAQ answer. Keep question, evidence_refs, and "
-                        "intent_cluster unchanged. Answer with practical advice, method, "
-                        "or tradeoffs; never repeat a product-specific number. Return only "
-                        "JSON with page_faq."
+                        "Write only the answer for every supplied canonical research "
+                        "question. Copy question, evidence_refs, and intent_cluster "
+                        "unchanged. Use the cited source snippets plus approved facts; "
+                        "answer with practical advice, method, or tradeoffs. Never repeat "
+                        "a product-specific number. Return only JSON with page_faq."
                     ),
                     "page_faq": rewrite_items,
-                    "faq_research": research,
+                    "faq_question_clusters": clusters,
+                    "selling_points_approved": approved_points,
+                    "structured_specs_json": structured_specs or {},
                     "forbidden_product_spec_numbers": sorted(
                         {
                             *structured_spec_number_tokens(structured_specs),
@@ -4304,7 +4437,11 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 ).strip()
                 for item in rewritten_items
                 if isinstance(item, dict)
-                and str(item.get("question") or "").strip() in numeric_questions
+                and str(item.get("question") or "").strip()
+                in {
+                    str(original.get("question") or "").strip()
+                    for original in rewrite_items
+                }
                 and str(item.get("answer") or "").strip()
             }
             safe_rewrites: list[dict[str, Any]] = []
@@ -4323,12 +4460,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 for item in safe_rewrites
             }
             retry_input = dict(result)
-            retry_input["page_faq"] = [
-                safe_by_question.get(str(item.get("question") or "").strip(), item)
-                if isinstance(item, dict)
-                else item
-                for item in raw_faq
-            ]
+            retry_input["page_faq"] = [*accepted, *safe_by_question.values()]
             validated = validate_generated_faq(
                 retry_input,
                 research,
@@ -4336,29 +4468,42 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 structured_specs=structured_specs,
                 package_includes=package_includes,
             )
-            final_dropped = (validated.get("faq_quality") or {}).get("dropped") or []
-            repeated = sum(
-                1
-                for item in final_dropped
-                if isinstance(item, dict)
-                and item.get("reason")
-                == "answer_repeats_product_specification_number"
-            )
+            final_quality = validated.get("faq_quality") or {}
+            final_count = int(final_quality.get("accepted_count") or 0)
+            final_eligible = final_quality.get("eligible_for_schema") is True
             rewrite_audit.update(
                 {
-                    "status": "succeeded" if repeated == 0 else "discarded_after_retry",
-                    "discarded_after_retry": repeated,
+                    "status": (
+                        "succeeded"
+                        if final_eligible and final_count >= min(2, target_count)
+                        else "partial"
+                        if final_count > len(accepted)
+                        else "discarded_after_retry"
+                    ),
+                    "accepted_after_retry": final_count,
+                    "discarded_after_retry": max(
+                        0,
+                        len(rewrite_items) - (final_count - len(accepted)),
+                    ),
                 }
             )
         except Exception as exc:  # noqa: BLE001 - FAQ never blocks copy/P
             logger.warning(
-                "FAQ numeric-answer rewrite degraded error=%s",
+                "FAQ research-cluster rewrite degraded error=%s",
                 exc.__class__.__name__,
                 exc_info=True,
             )
             rewrite_audit["error_class"] = exc.__class__.__name__
         final_quality = dict(validated.get("faq_quality") or {})
-        final_quality["numeric_answer_rewrite"] = rewrite_audit
+        final_quality["faq_cluster_rewrite"] = rewrite_audit
+        if numeric_questions:
+            # Compatibility receipt for Round 3: numeric FAQ still follows the
+            # same single cluster rewrite, never a second provider attempt.
+            final_quality["numeric_answer_rewrite"] = {
+                "attempted": True,
+                "requested_count": len(numeric_questions),
+                "status": rewrite_audit["status"],
+            }
         validated["faq_quality"] = final_quality
         return validated
 
@@ -4413,6 +4558,11 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "sources": [],
                 "source_count": 0,
             }
+        faq_question_clusters = (
+            _faq_question_clusters(faq_research)
+            if faq_research.get("quality_ready") is True
+            else []
+        )
         skill = copy_skill_context_for_channel(channel)
         gate_context = self.gate_resolver(
             self.db,
@@ -4444,6 +4594,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "final_keywords": final_keywords,
             "evidence_digest": evidence_digest,
             "faq_research": faq_research,
+            # Server-projected cluster/source pairs make the allowed FAQ
+            # questions explicit; the model authors answers, not provenance.
+            "faq_question_clusters": faq_question_clusters,
             "site_brand": SITE_BRAND,
             "forbidden_brand_terms": normalized_brand_terms(product),
         }
@@ -4479,18 +4632,29 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 key=key,
                 gate_context=gate_context,
             )
-            # The neutral identity comes from the reviewed main keyword rather
-            # than the raw long product name, which may itself contain an
-            # unsupported legacy claim.
-            result = enforce_title_evidence_consistency(
-                result,
-                product_name=product.primary_keyword or product.product_type,
-                product_type=product.product_type,
-                site_brand=SITE_BRAND,
-                approved_selling_points={"bullets": approved_points},
-                structured_specs=product.structured_specs_json,
-                package_includes=package_includes,
-            )
+            try:
+                result = enforce_title_evidence_consistency(
+                    result,
+                    # product_name_en is the only customer identity fallback.
+                    # A keyword must never replace a degenerated product title.
+                    product_name=product.product_name_en,
+                    product_type=product.product_type,
+                    category_name=(
+                        product.category_path
+                        or product.merchant_product_type
+                        or product.category_hint
+                    ),
+                    site_brand=SITE_BRAND,
+                    approved_selling_points={"bullets": approved_points},
+                    structured_specs=product.structured_specs_json,
+                    package_includes=package_includes,
+                )
+            except TitleEvidenceConsistencyError as exc:
+                raise KWorkflowExecutionError(
+                    "MARKETING_COPY_TITLE_DEGENERATE",
+                    str(exc),
+                    status_code=409,
+                ) from exc
         result = _stamp_keyword_coverage(result, final_keywords)
         result["evidence_contract"] = "pdp-evidence-v1"
         result["evidence_digest"] = evidence_digest

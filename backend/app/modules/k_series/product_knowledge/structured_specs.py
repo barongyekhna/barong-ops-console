@@ -631,6 +631,7 @@ def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
         item: dict[str, Any] = {
             "key": stable_key,
             "label": label[:255],
+            "source_label": label[:255],
             "value": value[:1000],
             "raw_value": value[:1000],
             "evidence": "operator_fact",
@@ -1229,6 +1230,7 @@ def _additional_spec(
     item = {
         "key": ascii_key[:128],
         "label": label[:255],
+        "source_label": label[:255],
         "value": raw_value[:1000],
         "raw_value": raw_value[:1000],
     }

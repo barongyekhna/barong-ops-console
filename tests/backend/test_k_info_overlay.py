@@ -139,6 +139,107 @@ def test_overlay_resolves_only_supplier_backed_evidence_values() -> None:
     assert resolve_structured_spec_text(specs, "runtime_h") == "Runtime: 8–12 h"
 
 
+def test_additional_spec_overlay_resolves_by_stable_key_and_renders_label_en() -> None:
+    source = _png()
+    specs = _verified_specs()
+    specs["additional_specs"] = [
+        {
+            "key": "capacity_pot",
+            "label": "主锅容量",
+            "label_en": "Main Pot Capacity",
+            "value": 1.4,
+            "unit": "L",
+            "raw_value": "1.4升",
+            "source_label": "主锅容量",
+        }
+    ]
+    source_field = "additional_specs.capacity_pot"
+    overlay = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "role": "feature_callout",
+        "items": [
+            {
+                "type": "callout",
+                "source_field": source_field,
+                "label": "Model-authored label must be ignored",
+                "anchor": {"x": 0.42, "y": 0.5},
+                "text_anchor": {"x": 0.68, "y": 0.28},
+                "leader_direction": "right",
+            }
+        ],
+    }
+
+    assert source_field in OVERLAY_SOURCE_FIELDS
+    assert normalize_overlay_contract(overlay) is not None
+    assert (
+        resolve_structured_spec_text(specs, source_field)
+        == "Main Pot Capacity: 1.4 L"
+    )
+    assert (
+        resolve_structured_spec_text(specs, source_field, target_market="US")
+        == "Main Pot Capacity: 1.5 qt"
+    )
+
+    rendered, report = compose_info_overlay(
+        source,
+        overlay,
+        specs,
+        target_market="US",
+    )
+    assert rendered != source
+    assert report == {"status": "applied", "applied_items": 1, "warnings": []}
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["label_en", "value", "raw_value", "source_label"],
+)
+def test_additional_spec_overlay_requires_english_label_and_real_evidence(
+    missing: str,
+) -> None:
+    specs = _verified_specs()
+    item = {
+        "key": "capacity_pot",
+        "label": "主锅容量",
+        "label_en": "Main Pot Capacity",
+        "value": 1.4,
+        "unit": "L",
+        "raw_value": "1.4升",
+        "source_label": "主锅容量",
+    }
+    item.pop(missing)
+    specs["additional_specs"] = [item]
+
+    assert (
+        resolve_structured_spec_text(specs, "additional_specs.capacity_pot")
+        is None
+    )
+
+
+def test_additional_spec_overlay_rejects_non_english_label_and_unknown_key() -> None:
+    specs = _verified_specs()
+    specs["additional_specs"] = [
+        {
+            "key": "capacity_pot",
+            "label": "主锅容量",
+            "label_en": "主锅容量",
+            "value": 1.4,
+            "unit": "L",
+            "raw_value": "1.4升",
+            "source_label": "主锅容量",
+        }
+    ]
+
+    assert (
+        resolve_structured_spec_text(specs, "additional_specs.capacity_pot")
+        is None
+    )
+    assert (
+        resolve_structured_spec_text(specs, "additional_specs.capacity_pan")
+        is None
+    )
+
+
 def test_overlay_contract_rejects_unbound_text_and_bad_coordinates() -> None:
     value = _overlay()
     first = value["items"][0]  # type: ignore[index]

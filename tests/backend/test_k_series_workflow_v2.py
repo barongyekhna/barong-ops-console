@@ -924,6 +924,10 @@ def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
 
     assert "faq_research" not in provider_steps
     assert captured_copy_input["faq_research"] == stored_research
+    assert [
+        item["intent_cluster"]
+        for item in captured_copy_input["faq_question_clusters"]
+    ] == ["weather_use", "pre_trip_check"]
     assert generated.faq_research_json == stored_research
     assert generated.marketing_copy_json["faq_quality"]["eligible_for_schema"] is True
     assert generated.marketing_copy_json["faq_quality"]["evidence_autobind_count"] == 2
@@ -937,6 +941,47 @@ def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
         item["question"]: item["reason"]
         for item in generated.marketing_copy_json["faq_quality"]["dropped"]
     }["How do I get this pump ready for winter?"] == "missing_serper_evidence"
+
+
+def test_marketing_copy_degenerate_title_uses_product_name_not_primary_keyword() -> None:
+    db, user, scope, engine, product = _setup_engine()
+    _approve_operator_point(product)
+    product.product_name_en = "DS-308 Portable Steel Pump"
+    product.primary_keyword = "wholesale pump"
+    product.category_hint = "Industrial Pumps"
+    product.faq_research_json = {
+        "status": "insufficient",
+        "quality_ready": False,
+        "sources": [],
+    }
+    db.add(product)
+    db.commit()
+
+    def provider(key: ModuleExecutionKey, _payload: dict[str, Any]) -> dict[str, Any]:
+        if key.step_name == "marketing_copy_generation":
+            return {
+                "channel": "dtc",
+                "product_page_copy": {"key_bullets": []},
+                "page_faq": [],
+                "seo": {"title": "Product", "h1": "Barong Yekhna"},
+            }
+        if key.step_name == "translate_zh":
+            return {"content": "便携钢泵"}
+        raise AssertionError(key.step_name)
+
+    engine.provider_client = provider
+    generated = engine.generate_marketing_copy(
+        product_id=product.id,
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert generated.marketing_copy_json["seo"] == {
+        "title": "Portable Steel Pump",
+        "h1": "Portable Steel Pump",
+    }
+    assert "wholesale" not in str(generated.marketing_copy_json["seo"]).casefold()
 
 
 def test_marketing_copy_rejects_evidence_changed_during_provider_call() -> None:

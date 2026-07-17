@@ -9,6 +9,13 @@ from typing import Any
 
 _TITLE_SEPARATORS = re.compile(r"\s*(?:\||—|–|•|:)\s*")
 _TOKEN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+_SUPPLIER_MODEL_HYPHENATED = re.compile(
+    r"(?<![a-z0-9-])(?:[a-z]{2,}[-_]\d[a-z0-9_-]*)(?![a-z0-9])",
+    re.IGNORECASE,
+)
+_SUPPLIER_MODEL_COMPACT = re.compile(
+    r"(?<![A-Za-z0-9])[A-Z]{2,}\d{3,}[A-Z0-9-]*(?![A-Za-z0-9])"
+)
 _STOPWORDS = {
     "a",
     "an",
@@ -39,6 +46,11 @@ _UNTRUSTED_IDENTITY_CLAIMS = {
     "certified",
     "guaranteed",
 }
+
+
+class TitleEvidenceConsistencyError(ValueError):
+    """Raised when neither generated title copy nor product identity is usable."""
+
 
 # Concrete set components are claims, not harmless category language.  A legacy
 # supplier title may say "kettle" (or "7-piece") even when no reviewed package
@@ -355,10 +367,20 @@ def _flatten_text(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _strip_supplier_model_tokens(value: Any) -> str:
+    """Remove supplier-style model identifiers from customer-facing identity."""
+
+    clean = html.unescape(str(value or ""))
+    clean = _SUPPLIER_MODEL_HYPHENATED.sub(" ", clean)
+    clean = _SUPPLIER_MODEL_COMPACT.sub(" ", clean)
+    return re.sub(r"\s+", " ", clean).strip(" -_/|:;")
+
+
 def title_evidence_corpus(
     *,
     product_name: str | None,
     product_type: str | None,
+    category_name: str | None = None,
     site_brand: str,
     approved_selling_points: dict[str, Any],
     structured_specs: dict[str, Any] | None,
@@ -368,13 +390,15 @@ def title_evidence_corpus(
     # themselves contain unsupported modifiers. Never let those modifiers
     # self-prove merely because they appeared in the old title.
     includes = canonical_package_includes(package_includes, structured_specs)
+    clean_product_name = _strip_supplier_model_tokens(product_name)
+    clean_category_name = _strip_supplier_model_tokens(category_name or product_type)
     identity = _downgrade_unverified_piece_claims(
-        f"{product_name or ''} {product_type or ''}", len(includes)
+        f"{clean_product_name} {clean_category_name}", len(includes)
     )
     identity_tokens = _claim_tokens(identity)
     tokens = identity_tokens - _UNTRUSTED_IDENTITY_CLAIMS
     unsupported_identity_components = unsupported_component_terms(
-        f"{product_name or ''} {product_type or ''}",
+        f"{clean_product_name} {clean_category_name}",
         package_includes=package_includes,
         structured_specs=structured_specs,
     )
@@ -400,9 +424,7 @@ def _neutral_fallback(
     package_includes: Any = None,
     structured_specs: dict[str, Any] | None = None,
 ) -> str:
-    original = re.sub(
-        r"\s+", " ", html.unescape(str(product_name or product_type or "Product"))
-    ).strip()
+    original = _strip_supplier_model_tokens(product_name or product_type or "Product")
     includes = canonical_package_includes(package_includes, structured_specs)
     original = _downgrade_unverified_piece_claims(original, len(includes))
     unsupported = unsupported_component_terms(
@@ -424,6 +446,22 @@ def _neutral_fallback(
         and word.casefold().strip("-/") not in unsupported_tokens
     ]
     return " ".join(kept).strip() or "Product"
+
+
+def _title_is_degenerate(value: Any, *, site_brand: str) -> bool:
+    """Return whether a title has fewer than two distinct identity words."""
+
+    clean = _strip_supplier_model_tokens(value)
+    brand_tokens = _claim_tokens(site_brand)
+    meaningful = {
+        token
+        for token in _TOKEN.findall(clean.casefold())
+        if token not in _STOPWORDS
+        and token not in brand_tokens
+        and token not in {"product", "products"}
+        and not token.isdigit()
+    }
+    return len(meaningful) < 2
 
 
 def project_approved_selling_points(
@@ -461,10 +499,10 @@ def _supported_title(
     *,
     corpus: set[str],
     fallback: str,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], bool]:
     clean = re.sub(r"\s+", " ", html.unescape(str(value or ""))).strip()
     if not clean:
-        return fallback, []
+        return fallback, [], True
     kept: list[str] = []
     removed: list[str] = []
     for segment in [part.strip() for part in _TITLE_SEPARATORS.split(clean) if part.strip()]:
@@ -473,7 +511,7 @@ def _supported_title(
             kept.append(segment)
         else:
             removed.append(segment)
-    return (" | ".join(kept) if kept else fallback), removed
+    return (" | ".join(kept) if kept else fallback), removed, not kept
 
 
 def enforce_title_evidence_consistency(
@@ -481,6 +519,7 @@ def enforce_title_evidence_consistency(
     *,
     product_name: str | None,
     product_type: str | None,
+    category_name: str | None = None,
     site_brand: str,
     approved_selling_points: dict[str, Any],
     structured_specs: dict[str, Any] | None,
@@ -492,30 +531,43 @@ def enforce_title_evidence_consistency(
     seo = dict(output.get("seo") or {})
     fallback = _neutral_fallback(
         product_name,
-        product_type,
+        None,
         package_includes=package_includes,
         structured_specs=structured_specs,
     )
     corpus = title_evidence_corpus(
         product_name=product_name,
         product_type=product_type,
+        category_name=category_name,
         site_brand=site_brand,
         approved_selling_points=approved_selling_points,
         structured_specs=structured_specs,
         package_includes=package_includes,
     )
     removed: dict[str, list[str]] = {}
+    fallback_fields: list[str] = []
     for field in ("title", "h1"):
-        clean, dropped = _supported_title(
+        clean, dropped, used_fallback = _supported_title(
             seo.get(field), corpus=corpus, fallback=fallback
         )
+        if _title_is_degenerate(clean, site_brand=site_brand):
+            if _title_is_degenerate(fallback, site_brand=site_brand):
+                raise TitleEvidenceConsistencyError(
+                    f"SEO {field} degenerated and product_name_en does not provide "
+                    "at least two meaningful non-brand words."
+                )
+            clean = fallback
+            used_fallback = True
+        if used_fallback:
+            fallback_fields.append(field)
         seo[field] = clean
         if dropped:
             removed[field] = dropped
     output["seo"] = seo
     output["evidence_consistency"] = {
-        "status": "sanitized" if removed else "passed",
+        "status": "sanitized" if removed or fallback_fields else "passed",
         "removed_unsupported_title_segments": removed,
+        "product_name_fallback_fields": fallback_fields,
         "approved_selling_points_only": True,
     }
     return output

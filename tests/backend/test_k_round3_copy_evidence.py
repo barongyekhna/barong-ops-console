@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.app.modules.k_series.product_knowledge.evidence_guard import (
+    TitleEvidenceConsistencyError,
     enforce_package_evidence_consistency,
     enforce_title_evidence_consistency,
     package_claim_error,
@@ -157,6 +158,67 @@ def test_title_fallback_cannot_restore_unverified_piece_or_component_claims() ->
     assert "cutting" not in rendered
     assert "board" not in rendered
     assert "camping cookware set" in rendered
+
+
+def test_degenerate_titles_fall_back_to_clean_product_name_en() -> None:
+    guarded = enforce_title_evidence_consistency(
+        {"seo": {"title": "Product", "h1": "Barong Yekhna"}},
+        product_name="DS-308 3-in-1 Portable Camping Cookware",
+        product_type="simple_product",
+        category_name="Camping Cookware",
+        site_brand="Barong Yekhna",
+        approved_selling_points={"bullets": []},
+        structured_specs={},
+    )
+
+    assert guarded["seo"] == {
+        "title": "3-in-1 Portable Camping Cookware",
+        "h1": "3-in-1 Portable Camping Cookware",
+    }
+    assert guarded["evidence_consistency"]["product_name_fallback_fields"] == [
+        "title",
+        "h1",
+    ]
+
+
+def test_degenerate_title_blocks_when_product_name_en_is_also_degenerate() -> None:
+    with pytest.raises(
+        TitleEvidenceConsistencyError,
+        match="product_name_en does not provide at least two meaningful",
+    ):
+        enforce_title_evidence_consistency(
+            {"seo": {"title": "Product", "h1": "Barong Yekhna"}},
+            product_name="DS-308 Barong Yekhna Product",
+            product_type="simple_product",
+            category_name="Camping Cookware",
+            site_brand="Barong Yekhna",
+            approved_selling_points={"bullets": []},
+            structured_specs={},
+        )
+
+
+def test_normal_title_uses_name_category_and_verified_selling_point_corpus_unchanged() -> None:
+    title = "Camping Cookware | Trail Stove | Piezo Ignition"
+    guarded = enforce_title_evidence_consistency(
+        {"seo": {"title": title, "h1": title}},
+        product_name="Trail Stove",
+        product_type="simple_product",
+        category_name="Camping Cookware",
+        site_brand="Barong Yekhna",
+        approved_selling_points={
+            "bullets": [
+                {
+                    "text": "Piezo ignition starts without a separate lighter",
+                    "verification_status": "verified",
+                }
+            ]
+        },
+        structured_specs={},
+    )
+
+    assert guarded["seo"] == {"title": title, "h1": title}
+    assert guarded["evidence_consistency"]["status"] == "passed"
+    assert guarded["evidence_consistency"]["product_name_fallback_fields"] == []
 
 
 def test_selling_point_generation_uses_same_number_and_component_rules_as_approval() -> None:

@@ -102,6 +102,7 @@ def test_1688_specs_are_normalized_with_original_evidence() -> None:
         {
             "key": "supplier_attribute_12b056a932",
             "label": "输入电压",
+            "source_label": "输入电压",
             "value": "5V",
             "raw_value": "5V",
             "value_en": "5V",
@@ -281,10 +282,11 @@ def test_public_k_payloads_accept_only_operator_evidenced_specs(schema: type) ->
             "evidence_type": "operator_fact",
         },
         "additional_specs": [
-            {
-                "key": "ignition",
-                "label": "Ignition",
-                "value": "Piezo",
+                {
+                    "key": "ignition",
+                    "label": "Ignition",
+                    "source_label": "Ignition",
+                    "value": "Piezo",
                 "raw_value": "Piezo",
                 "evidence": "operator_fact",
                 "label_en": "Ignition",
