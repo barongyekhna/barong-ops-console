@@ -256,6 +256,7 @@ def test_buyer_projection_skips_untranslated_cjk_and_adds_package_contents() -> 
                 "value": "1.4升",
                 "value_en": "1.4 L",
                 "raw_value": "1.4升",
+                "unit": "L",
             },
             {
                 "key": "coating",
@@ -297,6 +298,35 @@ def test_buyer_projection_skips_untranslated_cjk_and_adds_package_contents() -> 
     html = _append_package_includes_section("<div><p>Body</p></div>", ["Pot", "Bowl"])
     assert "<h2>What's in the box</h2>" in html
     assert "<li>Pot</li><li>Bowl</li>" in html
+
+
+def test_package_contents_are_imperialized_and_fail_closed() -> None:
+    specs = {
+        "schema_version": "1.0",
+        "source": {"platform": "1688"},
+        "dimensions": {
+            "length": {
+                "value": 2,
+                "raw_value": "2 m",
+                "source_label": "Length",
+            },
+            "unit": "m",
+        },
+    }
+
+    attributes, schema = project_verified_product_specs(
+        specs,
+        package_includes=["1.4 L pot", "2 m rope", "锅"],
+    )
+
+    assert [item.model_dump() for item in attributes] == [
+        {
+            "name": "What's included",
+            "value": "1.5 qt pot",
+            "unit": None,
+        }
+    ]
+    assert [item.value for item in schema.additional_property] == ["1.5 qt pot"]
 
 
 def test_wordpress_filter_preserves_woo_owned_real_review_fields() -> None:

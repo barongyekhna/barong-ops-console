@@ -4005,6 +4005,22 @@ def generate_product_selling_points(
             product.structured_specs_json = translated_specs
         if translated_package:
             product.package_includes_json = translated_package
+        # Translation is a one-shot, source-digest-bound operation.  Persist
+        # both successes and failed request IDs before parsing the unrelated
+        # selling-point envelope, so a malformed selling response cannot cause
+        # the same supplier text to be sent for translation again next time.
+        if translated_specs is not None:
+            invalidate_evidence_outputs(product)
+            db.add(product)
+            db.commit()
+            try:
+                product = get_product(
+                    db,
+                    product_id=product_id,
+                    scope_context=scope_context,
+                )
+            except KProductKnowledgeError as exc:
+                _raise_k_error(exc)
     try:
         response = _normalize_selling_points_response(
             provider_output,

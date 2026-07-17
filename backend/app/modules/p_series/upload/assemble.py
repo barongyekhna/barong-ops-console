@@ -52,7 +52,10 @@ from ...k_series.product_knowledge.category_resolver import (
     repair_legacy_google_category_path,
 )
 from ...k_series.product_knowledge.faq_research import faq_schema_is_eligible
-from ...k_series.product_knowledge.evidence_guard import canonical_package_includes
+from ...k_series.product_knowledge.evidence_guard import (
+    canonical_package_includes,
+    enforce_package_evidence_consistency,
+)
 from ...k_series.product_knowledge.sku_allocator import ensure_product_sku
 from .description_html import (
     build_description_html,
@@ -562,15 +565,26 @@ def assemble_upload_package(
     # Legacy/malformed copy must degrade to an empty schema verdict instead of
     # making publication fail. Normal K-generated copy is always a dictionary.
     raw_copy = raw_mcj if isinstance(raw_mcj, dict) else {}
+    structured_specs = getattr(product, "structured_specs_json", None)
+    raw_package_includes = canonical_package_includes(
+        getattr(product, "package_includes_json", None),
+        structured_specs,
+    )
+    projected_package = buyer_safe_tree(
+        raw_package_includes,
+        field_path="package_includes",
+    )
     package_includes = normalize_package_includes(
-        canonical_package_includes(
-            getattr(product, "package_includes_json", None),
-            getattr(product, "structured_specs_json", None),
-        ),
+        projected_package if isinstance(projected_package, list) else [],
         reject_cjk=False,
     )
+    raw_copy = enforce_package_evidence_consistency(
+        raw_copy,
+        package_includes=package_includes,
+        structured_specs=structured_specs,
+    )
     attributes, product_schema = project_verified_product_specs(
-        getattr(product, "structured_specs_json", None),
+        structured_specs,
         package_includes=package_includes,
         target_market=str(getattr(product, "target_market", None) or "US"),
     )

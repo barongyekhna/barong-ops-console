@@ -13,6 +13,7 @@ from backend.app.modules.k_series.product_knowledge.buyer_display import (
     imperialize_text,
     kg_to_pounds,
     liters_to_quarts,
+    normalize_package_includes,
 )
 
 
@@ -28,6 +29,10 @@ def test_public_imperial_conversions_share_one_decimal_rounding() -> None:
     assert imperialize_text("Measures 160×160×110 mm and weighs 720 g.") == (
         "Measures 6.3 × 6.3 × 4.3 in and weighs 25.4 oz."
     )
+    assert normalize_package_includes(["1.4 L pot", "1. Frying pan"]) == [
+        "1.4 L pot",
+        "Frying pan",
+    ]
 
 
 @pytest.mark.parametrize(

@@ -121,13 +121,25 @@ def _buyer_measurement(
     rendered = _clean(value)
     if not rendered or contains_cjk(rendered):
         return None
+    rendered_safe = imperialize_text(rendered)
+    if not rendered_safe:
+        return None
     if target_market.strip().upper() in _IMPERIAL_MARKETS and unit:
         converted = imperial_measurement(value, unit)
         if converted is not None:
             return converted
-    safe = imperialize_text(rendered)
-    if not safe:
-        return None
+        # Some supplier/operator projections already include the unit in the
+        # value while also carrying a separate unit field.  Prefer the complete
+        # converted expression and do not append/convert the duplicate unit.
+        if rendered_safe != rendered:
+            return rendered_safe, None
+        combined = f"{rendered} {unit}"
+        combined_safe = imperialize_text(combined)
+        if combined_safe is None:
+            return None
+        if combined_safe != combined:
+            return combined_safe, None
+    safe = rendered_safe
     # A value such as ``1.4 L`` carries its own converted unit; do not append
     # the old metric unit again in n8n/schema.
     if safe != rendered and unit:
@@ -248,7 +260,11 @@ def project_verified_product_specs(
                 seen=seen,
             )
 
-    package_items = normalize_package_includes(package_includes, reject_cjk=False)
+    package_items = [
+        safe
+        for item in normalize_package_includes(package_includes, reject_cjk=False)
+        if (safe := imperialize_text(item))
+    ]
     if package_items:
         _append(
             attributes,

@@ -167,7 +167,9 @@ def normalize_package_includes(
         if not isinstance(raw, (str, int, float, Decimal)) or isinstance(raw, bool):
             continue
         text = " ".join(str(raw).split()).strip()
-        text = re.sub(r"^(?:[-*•]|\d+[.)])\s*", "", text).strip()
+        # Strip real list bullets, but never mistake a decimal measurement such
+        # as ``1.4 L pot`` for an ordered-list prefix (``1. item``).
+        text = re.sub(r"^(?:[-*•]\s*|\d+[.)]\s+)", "", text).strip()
         if not text:
             continue
         if contains_cjk(text):
