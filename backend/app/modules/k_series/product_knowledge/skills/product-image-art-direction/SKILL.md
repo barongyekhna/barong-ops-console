@@ -106,7 +106,9 @@ CONSISTENCY: same product as the reference image — do not alter product shape,
 | `proof_scene`（证据场景） | gallery ≥2 张 + description 若干 | gallery + description | 用真实证据说服 | **每张对应一条已审卖点，把证据拍出来**：抗风=火焰迎风稳定；户外烹饪=真营地(帐篷/山景/黄昏)真点火锅里真在烧冒热气；便携=嵌套网袋挨着背包。**必须是真实使用场景，禁止干净摆拍充数** |
 | `detail`（材质特写） | 0-1 | 任意 | 信任+差异化 | 微距核心差异点，放大工艺 |
 
-**图廊（gallery）铁律——至少 6 张，五类缺一不可：** `main`×1 + `feature_callout`×1 + `accessory`×1 + `dimension`×1 + `proof_scene`×≥2 = **gallery ≥6**。产品确实无配件（无 package_includes 或单件）时 accessory 可豁免，但 gallery 仍须 ≥5 且必含信息图。description 的图文模块另配 proof_scene，**不许挪用 gallery 配额**。丢任何一类 = 违规，重排图组。
+**图廊（gallery）铁律——至少 6 张，五类缺一不可：** `main`×1 + `feature_callout`×1 + `accessory`×1 + `dimension`×1 + `proof_scene`×≥2 = **gallery ≥6**。产品确实无配件（无 package_includes 或单件）时 accessory 可豁免，但 gallery 仍须 ≥5 且必含信息图。
+
+**描述区（description）配额同样是硬的——至少 3 张 4:3 横版 proof_scene**（供图文左右交替模块用；只给 1 张 = 描述区大段秃文字，违规）。**两边配额独立、互不挪用**：标准图组 = gallery 6 + description 3 = **总数 9-10 张**。丢任何一类/任何一边不足 = 违规，重排图组。
 
 **宽高比铁律（按 placement 写死，别让排版头重脚轻）：**
 - `placement=gallery` → `aspect_ratio` **1:1**（Woo 画廊标准方图）。
