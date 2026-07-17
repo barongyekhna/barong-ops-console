@@ -27,6 +27,7 @@ from backend.app.modules.k_series.product_knowledge.constants import (
 from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
+    KProductKnowledgeResearchRun,
     KProductKnowledgeVariant,
     KProductKnowledgeWorkflowExecution,
 )
@@ -39,6 +40,7 @@ from backend.app.modules.k_series.product_knowledge.schemas import (
 )
 from backend.app.modules.k_series.product_knowledge.scope_shim import KScopeContext
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
+    KWorkflowExecutionError,
     KWorkflowOrchestratorV2,
     KWorkflowStateMachineV2,
 )
@@ -779,3 +781,165 @@ def test_marketing_copy_keeps_google_id_and_p_builds_wc_category_hierarchy(
 
     assert generated.google_product_category == "7401"
     assert generated.category_hint is None
+
+
+def test_faq_research_persists_valid_status_and_distinct_real_pain_clusters() -> None:
+    db, user, _scope, engine, product = _setup_engine()
+    product.primary_keyword = "cassette stove"
+    db.add(product)
+    db.commit()
+
+    def provider(key: ModuleExecutionKey, payload: dict[str, Any]) -> dict[str, Any]:
+        assert key.step_name == "faq_research"
+        query = str(payload.get("query") or "")
+        if "problems" in query:
+            return {
+                "organic": [
+                    {
+                        "title": "Why will my camping stove not ignite?",
+                        "link": "https://www.reddit.com/r/camping/example",
+                        "snippet": "Buyers discuss ignition and fuel pressure.",
+                    }
+                ]
+            }
+        return {
+            "peopleAlsoAsk": [
+                {
+                    "question": "Does a cassette stove lose power at high altitude?",
+                    "snippet": "Performance changes as elevation rises.",
+                },
+                {
+                    "question": "Can a butane stove work in cold weather?",
+                    "snippet": "Cold affects canister pressure.",
+                },
+            ]
+        }
+
+    engine.provider_client = provider
+    research = engine._research_faq_pain_points_fail_safe(
+        product=product,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert research["quality_ready"] is True
+    assert research["intent_cluster_count"] >= 2
+    run = db.scalar(
+        select(KProductKnowledgeResearchRun).where(
+            KProductKnowledgeResearchRun.product_id == product.id,
+            KProductKnowledgeResearchRun.run_type == "faq_pain_point_research",
+        )
+    )
+    assert run is not None
+    assert run.status == "succeeded"
+
+    engine.provider_client = lambda _key, _payload: {}
+    insufficient = engine._research_faq_pain_points_fail_safe(
+        product=product,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+    assert insufficient["status"] == "insufficient"
+    insufficient_run = db.get(
+        KProductKnowledgeResearchRun,
+        UUID(str(insufficient["research_run_id"])),
+    )
+    assert insufficient_run is not None
+    assert insufficient_run.status == "needs_review"
+
+
+def test_marketing_copy_rejects_evidence_changed_during_provider_call() -> None:
+    db, user, scope, engine, product = _setup_engine()
+    _approve_operator_point(product)
+    product.structured_specs_json = {
+        "runtime_h": {"value": 2, "raw_value": "2 h", "unit": "h"}
+    }
+    db.add(product)
+    db.commit()
+
+    def provider(key: ModuleExecutionKey, _payload: dict[str, Any]) -> dict[str, Any]:
+        if key.step_name == "faq_research":
+            return {}
+        if key.step_name == "marketing_copy_generation":
+            current = db.get(KProductKnowledgeProduct, product.id)
+            assert current is not None
+            current.structured_specs_json = {
+                "runtime_h": {"value": 3, "raw_value": "3 h", "unit": "h"}
+            }
+            db.add(current)
+            db.commit()
+            return {
+                "channel": "dtc",
+                "product_page_copy": {"key_bullets": []},
+                "page_faq": [],
+                "seo": {
+                    "title": "Industrial Steel Pump",
+                    "h1": "Industrial Steel Pump",
+                },
+            }
+        if key.step_name == "translate_zh":
+            return {"content": "工业钢泵"}
+        raise AssertionError(key.step_name)
+
+    engine.provider_client = provider
+    with pytest.raises(KWorkflowExecutionError) as exc_info:
+        engine.generate_marketing_copy(
+            product_id=product.id,
+            scope_context=scope,
+            request=None,  # type: ignore[arg-type]
+            user=user,
+        )
+    assert exc_info.value.code == "MARKETING_COPY_EVIDENCE_CHANGED"
+    db.refresh(product)
+    assert product.marketing_copy_json is None
+
+
+def test_image_brief_uses_only_approved_points_and_minimal_fact_snapshot() -> None:
+    db, user, scope, engine, product = _setup_engine()
+    _approve_operator_point(product)
+    product.short_description_en = "Legacy AI windproof claim"
+    product.long_description_en = "Legacy AI home-use claim"
+    product.marketing_copy_json = {"evidence_contract": "pdp-evidence-v1"}
+    db.add(product)
+    db.commit()
+    captured: dict[str, Any] = {}
+
+    def provider(key: ModuleExecutionKey, payload: dict[str, Any]) -> dict[str, Any]:
+        if key.step_name == "image_brief_generation":
+            captured.update(payload)
+            return {
+                "image_count": 2,
+                "images": [
+                    {
+                        "position": 1,
+                        "role": "main",
+                        "placement": "gallery",
+                        "prompt": "One clean white-background main image.",
+                    },
+                    {
+                        "position": 2,
+                        "role": "proof_scene",
+                        "placement": "gallery",
+                        "prompt": "Show the approved construction in real use.",
+                        "selling_point_id": "operator-steel",
+                        "proof_intent": "A close real-use view makes the steel construction visible.",
+                    },
+                ],
+            }
+        if key.step_name == "translate_zh":
+            return {"content": "图片指令"}
+        raise AssertionError(key.step_name)
+
+    engine.provider_client = provider
+    generated = engine.generate_image_brief(
+        product_id=product.id,
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert "short_description_en" not in captured["product"]
+    assert "long_description_en" not in captured["product"]
+    assert captured["selling_points_approved"][0]["id"] == "operator-steel"
+    assert len(captured["evidence_digest"]) == 64
+    assert generated.image_instruction_json["evidence_digest"] == captured["evidence_digest"]

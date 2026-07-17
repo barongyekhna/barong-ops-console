@@ -1452,7 +1452,13 @@ def _evidence_value_text(value: Any, unit: Any = None) -> str:
     else:
         rendered = str(value or "").strip()
     clean_unit = str(unit or "").strip()
-    return f"{rendered} {clean_unit}".strip()
+    if clean_unit and not re.search(
+        rf"(?<![A-Za-z]){re.escape(clean_unit)}(?![A-Za-z])",
+        rendered,
+        re.IGNORECASE,
+    ):
+        return f"{rendered} {clean_unit}".strip()
+    return rendered
 
 
 def _structured_spec_evidence_snapshot(
@@ -1746,6 +1752,14 @@ def _normalized_evidence_text(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
 
 
+def _contains_evidence_phrase(haystack: str, phrase: str) -> bool:
+    needle = _normalized_evidence_text(phrase)
+    return bool(
+        needle
+        and re.search(rf"(?:^|\s){re.escape(needle)}(?:$|\s)", haystack)
+    )
+
+
 def _selling_point_support_error(
     bullet: SellingPointBullet,
     snapshot: dict[str, Any],
@@ -1767,9 +1781,11 @@ def _selling_point_support_error(
         return "Claim contains numbers absent from the current evidence: " + ", ".join(unsupported_numbers)
 
     for topic, terms in _EVIDENCE_TOPIC_TERMS:
-        claim_has_topic = any(_normalized_evidence_text(term) in claim for term in terms)
+        claim_has_topic = any(
+            _contains_evidence_phrase(claim, term) for term in terms
+        )
         if claim_has_topic and not any(
-            _normalized_evidence_text(term) in support for term in terms
+            _contains_evidence_phrase(support, term) for term in terms
         ):
             return f"Evidence does not support the claim topic '{topic}'."
 

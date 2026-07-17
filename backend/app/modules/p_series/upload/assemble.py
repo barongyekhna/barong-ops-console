@@ -11,6 +11,7 @@ import hashlib
 import html
 import json
 import logging
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -54,6 +55,7 @@ from .wc_categories import ensure_wc_category_path
 
 LAYOUT_SKILL_VERSION = "p-product-page-layout-v1"
 logger = logging.getLogger(__name__)
+_SLUG_STOPWORDS = {"a", "an", "and", "for", "of", "or", "the", "to", "with"}
 
 
 def _stable_hash(value: Any, *, compact: bool = False) -> str:
@@ -203,6 +205,22 @@ def _optional_text(value: Any) -> str | None:
     return normalized or None
 
 
+def _short_url_slug(value: Any) -> str | None:
+    authored = _optional_text(value)
+    if not authored:
+        return None
+    words = [
+        word
+        for word in re.findall(r"[a-z0-9]+", html.unescape(authored).casefold())
+        if word not in _SLUG_STOPWORDS
+    ]
+    if not words:
+        return None
+    # Never fall back to the long H1. If a provider violates the 3-5-word
+    # contract, deterministically keep only its first five authored words.
+    return "-".join(words[:5])
+
+
 def _seo_for_upload(marketing_copy_json: Any, product: Any) -> Seo:
     """Project K's generated SEO copy into the P upload contract.
 
@@ -230,7 +248,7 @@ def _seo_for_upload(marketing_copy_json: Any, product: Any) -> Seo:
         ),
         # Deliberately no product.slug / H1-derived fallback: a missing K slug
         # is safer than silently publishing the old 15-word permalink again.
-        url_slug=_optional_text(generated_seo.get("url_slug")),
+        url_slug=_short_url_slug(generated_seo.get("url_slug")),
     )
 
 

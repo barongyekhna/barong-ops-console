@@ -4103,6 +4103,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "Approve at least one evidence-backed selling point before generating the image brief.",
                 status_code=409,
             )
+        evidence_digest = _image_brief_evidence_digest(product, approved_points)
         channel = (product.channel or "dtc").strip().lower()
         skill = image_art_direction_skill_context()
         gate_context = self.gate_resolver(
@@ -4126,7 +4127,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "instruction": image_art_direction_instruction(),
             "art_direction_skill": skill,
             "product": sanitize_snapshot_for_generation(
-                _product_snapshot(product), product
+                _copy_evidence_product_snapshot(product), product
             ),
             # The approved set is the sole claim authority for image planning.
             # Marketing copy is intentionally not passed here: stale/unreviewed

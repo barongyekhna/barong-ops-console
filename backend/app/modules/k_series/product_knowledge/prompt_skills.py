@@ -353,7 +353,7 @@ def marketing_copy_instruction(channel: str) -> str:
         ' "<...>", "brand": {"@type": "Brand", "name": "<site_brand, NEVER any'
         ' other brand>"}}},\n'
         '  "seo": {"title": "<meta title>", "meta_description": "<...>",'
-        ' "h1": "<...>", "url_slug": "<...>"},\n'
+        ' "h1": "<...>", "url_slug": "<lowercase, hyphenated, 3-5 meaningful words>"},\n'
         '  "compliance_self_check": {"<check>": "<pass/fail + why>"},\n'
         '  "missing_inputs": ["<unsupported claims you had to drop>"]\n'
         "}\n"

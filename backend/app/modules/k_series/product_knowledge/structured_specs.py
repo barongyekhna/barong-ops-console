@@ -242,6 +242,29 @@ def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
             continue
         if not isinstance(raw, dict):
             raise ValueError(f"Manual standard spec '{key}' must be an object")
+        if key == "dimensions":
+            dimensions = dict(raw)
+            retained_dimension = False
+            for axis in ("length", "width", "height"):
+                leaf = raw.get(axis)
+                if not isinstance(leaf, dict):
+                    continue
+                leaf_value = leaf.get("value")
+                leaf_raw_value = _clean_text(leaf.get("raw_value"))
+                if leaf_value in (None, "", [], {}) and not leaf_raw_value:
+                    dimensions.pop(axis, None)
+                    continue
+                normalized_leaf = dict(leaf)
+                if leaf_raw_value:
+                    normalized_leaf["raw_value"] = leaf_raw_value[:1000]
+                normalized_leaf["evidence"] = "operator_fact"
+                dimensions[axis] = normalized_leaf
+                retained_dimension = True
+            if not retained_dimension:
+                continue
+            dimensions["evidence"] = "operator_fact"
+            output[key] = dimensions
+            continue
         # Keep the established source-preserving shape.  A manual standard
         # value without a value/raw_value is not evidence and is discarded.
         value = raw.get("value")

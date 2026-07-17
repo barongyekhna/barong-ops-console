@@ -245,6 +245,23 @@ def test_operator_specs_drop_blank_rows_and_reject_identity_fields() -> None:
         )
 
 
+def test_operator_dimensions_keep_evidence_on_each_real_axis() -> None:
+    specs = normalize_operator_structured_specs(
+        {
+            "source": {"platform": "operator"},
+            "dimensions": {
+                "unit": "cm",
+                "length": {"value": 12, "raw_value": "12 cm"},
+                "width": {"value": 8, "raw_value": "8 cm"},
+            },
+        }
+    )
+    assert specs is not None
+    assert specs["dimensions"]["evidence"] == "operator_fact"
+    assert specs["dimensions"]["length"]["evidence"] == "operator_fact"
+    assert "height" not in specs["dimensions"]
+
+
 def test_k_copy_and_selling_point_payloads_receive_the_same_verified_specs() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(bind=engine)

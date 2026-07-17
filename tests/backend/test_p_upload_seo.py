@@ -51,6 +51,16 @@ def test_upload_seo_falls_back_safely_without_valid_generated_copy() -> None:
     assert seo.description == "Legacy description"
     assert seo.url_slug is None
 
+    shortened = assemble._seo_for_upload(
+        {
+            "seo": {
+                "url_slug": "Portable Cassette Stove With A Very Long Unsupported Permalink"
+            }
+        },
+        product,
+    )
+    assert shortened.url_slug == "portable-cassette-stove-very-long"
+
 
 def test_n8n_writes_only_authored_seo_copy_to_yoast_product_meta() -> None:
     workflow_path = (
