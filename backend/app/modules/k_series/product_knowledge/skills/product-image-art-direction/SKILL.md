@@ -115,6 +115,7 @@ CONSISTENCY: same product as the reference image — do not alter product shape,
 
 **图上文字规则（硬约束）：** `feature_callout` / `dimension` / `spec` 类图 = AI 只出**干净基底图 + 留标注空间**；**文字/引线/尺寸线一律由管线程序化叠加**（AI 直接写字必乱码）。作图指令为这几类额外输出 `k-info-overlay-v1` 的 `overlay`：
 - 顶层 `schema_version`/`role`/`items`；每条 item 只给 `type`、`source_field` 与相对坐标/引线方向；**不得输出 `text`/`label`/数值**（服务端固定映射 + 从规格证据解析）。
+- **`source_field` 只能取以下白名单**（其余一律校验失败）：`lumens`、`color_temperature_k`、`battery_type`、`battery_capacity_mah`、`charge_time_h`、`runtime_h`、`ip_rating`、`dimensions.length`、`dimensions.width`、`dimensions.height`、`weight`、`material`、`mount_type`、`certifications`。**不要引用 `additional_specs.*`**——该产品有价值的规格若都在 additional_specs 里，callout 就选产品拥有的标准键（如 material/weight/dimensions），条数可少于 3。
 - 数据来源 = 真实规格 `structured_specs_json`；抓不到的字段**不叠、不编**。
 - **尺寸单位英制**：面向美国市场，尺寸/重量叠字用 **inch / lb**（公制存库，展示层由 worker 换算）。
 - **尺寸线几何吸附产品真身**：坐标只作意图提示；worker 在渲染出的干净基底图上**检测产品实际包围盒/轮廓，把尺寸线吸附到产品真实边缘**，别用估算坐标画歪线。文字框自适应、居中、不出框、与引线对齐。
