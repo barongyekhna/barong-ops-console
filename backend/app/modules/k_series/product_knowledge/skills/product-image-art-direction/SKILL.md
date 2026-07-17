@@ -97,15 +97,21 @@ CONSISTENCY: same product as the reference image — do not alter product shape,
 
 **白底只留 1 张（主图）。** 副图全部是"证据/真实场景/信息"图——**禁止一堆白底副图**（浪费图位、零信息）。
 
-| asset_role | 数量 | 使命 | 硬要求 |
-|---|---|---|---|
-| `main`（白底） | **恰好 1 张（强制）** | 点击 | 家规干净白底图，产品唯一变量 |
-| `dimension`（尺寸图） | **恰好 1 张（强制，绝不省略）** | 打消退货疑虑 | **归入主副图 gallery（不埋进 description）**；干净基底 + 程序化叠尺寸线与数值 + 真实参照物。**只要产品有 dimensions 规格就必须出这张，不许被 proof_scene 挤掉** |
-| `proof_scene`（证据场景） | 剩余图位（多数） | 用真实证据说服 | **每张对应一条已审卖点，把该卖点的证据拍出来**：抗风=火焰迎风稳定；户外烹饪=真营地(帐篷/山景/黄昏)真点火锅里真在烧冒热气；便携=嵌套网袋挨着背包。**必须是真实使用场景，禁止干净摆拍充数** |
-| `accessory`（配件/开箱） | 0-1 | 分层打击 | 平铺"包含什么"，不同使用面的顾客都放心 |
-| `detail`（材质特写） | 0-1 | 信任+差异化 | 微距核心差异点，放大工艺 |
+| asset_role | 数量 | placement | 使命 | 硬要求 |
+|---|---|---|---|---|
+| `main`（白底） | **恰好 1 张（强制）** | gallery | 点击 | 家规干净白底图，产品唯一变量 |
+| `feature_callout`（卖点信息图） | **恰好 1 张（强制）** | gallery | 看懂 | 干净基底留标注空间，管线程序化叠 3-5 条真规格标注 |
+| `accessory`（配件/开箱） | **1 张（强制；无配件产品可豁免）** | gallery | 分层打击 | 平铺"包含什么"（与 package_includes 一致），不同使用面的顾客都放心 |
+| `dimension`（尺寸图） | **恰好 1 张（强制，绝不省略）** | gallery | 打消退货疑虑 | 干净基底 + 程序化叠尺寸线与数值（英制）+ 真实参照物。**产品有 dimensions 规格就必须出，不许被 proof_scene 挤掉** |
+| `proof_scene`（证据场景） | gallery ≥2 张 + description 若干 | gallery + description | 用真实证据说服 | **每张对应一条已审卖点，把证据拍出来**：抗风=火焰迎风稳定；户外烹饪=真营地(帐篷/山景/黄昏)真点火锅里真在烧冒热气；便携=嵌套网袋挨着背包。**必须是真实使用场景，禁止干净摆拍充数** |
+| `detail`（材质特写） | 0-1 | 任意 | 信任+差异化 | 微距核心差异点，放大工艺 |
 
-**组成硬规则（生成图组前自检，缺一不可）：** 图组**必须**包含 ①`main` ×1 ②`dimension` ×1（产品有 dimensions 规格时绝不省略）③`proof_scene` ×(卖点数，可合并近似卖点)。`proof_scene` 再多也不能挤掉 `main` 和 `dimension`。若为省图位而丢掉 `dimension` = 违规。
+**图廊（gallery）铁律——至少 6 张，五类缺一不可：** `main`×1 + `feature_callout`×1 + `accessory`×1 + `dimension`×1 + `proof_scene`×≥2 = **gallery ≥6**。产品确实无配件（无 package_includes 或单件）时 accessory 可豁免，但 gallery 仍须 ≥5 且必含信息图。description 的图文模块另配 proof_scene，**不许挪用 gallery 配额**。丢任何一类 = 违规，重排图组。
+
+**宽高比铁律（按 placement 写死，别让排版头重脚轻）：**
+- `placement=gallery` → `aspect_ratio` **1:1**（Woo 画廊标准方图）。
+- `placement=description`（图文并排模块用）→ `aspect_ratio` **4:3 横图**（方图配短文字必然太高——横图与文字天然平衡）。
+- 每张图的 `aspect_ratio` 必须按此填写；管线会按 placement 强制覆写兜底，但你写对是第一保险。
 
 **图上文字规则（硬约束）：** `feature_callout` / `dimension` / `spec` 类图 = AI 只出**干净基底图 + 留标注空间**；**文字/引线/尺寸线一律由管线程序化叠加**（AI 直接写字必乱码）。作图指令为这几类额外输出 `k-info-overlay-v1` 的 `overlay`：
 - 顶层 `schema_version`/`role`/`items`；每条 item 只给 `type`、`source_field` 与相对坐标/引线方向；**不得输出 `text`/`label`/数值**（服务端固定映射 + 从规格证据解析）。
