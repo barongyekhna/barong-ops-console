@@ -116,8 +116,20 @@ def test_selling_point_evidence_resolves_specs_features_and_operator_fact() -> N
 
     assert _structured_spec_path_exists(product.structured_specs_json, "material")
     assert _structured_spec_path_exists(product.structured_specs_json, "ignition_type")
+    assert _structured_spec_path_exists(
+        product.structured_specs_json,
+        "additional_specs.ignition_type",
+    )
     assert _selling_point_evidence_error(db, product, "spec:material") is None
     assert _selling_point_evidence_error(db, product, "spec:ignition_type") is None
+    assert (
+        _selling_point_evidence_error(
+            db,
+            product,
+            "spec:additional_specs.ignition_type",
+        )
+        is None
+    )
     assert (
         _selling_point_evidence_error(
             db, product, f"verified_feature:{feature.id}"

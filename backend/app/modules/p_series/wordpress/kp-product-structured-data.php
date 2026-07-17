@@ -232,10 +232,6 @@ function barong_k_schema_offer( $offer, $product ) {
 	$offer['priceValidUntil'] = barong_k_schema_price_valid_until( $product );
 	$offer['availability']    = barong_k_schema_availability( $product );
 	$offer['itemCondition']   = 'https://schema.org/NewCondition';
-	if ( isset( $offer['priceSpecification'] ) && is_array( $offer['priceSpecification'] ) ) {
-		$offer['priceSpecification']['price']         = $price;
-		$offer['priceSpecification']['priceCurrency'] = strtoupper( $currency );
-	}
 	return $offer;
 }
 

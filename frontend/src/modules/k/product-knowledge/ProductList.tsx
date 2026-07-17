@@ -58,6 +58,7 @@ import { DashboardScene } from "@/components/dashboard-scene";
 import { ProductDetail } from "./ProductDetail";
 import { ProductForm } from "./ProductForm";
 import { displayProductKey } from "./display";
+import { publishGateConflictMessage } from "./publish-gate-error";
 import styles from "./ProductKnowledge.module.css";
 import type {
   ProductCreateFormPayload,
@@ -638,10 +639,9 @@ export function ProductListFull() {
     } catch (error) {
       let message = formatError(error, "上架派单失败，请重试。");
       if (error instanceof ProductKnowledgeApiError) {
-        const blockers = (error.detail as { blockers?: unknown } | null)
-          ?.blockers;
-        if (Array.isArray(blockers) && blockers.length > 0) {
-          message = `「${label}」未过上架门禁：${blockers.join("；")}`;
+        const gateMessage = publishGateConflictMessage(label, error.detail);
+        if (gateMessage) {
+          message = gateMessage;
         }
       }
       setBatchError(message);

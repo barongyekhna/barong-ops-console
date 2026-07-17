@@ -404,11 +404,29 @@ def validate_generated_faq(
     """Drop fabricated/spec-parroting FAQ and stamp schema eligibility."""
 
     output = dict(result)
-    sources = {
-        str(item.get("id")): item
+    research_sources = [
+        item
         for item in ((research or {}).get("sources") or [])
         if isinstance(item, dict) and item.get("id")
+    ]
+    sources = {
+        str(item.get("id")): item
+        for item in research_sources
     }
+    source_clusters: dict[str, set[str]] = {}
+    raw_clusters = (research or {}).get("clusters")
+    clusters = raw_clusters if isinstance(raw_clusters, dict) else {}
+    for cluster, source_ids in clusters.items():
+        if not isinstance(source_ids, list):
+            continue
+        for source_id in source_ids:
+            source_clusters.setdefault(str(source_id), set()).add(str(cluster))
+    exact_sources: dict[str, list[dict[str, Any]]] = {}
+    for source in research_sources:
+        exact_sources.setdefault(
+            _question_key(str(source.get("question") or "")), []
+        ).append(source)
+
     accepted: list[dict[str, Any]] = []
     dropped: list[dict[str, str]] = []
     seen: set[str] = set()
@@ -422,11 +440,35 @@ def validate_generated_faq(
     if isinstance(package_includes, list) and package_includes:
         structured_spec_numbers.add(str(len(package_includes)))
     raw_items = result.get("page_faq") if isinstance(result, dict) else None
+    evidence_autobind_count = 0
     for raw in raw_items or []:
         if not isinstance(raw, dict):
             continue
+        raw = dict(raw)
         question = _clean_text(raw.get("question"), limit=512)
         answer = _clean_text(raw.get("answer"), limit=2000)
+        provided_refs = [
+            str(ref).strip()
+            for ref in (raw.get("evidence_refs") or [])
+            if str(ref).strip() in sources
+        ]
+        if not provided_refs:
+            exact_matches = exact_sources.get(_question_key(question), [])
+            if len(exact_matches) == 1:
+                source = exact_matches[0]
+                source_id = str(source.get("id"))
+                source_cluster = str(source.get("intent_cluster") or "").strip()
+                if not source_cluster:
+                    cluster_matches = source_clusters.get(source_id, set())
+                    if len(cluster_matches) == 1:
+                        source_cluster = next(iter(cluster_matches))
+                if source_cluster:
+                    # Provider refs are advisory.  Missing/invalid refs can be
+                    # repaired only by an exact normalized research-question
+                    # match; paraphrases remain unbound and are dropped below.
+                    raw["evidence_refs"] = [source_id]
+                    raw["intent_cluster"] = source_cluster
+                    evidence_autobind_count += 1
         refs = [
             str(ref).strip()
             for ref in (raw.get("evidence_refs") or [])
@@ -486,6 +528,7 @@ def validate_generated_faq(
         "dropped": dropped,
         "research_source_count": len(sources),
         "intent_cluster_count": len(accepted_clusters),
+        "evidence_autobind_count": evidence_autobind_count,
         "reason": None if eligible else "insufficient_evidence_backed_questions",
     }
     return output

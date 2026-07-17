@@ -422,7 +422,7 @@ def image_art_direction_instruction() -> str:
         "{\n"
         '  "image_count": <integer = how many images the plan calls for>,\n'
         '  "channel": "amazon" | "dtc",\n'
-        '  "aspect_ratio": "<e.g. 1:1 for Amazon main, 4:5, 16:9>",\n'
+        '  "aspect_ratio": "<gallery=1:1; description=4:3>",\n'
         '  "edit_mode": true,\n'
         '  "global_style": {"style": "<archetype + palette, English>",'
         ' "lighting": "<lighting language, English>",'
@@ -434,7 +434,7 @@ def image_art_direction_instruction() -> str:
         '  "images": [{"position": <int>, "role": "main" | "proof_scene" |'
         ' "dimension" | "feature_callout" | "spec" | "accessory" | "detail",'
         ' "placement": "gallery" | "description",'
-        ' "aspect_ratio": "<THIS image\'s ratio, machine-readable like 1:1 / 4:5 / 16:9>",'
+        ' "aspect_ratio": "<gallery=1:1 or description=4:3; no other value>",'
         ' "mission": "<CTR/看懂/想要/...>", "prompt": "<English prompt for this image>",'
         ' "selling_point_index": <1-based index in selling_points_approved, or null>,'
         ' "selling_point_id": "<exact approved point id, or null>",'
@@ -479,10 +479,23 @@ def image_art_direction_instruction() -> str:
         "camp environment when those approved points exist; lighting, contact shadows and "
         "depth must physically integrate product and scene. "
         "gallery images go into the store's product image gallery; description images get "
-        "embedded inside the product description at their position. All gallery images "
-        "are square 1:1. role=dimension is ALWAYS placement=gallery. If verified "
-        "product.structured_specs_json.dimensions exist, the plan MUST include at least "
-        "one role=dimension image; omission makes the entire brief invalid.\n"
+        "embedded inside the product description at their position and NEVER count toward "
+        "the gallery quota. Gallery MUST contain exactly one main, exactly one "
+        "feature_callout, exactly one dimension, at least two proof_scene images, and "
+        "exactly one accessory when product.package_includes has multiple items: at least "
+        "6 gallery images total. If package_includes is absent or has one item, accessory "
+        "is exempt but gallery still needs at least 5 images and the feature_callout. "
+        "Add at least one separate placement=description proof_scene for the horizontal "
+        "description module; it does not satisfy either gallery proof_scene slot. "
+        "All gallery images are square 1:1; every description image is landscape 4:3. "
+        "role=dimension is ALWAYS placement=gallery. When at least one verified "
+        "dimensions.<length|width|height> evidence leaf exists, the brief MUST include "
+        "at least one role=dimension image (the validator accepts exactly one), bound to "
+        "that real source_field. If no verified "
+        "dimension evidence exists, NEVER invent a source_field, measurement, label, or "
+        "dimension image merely to satisfy the gallery quota; omit it so the server can "
+        "record the quota fail-safe and alert an operator. Evidence truth overrides the "
+        "layout quota.\n"
         "SEO METADATA (mandatory, YOU write it — this is what goes on the live store): for "
         "EVERY image fill title + alt + caption + description in the target-market language "
         "(English for US). alt must describe the image accurately with the product's real "

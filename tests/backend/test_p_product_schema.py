@@ -359,6 +359,63 @@ def test_wordpress_filter_preserves_woo_owned_real_review_fields() -> None:
     assert "$markup['review']" not in plugin
 
 
+@pytest.mark.parametrize(
+    "yoast_price_specification",
+    [
+        [
+            {
+                "@type": "UnitPriceSpecification",
+                "price": "42.00",
+                "priceCurrency": "USD",
+            },
+            {
+                "@type": "UnitPriceSpecification",
+                "price": "38.00",
+                "priceCurrency": "USD",
+                "priceType": "https://schema.org/SalePrice",
+            },
+        ],
+        {
+            "@type": "UnitPriceSpecification",
+            "price": "42.00",
+            "priceCurrency": "USD",
+        },
+    ],
+    ids=("yoast-list", "associative-boundary"),
+)
+def test_wordpress_offer_filter_never_mutates_price_specification(
+    yoast_price_specification: object,
+) -> None:
+    """Yoast owns both supported priceSpecification container shapes."""
+
+    plugin = (
+        Path(__file__).resolve().parents[2]
+        / "backend/app/modules/p_series/wordpress/kp-product-structured-data.php"
+    ).read_text(encoding="utf-8")
+    offer_function = plugin.split(
+        "function barong_k_schema_offer( $offer, $product ) {", 1
+    )[1].split(
+        "/**\n * Apply Offer enrichment whether the producer emits one object or a list.",
+        1,
+    )[0]
+
+    # The adapter may enrich the Offer itself, but no left-hand assignment may
+    # target Yoast's nested/list-owned priceSpecification value. In particular,
+    # adding string keys to a PHP list would serialize it as a mixed JSON object.
+    assert "$offer['price']" in offer_function
+    assert "$offer['priceCurrency']" in offer_function
+    assert "$offer['priceValidUntil']" in offer_function
+    assert "$offer['priceSpecification']" not in offer_function
+
+    # Keep both real boundary fixtures serializable in their original shape so
+    # the regression covers the list that triggered the production defect and
+    # the associative form that must likewise remain producer-owned.
+    encoded = json.dumps(yoast_price_specification)
+    decoded = json.loads(encoded)
+    assert decoded == yoast_price_specification
+    assert isinstance(decoded, type(yoast_price_specification))
+
+
 def test_n8n_transform_sends_only_k_short_slug_to_woocommerce() -> None:
     workflow_path = (
         Path(__file__).resolve().parents[2]
@@ -401,6 +458,7 @@ def test_n8n_transform_sends_only_k_short_slug_to_woocommerce() -> None:
             "key": "_yoast_wpseo_metadesc",
             "value": "A clean authored description.",
         },
+        {"key": "_kp_faq", "value": ""},
     ]
 
     package["product"]["seo"].pop("url_slug")

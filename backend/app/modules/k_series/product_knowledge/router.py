@@ -1515,8 +1515,16 @@ def _structured_spec_evidence_snapshot(
             "value_text": value_text,
         }
     # Extensible manual/supplier fields are addressed by their stable key or
-    # label, e.g. ``spec:ignition_type``.
-    normalized = re.sub(r"[^a-z0-9]+", "_", cleaned.casefold()).strip("_")
+    # label. Accept both the legacy short form ``spec:ignition_type`` and the
+    # canonical model path ``spec:additional_specs.ignition_type``.
+    additional_lookup = cleaned
+    if cleaned.casefold().startswith("additional_specs."):
+        additional_lookup = cleaned.split(".", 1)[1].strip().strip(".")
+        if not additional_lookup:
+            return None
+    normalized = re.sub(
+        r"[^a-z0-9]+", "_", additional_lookup.casefold()
+    ).strip("_")
     for item in specs.get("additional_specs") or []:
         if not isinstance(item, dict):
             continue
@@ -1528,7 +1536,7 @@ def _structured_spec_evidence_snapshot(
                 str(item.get("label") or "").casefold(),
             ).strip("_"),
         }
-        if cleaned.casefold() in aliases or normalized in aliases:
+        if additional_lookup.casefold() in aliases or normalized in aliases:
             raw_value = item.get("raw_value")
             value = item.get("value")
             if raw_value in (None, "") and value in (None, "", [], {}):

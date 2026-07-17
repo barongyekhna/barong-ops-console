@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from backend.app.db.base import Base
 from backend.app.models.organization import OrganizationRecord
 from backend.app.models.user import User
+from backend.app.modules.notifications.models import PNotification
 from backend.app.modules.k_series.product_knowledge import (
     workflow_engine as workflow_module,
 )
@@ -848,6 +849,96 @@ def test_faq_research_persists_valid_status_and_distinct_real_pain_clusters() ->
     assert insufficient_run.status == "needs_review"
 
 
+def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
+    db, user, scope, engine, product = _setup_engine()
+    _approve_operator_point(product)
+    stored_research = {
+        "status": "completed",
+        "quality_ready": True,
+        "source_count": 2,
+        "sources": [
+            {
+                "id": "faq-cold-weather",
+                "question": "How should this pump be prepared for cold weather?",
+                "snippet": "Follow the maker's cold-weather preparation guidance.",
+                "intent_cluster": "weather_use",
+            },
+            {
+                "id": "faq-ignition-check",
+                "question": "What should I check before taking the pump outdoors?",
+                "snippet": "Test operation before a trip and follow the maker's guidance.",
+                "intent_cluster": "pre_trip_check",
+            },
+        ],
+        "clusters": {
+            "weather_use": ["faq-cold-weather"],
+            "pre_trip_check": ["faq-ignition-check"],
+        },
+    }
+    product.faq_research_json = stored_research
+    db.add(product)
+    db.commit()
+    provider_steps: list[str] = []
+    captured_copy_input: dict[str, Any] = {}
+
+    def provider(key: ModuleExecutionKey, payload: dict[str, Any]) -> dict[str, Any]:
+        provider_steps.append(key.step_name)
+        if key.step_name == "marketing_copy_generation":
+            captured_copy_input.update(payload)
+            return {
+                "channel": "dtc",
+                "product_page_copy": {
+                    "above_the_fold": {"headline": "Industrial Steel Pump"},
+                    "key_bullets": ["Operator verified steel construction"],
+                },
+                "page_faq": [
+                    {
+                        "question": "How should this pump be prepared for cold weather?",
+                        "answer": "Follow the maker's cold-weather preparation guidance.",
+                    },
+                    {
+                        "question": "What should I check before taking the pump outdoors?",
+                        "answer": "Test operation before a trip and follow the maker's guidance.",
+                    },
+                    {
+                        "question": "How do I get this pump ready for winter?",
+                        "answer": "Follow the maker's cold-weather preparation guidance.",
+                    },
+                ],
+                "seo": {
+                    "title": "Industrial Steel Pump",
+                    "h1": "Industrial Steel Pump",
+                },
+            }
+        if key.step_name == "translate_zh":
+            return {"content": "工业钢泵"}
+        raise AssertionError(key.step_name)
+
+    engine.provider_client = provider
+    generated = engine.generate_marketing_copy(
+        product_id=product.id,
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert "faq_research" not in provider_steps
+    assert captured_copy_input["faq_research"] == stored_research
+    assert generated.faq_research_json == stored_research
+    assert generated.marketing_copy_json["faq_quality"]["eligible_for_schema"] is True
+    assert generated.marketing_copy_json["faq_quality"]["evidence_autobind_count"] == 2
+    assert [
+        item["evidence_refs"] for item in generated.marketing_copy_json["page_faq"]
+    ] == [["faq-cold-weather"], ["faq-ignition-check"]]
+    assert [
+        item["intent_cluster"] for item in generated.marketing_copy_json["page_faq"]
+    ] == ["weather_use", "pre_trip_check"]
+    assert {
+        item["question"]: item["reason"]
+        for item in generated.marketing_copy_json["faq_quality"]["dropped"]
+    }["How do I get this pump ready for winter?"] == "missing_serper_evidence"
+
+
 def test_marketing_copy_rejects_evidence_changed_during_provider_call() -> None:
     db, user, scope, engine, product = _setup_engine()
     _approve_operator_point(product)
@@ -950,9 +1041,19 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
     _approve_operator_point(product)
     product.marketing_copy_json = {"evidence_contract": "pdp-evidence-v1"}
     product.structured_specs_json = {
+        "schema_version": "1.0",
+        "source": {
+            "platform": "1688",
+            "offer_id": "round4-dimension-test",
+        },
         "dimensions": {
             "unit": "cm",
-            "height": {"value": 16, "unit": "cm", "evidence": "operator_fact"},
+            "height": {
+                "value": 16,
+                "unit": "cm",
+                "raw_value": "16 cm",
+                "source_label": "高度",
+            },
         }
     }
     db.add(product)
@@ -1002,6 +1103,49 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
                             ],
                         },
                     },
+                    {
+                        "position": 3,
+                        "role": "feature_callout",
+                        "placement": "gallery",
+                        "prompt": "Clean verified information base.",
+                        "overlay": {
+                            "schema_version": "k-info-overlay-v1",
+                            "role": "feature_callout",
+                            "items": [
+                                {
+                                    "type": "callout",
+                                    "source_field": "dimensions.height",
+                                    "anchor": {"x": 0.5, "y": 0.5},
+                                    "text_anchor": {"x": 0.8, "y": 0.25},
+                                    "leader_direction": "right",
+                                }
+                            ],
+                        },
+                    },
+                    {
+                        "position": 4,
+                        "role": "proof_scene",
+                        "placement": "gallery",
+                        "prompt": "Verified construction in real use, front view.",
+                        "selling_point_id": "operator-steel",
+                        "proof_intent": "Show the verified construction during use.",
+                    },
+                    {
+                        "position": 5,
+                        "role": "proof_scene",
+                        "placement": "gallery",
+                        "prompt": "Verified construction in real use, side view.",
+                        "selling_point_id": "operator-steel",
+                        "proof_intent": "Show the verified construction from another angle.",
+                    },
+                    {
+                        "position": 6,
+                        "role": "proof_scene",
+                        "placement": "description",
+                        "prompt": "Wide verified-use scene for the description module.",
+                        "selling_point_id": "operator-steel",
+                        "proof_intent": "Show the verified construction in a wide use scene.",
+                    },
                 ]
             }
         if key.step_name == "translate_zh":
@@ -1023,3 +1167,63 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
         "attempted": True,
         "status": "succeeded",
     }
+    assert generated.image_instruction_json["gallery_composition_validation"]["status"] == "succeeded"
+
+
+def test_image_brief_second_bad_gallery_fails_open_with_error_notification() -> None:
+    db, user, scope, engine, product = _setup_engine()
+    _approve_operator_point(product)
+    product.marketing_copy_json = {"evidence_contract": "pdp-evidence-v1"}
+    db.add(product)
+    db.commit()
+    image_calls: list[dict[str, Any]] = []
+
+    def provider(key: ModuleExecutionKey, payload: dict[str, Any]) -> dict[str, Any]:
+        if key.step_name == "image_brief_generation":
+            image_calls.append(payload)
+            return {
+                "images": [
+                    {
+                        "position": 1,
+                        "role": "main",
+                        "placement": "gallery",
+                        "prompt": "Pure white product main.",
+                    },
+                    {
+                        "position": 2,
+                        "role": "proof_scene",
+                        "placement": "gallery",
+                        "prompt": "Verified construction in real use.",
+                        "selling_point_id": "operator-steel",
+                        "proof_intent": "Show the verified construction during use.",
+                    },
+                ]
+            }
+        if key.step_name == "translate_zh":
+            return {"content": "图片指令"}
+        raise AssertionError(key.step_name)
+
+    engine.provider_client = provider
+    generated = engine.generate_image_brief(
+        product_id=product.id,
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert len(image_calls) == 2
+    assert image_calls[1]["task"] == "image_brief_generation_gallery_retry"
+    audit = generated.image_instruction_json["gallery_composition_validation"]
+    assert audit["status"] == "failed_open"
+    assert audit["remaining_issues"]
+    assert generated.image_instruction_json["warnings"][-1]["code"] == (
+        "IMAGE_BRIEF_GALLERY_COMPOSITION_FAILED_OPEN"
+    )
+    notification = db.scalar(
+        select(PNotification).where(
+            PNotification.event_type == "k.image_brief.gallery_failed_open",
+            PNotification.product_id == product.id,
+        )
+    )
+    assert notification is not None
+    assert notification.level == "error"

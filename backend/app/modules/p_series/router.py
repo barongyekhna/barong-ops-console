@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from uuid import UUID
 
@@ -18,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
+from ...core.config import get_settings
 from ...core.roles import is_super_admin_role
 from ...db.session import get_db
 from ...models.user import User
@@ -29,6 +31,7 @@ from ..k_series.product_knowledge.models import (
 from ..notifications.service import create_notification
 from .contract.upload_package import UploadPackage
 from .upload.assemble import assemble_upload_package, gate_blockers
+from .upload.faq_publication_audit import audit_published_faq
 from .upload.jobs import (
     create_dispatch_job,
     enqueue_dispatch_job,
@@ -38,6 +41,7 @@ from .upload.jobs import (
 from .upload.models import PUploadJob
 
 router = APIRouter(prefix="/p", tags=["p-upload"])
+logger = logging.getLogger(__name__)
 
 MODULE_KEY = "p.upload"
 PERMISSION_READ = "p.upload.read"
@@ -99,6 +103,77 @@ class UploadResultRequest(BaseModel):
 class UploadResultResponse(BaseModel):
     job_id: str
     status: str
+
+
+def _audit_published_faq_after_success(
+    db: Session,
+    *,
+    product_id: UUID,
+    external_product_id: str | None,
+    external_url: str | None,
+) -> dict[str, object]:
+    """Best-effort FAQ/schema audit; alert without changing upload success."""
+
+    try:
+        if not external_url:
+            raise ValueError("successful upload callback did not include a page URL")
+        audit = audit_published_faq(
+            external_url,
+            allowed_base_url=get_settings().wp_base_url,
+        )
+    except Exception as exc:  # noqa: BLE001 - publication is never rolled back
+        audit = {
+            "status": "audit_failed",
+            "ok": False,
+            "page_url": external_url,
+            "error_class": exc.__class__.__name__,
+            "error": str(exc),
+        }
+        logger.error(
+            "Published FAQ/schema audit failed product_id=%s url=%s error=%s",
+            product_id,
+            external_url,
+            exc.__class__.__name__,
+            exc_info=True,
+        )
+        create_notification(
+            db,
+            event_type="p.upload.faq_audit_failed",
+            title="上架页 FAQ 同步校验失败",
+            body="无法完成 FAQPage schema 与页面可见 FAQ 的自动对账，请人工复查。",
+            level="error",
+            source="p.woocommerce",
+            product_id=product_id,
+            external_refs={
+                "woo_product_id": external_product_id,
+                "url": external_url,
+            },
+            payload=audit,
+        )
+        return audit
+
+    if audit.get("ok") is not True:
+        logger.error(
+            "Published FAQ/schema mismatch product_id=%s url=%s audit=%s",
+            product_id,
+            external_url,
+            audit,
+        )
+        create_notification(
+            db,
+            event_type="p.upload.faq_sync_mismatch",
+            title="上架页 FAQ 与结构化数据不一致",
+            body="FAQPage schema 含有页面不可见的问答；上架未回滚，请立即复查。",
+            level="error",
+            source="p.woocommerce",
+            product_id=product_id,
+            external_refs={
+                "woo_product_id": external_product_id,
+                "url": external_url,
+            },
+            payload=audit,
+        )
+    return audit
 
 
 def _load_product(db: Session, product_id: UUID) -> KProductKnowledgeProduct:
@@ -448,5 +523,23 @@ def p_upload_result(
             source="p.woocommerce",
             product_id=job.product_id,
         )
+    # Persist the upload outcome before the network audit.  A stale cache,
+    # unavailable page, or FAQ mismatch must alert, never roll back Woo success.
     db.commit()
+    if payload.status == "success":
+        try:
+            _audit_published_faq_after_success(
+                db,
+                product_id=job.product_id,
+                external_product_id=payload.external_product_id,
+                external_url=payload.external_url,
+            )
+            db.commit()
+        except Exception:  # noqa: BLE001 - even alert persistence is fail-safe
+            db.rollback()
+            logger.error(
+                "Failed to persist published FAQ/schema audit product_id=%s",
+                job.product_id,
+                exc_info=True,
+            )
     return UploadResultResponse(job_id=job.job_id, status=job.status)

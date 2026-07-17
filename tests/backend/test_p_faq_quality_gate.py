@@ -11,10 +11,15 @@ from uuid import uuid4
 
 import pytest
 
+from backend.app.modules.p_series import router as p_router
 from backend.app.modules.p_series.upload import assemble
 from backend.app.modules.p_series.upload.description_html import (
     build_description_html,
     build_schema_jsonld,
+)
+from backend.app.modules.p_series.upload.faq_publication_audit import (
+    audit_published_faq,
+    audit_published_faq_html,
 )
 
 
@@ -64,6 +69,166 @@ def test_faq_jsonld_requires_explicit_true_quality_verdict() -> None:
     malformed["page_faq"] = 7
     assert "kp-faq" not in build_description_html(malformed)["html"]
     assert build_schema_jsonld(malformed) == ""
+
+
+def test_published_faq_audit_accepts_schema_from_the_visible_faq_block() -> None:
+    html = """
+    <section class="kp-faq">
+      <details><summary>Will fuel pressure change in cold weather?</summary>
+      <div><p>Follow the fuel maker's approved temperature guidance.</p></div>
+      </details>
+    </section>
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@graph":[{"@type":"FAQPage",
+       "mainEntity":[{"@type":"Question",
+       "name":"Will fuel pressure change in cold weather?",
+       "acceptedAnswer":{"@type":"Answer",
+       "text":"Follow the fuel maker's approved temperature guidance."}}]}]}
+    </script>
+    """
+
+    audit = audit_published_faq_html(
+        html,
+        page_url="https://shop.example.test/product/pump",
+    )
+
+    assert audit["status"] == "passed"
+    assert audit["schema_faq_count"] == 1
+    assert audit["visible_faq_present"] is True
+    assert audit["missing_from_visible"] == []
+
+
+def test_published_faq_audit_reports_stale_schema_question() -> None:
+    html = """
+    <section class="kp-faq">
+      <details><summary>How should titanium cookware be cleaned?</summary>
+      <div><p>Use the care method provided with the product.</p></div></details>
+    </section>
+    <script type="application/ld+json">
+      {"@type":"FAQPage","mainEntity":[{"@type":"Question",
+       "name":"Does the kettle work in cold weather?",
+       "acceptedAnswer":{"@type":"Answer","text":"Keep the kettle warm."}}]}
+    </script>
+    """
+
+    audit = audit_published_faq_html(html)
+
+    assert audit["status"] == "mismatch"
+    assert audit["ok"] is False
+    assert audit["missing_from_visible"] == [
+        {
+            "question": "Does the kettle work in cold weather?",
+            "missing_fields": ["question", "answer"],
+        }
+    ]
+
+
+def test_upload_callback_faq_mismatch_alert_is_error_and_fail_safe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mismatch = {
+        "status": "mismatch",
+        "ok": False,
+        "schema_faq_count": 1,
+        "missing_from_visible": [{"question": "Stale FAQ"}],
+    }
+    notifications: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        p_router,
+        "audit_published_faq",
+        lambda _url, **_kwargs: mismatch,
+    )
+    monkeypatch.setattr(
+        p_router,
+        "get_settings",
+        lambda: SimpleNamespace(wp_base_url="https://shop.example.test"),
+    )
+    monkeypatch.setattr(
+        p_router,
+        "create_notification",
+        lambda _db, **kwargs: notifications.append(kwargs),
+    )
+
+    result = p_router._audit_published_faq_after_success(
+        object(),  # type: ignore[arg-type]
+        product_id=uuid4(),
+        external_product_id="3822",
+        external_url="https://shop.example.test/product/new-product",
+    )
+
+    assert result == mismatch
+    assert notifications[0]["event_type"] == "p.upload.faq_sync_mismatch"
+    assert notifications[0]["level"] == "error"
+    assert notifications[0]["payload"] == mismatch
+
+
+def test_published_faq_fetch_rejects_an_off_origin_page_before_opening() -> None:
+    opened = False
+
+    def opener(*_args: Any, **_kwargs: Any) -> Any:
+        nonlocal opened
+        opened = True
+        raise AssertionError("off-origin URL must be rejected before fetch")
+
+    with pytest.raises(ValueError, match="configured WordPress origin"):
+        audit_published_faq(
+            "http://127.0.0.1/internal",
+            allowed_base_url="https://shop.example.test",
+            opener=opener,
+        )
+    assert opened is False
+
+
+def test_published_faq_fetch_rejects_an_off_origin_final_redirect() -> None:
+    class RedirectedResponse:
+        headers = None
+
+        def __enter__(self) -> "RedirectedResponse":
+            return self
+
+        def __exit__(self, *_args: Any) -> None:
+            return None
+
+        def geturl(self) -> str:
+            return "https://attacker.example.test/redirected"
+
+        def read(self, _limit: int) -> bytes:
+            raise AssertionError("redirect target body must not be read")
+
+    with pytest.raises(ValueError, match="configured WordPress origin"):
+        audit_published_faq(
+            "https://shop.example.test/product/new-product",
+            allowed_base_url="https://shop.example.test",
+            opener=lambda *_args, **_kwargs: RedirectedResponse(),
+        )
+
+
+def test_upload_callback_missing_wp_base_alerts_without_fetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    notifications: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        p_router,
+        "get_settings",
+        lambda: SimpleNamespace(wp_base_url=None),
+    )
+    monkeypatch.setattr(
+        p_router,
+        "create_notification",
+        lambda _db, **kwargs: notifications.append(kwargs),
+    )
+
+    result = p_router._audit_published_faq_after_success(
+        object(),  # type: ignore[arg-type]
+        product_id=uuid4(),
+        external_product_id="3822",
+        external_url="https://shop.example.test/product/new-product",
+    )
+
+    assert result["status"] == "audit_failed"
+    assert result["error_class"] == "ValueError"
+    assert notifications[0]["event_type"] == "p.upload.faq_audit_failed"
+    assert notifications[0]["level"] == "error"
 
 
 def _product(marketing_copy_json: Any) -> SimpleNamespace:
@@ -149,7 +314,7 @@ process.stdout.write(JSON.stringify(result));
     return json.loads(completed.stdout)[0]["json"]["woo_body"]
 
 
-def test_n8n_emits_faq_meta_only_for_explicitly_eligible_package() -> None:
+def test_n8n_overwrites_faq_meta_for_eligible_empty_and_ineligible_packages() -> None:
     faq = [
         {
             "question": "Will fuel pressure change in cold weather?",
@@ -163,7 +328,12 @@ def test_n8n_emits_faq_meta_only_for_explicitly_eligible_package() -> None:
             "price": {"regular": "19.99"},
             "stock": {"status": "in_stock"},
             "description": {
-                "html": "<section class=\"kp-faq\">Visible FAQ</section>",
+                "html": (
+                    '<section class="kp-faq"><details><summary>'
+                    "Will fuel pressure change in cold weather?"
+                    "</summary><p>Use the fuel maker's approved temperature range."
+                    "</p></details></section>"
+                ),
                 "faq": faq,
             },
             "category": {},
@@ -174,13 +344,11 @@ def test_n8n_emits_faq_meta_only_for_explicitly_eligible_package() -> None:
 
     legacy_body = _run_n8n_transform(package)
     assert legacy_body["description"] == package["product"]["description"]["html"]
-    assert all(item["key"] != "_kp_faq" for item in legacy_body["meta_data"])
+    assert legacy_body["meta_data"] == [{"key": "_kp_faq", "value": ""}]
 
     package["product"]["description"]["faq_schema_eligible"] = False
     low_quality_body = _run_n8n_transform(package)
-    assert all(
-        item["key"] != "_kp_faq" for item in low_quality_body["meta_data"]
-    )
+    assert low_quality_body["meta_data"] == [{"key": "_kp_faq", "value": ""}]
 
     package["product"]["description"]["faq_schema_eligible"] = True
     eligible_body = _run_n8n_transform(package)

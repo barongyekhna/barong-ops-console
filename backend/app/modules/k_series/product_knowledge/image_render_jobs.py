@@ -140,9 +140,6 @@ _REFERENCE_DOWNLOAD_TIMEOUT_SECONDS = 20.0
 _REFERENCE_MAX_BYTES = 20 * 1024 * 1024
 _RENDER_MODEL_MAX_ATTEMPTS = 3
 
-_RATIO_RE = re.compile(r"(\d{1,2})\s*:\s*(\d{1,2})")
-
-
 class KImageRenderError(RuntimeError):
     """Enqueue-time validation failure (message is operator-facing Chinese)."""
 
@@ -242,21 +239,10 @@ def _resolve_aspect_ratio(
     channel: str,
     placement: str,
 ) -> str:
-    # 硬规则：主副图（gallery）一律 1:1 —— 存储时统一放大到 1800×1800。
-    if placement == PLACEMENT_GALLERY:
-        return "1:1"
-    # 描述图：每图字段优先，退回全局说明里的横版比例，默认 16:9。
-    for raw in (spec.get("aspect_ratio"), spec.get("ratio")):
-        if isinstance(raw, str):
-            match = _RATIO_RE.search(raw)
-            if match:
-                return f"{match.group(1)}:{match.group(2)}"
-    global_raw = instruction.get("aspect_ratio")
-    ratios = _RATIO_RE.findall(global_raw) if isinstance(global_raw, str) else []
-    for width, height in ratios:
-        if int(width) > int(height):
-            return f"{width}:{height}"
-    return "16:9"
+    # Placement is the authority.  Never trust a stale/AI-authored ratio: Woo
+    # gallery assets are square and description modules are fixed landscape 4:3.
+    del spec, instruction, channel
+    return "4:3" if placement == PLACEMENT_DESCRIPTION else "1:1"
 
 
 def _compose_prompt(

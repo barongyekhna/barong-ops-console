@@ -21,6 +21,7 @@ import type {
 } from "./types";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 import { translateKBackendError } from "@/lib/i18n";
+import { parsePublishGateConflictDetail } from "./publish-gate-error";
 
 const API_PROXY_BASE = "/api/backend";
 export const K_PRODUCTS_PATH = "/k/products";
@@ -113,6 +114,13 @@ async function errorPayloadFor(
     const payload = (await response.json()) as { detail?: unknown };
     if (typeof payload.detail === "string") {
       return { detail: null, message: payload.detail };
+    }
+    const publishGateDetail = parsePublishGateConflictDetail(payload.detail);
+    if (publishGateDetail) {
+      return {
+        detail: publishGateDetail,
+        message: "产品未通过上架门禁。",
+      };
     }
     if (
       payload.detail &&

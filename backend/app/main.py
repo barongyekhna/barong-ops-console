@@ -285,6 +285,29 @@ def _production_error_detail(request: Request, status_code: int) -> str:
     return "Request failed."
 
 
+def _p_publish_gate_conflict_detail_for_production(
+    request: Request,
+    status_code: int,
+    detail: object,
+) -> dict[str, object] | None:
+    """Keep only the non-sensitive P publish-gate conflict contract."""
+
+    if (
+        status_code != status.HTTP_409_CONFLICT
+        or not request.url.path.startswith(f"{APPLICATION_API_PREFIX}/p/")
+        or not isinstance(detail, dict)
+        or set(detail) != {"ready", "blockers"}
+    ):
+        return None
+    ready = detail.get("ready")
+    blockers = detail.get("blockers")
+    if not isinstance(ready, bool) or not isinstance(blockers, list):
+        return None
+    if not all(isinstance(blocker, str) for blocker in blockers):
+        return None
+    return {"ready": ready, "blockers": list(blockers)}
+
+
 def _structured_failure_detail_for_production(
     request: Request,
     detail: object,
@@ -562,7 +585,13 @@ async def sanitized_http_exception_handler(
     exc: StarletteHTTPException,
 ):
     if _production_like():
-        detail = _structured_failure_detail_for_production(request, exc.detail)
+        detail = _p_publish_gate_conflict_detail_for_production(
+            request,
+            exc.status_code,
+            exc.detail,
+        )
+        if detail is None:
+            detail = _structured_failure_detail_for_production(request, exc.detail)
         if detail is None:
             detail = _production_error_detail(request, exc.status_code)
     else:

@@ -35,6 +35,23 @@ def _png() -> bytes:
     return output.getvalue()
 
 
+def _png_at_size(width: int, height: int) -> bytes:
+    output = BytesIO()
+    image = Image.new("RGB", (width, height), "#f7f6f4")
+    ImageDraw.Draw(image).rounded_rectangle(
+        (
+            round(width * 0.30),
+            round(height * 0.20),
+            round(width * 0.70),
+            round(height * 0.82),
+        ),
+        radius=max(8, round(min(width, height) * 0.04)),
+        fill="#355b48",
+    )
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
 def _overlay() -> dict[str, object]:
     return {
         "schema_version": OVERLAY_SCHEMA_VERSION,
@@ -193,6 +210,52 @@ def test_overlay_composes_callout_and_dimension_then_reports_missing_specs() -> 
     assert report["warnings"] == [
         "unverified structured specs: schema_version must be 1.0",
     ]
+
+
+def test_provider_dimension_overlay_cannot_render_without_verified_evidence() -> None:
+    source = _png()
+    provider_overlay = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "role": "dimension",
+        "items": [
+            {
+                "type": "dimension",
+                "source_field": "dimensions.height",
+                "line": {
+                    "start": {"x": 0.15, "y": 0.2},
+                    "end": {"x": 0.15, "y": 0.8},
+                },
+                "text_anchor": {"x": 0.1, "y": 0.5},
+            }
+        ],
+    }
+
+    rendered, report = compose_info_overlay(source, provider_overlay, {})
+
+    assert rendered == source
+    assert report == {
+        "status": "skipped_unverified_specs",
+        "applied_items": 0,
+        "warnings": ["unverified structured specs: schema_version must be 1.0"],
+    }
+
+
+@pytest.mark.parametrize("size", [(1200, 900), (1200, 675)])
+def test_overlay_uses_actual_non_square_canvas_dimensions(
+    size: tuple[int, int],
+) -> None:
+    source = _png_at_size(*size)
+
+    rendered, report = compose_info_overlay(
+        source,
+        _overlay(),
+        _verified_specs(),
+        target_market="US",
+    )
+
+    assert report == {"status": "applied", "applied_items": 2, "warnings": []}
+    with Image.open(BytesIO(rendered)) as image:
+        assert image.size == size
 
 
 def test_callout_spec_and_imperial_dimension_roles_all_render_verified_text(

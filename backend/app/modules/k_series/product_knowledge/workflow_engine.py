@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session
 from ....db.session import SessionLocal
 from ....models.organization import OrganizationRecord
 from ....models.user import User
+from ....modules.notifications.service import create_notification
 from ....services.ai_provider_router import AIExecutionRouter, AIProviderExecutionError
 from ....services.module_execution_gate import (
     ModuleExecutionContext,
@@ -66,7 +67,11 @@ from .faq_research import (
     structured_spec_number_tokens,
     validate_generated_faq,
 )
-from .info_overlay import OverlayContractError, normalize_overlay_contract
+from .info_overlay import (
+    OverlayContractError,
+    normalize_overlay_contract,
+    resolve_structured_spec_text,
+)
 from .models import (
     KProductKnowledgeAIEvent,
     KProductKnowledgeKeyword,
@@ -2671,6 +2676,8 @@ _IMAGE_BRIEF_ROLE_ALIASES = {
 }
 _IMAGE_BRIEF_POINT_BOUND_ROLES = frozenset({"proof_scene", "accessory", "detail"})
 _IMAGE_BRIEF_OVERLAY_ROLES = frozenset({"dimension", "feature_callout", "spec"})
+_IMAGE_BRIEF_GALLERY_MINIMUM = 6
+_IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM = 5
 _VALID_SELLING_POINT_EVIDENCE_PREFIXES = ("spec:", "verified_feature:")
 
 
@@ -2753,6 +2760,156 @@ def _image_brief_error(message: str) -> KWorkflowExecutionError:
         message,
         status_code=502,
     )
+
+
+def _image_brief_gallery_error(
+    issues: list[dict[str, Any]],
+    *,
+    accessory_required: bool,
+) -> KWorkflowExecutionError:
+    minimum = (
+        _IMAGE_BRIEF_GALLERY_MINIMUM
+        if accessory_required
+        else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
+    )
+    summary = "; ".join(str(issue.get("message") or "") for issue in issues)
+    return KWorkflowExecutionError(
+        "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID",
+        f"Image gallery composition is invalid: {summary}",
+        status_code=502,
+        error_report={
+            "status": "failed",
+            "reason": "gallery_composition_invalid",
+            "code": "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID",
+            "message": summary,
+            "must_stop": False,
+            "issues": issues,
+            "accessory_required": accessory_required,
+            "gallery_minimum": minimum,
+            "timestamp": _now_iso(),
+        },
+    )
+
+
+def _validate_image_brief_gallery_composition(
+    result: dict[str, Any],
+    *,
+    accessory_required: bool,
+    dimension_evidence_available: bool = True,
+) -> dict[str, Any]:
+    """Enforce gallery quotas without counting description-only modules.
+
+    This is deliberately separate from the evidence-contract normalizer.  A
+    provider may get one chance to rearrange a structurally safe brief, while
+    malformed/unbound visual claims remain hard failures and are never admitted
+    through the layout fail-safe.
+    """
+
+    raw_images = result.get("images")
+    images = raw_images if isinstance(raw_images, list) else []
+    gallery = [
+        image
+        for image in images
+        if isinstance(image, dict)
+        and str(image.get("placement") or "gallery").strip().lower() == "gallery"
+    ]
+    description = [
+        image
+        for image in images
+        if isinstance(image, dict)
+        and str(image.get("placement") or "gallery").strip().lower()
+        == "description"
+    ]
+    role_counts: dict[str, int] = {}
+    for image in gallery:
+        role = str(image.get("role") or "").strip().lower()
+        role_counts[role] = role_counts.get(role, 0) + 1
+
+    issues: list[dict[str, Any]] = []
+
+    def require_exactly_one(role: str) -> None:
+        count = role_counts.get(role, 0)
+        if count != 1:
+            issues.append(
+                {
+                    "role": role,
+                    "expected": 1,
+                    "actual": count,
+                    "message": f"gallery requires exactly one {role} image (found {count})",
+                }
+            )
+
+    require_exactly_one("main")
+    require_exactly_one("feature_callout")
+    if dimension_evidence_available:
+        require_exactly_one("dimension")
+    else:
+        issues.append(
+            {
+                "role": "dimension",
+                "expected": 1,
+                "actual": role_counts.get("dimension", 0),
+                "message": (
+                    "gallery dimension quota has no verified dimensions evidence; "
+                    "do not fabricate a source_field or measurement"
+                ),
+            }
+        )
+    if accessory_required:
+        require_exactly_one("accessory")
+    proof_count = role_counts.get("proof_scene", 0)
+    if proof_count < 2:
+        issues.append(
+            {
+                "role": "proof_scene",
+                "expected_minimum": 2,
+                "actual": proof_count,
+                "message": (
+                    "gallery requires at least two proof_scene images "
+                    f"(found {proof_count})"
+                ),
+            }
+        )
+    minimum = (
+        _IMAGE_BRIEF_GALLERY_MINIMUM
+        if accessory_required
+        else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
+    )
+    if len(gallery) < minimum:
+        issues.append(
+            {
+                "role": "gallery_total",
+                "expected_minimum": minimum,
+                "actual": len(gallery),
+                "message": (
+                    f"gallery requires at least {minimum} images "
+                    f"(found {len(gallery)}); description images do not count"
+                ),
+            }
+        )
+    description_proof_count = sum(
+        1
+        for image in description
+        if str(image.get("role") or "").strip().lower() == "proof_scene"
+    )
+    if description_proof_count < 1:
+        issues.append(
+            {
+                "role": "description_proof_scene",
+                "expected_minimum": 1,
+                "actual": description_proof_count,
+                "message": (
+                    "description requires at least one separate proof_scene image "
+                    "and it never counts toward the gallery quota"
+                ),
+            }
+        )
+    if issues:
+        raise _image_brief_gallery_error(
+            issues,
+            accessory_required=accessory_required,
+        )
+    return result
 
 
 def _bind_image_to_selling_point(
@@ -4234,20 +4391,28 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             product.structured_specs_json,
         )
         evidence_digest = _image_brief_evidence_digest(product, approved_points)
-        faq_research = (
-            self._research_faq_pain_points_fail_safe(
-                product=product,
-                request=request,
-                user=user,
+        stored_faq_research = product.faq_research_json
+        if channel == "dtc":
+            # FAQ research is durable evidence, not disposable copy input.
+            # Regeneration must reuse the exact reviewed question/source set;
+            # only a product with no persisted research runs Serper first.
+            faq_research = (
+                dict(stored_faq_research)
+                if isinstance(stored_faq_research, dict)
+                and stored_faq_research
+                else self._research_faq_pain_points_fail_safe(
+                    product=product,
+                    request=request,
+                    user=user,
+                )
             )
-            if channel == "dtc"
-            else {
+        else:
+            faq_research = {
                 "status": "not_applicable",
                 "quality_ready": False,
                 "sources": [],
                 "source_count": 0,
             }
-        )
         skill = copy_skill_context_for_channel(channel)
         gate_context = self.gate_resolver(
             self.db,
@@ -4436,35 +4601,85 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             if isinstance(product.structured_specs_json, dict)
             else {}
         )
-        dimensions = structured_specs.get("dimensions")
-        require_dimension = isinstance(dimensions, dict) and any(
-            isinstance(dimensions.get(axis), dict)
-            and dimensions[axis].get("value") not in (None, "")
+        require_dimension = any(
+            resolve_structured_spec_text(
+                structured_specs,
+                f"dimensions.{axis}",
+                target_market=getattr(product, "target_market", None),
+            )
+            is not None
             for axis in ("length", "width", "height")
         )
+        package_includes = canonical_package_includes(
+            getattr(product, "package_includes_json", None),
+            structured_specs,
+        )
+        # A reviewed multi-item package needs a dedicated gallery contents shot.
+        # Empty/one-item packages are the explicit single-product exemption.
+        accessory_required = len(package_includes) > 1
+        result = _normalize_evidence_driven_image_brief(
+            provider_result,
+            approved_points,
+        )
         try:
-            result = _normalize_evidence_driven_image_brief(
-                provider_result,
-                approved_points,
-                require_dimension=require_dimension,
+            _validate_image_brief_gallery_composition(
+                result,
+                accessory_required=accessory_required,
+                dimension_evidence_available=require_dimension,
             )
-        except KWorkflowExecutionError as exc:
-            missing_required_dimension = (
-                require_dimension
-                and exc.code == "IMAGE_BRIEF_EVIDENCE_CONTRACT_INVALID"
-                and "must contain a dimension image" in str(exc).casefold()
-            )
-            if not missing_required_dimension:
+            result["gallery_composition_validation"] = {
+                "attempted_rearrangement": False,
+                "status": "passed",
+                "accessory_required": accessory_required,
+                "dimension_evidence_available": require_dimension,
+                "gallery_minimum": (
+                    _IMAGE_BRIEF_GALLERY_MINIMUM
+                    if accessory_required
+                    else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
+                ),
+            }
+        except KWorkflowExecutionError as first_error:
+            if first_error.code != "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID":
                 raise
+            initial_issues = list(first_error.error_report.get("issues") or [])
+            missing_dimension = any(
+                issue.get("role") == "dimension" for issue in initial_issues
+            )
+            if require_dimension and missing_dimension:
+                retry_task = "image_brief_generation_dimension_retry"
+                correction_prefix = (
+                    "The previous plan omitted the mandatory role=dimension image. "
+                )
+            else:
+                retry_task = "image_brief_generation_gallery_retry"
+                correction_prefix = "The previous plan violated the gallery quota. "
+            accessory_rule = (
+                "exactly one gallery accessory image"
+                if accessory_required
+                else "accessory may be omitted because the reviewed package has at most one item"
+            )
+            dimension_rule = (
+                "exactly one gallery dimension image whose overlay resolves to the supplied verified dimensions"
+                if require_dimension
+                else (
+                    "no fabricated dimension image/source_field/value because no verified "
+                    "dimension evidence is available (the quota must fail safe for review)"
+                )
+            )
             retry_input = {
                 **ai_input,
-                "task": "image_brief_generation_dimension_retry",
+                "task": retry_task,
                 "correction": (
-                    "The previous plan omitted the mandatory role=dimension image. "
-                    "Return a corrected full brief with exactly one main plus at least "
-                    "one gallery dimension image whose structured overlay resolves to "
-                    "the supplied verified dimensions."
+                    correction_prefix
+                    + "Return a corrected FULL brief (including description images) with "
+                    "gallery containing exactly one main, exactly one feature_callout, "
+                    f"{accessory_rule}, {dimension_rule}, at least two proof_scene "
+                    "images, and the required gallery minimum. Also include at least one "
+                    "separate placement=description proof_scene in landscape composition; "
+                    "description images never count toward the gallery minimum. Preserve "
+                    "all evidence bindings and structured overlays."
                 ),
+                "gallery_validation_issues": initial_issues,
                 "previous_invalid_output": provider_result,
             }
             retry_result = self._execute_provider(
@@ -4474,15 +4689,102 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 gate_context=gate_context,
                 payload=retry_input,
             )
+            # Evidence/overlay failures remain fail-closed. Only a second valid
+            # evidence contract with a bad gallery arrangement may fail open.
             result = _normalize_evidence_driven_image_brief(
                 retry_result,
                 approved_points,
-                require_dimension=True,
             )
-            result["dimension_retry"] = {
-                "attempted": True,
-                "status": "succeeded",
+            remaining_issues: list[dict[str, Any]] = []
+            try:
+                _validate_image_brief_gallery_composition(
+                    result,
+                    accessory_required=accessory_required,
+                    dimension_evidence_available=require_dimension,
+                )
+                layout_status = "succeeded"
+            except KWorkflowExecutionError as second_error:
+                if second_error.code != "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID":
+                    raise
+                layout_status = "failed_open"
+                remaining_issues = list(
+                    second_error.error_report.get("issues") or []
+                )
+            result["gallery_composition_validation"] = {
+                "attempted_rearrangement": True,
+                "status": layout_status,
+                "accessory_required": accessory_required,
+                "dimension_evidence_available": require_dimension,
+                "gallery_minimum": (
+                    _IMAGE_BRIEF_GALLERY_MINIMUM
+                    if accessory_required
+                    else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
+                ),
+                "initial_issues": initial_issues,
+                "remaining_issues": remaining_issues,
             }
+            if require_dimension and missing_dimension:
+                dimension_count = sum(
+                    1
+                    for image in result.get("images", [])
+                    if isinstance(image, dict)
+                    and image.get("role") == "dimension"
+                    and image.get("placement") == "gallery"
+                )
+                result["dimension_retry"] = {
+                    "attempted": True,
+                    "status": "succeeded" if dimension_count == 1 else "failed_open",
+                }
+            if layout_status == "failed_open":
+                warnings = (
+                    list(result.get("warnings"))
+                    if isinstance(result.get("warnings"), list)
+                    else []
+                )
+                warnings.append(
+                    {
+                        "code": "IMAGE_BRIEF_GALLERY_COMPOSITION_FAILED_OPEN",
+                        "message": (
+                            "Gallery composition remained invalid after one full-brief "
+                            "rearrangement; fail-safe preserved the evidence-valid plan."
+                        ),
+                        "issues": remaining_issues,
+                    }
+                )
+                result["warnings"] = warnings
+                logger.error(
+                    "image brief gallery composition failed open product=%s issues=%s",
+                    product.id,
+                    remaining_issues,
+                )
+                try:
+                    create_notification(
+                        self.db,
+                        event_type="k.image_brief.gallery_failed_open",
+                        title=(
+                            "作图指令图廊配额重排后仍不合格："
+                            f"{product.sku or product.product_key or product.id}"
+                        ),
+                        body="证据合同有效，已按 fail-safe 放行；请人工检查图位后再渲染。",
+                        level="error",
+                        source="k.image_brief",
+                        product_id=product.id,
+                        payload={
+                            "issues": remaining_issues,
+                            "accessory_required": accessory_required,
+                            "dimension_evidence_available": require_dimension,
+                            "gallery_minimum": (
+                                _IMAGE_BRIEF_GALLERY_MINIMUM
+                                if accessory_required
+                                else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
+                            ),
+                        },
+                    )
+                except Exception:  # noqa: BLE001 - alerting must not defeat fail-safe
+                    logger.exception(
+                        "image brief gallery fail-open notification failed product=%s",
+                        product.id,
+                    )
         result["evidence_digest"] = evidence_digest
         zh = self._plain_chinese(result, "作图指令", user=user, request=request)
         product = self._require_product(product_id, scope_context)

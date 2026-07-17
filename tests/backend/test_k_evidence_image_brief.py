@@ -16,6 +16,7 @@ from backend.app.modules.k_series.product_knowledge.workflow_engine import (
     KWorkflowExecutionError,
     _approved_selling_points_snapshot,
     _normalize_evidence_driven_image_brief,
+    _validate_image_brief_gallery_composition,
 )
 
 
@@ -97,6 +98,95 @@ def _valid_brief() -> dict[str, object]:
             },
         ],
     }
+
+
+def _round4_gallery_brief(*, include_accessory: bool = True) -> dict[str, object]:
+    images: list[dict[str, object]] = [
+        {
+            "position": 1,
+            "role": "main",
+            "placement": "gallery",
+            "prompt": "Pure white main.",
+        },
+        {
+            "position": 2,
+            "role": "feature_callout",
+            "placement": "gallery",
+            "prompt": "Clean verified callout base.",
+            "overlay": {
+                "schema_version": "k-info-overlay-v1",
+                "role": "feature_callout",
+                "items": [
+                    {
+                        "type": "callout",
+                        "source_field": "material",
+                        "anchor": {"x": 0.45, "y": 0.5},
+                        "text_anchor": {"x": 0.75, "y": 0.25},
+                        "leader_direction": "right",
+                    }
+                ],
+            },
+        },
+        {
+            "position": 3,
+            "role": "dimension",
+            "placement": "gallery",
+            "prompt": "Clean dimension base.",
+            "overlay": {
+                "schema_version": "k-info-overlay-v1",
+                "role": "dimension",
+                "items": [
+                    {
+                        "type": "dimension",
+                        "source_field": "dimensions.height",
+                        "line": {
+                            "start": {"x": 0.2, "y": 0.2},
+                            "end": {"x": 0.2, "y": 0.8},
+                        },
+                        "text_anchor": {"x": 0.1, "y": 0.5},
+                    }
+                ],
+            },
+        },
+        {
+            "position": 4,
+            "role": "proof_scene",
+            "placement": "gallery",
+            "prompt": "Product in verified real use, angle one.",
+            "selling_point_id": "camp-cooking",
+            "proof_intent": "Show active outdoor cooking from the front.",
+        },
+        {
+            "position": 5,
+            "role": "proof_scene",
+            "placement": "gallery",
+            "prompt": "Product in verified real use, angle two.",
+            "selling_point_id": "camp-cooking",
+            "proof_intent": "Show active outdoor cooking from the side.",
+        },
+    ]
+    if include_accessory:
+        images.append(
+            {
+                "position": 6,
+                "role": "accessory",
+                "placement": "gallery",
+                "prompt": "Reviewed package contents laid out together.",
+                "selling_point_id": "portable",
+                "proof_intent": "Show every reviewed included item once.",
+            }
+        )
+    images.append(
+        {
+            "position": len(images) + 1,
+            "role": "proof_scene",
+            "placement": "description",
+            "prompt": "Landscape verified-use scene for the description module.",
+            "selling_point_id": "camp-cooking",
+            "proof_intent": "Show active outdoor cooking in a wide composition.",
+        }
+    )
+    return {"images": images}
 
 
 def test_approved_snapshot_never_reads_candidates_or_invents_legacy_evidence() -> None:
@@ -191,6 +281,165 @@ def test_image_brief_requires_dimension_role_when_dimensions_exist() -> None:
             _points(),
             require_dimension=True,
         )
+
+
+def test_round4_gallery_quota_ignores_description_images() -> None:
+    normalized = _normalize_evidence_driven_image_brief(
+        _round4_gallery_brief(),
+        _points(),
+    )
+    _validate_image_brief_gallery_composition(
+        normalized,
+        accessory_required=True,
+    )
+
+    images = normalized["images"]
+    assert isinstance(images, list)
+    proof = next(
+        image
+        for image in images
+        if isinstance(image, dict)
+        and image.get("role") == "proof_scene"
+        and image.get("position") == 5
+    )
+    proof["placement"] = "description"
+    images.append(
+        {
+            **proof,
+            "position": 8,
+            "placement": "description",
+        }
+    )
+
+    with pytest.raises(KWorkflowExecutionError) as caught:
+        _validate_image_brief_gallery_composition(
+            normalized,
+            accessory_required=True,
+        )
+    assert caught.value.code == "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID"
+    issues = caught.value.error_report["issues"]
+    assert any(issue.get("role") == "proof_scene" for issue in issues)
+    assert any(issue.get("role") == "gallery_total" for issue in issues)
+
+
+def test_round4_single_item_accessory_exemption_still_requires_five_gallery_images() -> None:
+    normalized = _normalize_evidence_driven_image_brief(
+        _round4_gallery_brief(include_accessory=False),
+        _points(),
+    )
+    _validate_image_brief_gallery_composition(
+        normalized,
+        accessory_required=False,
+    )
+
+    with pytest.raises(KWorkflowExecutionError) as caught:
+        _validate_image_brief_gallery_composition(
+            normalized,
+            accessory_required=True,
+        )
+    assert caught.value.error_report["gallery_minimum"] == 6
+    assert any(
+        issue.get("role") == "accessory"
+        for issue in caught.value.error_report["issues"]
+    )
+
+
+def test_dimension_role_cannot_satisfy_quota_without_verified_dimension_evidence() -> None:
+    normalized = _normalize_evidence_driven_image_brief(
+        _round4_gallery_brief(include_accessory=False),
+        _points(),
+    )
+
+    with pytest.raises(KWorkflowExecutionError) as caught:
+        _validate_image_brief_gallery_composition(
+            normalized,
+            accessory_required=False,
+            dimension_evidence_available=False,
+        )
+
+    assert caught.value.code == "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID"
+    dimension_issue = next(
+        issue
+        for issue in caught.value.error_report["issues"]
+        if issue.get("role") == "dimension"
+    )
+    assert "do not fabricate" in dimension_issue["message"]
+
+
+def test_render_enqueue_ratio_is_owned_by_placement_not_ai_output() -> None:
+    instruction = {"aspect_ratio": "9:16"}
+    assert (
+        image_render_jobs._resolve_aspect_ratio(
+            {"aspect_ratio": "4:5"},
+            instruction,
+            "dtc",
+            image_render_jobs.PLACEMENT_GALLERY,
+        )
+        == "1:1"
+    )
+    assert (
+        image_render_jobs._resolve_aspect_ratio(
+            {"aspect_ratio": "1:1"},
+            instruction,
+            "dtc",
+            image_render_jobs.PLACEMENT_DESCRIPTION,
+        )
+        == "4:3"
+    )
+
+
+def test_enqueue_persists_forced_ratio_in_each_job_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inserted: list[dict[str, object]] = []
+
+    class _DB:
+        def execute(self, statement, parameters):
+            if "INSERT INTO k_image_render_jobs" in str(statement):
+                inserted.append(dict(parameters))
+            return SimpleNamespace(scalar=lambda: 0)
+
+    product = SimpleNamespace(
+        id=uuid4(),
+        channel="dtc",
+        detected_brand_terms=[],
+        image_instruction_json={
+            "aspect_ratio": "9:16",
+            "images": [
+                {
+                    "position": 1,
+                    "role": "main",
+                    "placement": "gallery",
+                    "aspect_ratio": "4:3",
+                    "prompt": "Pure white product main.",
+                },
+                {
+                    "position": 2,
+                    "role": "proof_scene",
+                    "placement": "description",
+                    "aspect_ratio": "1:1",
+                    "prompt": "Wide real-use scene.",
+                },
+            ],
+        },
+    )
+    monkeypatch.setattr(image_render_jobs, "reference_available", lambda *_args: True)
+
+    _batch_id, jobs = image_render_jobs.enqueue_image_render_jobs(
+        _DB(),  # type: ignore[arg-type]
+        product=product,  # type: ignore[arg-type]
+        user=None,
+        scope_context=SimpleNamespace(
+            workspace_key="workspace",
+            business_context="catalog",
+            scope_mode="global",
+        ),
+    )
+
+    assert len(jobs) == 2
+    snapshots = {str(row["placement"]): row for row in inserted}
+    assert snapshots["gallery"]["aspect_ratio"] == "1:1"
+    assert snapshots["description"]["aspect_ratio"] == "4:3"
 
 
 def test_render_model_automatically_retries_twice_with_exponential_backoff(
