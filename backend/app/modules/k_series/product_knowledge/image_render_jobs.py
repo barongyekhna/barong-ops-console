@@ -1652,9 +1652,9 @@ def save_render_assets(
         and row.metadata_json.get("render_pipeline") == RENDER_PIPELINE_TAG
     ]
     if not staged:
-        raise KImageRenderError(
-            "NOTHING_TO_SAVE", "没有待保存的暂存图。", status_code=409
-        )
+        # Save is an idempotent orchestration boundary: retrying after a
+        # successful save (or before any render exists) is a successful no-op.
+        return {"saved": [], "audit_enqueued": False}
 
     saved: list[dict[str, Any]] = []
     main_asset: KProductKnowledgeMediaAsset | None = None

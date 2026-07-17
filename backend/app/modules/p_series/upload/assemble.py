@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ..contract.upload_package import (
@@ -56,6 +56,7 @@ from ...k_series.product_knowledge.evidence_guard import (
     canonical_package_includes,
     enforce_package_evidence_consistency,
 )
+from ...k_series.product_knowledge.models import KProductKnowledgeMediaAsset
 from ...k_series.product_knowledge.sku_allocator import ensure_product_sku
 from .description_html import (
     build_description_html,
@@ -195,14 +196,15 @@ def _has_bound_image(db: Session, product: Any) -> bool:
         return True
     if getattr(product, "selected_image_path", None):
         return True
-    row = db.execute(
-        text(
-            "SELECT 1 FROM k_product_knowledge_media_assets "
-            "WHERE product_id = :p AND status = 'bound' LIMIT 1"
-        ),
-        {"p": str(product.id)},
-    ).first()
-    return row is not None
+    asset_id = db.scalar(
+        select(KProductKnowledgeMediaAsset.id)
+        .where(
+            KProductKnowledgeMediaAsset.product_id == product.id,
+            KProductKnowledgeMediaAsset.status == "bound",
+        )
+        .limit(1)
+    )
+    return asset_id is not None
 
 
 def _availability(stock_status: str | None) -> str:
@@ -535,6 +537,18 @@ def _append_package_includes_section(
 ) -> str:
     if not package_includes:
         return description_html
+    # K copy may already own this conversion section as a reviewed H2.  The P
+    # template must not append a second, mechanically generated copy below it.
+    headings = re.findall(
+        r"<h[1-6]\b[^>]*>(.*?)</h[1-6]\s*>",
+        description_html,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    for heading_html in headings:
+        heading = html.unescape(re.sub(r"<[^>]+>", " ", heading_html))
+        heading = re.sub(r"\s+", " ", heading).strip().casefold()
+        if re.search(r"\bwhat(?:'|’)?s\s+in\s+the\s+box\b", heading):
+            return description_html
     items = "".join(
         f"<li>{html.escape(item)}</li>" for item in package_includes
     )

@@ -4450,6 +4450,14 @@ def approve_product_selling_points(
             ),
         )
 
+    # Approved selling-point IDs are a positional contract for downstream image
+    # briefs. Rejections can leave holes in candidate IDs (for example bp1, bp3),
+    # so freeze the retained set with IDs that match its 1-based list order.
+    approved_bullets = [
+        bullet.model_copy(update={"id": f"bp{index}"})
+        for index, bullet in enumerate(approved_bullets, start=1)
+    ]
+
     source = (payload.source or "manual_review").strip() or "manual_review"
     target_language = (
         payload.target_language.strip()

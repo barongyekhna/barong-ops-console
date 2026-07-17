@@ -354,16 +354,56 @@ def p_dispatch(
     user: User = Depends(_require_p_permission(PERMISSION_EXECUTE)),
 ) -> DispatchResponse:
     del request, user
-    product = _load_product(db, product_id)
-    blockers = gate_blockers(db, product)
+    try:
+        product = _load_product(db, product_id)
+        blockers = gate_blockers(db, product)
+    except HTTPException:
+        logger.exception(
+            "P dispatch preflight raised an HTTP error product_id=%s channel=%s",
+            product_id,
+            channel,
+        )
+        raise
+    except Exception:  # noqa: BLE001 - preserve the original route failure
+        logger.exception(
+            "P dispatch preflight failed product_id=%s channel=%s",
+            product_id,
+            channel,
+        )
+        raise
     if blockers:
+        logger.warning(
+            "P dispatch blocked by canonical gate product_id=%s channel=%s blockers=%s",
+            product_id,
+            channel,
+            blockers,
+        )
         raise HTTPException(
             status_code=409, detail={"ready": False, "blockers": blockers}
         )
-    job = create_dispatch_job(
-        db, product_id=product_id, channel=channel, public_base=_public_base()
-    )
-    db.commit()
+    try:
+        job = create_dispatch_job(
+            db, product_id=product_id, channel=channel, public_base=_public_base()
+        )
+    except Exception:  # noqa: BLE001 - do not remap dispatch failures to 409
+        logger.exception(
+            "P dispatch job creation failed product_id=%s channel=%s",
+            product_id,
+            channel,
+        )
+        db.rollback()
+        raise
+    try:
+        db.commit()
+    except Exception:  # noqa: BLE001 - original exception stays visible and propagates
+        logger.exception(
+            "P dispatch commit failed product_id=%s channel=%s job_id=%s",
+            product_id,
+            channel,
+            job.job_id,
+        )
+        db.rollback()
+        raise
     return DispatchResponse(
         job_id=job.job_id,
         status=job.status,

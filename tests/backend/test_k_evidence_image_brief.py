@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from backend.app.modules.k_series.product_knowledge.prompt_skills import (
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
     KWorkflowExecutionError,
     _approved_selling_points_snapshot,
+    _bind_image_to_selling_point,
     _normalize_evidence_driven_image_brief,
     _validate_image_brief_gallery_composition,
 )
@@ -241,6 +243,70 @@ def test_image_brief_binds_proof_and_forces_main_and_dimension_into_gallery() ->
     assert images[1]["selling_point_index"] == 2
     assert images[1]["selling_point_text"] == "Supports real outdoor cooking"
     assert images[2]["placement"] == "gallery"
+
+
+def test_image_brief_binding_exact_id_wins_over_sparse_id_metadata_conflicts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    approved_points = [
+        {"id": "bp1", "text": "First approved point"},
+        {"id": "bp3", "text": "Third source point, second approved point"},
+        {"id": "bp4", "text": "Fourth source point, third approved point"},
+    ]
+
+    with caplog.at_level(
+        logging.DEBUG,
+        logger="backend.app.modules.k_series.product_knowledge.workflow_engine",
+    ):
+        bound = _bind_image_to_selling_point(
+            {
+                "selling_point_id": "bp3",
+                "selling_point_index": 3,
+                "selling_point_text": "Fourth source point, third approved point",
+            },
+            approved_points,
+        )
+
+    assert bound is approved_points[1]
+    record = next(
+        record
+        for record in caplog.records
+        if "binding by id" in record.getMessage()
+    )
+    assert record.selling_point_binding_conflicts == [
+        "index_mismatch",
+        "text_mismatch",
+    ]
+
+
+def test_image_brief_binding_without_id_still_falls_back_to_index() -> None:
+    approved_points = [
+        {"id": "bp1", "text": "First approved point"},
+        {"id": "bp3", "text": "Third source point, second approved point"},
+    ]
+
+    assert _bind_image_to_selling_point(
+        {"selling_point_index": 2},
+        approved_points,
+    ) is approved_points[1]
+
+
+def test_image_brief_binding_unknown_id_does_not_fall_back() -> None:
+    approved_points = [
+        {"id": "bp1", "text": "First approved point"},
+        {"id": "bp3", "text": "Third source point, second approved point"},
+    ]
+
+    assert (
+        _bind_image_to_selling_point(
+            {
+                "selling_point_id": "missing",
+                "selling_point_index": 2,
+            },
+            approved_points,
+        )
+        is None
+    )
 
 
 @pytest.mark.parametrize(

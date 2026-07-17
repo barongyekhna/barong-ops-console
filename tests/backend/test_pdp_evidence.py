@@ -546,3 +546,76 @@ def test_manual_approval_rejects_duplicate_ids_and_freezes_evidence_snapshot() -
     assert _selling_points_snapshot(product)["digest"] == (
         product.ai_warnings_json["selling_points_review"]["selling_points_digest"]
     )
+
+
+def test_manual_approval_compacts_retained_bullet_ids_in_list_order() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(bind=engine)
+    db = sessionmaker(bind=engine, expire_on_commit=False)()
+    product = KProductKnowledgeProduct(
+        id=uuid4(),
+        product_key="approval-id-compaction",
+        workspace_key="org-approval",
+        business_context="independent_store",
+        scope_mode="production",
+        canonical_language="en",
+        target_market="US",
+    )
+    db.add(product)
+    db.commit()
+    request = Request({"type": "http", "method": "POST", "path": "/", "headers": []})
+    request.state.org_id = "org-approval"
+    user = User(id=7, username="reviewer", password_hash="x", role="owner", is_active=True)
+
+    response = approve_product_selling_points(
+        product.id,
+        ApproveSellingPointsRequest(
+            bullets=[
+                SellingPointBullet(
+                    id="bp1",
+                    category="storage",
+                    text="Compact storage",
+                    importance_score=1,
+                    evidence="operator_fact",
+                    evidence_excerpt="Compact storage",
+                    review_decision="approve",
+                ),
+                SellingPointBullet(
+                    id="bp2",
+                    category="candidate",
+                    text="Rejected unsupported claim",
+                    importance_score=1,
+                    review_decision="reject",
+                ),
+                SellingPointBullet(
+                    id="bp3",
+                    category="setup",
+                    text="Simple setup",
+                    importance_score=1,
+                    evidence="operator_fact",
+                    evidence_excerpt="Simple setup",
+                    review_decision="edit",
+                ),
+            ]
+        ),
+        request,
+        db,
+        user,
+    )
+
+    assert [bullet.id for bullet in response.bullets] == ["bp1", "bp2"]
+    assert [bullet.text for bullet in response.bullets] == [
+        "Compact storage",
+        "Simple setup",
+    ]
+    db.refresh(product)
+    assert [
+        bullet["id"] for bullet in product.selling_points_approved_json["bullets"]
+    ] == ["bp1", "bp2"]
+    assert [
+        bullet["text"] for bullet in product.selling_points_approved_json["bullets"]
+    ] == ["Compact storage", "Simple setup"]
+    assert [
+        bullet["text"]
+        for bullet in product.selling_points_approved_json["rejected_bullets"]
+    ] == ["Rejected unsupported claim"]

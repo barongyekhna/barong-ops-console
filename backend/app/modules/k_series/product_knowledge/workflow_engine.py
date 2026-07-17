@@ -2918,16 +2918,6 @@ def _bind_image_to_selling_point(
     image: dict[str, Any],
     approved_points: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    matches: list[dict[str, Any]] = []
-    raw_index = image.get("selling_point_index")
-    try:
-        point_index = int(raw_index) if raw_index not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
-    if point_index is not None:
-        if not 1 <= point_index <= len(approved_points):
-            return None
-        matches.append(approved_points[point_index - 1])
     point_id = str(image.get("selling_point_id") or "").strip()
     if point_id:
         matched_id = next(
@@ -2940,7 +2930,46 @@ def _bind_image_to_selling_point(
         )
         if matched_id is None:
             return None
-        matches.append(matched_id)
+
+        conflicts: list[str] = []
+        raw_index = image.get("selling_point_index")
+        if raw_index not in (None, ""):
+            try:
+                point_index = int(raw_index)
+            except (TypeError, ValueError):
+                conflicts.append("index_invalid")
+            else:
+                if not 1 <= point_index <= len(approved_points):
+                    conflicts.append("index_out_of_range")
+                elif approved_points[point_index - 1] is not matched_id:
+                    conflicts.append("index_mismatch")
+
+        point_text = str(image.get("selling_point_text") or "").strip()
+        if point_text and point_text != str(matched_id.get("text") or "").strip():
+            conflicts.append("text_mismatch")
+
+        if conflicts:
+            logger.debug(
+                "Image brief selling-point metadata conflicts with exact id; "
+                "binding by id",
+                extra={
+                    "selling_point_id": point_id,
+                    "selling_point_index": raw_index,
+                    "selling_point_binding_conflicts": conflicts,
+                },
+            )
+        return matched_id
+
+    matches: list[dict[str, Any]] = []
+    raw_index = image.get("selling_point_index")
+    try:
+        point_index = int(raw_index) if raw_index not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+    if point_index is not None:
+        if not 1 <= point_index <= len(approved_points):
+            return None
+        matches.append(approved_points[point_index - 1])
     point_text = str(image.get("selling_point_text") or "").strip()
     if point_text:
         matched_text = next(
