@@ -102,7 +102,11 @@ def _valid_brief() -> dict[str, object]:
     }
 
 
-def _round4_gallery_brief(*, include_accessory: bool = True) -> dict[str, object]:
+def _round4_gallery_brief(
+    *,
+    include_accessory: bool = True,
+    description_count: int = 3,
+) -> dict[str, object]:
     images: list[dict[str, object]] = [
         {
             "position": 1,
@@ -178,16 +182,23 @@ def _round4_gallery_brief(*, include_accessory: bool = True) -> dict[str, object
                 "proof_intent": "Show every reviewed included item once.",
             }
         )
-    images.append(
-        {
-            "position": len(images) + 1,
-            "role": "proof_scene",
-            "placement": "description",
-            "prompt": "Landscape verified-use scene for the description module.",
-            "selling_point_id": "camp-cooking",
-            "proof_intent": "Show active outdoor cooking in a wide composition.",
-        }
-    )
+    for description_index in range(description_count):
+        images.append(
+            {
+                "position": len(images) + 1,
+                "role": "proof_scene",
+                "placement": "description",
+                "prompt": (
+                    "Landscape verified-use scene for description module "
+                    f"{description_index + 1}."
+                ),
+                "selling_point_id": "camp-cooking",
+                "proof_intent": (
+                    "Show active outdoor cooking in wide composition "
+                    f"{description_index + 1}."
+                ),
+            }
+        )
     return {"images": images}
 
 
@@ -386,6 +397,73 @@ def test_round4_gallery_quota_ignores_description_images() -> None:
     issues = caught.value.error_report["issues"]
     assert any(issue.get("role") == "proof_scene" for issue in issues)
     assert any(issue.get("role") == "gallery_total" for issue in issues)
+
+
+def test_round6_description_quota_rejects_six_gallery_plus_one_description() -> None:
+    normalized = _normalize_evidence_driven_image_brief(
+        _round4_gallery_brief(description_count=1),
+        _points(),
+    )
+
+    with pytest.raises(KWorkflowExecutionError) as caught:
+        _validate_image_brief_gallery_composition(
+            normalized,
+            accessory_required=True,
+        )
+
+    assert caught.value.code == "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID"
+    assert caught.value.error_report["description_proof_scene_minimum"] == 3
+    issue = next(
+        issue
+        for issue in caught.value.error_report["issues"]
+        if issue.get("role") == "description_proof_scene"
+    )
+    assert issue["expected_minimum"] == 3
+    assert issue["actual"] == 1
+    assert "Image brief composition is invalid" in str(caught.value)
+
+
+def test_round6_description_quota_counts_only_proof_scene_roles() -> None:
+    normalized = _normalize_evidence_driven_image_brief(
+        _round4_gallery_brief(description_count=3),
+        _points(),
+    )
+    description_images = [
+        image
+        for image in normalized["images"]
+        if isinstance(image, dict) and image.get("placement") == "description"
+    ]
+    description_images[1]["role"] = "detail"
+    description_images[2]["role"] = "accessory"
+
+    with pytest.raises(KWorkflowExecutionError) as caught:
+        _validate_image_brief_gallery_composition(
+            normalized,
+            accessory_required=True,
+        )
+
+    issue = next(
+        issue
+        for issue in caught.value.error_report["issues"]
+        if issue.get("role") == "description_proof_scene"
+    )
+    assert issue["expected_minimum"] == 3
+    assert issue["actual"] == 1
+
+
+def test_round6_description_quota_accepts_six_gallery_plus_three_description() -> None:
+    normalized = _normalize_evidence_driven_image_brief(
+        _round4_gallery_brief(description_count=3),
+        _points(),
+    )
+
+    assert (
+        _validate_image_brief_gallery_composition(
+            normalized,
+            accessory_required=True,
+        )
+        is normalized
+    )
 
 
 def test_round4_single_item_accessory_exemption_still_requires_five_gallery_images() -> None:
@@ -602,3 +680,4 @@ def test_prompt_contracts_require_evidence_for_points_and_proof_shots() -> None:
     assert "NO white-background secondary" in image
     assert "role=dimension is ALWAYS placement=gallery" in image
     assert "MUST include at least one role=dimension image" in image
+    assert "at least three separate placement=description proof_scene images" in image

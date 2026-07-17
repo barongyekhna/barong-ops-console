@@ -2680,6 +2680,7 @@ _IMAGE_BRIEF_POINT_BOUND_ROLES = frozenset({"proof_scene", "accessory", "detail"
 _IMAGE_BRIEF_OVERLAY_ROLES = frozenset({"dimension", "feature_callout", "spec"})
 _IMAGE_BRIEF_GALLERY_MINIMUM = 6
 _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM = 5
+_IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM = 3
 _VALID_SELLING_POINT_EVIDENCE_PREFIXES = ("spec:", "verified_feature:")
 
 
@@ -2777,7 +2778,7 @@ def _image_brief_gallery_error(
     summary = "; ".join(str(issue.get("message") or "") for issue in issues)
     return KWorkflowExecutionError(
         "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID",
-        f"Image gallery composition is invalid: {summary}",
+        f"Image brief composition is invalid: {summary}",
         status_code=502,
         error_report={
             "status": "failed",
@@ -2788,6 +2789,9 @@ def _image_brief_gallery_error(
             "issues": issues,
             "accessory_required": accessory_required,
             "gallery_minimum": minimum,
+            "description_proof_scene_minimum": (
+                _IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM
+            ),
             "timestamp": _now_iso(),
         },
     )
@@ -2799,7 +2803,7 @@ def _validate_image_brief_gallery_composition(
     accessory_required: bool,
     dimension_evidence_available: bool = True,
 ) -> dict[str, Any]:
-    """Enforce gallery quotas without counting description-only modules.
+    """Enforce gallery and description quotas as independent compositions.
 
     This is deliberately separate from the evidence-contract normalizer.  A
     provider may get one chance to rearrange a structurally safe brief, while
@@ -2894,15 +2898,17 @@ def _validate_image_brief_gallery_composition(
         for image in description
         if str(image.get("role") or "").strip().lower() == "proof_scene"
     )
-    if description_proof_count < 1:
+    if description_proof_count < _IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM:
         issues.append(
             {
                 "role": "description_proof_scene",
-                "expected_minimum": 1,
+                "expected_minimum": _IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM,
                 "actual": description_proof_count,
                 "message": (
-                    "description requires at least one separate proof_scene image "
-                    "and it never counts toward the gallery quota"
+                    "description requires at least "
+                    f"{_IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM} separate "
+                    "placement=description proof_scene images; they never count "
+                    "toward the gallery quota"
                 ),
             }
         )
@@ -4887,6 +4893,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                     if accessory_required
                     else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
                 ),
+                "description_proof_scene_minimum": (
+                    _IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM
+                ),
             }
         except KWorkflowExecutionError as first_error:
             if first_error.code != "IMAGE_BRIEF_GALLERY_COMPOSITION_INVALID":
@@ -4902,7 +4911,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 )
             else:
                 retry_task = "image_brief_generation_gallery_retry"
-                correction_prefix = "The previous plan violated the gallery quota. "
+                correction_prefix = (
+                    "The previous plan violated the gallery or description image quota. "
+                )
             accessory_rule = (
                 "exactly one gallery accessory image"
                 if accessory_required
@@ -4924,8 +4935,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                     + "Return a corrected FULL brief (including description images) with "
                     "gallery containing exactly one main, exactly one feature_callout, "
                     f"{accessory_rule}, {dimension_rule}, at least two proof_scene "
-                    "images, and the required gallery minimum. Also include at least one "
-                    "separate placement=description proof_scene in landscape composition; "
+                    "images, and the required gallery minimum. Also include at least three "
+                    "separate placement=description proof_scene images in landscape "
+                    "composition; "
                     "description images never count toward the gallery minimum. Preserve "
                     "all evidence bindings and structured overlays."
                 ),
@@ -4940,7 +4952,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 payload=retry_input,
             )
             # Evidence/overlay failures remain fail-closed. Only a second valid
-            # evidence contract with a bad gallery arrangement may fail open.
+            # evidence contract with a bad image composition may fail open.
             result = _normalize_evidence_driven_image_brief(
                 retry_result,
                 approved_points,
@@ -4970,6 +4982,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                     if accessory_required
                     else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
                 ),
+                "description_proof_scene_minimum": (
+                    _IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM
+                ),
                 "initial_issues": initial_issues,
                 "remaining_issues": remaining_issues,
             }
@@ -4995,7 +5010,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                     {
                         "code": "IMAGE_BRIEF_GALLERY_COMPOSITION_FAILED_OPEN",
                         "message": (
-                            "Gallery composition remained invalid after one full-brief "
+                            "Image brief composition remained invalid after one full-brief "
                             "rearrangement; fail-safe preserved the evidence-valid plan."
                         ),
                         "issues": remaining_issues,
@@ -5003,7 +5018,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 )
                 result["warnings"] = warnings
                 logger.error(
-                    "image brief gallery composition failed open product=%s issues=%s",
+                    "image brief composition failed open product=%s issues=%s",
                     product.id,
                     remaining_issues,
                 )
@@ -5012,7 +5027,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                         self.db,
                         event_type="k.image_brief.gallery_failed_open",
                         title=(
-                            "作图指令图廊配额重排后仍不合格："
+                            "作图指令图片布局配额重排后仍不合格："
                             f"{product.sku or product.product_key or product.id}"
                         ),
                         body="证据合同有效，已按 fail-safe 放行；请人工检查图位后再渲染。",
@@ -5028,11 +5043,14 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                                 if accessory_required
                                 else _IMAGE_BRIEF_GALLERY_ACCESSORY_EXEMPT_MINIMUM
                             ),
+                            "description_proof_scene_minimum": (
+                                _IMAGE_BRIEF_DESCRIPTION_PROOF_SCENE_MINIMUM
+                            ),
                         },
                     )
                 except Exception:  # noqa: BLE001 - alerting must not defeat fail-safe
                     logger.exception(
-                        "image brief gallery fail-open notification failed product=%s",
+                        "image brief composition fail-open notification failed product=%s",
                         product.id,
                     )
         result["evidence_digest"] = evidence_digest

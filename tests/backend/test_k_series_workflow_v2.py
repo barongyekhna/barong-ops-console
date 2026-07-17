@@ -1192,6 +1192,22 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
                         "selling_point_id": "operator-steel",
                         "proof_intent": "Show the verified construction in a wide use scene.",
                     },
+                    {
+                        "position": 7,
+                        "role": "proof_scene",
+                        "placement": "description",
+                        "prompt": "Wide verified-use detail for the description module.",
+                        "selling_point_id": "operator-steel",
+                        "proof_intent": "Show the verified construction in a wide detail view.",
+                    },
+                    {
+                        "position": 8,
+                        "role": "proof_scene",
+                        "placement": "description",
+                        "prompt": "Wide verified-use context for the description module.",
+                        "selling_point_id": "operator-steel",
+                        "proof_intent": "Show the verified construction in a wide context view.",
+                    },
                 ]
             }
         if key.step_name == "translate_zh":
