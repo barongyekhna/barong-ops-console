@@ -5,7 +5,7 @@ WooCommerce 的 description_html，并生成 Schema.org 结构化数据（Produc
 这里只做**确定性排版 + schema 组装**，不再调 AI。
 
 排版铁律（见 SKILL.md）：正文绝不含价格/库存/配送（走结构化字段）。
-Schema 铁律：FAQPage 的问答 = 页面可见 FAQ（同源，Google 硬规定，防惩罚）；
+Schema 铁律：FAQPage 的问答 = 页面可见且 K 质量门通过的 FAQ（同源，防惩罚）；
 Product 的 price/availability 用上架时的真实值填（与 feed 同源）。
 
 样式：HTML 只带稳定 class（kp-*），CSS 加在主题里一次、全站生效 —— 不往每个
@@ -17,6 +17,8 @@ from __future__ import annotations
 import json as _json
 from html import escape
 from typing import Any
+
+from ...k_series.product_knowledge.faq_research import faq_schema_is_eligible
 
 _AVAIL_SCHEMA = {
     "in_stock": "https://schema.org/InStock",
@@ -37,10 +39,13 @@ def _ppc(marketing_copy_json: dict[str, Any] | None) -> dict[str, Any]:
     return ppc if isinstance(ppc, dict) else {}
 
 
-def _faq_items(marketing_copy_json: dict[str, Any] | None) -> list[tuple[str, str]]:
-    mcj = marketing_copy_json or {}
+def _faq_items(marketing_copy_json: Any) -> list[tuple[str, str]]:
+    mcj = marketing_copy_json if isinstance(marketing_copy_json, dict) else {}
+    raw_items = mcj.get("page_faq")
+    if not isinstance(raw_items, list):
+        return []
     out: list[tuple[str, str]] = []
-    for f in mcj.get("page_faq") or []:
+    for f in raw_items:
         if not isinstance(f, dict):
             continue
         q, a = _s(f.get("question")), _s(f.get("answer"))
@@ -164,6 +169,10 @@ def build_description_html(
         omitted.append("kp-specs")
 
     # kp-faq —— 可见 FAQ，原生 <details> 折叠（零 JS，wp_kses 白名单实测放行）
+    # A visible FAQ may contain the evidence-backed questions retained by K's
+    # validator even when there are too few of them for an FAQPage rich result.
+    # Missing/legacy quality metadata therefore affects schema only, never the
+    # rest of the PDP or publication flow.
     faqs = _faq_items(marketing_copy_json)
     if faqs:
         rows = "".join(
@@ -194,8 +203,8 @@ def build_schema_jsonld(
     availability: str = "in_stock",
     url: str | None = None,
 ) -> str:
-    """生成 Product + FAQPage 的 <script type=ld+json>（客户不可见，给 Google 看）。
-    Product 的 price/availability 用真实值填（同源）；FAQPage 用页面同一份 FAQ。"""
+    """生成 Product + 合格 FAQPage 的 JSON-LD（客户不可见，给 Google 看）。
+    Product 的 price/availability 用真实值填；FAQPage 还必须有 K 的质量判定。"""
     mcj = marketing_copy_json or {}
     scripts: list[dict[str, Any]] = []
 
@@ -223,7 +232,7 @@ def build_schema_jsonld(
         scripts.append(prod)
 
     faqs = _faq_items(marketing_copy_json)
-    if faqs:
+    if faqs and faq_schema_is_eligible(marketing_copy_json):
         scripts.append(
             {
                 "@context": "https://schema.org",

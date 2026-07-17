@@ -56,7 +56,13 @@ from .info_overlay import (
     normalize_overlay_contract,
 )
 from .scope_shim import KScopeContext
-from .workflow_engine import IMAGE_SOURCE_I_SYSTEM, _user_uuid
+from .workflow_engine import (
+    IMAGE_SOURCE_I_SYSTEM,
+    _approved_selling_points_snapshot,
+    _hash_json,
+    _image_brief_evidence_digest,
+    _user_uuid,
+)
 
 _TABLE = "k_image_render_jobs"
 _LOGGER = logging.getLogger("k-image-render")
@@ -70,12 +76,9 @@ ASSET_ROLE_MAIN = "main"
 ASSET_ROLE_GALLERY = "gallery"
 ASSET_ROLE_DESCRIPTION = "description"
 
-# Barong Yekhna 视觉家规（代码层强制）：干净产品图（主图/画廊图）背景必须是
-# 明亮暖白、背景比产品亮 2 档、左上柔光、接触阴影、产品是唯一变量——绝不发灰。
-# 出图前对这两类角色的 prompt 无条件追加，作为 AI 作图指令跑偏时的兜底。
-# 场景图（description）保留其环境镜头，不套此白底块。详见
-# skills/product-image-art-direction/SKILL.md §0。
-_HOUSE_STYLE_ROLES = (ASSET_ROLE_MAIN, ASSET_ROLE_GALLERY)
+# 白底家规只能套在唯一主图。旧实现把所有 gallery 都当“干净产品图”，
+# 会把证据场景和信息图也拉回白底，正是白底副图泛滥的代码原因。
+_HOUSE_STYLE_ROLES = (ASSET_ROLE_MAIN,)
 _HOUSE_STYLE_MARKER = "Barong Yekhna house rule"
 HOUSE_STYLE_BLOCK = (
     "\n\nSTYLE BLOCK (Barong Yekhna house rule — clean product shot, "
@@ -97,6 +100,31 @@ INFO_OVERLAY_BASE_BLOCK = (
     "areas. Do NOT render text, letters, numbers, labels, leader lines, arrows, "
     "measurement lines, badges, or icons. The server will add verified supplier "
     "specifications after image generation."
+)
+
+PROOF_SCENE_BLOCK = (
+    "\n\nFINAL PROOF-SHOT CONSTRAINT (non-negotiable): this is NOT a white-"
+    "background catalog shot or a decorative product pose. Show the product "
+    "actively being used in the real environment described by the bound, "
+    "approved selling point. The visible action must prove that one point, with "
+    "physically coherent lighting, contact shadows, reflections and depth. "
+    "Do not imply any additional feature or performance claim."
+)
+
+NON_MAIN_EVIDENCE_BLOCK = (
+    "\n\nFINAL SECONDARY-IMAGE CONSTRAINT: this is not the storefront main and "
+    "must not become another pure-white isolated catalog shot. Preserve its "
+    "evidence, real-use, detail, accessory, dimension, or infographic mission. "
+    "A clean infographic base may use subtle contextual tone/texture and negative "
+    "space, but never duplicate the main-image composition."
+)
+
+_MAIN_ROLE_ALIASES = frozenset({"main", "hero_main", "主图", "白底主图"})
+_WHITE_SECONDARY_ROLE_ALIASES = frozenset(
+    {"white_secondary", "white_background", "white-background", "白底副图"}
+)
+_PROOF_SCENE_ROLE_ALIASES = frozenset(
+    {"proof_scene", "proof-shot", "proof_shot", "scene", "证据场景", "场景图"}
 )
 
 # R->K 参考图外链只可能来自这些图源 (Amazon CDN 现在, 1688/alicdn 之后).
@@ -152,12 +180,49 @@ def _spec_position(spec: dict[str, Any], fallback: int) -> int:
 
 
 def _spec_placement(spec: dict[str, Any]) -> str:
+    overlay = spec.get("overlay")
+    overlay_role = (
+        str(overlay.get("role") or "").strip().lower()
+        if isinstance(overlay, dict)
+        else ""
+    )
+    role = str(spec.get("role") or "").strip().lower()
+    # A dimension image is a buyer-confidence gallery image.  Force this at the
+    # consumer boundary too, so an old/stale brief cannot bury it in description.
+    if (
+        role in _MAIN_ROLE_ALIASES
+        or spec.get("is_main") is True
+        or role in {"dimension", "尺寸图"}
+        or overlay_role == "dimension"
+    ):
+        return PLACEMENT_GALLERY
     placement = str(spec.get("placement") or "").strip().lower()
     return (
         PLACEMENT_DESCRIPTION
         if placement == PLACEMENT_DESCRIPTION
         else PLACEMENT_GALLERY
     )
+
+
+def _normalized_role(spec: dict[str, Any]) -> str:
+    return str(spec.get("role") or "").strip().lower()
+
+
+def _explicit_main_position(
+    specs: Sequence[tuple[int, dict[str, Any]]],
+) -> int | None:
+    positions = [
+        position
+        for position, spec in specs
+        if _normalized_role(spec) in _MAIN_ROLE_ALIASES or spec.get("is_main") is True
+    ]
+    if len(positions) > 1:
+        raise KImageRenderError(
+            "IMAGE_BRIEF_MULTIPLE_MAIN_IMAGES",
+            "作图指令里有多张主图；白底 main 必须恰好一张，请重新生成。",
+            status_code=422,
+        )
+    return positions[0] if positions else None
 
 
 def _resolve_aspect_ratio(
@@ -263,11 +328,16 @@ def _role_label(
     return str(value or "").strip()[:128] or None
 
 
-def _spec_seo(spec: dict[str, Any]) -> dict[str, str]:
-    return {
+def _spec_seo(spec: dict[str, Any]) -> dict[str, Any]:
+    output: dict[str, Any] = {
         key: str(spec.get(key) or "").strip()
         for key in ("title", "alt", "caption", "description")
     }
+    for key in ("selling_point_index", "selling_point_id", "selling_point_text", "proof_intent"):
+        value = spec.get(key)
+        if value not in (None, ""):
+            output[key] = value
+    return output
 
 
 # --- reference photo --------------------------------------------------------
@@ -432,6 +502,27 @@ def enqueue_image_render_jobs(
             "IMAGE_BRIEF_REQUIRED",
             "请先生成作图指令（image_instruction），再一次性作图。",
         )
+    if isinstance(instruction, dict) and instruction.get("evidence_contract"):
+        approved_points = _approved_selling_points_snapshot(product)
+        brief_digest = str(instruction.get("selling_points_digest") or "").strip()
+        current_digest = _hash_json(approved_points)
+        brief_evidence_digest = str(instruction.get("evidence_digest") or "").strip()
+        current_evidence_digest = _image_brief_evidence_digest(
+            product,
+            approved_points,
+        )
+        if not brief_digest or brief_digest != current_digest:
+            raise KImageRenderError(
+                "IMAGE_BRIEF_SELLING_POINTS_STALE",
+                "已审卖点已变更，这份作图指令的证据绑定已过期，请重新生成。",
+                status_code=409,
+            )
+        if not brief_evidence_digest or brief_evidence_digest != current_evidence_digest:
+            raise KImageRenderError(
+                "IMAGE_BRIEF_EVIDENCE_STALE",
+                "卖点对应的真实规格已变更，请重新生成作图指令后再出图。",
+                status_code=409,
+            )
     if not reference_available(db, product):
         raise KImageRenderError(
             "REFERENCE_IMAGE_MISSING",
@@ -472,7 +563,29 @@ def enqueue_image_render_jobs(
         for position, spec in specs
         if _spec_placement(spec) == PLACEMENT_GALLERY
     ]
-    main_position = min(gallery_positions) if gallery_positions else None
+    main_position = _explicit_main_position(specs)
+    if main_position is None:
+        # Backward-compatible fallback for a legacy brief. New briefs always
+        # carry role=main and are validated when generated.
+        main_position = min(gallery_positions) if gallery_positions else None
+    if main_position is None:
+        raise KImageRenderError(
+            "IMAGE_BRIEF_MAIN_REQUIRED",
+            "作图指令必须有且只有一张 gallery main 主图。",
+            status_code=422,
+        )
+    white_secondary_positions = [
+        position
+        for position, spec in specs
+        if position != main_position
+        and _normalized_role(spec) in _WHITE_SECONDARY_ROLE_ALIASES
+    ]
+    if white_secondary_positions:
+        raise KImageRenderError(
+            "IMAGE_BRIEF_WHITE_SECONDARY_FORBIDDEN",
+            "白底图只能是唯一 main；请重新生成证据图/真实场景图替换白底副图。",
+            status_code=422,
+        )
     channel = (product.channel or "dtc").strip().lower()
 
     # 品牌红线：每张图都带移除指令；已知品牌词/审查检出位置追加强化提示
@@ -514,10 +627,18 @@ def enqueue_image_render_jobs(
                 f" A previous render of this image FAILED brand review: {hint}"
                 " — make absolutely sure that mark is gone this time."
             )
-        # 视觉家规兜底：干净产品图（主图/画廊图）无条件套明亮暖白家规块，
-        # 保证全线出图统一、绝不发灰——即便 AI 作图指令漂移到别的风格。
+        # Only the one storefront/feed main receives the white-background block.
         if asset_role in _HOUSE_STYLE_ROLES and _HOUSE_STYLE_MARKER not in prompt:
             prompt += HOUSE_STYLE_BLOCK
+        elif asset_role != ASSET_ROLE_MAIN:
+            prompt += NON_MAIN_EVIDENCE_BLOCK
+        if (
+            asset_role != ASSET_ROLE_MAIN
+            and _normalized_role(spec) in _PROOF_SCENE_ROLE_ALIASES
+        ):
+            # This final block wins over a stale/global studio style block and
+            # prevents a proof shot from degrading into a clean product pose.
+            prompt += PROOF_SCENE_BLOCK
         overlay = _overlay_snapshot(
             spec,
             product_id=product.id,
@@ -840,6 +961,7 @@ def _store_render_asset(
                 contents,
                 overlay,
                 getattr(product, "structured_specs_json", None),
+                target_market=getattr(product, "target_market", None),
             )
         except Exception as exc:  # noqa: BLE001 - overlay is fail-safe
             overlay_result = {
@@ -920,6 +1042,10 @@ def _store_render_asset(
             "alt": str(seo.get("alt") or ""),
             "caption": str(seo.get("caption") or ""),
             "description": str(seo.get("description") or ""),
+            "selling_point_index": seo.get("selling_point_index"),
+            "selling_point_id": seo.get("selling_point_id"),
+            "selling_point_text": str(seo.get("selling_point_text") or "") or None,
+            "proof_intent": str(seo.get("proof_intent") or "") or None,
             "overlay": overlay,
             "overlay_result": overlay_result,
             "mission": job.get("mission") or "",

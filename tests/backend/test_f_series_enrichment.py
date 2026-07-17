@@ -13,6 +13,7 @@ from sqlalchemy import text
 from backend.app.db.session import SessionLocal
 from backend.app.modules.f_series.enrichment import runs as run_engine
 from backend.app.modules.f_series.enrichment import serper_client
+from tests.fixtures.organization_fixtures import DEFAULT_TEST_ORG_DB_ID
 
 pytestmark = pytest.mark.integration
 
@@ -129,6 +130,13 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
         db.execute(text("DELETE FROM f_category_candidates"))
         db.execute(text("DELETE FROM f_category_keywords"))
         db.execute(text("DELETE FROM f_enrichment_runs"))
+        db.execute(
+            text(
+                "DELETE FROM k_product_knowledge_variants WHERE product_id IN ("
+                "SELECT id FROM k_product_knowledge_products "
+                "WHERE source_system = 'f_enrichment')"
+            )
+        )
         db.execute(
             text(
                 "DELETE FROM k_product_knowledge_products "
@@ -296,8 +304,16 @@ def test_candidate_red_flag_review_and_import_to_k(f_env: TestClient) -> None:
         row = db.execute(
             text(
                 "SELECT channel, google_product_category, category_review_needed, "
-                "source_system, moq FROM k_product_knowledge_products "
+                "source_system, moq, workspace_key, business_context, scope_mode "
+                "FROM k_product_knowledge_products "
                 "WHERE id = :i"
+            ),
+            {"i": imported["product_id"]},
+        ).mappings().first()
+        variant = db.execute(
+            text(
+                "SELECT parent_sku, variant_sku, attributes_json, image_folder "
+                "FROM k_product_knowledge_variants WHERE product_id = :i"
             ),
             {"i": imported["product_id"]},
         ).mappings().first()
@@ -307,6 +323,14 @@ def test_candidate_red_flag_review_and_import_to_k(f_env: TestClient) -> None:
     assert row["category_review_needed"] is False
     assert row["source_system"] == "f_enrichment"
     assert row["moq"] == 50
+    assert row["workspace_key"] == DEFAULT_TEST_ORG_DB_ID
+    assert row["business_context"] == "independent_store"
+    assert row["scope_mode"] == "production"
+    assert variant is not None
+    assert variant["parent_sku"]
+    assert variant["variant_sku"].startswith(f"{variant['parent_sku']}-")
+    assert variant["attributes_json"] == {"default_variant": True}
+    assert variant["image_folder"].endswith(f"/{variant['variant_sku']}")
 
     # 幂等：重复进 K → deduped
     response = f_env.patch(

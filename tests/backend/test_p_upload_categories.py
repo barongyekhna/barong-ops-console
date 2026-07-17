@@ -39,7 +39,10 @@ def _product(*, google_id: str | None = "222") -> SimpleNamespace:
         sku="P-CATEGORY-CONTRACT",
         product_name_en="Category contract product",
         product_type="simple_product",
-        marketing_copy_json={"product_page_copy": {}},
+        marketing_copy_json={
+            "product_page_copy": {},
+            "seo": {"url_slug": "short-category-product"},
+        },
         regular_price=Decimal("19.99"),
         sale_price=None,
         price_currency="USD",
@@ -114,6 +117,8 @@ def test_assemble_includes_resolved_path_and_wc_leaf_id(
         "Kitchen Tools",
     ]
     assert payload["product"]["category"]["wc_category_id"] == 321
+    assert payload["product"]["seo"]["url_slug"] == "short-category-product"
+    assert payload["product"]["category"]["slug"] == "short-category-product"
     # Category fail-safe may roll back; SKU finalization/variant reads therefore
     # happen only after the category transaction is settled.
     assert events == ["resolve", "ensure", "variants"]

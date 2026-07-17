@@ -67,7 +67,10 @@ def transfer_from_rw(
     user: User | None,
     scope_context: KScopeContext,
 ) -> dict[str, Any]:
-    from .service import _generate_unique_product_key
+    from .service import (
+        _generate_unique_product_key,
+        ensure_default_product_variant,
+    )
 
     channel = (channel or "dtc").strip().lower()
     if channel not in ("amazon", "dtc"):
@@ -167,6 +170,7 @@ def transfer_from_rw(
                 CR.assign_category(db, product)
                 ensure_product_sku(db, product, force_allocate=True)
                 db.add(product)
+                ensure_default_product_variant(db, product)
                 db.flush()
             created.append(
                 {

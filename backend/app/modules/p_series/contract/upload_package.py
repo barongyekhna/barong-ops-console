@@ -65,6 +65,8 @@ class Seo(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str | None = None
     description: str | None = None
+    # K-authored short (normally 3-5 word) Woo product permalink slug.
+    url_slug: str | None = None
 
 
 class Keywords(BaseModel):
@@ -155,8 +157,10 @@ class Description(BaseModel):
     html: str                       # from the product-page-layout skill
     text: str | None = None         # plain-text fallback
     bullets: list[str] = Field(default_factory=list)
-    # visible FAQ, also shipped as Woo meta `_kp_faq` for site-side FAQPage schema
+    # Visible FAQ. n8n may project it into `_kp_faq` only when the explicit K
+    # quality verdict below is true; legacy packages default fail-safe to false.
     faq: list[FaqItem] = Field(default_factory=list)
+    faq_schema_eligible: bool = False
     layout_skill_version: str | None = None
     category_block: str | None = None
 

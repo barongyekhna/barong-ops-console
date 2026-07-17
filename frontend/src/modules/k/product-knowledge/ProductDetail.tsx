@@ -38,6 +38,7 @@ import {
   mediaAssetFileUrl,
   mediaAssetThumbnailUrl,
   patchProductShipping,
+  updateProduct,
 } from "./api";
 import { CopyArtDirection } from "./CopyArtDirection";
 import styles from "./ProductKnowledge.module.css";
@@ -107,6 +108,12 @@ type PendingMediaUpload = {
   id: string;
   fileName: string;
   variantSku: string;
+};
+type ManualSpecDraft = {
+  key: string;
+  label: string;
+  value: string;
+  unit: string;
 };
 
 type ProductDetailProps = {
@@ -331,17 +338,38 @@ function sellingPointsProgressPercent(
   sellingPoints: ProductSellingPoints | null,
   isGenerating: boolean,
   approved: boolean,
+  hasManualDraft: boolean,
 ) {
   if (approved) {
     return 100;
   }
-  if (sellingPoints) {
+  if (sellingPoints || hasManualDraft) {
     return 72;
   }
   if (isGenerating) {
     return 36;
   }
   return 0;
+}
+
+function nextOperatorAttributeKey(specs: ManualSpecDraft[]) {
+  const occupiedKeys = new Set(specs.map((spec) => spec.key));
+  let ordinal = 1;
+  while (occupiedKeys.has(`operator_attribute_${ordinal}`)) {
+    ordinal += 1;
+  }
+  return `operator_attribute_${ordinal}`;
+}
+
+function nextManualSellingPointId(bullets: BulletPoint[]) {
+  const occupiedIds = new Set(
+    bullets.map((bullet) => bullet.id).filter((id): id is string => Boolean(id)),
+  );
+  let ordinal = 1;
+  while (occupiedIds.has(`manual_selling_point_${ordinal}`)) {
+    ordinal += 1;
+  }
+  return `manual_selling_point_${ordinal}`;
 }
 
 function normalizeKeywordKey(value: string) {
@@ -529,6 +557,9 @@ export function ProductDetail({
   const [shippingBusy, setShippingBusy] = useState<
     "save" | "assign" | "battery" | null
   >(null);
+  const [manualSpecs, setManualSpecs] = useState<ManualSpecDraft[]>([]);
+  const [specError, setSpecError] = useState("");
+  const [isSavingSpecs, setIsSavingSpecs] = useState(false);
   const activeProductIdRef = useRef<string | null>(product?.id ?? null);
   activeProductIdRef.current = product?.id ?? null;
 
@@ -572,8 +603,14 @@ export function ProductDetail({
         sellingPoints,
         isGeneratingSellingPoints,
         sellingPointsApproved,
+        sellingBullets.length > 0,
       ),
-    [isGeneratingSellingPoints, sellingPoints, sellingPointsApproved],
+    [
+      isGeneratingSellingPoints,
+      sellingBullets.length,
+      sellingPoints,
+      sellingPointsApproved,
+    ],
   );
   const riskKeywordKeys = useMemo(
     () => new Set(riskKeywords.map((item) => normalizeKeywordKey(item.term))),
@@ -710,6 +747,68 @@ export function ProductDetail({
     };
   }, [product?.id, shippingProduct?.channel, shippingProduct?.id]);
 
+  useEffect(() => {
+    const specs = shippingProduct?.structured_specs_json;
+    const additional = Array.isArray(specs?.additional_specs)
+      ? specs.additional_specs
+      : [];
+    const standard = Object.entries(specs ?? {}).flatMap(([field, raw]) => {
+      if (
+        ["schema_version", "source", "additional_specs"].includes(field) ||
+        !raw ||
+        typeof raw !== "object" ||
+        Array.isArray(raw)
+      ) {
+        return [];
+      }
+      const node = raw as Record<string, unknown>;
+      if (node.value != null || node.raw_value != null) {
+        return [
+          {
+            key: field,
+            label: String(node.source_label ?? field),
+            unit: String(node.unit ?? ""),
+            value: String(
+              node.raw_value ??
+                (typeof node.value === "object"
+                  ? JSON.stringify(node.value)
+                  : node.value ?? ""),
+            ),
+          },
+        ];
+      }
+      return Object.entries(node).flatMap(([part, nested]) => {
+        if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
+          return [];
+        }
+        const leaf = nested as Record<string, unknown>;
+        if (leaf.value == null && leaf.raw_value == null) {
+          return [];
+        }
+        return [
+          {
+            key: `${field}.${part}`,
+            label: String(leaf.source_label ?? `${field} ${part}`),
+            unit: String(leaf.unit ?? node.unit ?? ""),
+            value: String(leaf.raw_value ?? leaf.value ?? ""),
+          },
+        ];
+      });
+    });
+    const rows = [...standard, ...additional];
+    setManualSpecs(
+      rows
+        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+        .map((item, index) => ({
+          key: String(item.key ?? `operator_attribute_${index + 1}`),
+          label: String(item.label ?? ""),
+          unit: String(item.unit ?? ""),
+          value: String(item.raw_value ?? item.value ?? ""),
+        })),
+    );
+    setSpecError("");
+  }, [shippingProduct?.id, shippingProduct?.structured_specs_json]);
+
   const loadKeywordEntries = useCallback(async () => {
     if (!product) {
       setKeywordEntries([]);
@@ -756,6 +855,8 @@ export function ProductDetail({
     setImageSectionTouched(false);
     setKeywordSectionTouched(false);
     setSellingPointsTouched(false);
+    setSellingBullets([]);
+    setIsEditingSellingPoints(false);
     setSellingPointsCopyStatus("");
   }, [product?.id]);
 
@@ -774,7 +875,16 @@ export function ProductDetail({
       return;
     }
 
-    setSellingBullets(sellingPoints.bullets);
+    setSellingBullets(
+      sellingPoints.bullets.map((bullet) => ({
+        ...bullet,
+        evidence: bullet.evidence ?? "",
+        review_decision:
+          bullet.review_decision ??
+          (sellingPoints.source === "manual_review" ? "approve" : "candidate"),
+        verification_status: bullet.verification_status ?? "unverified",
+      })),
+    );
     setSeoKeywordsText(joinListText(sellingPoints.seo_keywords));
     setMarketTagsText(joinListText(sellingPoints.market_tags));
     setMarketingCopy(sellingPoints.marketing_copy ?? "");
@@ -812,6 +922,7 @@ export function ProductDetail({
     );
   }
   const currentProduct = product;
+  const hasSellingPointsDraft = Boolean(sellingPoints) || sellingBullets.length > 0;
   const currentShippingProduct =
     shippingProduct?.id === currentProduct.id ? shippingProduct : null;
   const shippingClassName = currentShippingProduct?.shipping_class
@@ -820,6 +931,80 @@ export function ProductDetail({
           shippingClass.slug === currentShippingProduct.shipping_class,
       )?.name ?? currentShippingProduct.shipping_class
     : null;
+
+  const structuredSpecSource = String(
+    currentShippingProduct?.structured_specs_json?.source &&
+      typeof currentShippingProduct.structured_specs_json.source === "object"
+      ? (currentShippingProduct.structured_specs_json.source as Record<string, unknown>)
+          .platform ?? ""
+      : "",
+  );
+  const supplierSpecsReadOnly = structuredSpecSource === "1688";
+
+  function updateManualSpec(
+    index: number,
+    key: keyof Pick<ManualSpecDraft, "label" | "value" | "unit">,
+    value: string,
+  ) {
+    setManualSpecs((current) =>
+      current.map((spec, specIndex) =>
+        specIndex === index ? { ...spec, [key]: value } : spec,
+      ),
+    );
+    setSpecError("");
+  }
+
+  function addManualSpec() {
+    setManualSpecs((current) => [
+      ...current,
+      {
+        key: nextOperatorAttributeKey(current),
+        label: "",
+        value: "",
+        unit: "",
+      },
+    ]);
+  }
+
+  async function saveManualSpecs() {
+    if (supplierSpecsReadOnly) {
+      setSpecError("供应商证据规格为只读，不能用人工值覆盖。");
+      return;
+    }
+    const populated = manualSpecs.filter(
+      (spec) => spec.label.trim() || spec.value.trim() || spec.unit.trim(),
+    );
+    if (populated.some((spec) => !spec.label.trim() || !spec.value.trim())) {
+      setSpecError("每条规格必须同时填写规格名和真实值；未知项请留空。");
+      return;
+    }
+    setIsSavingSpecs(true);
+    setSpecError("");
+    try {
+      await updateProduct(currentProduct.id, {
+        structured_specs_json:
+          populated.length > 0
+            ? {
+                schema_version: "1.0",
+                source: { platform: "operator" },
+                additional_specs: populated.map((spec, index) => ({
+                  evidence: "operator_fact",
+                  key: spec.key || `operator_attribute_${index + 1}`,
+                  label: spec.label.trim(),
+                  raw_value: spec.value.trim(),
+                  unit: spec.unit.trim() || undefined,
+                  value: spec.value.trim(),
+                })),
+              }
+            : null,
+      });
+      await refreshProductDetail(currentProduct.id);
+    } catch (error) {
+      setSpecError(error instanceof Error ? error.message : "规格保存失败。");
+    } finally {
+      setIsSavingSpecs(false);
+    }
+  }
 
   async function saveShippingAssignment() {
     if (!currentShippingProduct || shippingSelection === SHIPPING_SELECTION_UNSET) {
@@ -1156,9 +1341,38 @@ export function ProductDetail({
     );
   }
 
+  function addManualSellingPoint() {
+    setSellingPointsTouched(true);
+    setSellingPointsApproved(false);
+    setSellingPointReviewError("");
+    setIsEditingSellingPoints(true);
+    setSellingBullets((current) => [
+      ...current,
+      {
+        category: "benefit",
+        evidence: "operator_fact",
+        evidence_excerpt: "",
+        id: nextManualSellingPointId(current),
+        importance_score: 1,
+        review_decision: "approve",
+        text: "",
+        verification_status: "unverified",
+      },
+    ]);
+  }
+
+  function removeSellingPoint(index: number) {
+    setSellingPointsTouched(true);
+    setSellingPointsApproved(false);
+    setSellingPointReviewError("");
+    setSellingBullets((current) =>
+      current.filter((_, bulletIndex) => bulletIndex !== index),
+    );
+  }
+
   async function submitSellingPointsReview() {
-    if (!sellingPoints || sellingBullets.length === 0) {
-      setSellingPointReviewError("请先生成卖点，再进行人工审核。");
+    if (sellingBullets.length === 0) {
+      setSellingPointReviewError("请至少新增一条卖点，再进行人工审核。");
       return;
     }
     const cleanedBullets = sellingBullets
@@ -1169,32 +1383,69 @@ export function ProductDetail({
           ? Number(bullet.importance_score)
           : 1,
         text: bullet.text.trim(),
+        evidence: bullet.evidence?.trim() || null,
+        evidence_excerpt:
+          bullet.evidence_excerpt?.trim() ||
+          (bullet.evidence?.trim() === "operator_fact" ? bullet.text.trim() : null),
+        review_decision: bullet.review_decision ?? "candidate",
       }))
       .filter((bullet) => bullet.text.length > 0);
     if (cleanedBullets.length === 0) {
       setSellingPointReviewError("请至少保留一条卖点。");
       return;
     }
+    const undecided = cleanedBullets.filter(
+      (bullet) => (bullet.review_decision ?? "candidate") === "candidate",
+    );
+    if (undecided.length > 0) {
+      setSellingPointReviewError("请逐条选择通过、编辑后通过或拒绝。");
+      return;
+    }
+    const missingEvidence = cleanedBullets.filter(
+      (bullet) =>
+        bullet.review_decision !== "reject" && !bullet.evidence?.trim(),
+    );
+    if (missingEvidence.length > 0) {
+      setSellingPointReviewError(
+        "保留的每条卖点都必须填写 spec:<字段>、verified_feature:<ID> 或 operator_fact 证据。",
+      );
+      return;
+    }
 
     setIsSavingSellingPoints(true);
     setSellingPointReviewError("");
     try {
+      const baseSellingPoints: ProductSellingPoints = sellingPoints ?? {
+        bullets: [],
+        confidence_score: 1,
+        language: targetLanguage.trim() || "en",
+        market_tags: [],
+        product_id: currentProduct.id,
+        raw_input: "",
+        seo_bullets: [],
+        seo_keywords: [],
+        source: "manual_input",
+        title:
+          currentProduct.product_name_en ??
+          displayProductKey(currentProduct.product_key),
+      };
       await onApproveSellingPoints?.({
-        ...sellingPoints,
+        ...baseSellingPoints,
         bullets: cleanedBullets,
-        confidence_score: sellingPoints.confidence_score ?? 1,
+        confidence_score: baseSellingPoints.confidence_score ?? 1,
         chinese_translation: chineseTranslation.trim() || null,
-        language: sellingPoints.language ?? (targetLanguage || "en"),
+        language: baseSellingPoints.language ?? (targetLanguage || "en"),
         market_tags: splitListText(marketTagsText),
         marketing_copy: marketingCopy.trim() || null,
-        product_id: sellingPoints.product_id ?? currentProduct.id,
-        raw_input: sellingPoints.raw_input ?? "",
-        seo_bullets: sellingPoints.seo_bullets ?? [],
+        product_id: baseSellingPoints.product_id ?? currentProduct.id,
+        raw_input: baseSellingPoints.raw_input ?? "",
+        seo_bullets: baseSellingPoints.seo_bullets ?? [],
         seo_keywords: splitListText(seoKeywordsText),
         source: "manual_review",
-        target_language: targetLanguage.trim() || sellingPoints.target_language,
+        target_language:
+          targetLanguage.trim() || baseSellingPoints.target_language,
         title:
-          sellingPoints.title ??
+          baseSellingPoints.title ??
           currentProduct.product_name_en ??
           displayProductKey(currentProduct.product_key),
         translated_version: translatedVersion.trim() || null,
@@ -1445,6 +1696,88 @@ export function ProductDetail({
           ) : null}
         </section>
       ) : null}
+
+      <section className={styles.workflowSection} aria-labelledby="k-fact-specs">
+        <div className={styles.sellingPointsHeading}>
+          <div>
+            <span className={styles.eyebrow}>规格</span>
+            <h4 id="k-fact-specs">事实规格</h4>
+          </div>
+          {!supplierSpecsReadOnly ? (
+            <button className="secondary-button" onClick={addManualSpec} type="button">
+              <Plus aria-hidden="true" size={15} />
+              添加规格
+            </button>
+          ) : null}
+        </div>
+        <p className={styles.keywordAiNotice}>
+          规格只保存可核验事实；营销声明请在下方“卖点”区逐条挂证据审核。
+          {supplierSpecsReadOnly ? " 当前为 1688 供应商证据，只读展示。" : ""}
+        </p>
+        {manualSpecs.length === 0 ? (
+          <p className={styles.sellingPointsEmpty}>暂无事实规格，未知字段保持为空。</p>
+        ) : null}
+        {manualSpecs.map((spec, index) => (
+          <div className={styles.workflowStartGrid} key={spec.key || index}>
+            <label className={styles.field}>
+              <span>规格名 · 证据 spec:{spec.key}</span>
+              <input
+                disabled={supplierSpecsReadOnly}
+                onChange={(event) => updateManualSpec(index, "label", event.target.value)}
+                value={spec.label}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>真实值</span>
+              <input
+                disabled={supplierSpecsReadOnly}
+                onChange={(event) => updateManualSpec(index, "value", event.target.value)}
+                value={spec.value}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>单位</span>
+              <input
+                disabled={supplierSpecsReadOnly}
+                onChange={(event) => updateManualSpec(index, "unit", event.target.value)}
+                value={spec.unit}
+              />
+            </label>
+            {!supplierSpecsReadOnly ? (
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  setManualSpecs((current) =>
+                    current.filter((_, specIndex) => specIndex !== index),
+                  )
+                }
+                type="button"
+              >
+                删除
+              </button>
+            ) : null}
+          </div>
+        ))}
+        {specError ? <p className={styles.sellingPointsError}>{specError}</p> : null}
+        {!supplierSpecsReadOnly ? (
+          <div className={styles.sectionFooter}>
+            <span>保存后可作为 spec:&lt;字段&gt; 或 operator_fact 的卖点证据。</span>
+            <button
+              className="primary-button"
+              disabled={isSavingSpecs}
+              onClick={() => void saveManualSpecs()}
+              type="button"
+            >
+              {isSavingSpecs ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <Save aria-hidden="true" size={16} />
+              )}
+              保存规格
+            </button>
+          </div>
+        ) : null}
+      </section>
 
       <section className={styles.workflowSection} aria-labelledby="k-keywords">
         <div className={styles.sellingPointsHeading}>
@@ -2002,7 +2335,7 @@ export function ProductDetail({
             <h4 id="k-selling-points">卖点整理</h4>
           </div>
           <div className={styles.headingActions}>
-            {sellingPoints ? (
+            {hasSellingPointsDraft ? (
               <button
                 className="secondary-button"
                 onClick={() => void copySellingPoints()}
@@ -2013,6 +2346,14 @@ export function ProductDetail({
                 {sellingPointsCopyStatus || "复制"}
               </button>
             ) : null}
+            <button
+              className="secondary-button"
+              onClick={addManualSellingPoint}
+              type="button"
+            >
+              <Plus aria-hidden="true" size={16} />
+              新增手工卖点
+            </button>
             <button
               className="secondary-button"
               disabled={isGeneratingSellingPoints}
@@ -2068,7 +2409,7 @@ export function ProductDetail({
           <p className={styles.sellingPointsError}>{sellingPointReviewError}</p>
         ) : null}
 
-        {sellingPoints && !isEditingSellingPoints ? (
+        {hasSellingPointsDraft && !isEditingSellingPoints ? (
           <div className={styles.sellingPointsResult}>
             {/* ---- 阅读模式：整洁展示，点「编辑」才出输入框 ---- */}
             <div className={styles.spReadHead}>
@@ -2107,7 +2448,10 @@ export function ProductDetail({
 
             <ol className={styles.spReadList}>
               {sellingBullets.map((bullet, index) => (
-                <li className={styles.spReadCard} key={`${index}-${bullet.category}`}>
+                <li
+                  className={styles.spReadCard}
+                  key={bullet.id || `${index}-${bullet.category}`}
+                >
                   <div className={styles.spReadCardTop}>
                     <span className={styles.spCategoryBadge}>
                       {bullet.category || "卖点"}
@@ -2120,6 +2464,9 @@ export function ProductDetail({
                     </span>
                   </div>
                   <p>{bullet.text}</p>
+                  <small>
+                    证据：{bullet.evidence || "未提供"} · {bullet.verification_status === "verified" ? "已核验" : "待核验"}
+                  </small>
                 </li>
               ))}
             </ol>
@@ -2145,7 +2492,7 @@ export function ProductDetail({
           </div>
         ) : null}
 
-        {sellingPoints && isEditingSellingPoints ? (
+        {hasSellingPointsDraft && isEditingSellingPoints ? (
           <div className={styles.sellingPointsResult}>
             <div className={styles.spEditBar}>
               <span>编辑模式 —— 改完点「完成编辑」回到清爽视图，再提交卖点。</span>
@@ -2195,7 +2542,7 @@ export function ProductDetail({
 
             <ul className={styles.sellingPointBullets}>
               {sellingBullets.map((bullet, index) => (
-                <li key={`${index}-${bullet.category}`}>
+                <li key={bullet.id || `${index}-${bullet.category}`}>
                   <input
                     aria-label="卖点类别"
                     onChange={(event) =>
@@ -2223,6 +2570,45 @@ export function ProductDetail({
                     type="number"
                     value={bullet.importance_score}
                   />
+                  <label className={styles.field}>
+                    <span>证据</span>
+                    <input
+                      aria-label="卖点证据"
+                      onChange={(event) =>
+                        updateBullet(index, {
+                          evidence: event.target.value,
+                          verification_status: "unverified",
+                        })
+                      }
+                      placeholder="spec:material / verified_feature:ID / operator_fact"
+                      value={bullet.evidence ?? ""}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>逐条决定</span>
+                    <select
+                      aria-label="卖点审核决定"
+                      onChange={(event) =>
+                        updateBullet(index, {
+                          review_decision: event.target.value as BulletPoint["review_decision"],
+                        })
+                      }
+                      value={bullet.review_decision ?? "candidate"}
+                    >
+                      <option value="candidate">待决定</option>
+                      <option value="approve">通过</option>
+                      <option value="edit">编辑后通过</option>
+                      <option value="reject">拒绝</option>
+                    </select>
+                  </label>
+                  <button
+                    className="secondary-button"
+                    onClick={() => removeSellingPoint(index)}
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" size={15} />
+                    删除
+                  </button>
                 </li>
               ))}
             </ul>
@@ -2263,9 +2649,9 @@ export function ProductDetail({
           </div>
         ) : null}
 
-        {!sellingPoints ? (
+        {!hasSellingPointsDraft ? (
           <p className={styles.sellingPointsEmpty}>
-            点击生成后显示 DeepSeek 整理的卖点，人工确认后保存。
+            可直接新增手工卖点，或点击生成后逐条审核 AI 候选。
           </p>
         ) : null}
 
@@ -2279,7 +2665,7 @@ export function ProductDetail({
           </span>
           <button
             className="primary-button"
-            disabled={!sellingPoints || isSavingSellingPoints}
+            disabled={sellingBullets.length === 0 || isSavingSellingPoints}
             onClick={() => void submitSellingPointsReview()}
             type="button"
           >

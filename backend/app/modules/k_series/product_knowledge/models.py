@@ -244,6 +244,20 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     structured_specs_json: Mapped[Any | None] = mapped_column(
         json_type(), nullable=True
     )
+    # Evidence-driven selling-point contract.  Candidates are retained for
+    # audit/editing, while every downstream consumer must read only the
+    # operator-approved payload.
+    selling_points_candidates_json: Mapped[Any | None] = mapped_column(
+        json_type(), nullable=True
+    )
+    selling_points_approved_json: Mapped[Any | None] = mapped_column(
+        json_type(), nullable=True
+    )
+    # Serper/PAA/forum/review question evidence used to build non-repetitive
+    # FAQ copy.  A failed research pass is recorded here and must not block P.
+    faq_research_json: Mapped[Any | None] = mapped_column(
+        json_type(), nullable=True
+    )
     dimensions_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
     package_dimensions_json: Mapped[Any | None] = mapped_column(
         json_type(),

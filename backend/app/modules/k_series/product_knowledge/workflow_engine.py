@@ -54,6 +54,12 @@ from .prompt_skills import (
 )
 from .category_resolver import bind_google_category_id, category_is_bound
 from .errors import KProductNotFoundError
+from .evidence_guard import (
+    enforce_title_evidence_consistency,
+    project_approved_selling_points,
+)
+from .faq_research import build_faq_research, validate_generated_faq
+from .info_overlay import OverlayContractError, normalize_overlay_contract
 from .models import (
     KProductKnowledgeAIEvent,
     KProductKnowledgeKeyword,
@@ -529,7 +535,11 @@ class KProductKnowledgeWorkflowEngine:
                 status_code=404,
             )
         self._bind_image(product, execution, asset)
-        if self._risk_review_is_approved(execution) and execution.final_keyword_set_json:
+        if (
+            self._risk_review_is_approved(execution)
+            and execution.final_keyword_set_json
+            and self._selling_points_generated(product)
+        ):
             execution.status = "ready_for_export"
             execution.current_step = "export_p_gmc_seo"
             execution.error_report_json = None
@@ -1274,6 +1284,24 @@ class KProductKnowledgeWorkflowEngine:
             self.db.add_all([product, execution])
             self.db.flush()
             return execution
+        if not self._selling_points_generated(product):
+            execution.status = "blocked"
+            execution.current_step = "selling_points_review_manual"
+            execution.error_report_json = self._error_report(
+                execution,
+                code="SELLING_POINTS_APPROVAL_REQUIRED",
+                message="Approve evidence-backed selling points before export.",
+                step="selling_points_review_manual",
+            )
+            self._append_trace(
+                execution,
+                "selling_points_review_manual",
+                "blocked",
+                error=execution.error_report_json,
+            )
+            self.db.add_all([product, execution])
+            self.db.flush()
+            return execution
         execution.status = "ready_for_export"
         execution.current_step = "export_p_gmc_seo"
         execution.error_report_json = None
@@ -1647,7 +1675,7 @@ class KProductKnowledgeWorkflowEngine:
         if not execution.final_keyword_set_json:
             blockers.append("keywords not finalized")
         if not self._selling_points_generated(product):
-            blockers.append("DeepSeek selling points not generated")
+            blockers.append("evidence-backed selling points not approved")
         if not self._image_is_bound(product, execution):
             blockers.append("manual or I-system image not bound")
         if execution.status not in {"ready_for_export", "exported"}:
@@ -1664,12 +1692,7 @@ class KProductKnowledgeWorkflowEngine:
         return bool((execution.risk_approval_log_json or {}).get("approved") is True)
 
     def _selling_points_generated(self, product: KProductKnowledgeProduct) -> bool:
-        ai_warnings = product.ai_warnings_json or {}
-        deepseek_output = product.deepseek_structured_output_json or {}
-        return bool(
-            ai_warnings.get("selling_points")
-            or deepseek_output.get("selling_points_generation")
-        )
+        return bool(_approved_selling_points_snapshot(product))
 
     def _i_system_asset_reference(
         self,
@@ -2493,6 +2516,262 @@ def _product_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any]:
         "structured_specs_json": product.structured_specs_json,
         "organization_name": product.organization_name,
     }
+
+
+def _copy_evidence_product_snapshot(
+    product: KProductKnowledgeProduct,
+) -> dict[str, Any]:
+    """Minimal copy input: identity plus facts, never legacy narrative claims."""
+
+    return {
+        "id": str(product.id),
+        "product_key": product.product_key,
+        "sku": product.sku,
+        "product_name_en": product.product_name_en,
+        "product_type": product.product_type,
+        "structured_specs_json": product.structured_specs_json,
+        "organization_name": product.organization_name,
+    }
+
+
+_IMAGE_BRIEF_ROLE_ALIASES = {
+    "main": "main",
+    "hero_main": "main",
+    "主图": "main",
+    "白底主图": "main",
+    "proof_scene": "proof_scene",
+    "proof-shot": "proof_scene",
+    "proof_shot": "proof_scene",
+    "scene": "proof_scene",
+    "证据场景": "proof_scene",
+    "场景图": "proof_scene",
+    "dimension": "dimension",
+    "尺寸图": "dimension",
+    "feature_callout": "feature_callout",
+    "卖点信息图": "feature_callout",
+    "spec": "spec",
+    "规格图": "spec",
+    "accessory": "accessory",
+    "配件图": "accessory",
+    "开箱图": "accessory",
+    "detail": "detail",
+    "细节图": "detail",
+}
+_IMAGE_BRIEF_POINT_BOUND_ROLES = frozenset({"proof_scene", "accessory", "detail"})
+_IMAGE_BRIEF_OVERLAY_ROLES = frozenset({"dimension", "feature_callout", "spec"})
+_VALID_SELLING_POINT_EVIDENCE_PREFIXES = ("spec:", "verified_feature:")
+
+
+def _approved_selling_points_snapshot(
+    product: KProductKnowledgeProduct,
+) -> list[dict[str, Any]]:
+    """Return only the human-approved authority used by downstream image work."""
+    payload = getattr(product, "selling_points_approved_json", None)
+    if (
+        not isinstance(payload, dict)
+        or str(payload.get("review_status") or "").strip().lower() != "approved"
+    ):
+        return []
+    bullets = payload.get("bullets")
+    if not isinstance(bullets, list):
+        return []
+    output: list[dict[str, Any]] = []
+    for index, item in enumerate(bullets, start=1):
+        if not isinstance(item, dict):
+            continue
+        text_value = str(item.get("text") or "").strip()
+        if not text_value:
+            continue
+        normalized = dict(item)
+        normalized["id"] = str(item.get("id") or f"sp-{index}")
+        normalized["text"] = text_value
+        evidence = str(normalized.get("evidence") or "").strip()
+        if not (
+            evidence == "operator_fact"
+            or any(
+                evidence.startswith(prefix) and evidence[len(prefix) :].strip()
+                for prefix in _VALID_SELLING_POINT_EVIDENCE_PREFIXES
+            )
+        ):
+            continue
+        if str(normalized.get("verification_status") or "").lower() != "verified":
+            continue
+        evidence_snapshot = normalized.get("evidence_snapshot")
+        evidence_digest = str(normalized.get("evidence_digest") or "").strip()
+        if not isinstance(evidence_snapshot, dict) or evidence_digest != hashlib.sha256(
+            json.dumps(
+                evidence_snapshot,
+                default=str,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).hexdigest():
+            continue
+        normalized["verification_status"] = "verified"
+        output.append(normalized)
+    return output
+
+
+def _image_brief_evidence_digest(
+    product: KProductKnowledgeProduct,
+    approved_points: list[dict[str, Any]] | None = None,
+) -> str:
+    points = (
+        approved_points
+        if approved_points is not None
+        else _approved_selling_points_snapshot(product)
+    )
+    return _hash_json(
+        {
+            "selling_points_approved": points,
+            "structured_specs_json": getattr(product, "structured_specs_json", None),
+        }
+    )
+
+
+def _image_brief_error(message: str) -> KWorkflowExecutionError:
+    return KWorkflowExecutionError(
+        "IMAGE_BRIEF_EVIDENCE_CONTRACT_INVALID",
+        message,
+        status_code=502,
+    )
+
+
+def _bind_image_to_selling_point(
+    image: dict[str, Any],
+    approved_points: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    matches: list[dict[str, Any]] = []
+    raw_index = image.get("selling_point_index")
+    try:
+        point_index = int(raw_index) if raw_index not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+    if point_index is not None:
+        if not 1 <= point_index <= len(approved_points):
+            return None
+        matches.append(approved_points[point_index - 1])
+    point_id = str(image.get("selling_point_id") or "").strip()
+    if point_id:
+        matched_id = next(
+            (
+                point
+                for point in approved_points
+                if str(point.get("id") or "").strip() == point_id
+            ),
+            None,
+        )
+        if matched_id is None:
+            return None
+        matches.append(matched_id)
+    point_text = str(image.get("selling_point_text") or "").strip()
+    if point_text:
+        matched_text = next(
+            (
+                point
+                for point in approved_points
+                if str(point.get("text") or "").strip() == point_text
+            ),
+            None,
+        )
+        if matched_text is None:
+            return None
+        matches.append(matched_text)
+    if not matches:
+        return None
+    first_id = str(matches[0].get("id") or "")
+    return (
+        matches[0]
+        if all(str(point.get("id") or "") == first_id for point in matches)
+        else None
+    )
+
+
+def _normalize_evidence_driven_image_brief(
+    result: Any,
+    approved_points: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Validate the AI plan before it becomes an executable image brief."""
+    if not isinstance(result, dict):
+        raise _image_brief_error("Image brief provider output must be a JSON object.")
+    raw_images = result.get("images")
+    if not isinstance(raw_images, list) or not raw_images:
+        raise _image_brief_error("Image brief must include a non-empty images array.")
+    images: list[dict[str, Any]] = []
+    main_count = 0
+    seen_positions: set[int] = set()
+    approved_ids = {
+        str(point.get("id") or ""): index
+        for index, point in enumerate(approved_points, start=1)
+    }
+    for fallback_position, raw in enumerate(raw_images, start=1):
+        if not isinstance(raw, dict):
+            raise _image_brief_error("Every image brief item must be an object.")
+        image = dict(raw)
+        try:
+            position = int(raw.get("position") or fallback_position)
+        except (TypeError, ValueError) as exc:
+            raise _image_brief_error("Image positions must be integers.") from exc
+        if position < 1 or position in seen_positions:
+            raise _image_brief_error("Image positions must be unique positive integers.")
+        seen_positions.add(position)
+        raw_role = str(raw.get("role") or "").strip().lower()
+        role = _IMAGE_BRIEF_ROLE_ALIASES.get(raw_role)
+        if role is None:
+            raise _image_brief_error(
+                f"Image position {position} has unsupported role: {raw_role or '<empty>'}."
+            )
+        image["position"] = position
+        image["role"] = role
+        if role == "main":
+            main_count += 1
+            if position != 1:
+                raise _image_brief_error("The single white-background main must be position 1.")
+            image["placement"] = "gallery"
+            image["overlay"] = None
+        elif role == "dimension":
+            image["placement"] = "gallery"
+
+        if role in _IMAGE_BRIEF_POINT_BOUND_ROLES:
+            point = _bind_image_to_selling_point(image, approved_points)
+            proof_intent = str(image.get("proof_intent") or "").strip()
+            if point is None or not proof_intent:
+                raise _image_brief_error(
+                    f"Image position {position} ({role}) must bind one approved "
+                    "selling point and state a visible proof_intent."
+                )
+            point_id = str(point.get("id") or "")
+            image["selling_point_id"] = point_id
+            image["selling_point_index"] = approved_ids[point_id]
+            image["selling_point_text"] = str(point.get("text") or "")
+            image["proof_intent"] = proof_intent
+        elif role in _IMAGE_BRIEF_OVERLAY_ROLES:
+            overlay = image.get("overlay")
+            if not isinstance(overlay, dict):
+                raise _image_brief_error(
+                    f"Image position {position} ({role}) requires a structured overlay."
+                )
+            overlay_role = str(overlay.get("role") or "").strip().lower()
+            if overlay_role != role:
+                raise _image_brief_error(
+                    f"Image position {position} role and overlay.role must match."
+                )
+            try:
+                image["overlay"] = normalize_overlay_contract(overlay)
+            except OverlayContractError as exc:
+                raise _image_brief_error(
+                    f"Image position {position} has an invalid structured overlay: {exc}"
+                ) from exc
+        images.append(image)
+    if main_count != 1:
+        raise _image_brief_error("Image brief must contain exactly one main image.")
+    normalized = dict(result)
+    normalized["images"] = images
+    normalized["image_count"] = len(images)
+    normalized["selling_points_digest"] = _hash_json(approved_points)
+    normalized["evidence_contract"] = "selling-points-approved-v1"
+    return normalized
 
 
 def _json_object_from_text(value: Any) -> dict[str, Any] | None:
@@ -3558,6 +3837,110 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             self.db.rollback()
             return None
 
+    def _research_faq_pain_points_fail_safe(
+        self,
+        *,
+        product: KProductKnowledgeProduct,
+        request: Request,
+        user: User,
+    ) -> dict[str, Any]:
+        """Best-effort Serper PAA/forum/review research for real buyer FAQ.
+
+        This stage deliberately degrades to an ineligible FAQ verdict when the
+        key, provider, response, or persistence fails.  Copy generation and P
+        publication continue; only low-confidence FAQ/schema are omitted.
+        """
+
+        query_seed = (
+            product.primary_keyword
+            or product.product_name_en
+            or product.product_type
+            or product.product_key
+        )
+        target_market = (product.target_market or "US").strip().upper()
+        target_language = (product.canonical_language or "en").strip().lower()
+        queries = [
+            str(query_seed).strip(),
+            f"{query_seed} problems forum",
+            f"{query_seed} reviews complaints questions",
+        ]
+        try:
+            gate_context = self.gate_resolver(
+                self.db,
+                module_id=MODULE_KEY,
+                user=user,
+                request=request,
+                key_requirements={"faq_research": "serp"},
+            )
+            key = gate_context.key_for_step("faq_research")
+            self.db.commit()
+            responses = [
+                self._execute_provider(
+                    provider="serp",
+                    task_type="search",
+                    key=key,
+                    gate_context=gate_context,
+                    payload={
+                        "module_id": MODULE_KEY,
+                        "task": "faq_pain_point_research",
+                        "query": query,
+                        "main_keyword": str(query_seed),
+                        "target_market": target_market,
+                        "target_language": target_language,
+                    },
+                )
+                for query in queries
+            ]
+            research = build_faq_research(responses, queries=queries)
+            research["provider"] = key.name
+            run = KProductKnowledgeResearchRun(
+                id=uuid4(),
+                product_id=product.id,
+                run_type="faq_pain_point_research",
+                status=(
+                    "succeeded"
+                    if research.get("status") == "completed"
+                    else "needs_review"
+                ),
+                requested_by_user_id=_user_uuid(user) if user is not None else None,
+                target_market=target_market,
+                target_language=target_language,
+                seed_keywords_json=queries,
+                serp_provider=key.name,
+                serp_result_summary_json=research,
+                selected_keyword_ids_json=[
+                    item.get("id")
+                    for item in research.get("sources") or []
+                    if isinstance(item, dict) and item.get("id")
+                ],
+                started_at=_now(),
+                finished_at=_now(),
+                created_by_user_id=_user_uuid(user) if user is not None else None,
+                updated_by_user_id=_user_uuid(user) if user is not None else None,
+            )
+            self.db.add(run)
+            self.db.flush()
+            research["research_run_id"] = str(run.id)
+            return research
+        except Exception as exc:  # noqa: BLE001 - FAQ never blocks copy/P
+            self.db.rollback()
+            logger.warning(
+                "FAQ pain-point research degraded product_id=%s error=%s",
+                product.id,
+                exc.__class__.__name__,
+                exc_info=True,
+            )
+            return {
+                "status": "failed",
+                "quality_ready": False,
+                "queries": queries,
+                "sources": [],
+                "clusters": {},
+                "source_count": 0,
+                "error_class": exc.__class__.__name__,
+                "fail_safe": True,
+            }
+
     def generate_marketing_copy(
         self,
         *,
@@ -3573,6 +3956,28 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         """
         product = self._require_product(product_id, scope_context)
         channel = (product.channel or "dtc").strip().lower()
+        approved_points = _approved_selling_points_snapshot(product)
+        if not approved_points:
+            raise KWorkflowExecutionError(
+                "SELLING_POINTS_APPROVAL_REQUIRED_FOR_COPY",
+                "Approve at least one evidence-backed selling point before generating marketing copy.",
+                status_code=409,
+            )
+        evidence_digest = _image_brief_evidence_digest(product, approved_points)
+        faq_research = (
+            self._research_faq_pain_points_fail_safe(
+                product=product,
+                request=request,
+                user=user,
+            )
+            if channel == "dtc"
+            else {
+                "status": "not_applicable",
+                "quality_ready": False,
+                "sources": [],
+                "source_count": 0,
+            }
+        )
         skill = copy_skill_context_for_channel(channel)
         gate_context = self.gate_resolver(
             self.db,
@@ -3596,8 +4001,11 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "copy_skill": skill,
             # 品牌红线：快照先消毒（AI 看不到第三方品牌），黑名单显式下发
             "product": sanitize_snapshot_for_generation(
-                _product_snapshot(product), product
+                _copy_evidence_product_snapshot(product), product
             ),
+            "selling_points_approved": approved_points,
+            "evidence_digest": evidence_digest,
+            "faq_research": faq_research,
             "site_brand": SITE_BRAND,
             "forbidden_brand_terms": normalized_brand_terms(product),
         }
@@ -3611,9 +4019,46 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             gate_context=gate_context,
             payload=ai_input,
         )
+        if not isinstance(result, dict):
+            raise KWorkflowExecutionError(
+                "MARKETING_COPY_SCHEMA_INVALID",
+                "Marketing copy provider output must be a JSON object.",
+                status_code=502,
+            )
+        result = project_approved_selling_points(result, approved_points)
+        if channel == "dtc":
+            result = validate_generated_faq(
+                result,
+                faq_research,
+                approved_selling_points=approved_points,
+                structured_specs=product.structured_specs_json,
+            )
+            # The neutral identity comes from the reviewed main keyword rather
+            # than the raw long product name, which may itself contain an
+            # unsupported legacy claim.
+            result = enforce_title_evidence_consistency(
+                result,
+                product_name=product.primary_keyword or product.product_type,
+                product_type=product.product_type,
+                site_brand=SITE_BRAND,
+                approved_selling_points={"bullets": approved_points},
+                structured_specs=product.structured_specs_json,
+            )
+        result["evidence_contract"] = "pdp-evidence-v1"
+        result["evidence_digest"] = evidence_digest
+        result["selling_points_digest"] = _hash_json(approved_points)
         zh = self._plain_chinese(result, "文案", user=user, request=request)
         product = self._require_product(product_id, scope_context)
+        self.db.refresh(product)
+        current_points = _approved_selling_points_snapshot(product)
+        if _image_brief_evidence_digest(product, current_points) != evidence_digest:
+            raise KWorkflowExecutionError(
+                "MARKETING_COPY_EVIDENCE_CHANGED",
+                "Approved selling points or specifications changed while copy was generated; regenerate from the current evidence.",
+                status_code=409,
+            )
         _capture_ai_category_hint(product, result)
+        product.faq_research_json = faq_research
         product.marketing_copy_json = result
         product.marketing_copy_zh = zh
         product.marketing_copy_skill_version = skill["version"]
@@ -3651,6 +4096,13 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "Generate the marketing copy before the image art-direction brief.",
                 status_code=409,
             )
+        approved_points = _approved_selling_points_snapshot(product)
+        if not approved_points:
+            raise KWorkflowExecutionError(
+                "SELLING_POINTS_APPROVAL_REQUIRED_FOR_IMAGE_BRIEF",
+                "Approve at least one evidence-backed selling point before generating the image brief.",
+                status_code=409,
+            )
         channel = (product.channel or "dtc").strip().lower()
         skill = image_art_direction_skill_context()
         gate_context = self.gate_resolver(
@@ -3676,7 +4128,12 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "product": sanitize_snapshot_for_generation(
                 _product_snapshot(product), product
             ),
-            "marketing_copy": product.marketing_copy_json,
+            # The approved set is the sole claim authority for image planning.
+            # Marketing copy is intentionally not passed here: stale/unreviewed
+            # prose must not become a visual product claim.
+            "selling_points_approved": approved_points,
+            "selling_points_digest": _hash_json(approved_points),
+            "evidence_digest": evidence_digest,
             "site_brand": SITE_BRAND,
             "forbidden_brand_terms": normalized_brand_terms(product),
         }
@@ -3690,6 +4147,8 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             gate_context=gate_context,
             payload=ai_input,
         )
+        result = _normalize_evidence_driven_image_brief(result, approved_points)
+        result["evidence_digest"] = evidence_digest
         zh = self._plain_chinese(result, "作图指令", user=user, request=request)
         product = self._require_product(product_id, scope_context)
         product.image_instruction_json = result
@@ -3789,6 +4248,22 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         product: KProductKnowledgeProduct,
         execution: KProductKnowledgeWorkflowExecution,
     ) -> None:
+        if not self._selling_points_generated(product):
+            execution.status = "blocked"
+            execution.current_step = "selling_points_review_manual"
+            execution.error_report_json = self._error_report(
+                execution,
+                code="SELLING_POINTS_APPROVAL_REQUIRED",
+                message="Approve evidence-backed selling points before export.",
+                step="selling_points_review_manual",
+            )
+            self._append_trace(
+                execution,
+                "selling_points_review_manual",
+                "blocked",
+                error=execution.error_report_json,
+            )
+            return
         execution.status = "ready_for_export"
         execution.current_step = "export_p_series"
         execution.error_report_json = None

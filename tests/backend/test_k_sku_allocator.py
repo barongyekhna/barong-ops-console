@@ -381,6 +381,7 @@ def test_r_to_k_transfer_keeps_asin_as_reference_never_as_sku() -> None:
             scope_context=scope,
         )
         product = db.scalar(select(KProductKnowledgeProduct))
+        variant = db.scalar(select(KProductKnowledgeVariant))
 
         assert result["errors"] == []
         assert result["created"][0]["sku"] == "IGL-001"
@@ -389,6 +390,12 @@ def test_r_to_k_transfer_keeps_asin_as_reference_never_as_sku() -> None:
         assert product.parent_sku == "IGL-001"
         assert product.asin_reference == "B0BYTEST01"
         assert product.source_record_id == "B0BYTEST01"
+        assert variant is not None
+        assert variant.product_id == product.id
+        assert variant.parent_sku == product.sku
+        assert variant.variant_sku.startswith(f"{product.sku}-")
+        assert variant.attributes_json == {"default_variant": True}
+        assert variant.image_folder.endswith(f"/{variant.variant_sku}")
 
 
 def test_p_package_allocates_after_category_fail_safe_rollback(

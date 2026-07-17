@@ -54,6 +54,10 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
     review_reason?: string | null;
   } | null;
   contains_battery?: boolean;
+  structured_specs_json?: Record<string, unknown> | null;
+  selling_points_candidates_json?: Record<string, unknown> | null;
+  selling_points_approved_json?: Record<string, unknown> | null;
+  faq_research_json?: Record<string, unknown> | null;
 };
 
 export type WShippingClassOption = {
@@ -108,6 +112,7 @@ export type ProductKnowledgeCreatePayload = {
   price_currency?: string | null;
   dimensions_json?: Record<string, unknown> | null;
   weight_json?: Record<string, unknown> | null;
+  structured_specs_json?: Record<string, unknown> | null;
   short_description_en?: string | null;
   long_description_en?: string | null;
   primary_use_case_en?: string | null;
@@ -121,6 +126,7 @@ export type ProductKnowledgeCreatePayload = {
 
 export type ProductKnowledgeUpdatePayload = Partial<{
   review_status: ProductReviewStatus;
+  structured_specs_json: Record<string, unknown> | null;
 }>;
 
 export type ProductCreateFormPayload = Omit<
@@ -176,6 +182,12 @@ export type ProductVariantFormInput = {
   price_override: string;
 };
 
+export type ProductManualSpecInput = {
+  label: string;
+  value: string;
+  unit: string;
+};
+
 export type ProductKnowledgeVariant = {
   id: string;
   product_id: string;
@@ -205,6 +217,7 @@ export type ProductFormValues = {
   target_market: string;
   dimensions_input: ProductDimensionsInput;
   weight_input: ProductWeightInput;
+  manual_specs: ProductManualSpecInput[];
   raw_input_text: string;
   variants: ProductVariantFormInput[];
   channel: string;

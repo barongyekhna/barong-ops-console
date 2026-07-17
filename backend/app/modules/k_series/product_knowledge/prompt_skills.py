@@ -7,7 +7,7 @@ from typing import Any
 _SKILLS_DIR = Path(__file__).parent / "skills"
 
 KEYWORD_RESEARCH_SKILL_VERSION = "k-keyword-research-independent-site-v1"
-SELLING_POINTS_SKILL_VERSION = "k-selling-points-conversion-v1"
+SELLING_POINTS_SKILL_VERSION = "k-selling-points-evidence-v2"
 
 KEYWORD_RESEARCH_SKILL_SOURCES = [
     {
@@ -109,6 +109,8 @@ def selling_points_skill_context() -> dict[str, Any]:
             "Address likely objections: fit, compatibility, durability, installation/use, maintenance, packaging, and value.",
             "Use target-market language, spelling, units, and ecommerce phrasing; translate final copy to the market language.",
             "Avoid unsupported superlatives, medical/legal/safety promises, trademark misuse, and absolute guarantees.",
+            "Every bullet carries exactly one evidence reference: spec:<field>, verified_feature:<id>, or operator_fact.",
+            "If no supplied evidence supports a proposed claim, omit it or mark it unverified for operator review; never phrase it as a product fact.",
         ],
         "required_copy_blocks": [
             "benefit-led bullets ranked by conversion importance",
@@ -124,6 +126,23 @@ def selling_points_skill_context() -> dict[str, Any]:
             "Prefer clear plain language over hype.",
             "Make missing proof explicit in rationale instead of fabricating details.",
         ],
+        "bullet_contract": {
+            "required_fields": [
+                "id",
+                "category",
+                "text",
+                "importance_score",
+                "evidence",
+                "evidence_excerpt",
+                "verification_status",
+            ],
+            "evidence_enum": [
+                "spec:<structured_specs_json field>",
+                "verified_feature:<verified feature id>",
+                "operator_fact",
+            ],
+            "verification_status": ["verified", "unverified"],
+        },
         "sources": SELLING_POINTS_SKILL_SOURCES,
     }
 
@@ -164,18 +183,29 @@ def claude_keyword_review_instruction() -> str:
 
 def selling_points_instruction() -> str:
     return (
-        "Generate conversion-first ecommerce selling points from the full product data. "
-        "Use the supplied selling_points_skill exactly. Base every claim on product facts, "
-        "approved keywords, variant data, or manual product information. Translate into "
-        "the target market language. `structured_specs_json` contains verified supplier "
+        "Generate evidence-backed candidate ecommerce selling points from the supplied "
+        "evidence payload. Use the supplied selling_points_skill exactly. Product names, "
+        "search keywords, and identity metadata identify the category but NEVER prove a "
+        "claim. Base every claim only on `structured_specs_json`, a listed "
+        "`verified_features` record, or an explicit `operator_facts` excerpt. Translate into "
+        "the target market language. `structured_specs_json` contains verified supplier/operator "
         "specifications: quote its exact values and units when they support a useful benefit. "
         "If a specification key is absent, omit that claim; never infer, estimate, or fill it. "
+        "Every bullet MUST include an `evidence` string using exactly one of these "
+        "forms: `spec:<field>`, `verified_feature:<id>`, or `operator_fact`, plus a "
+        "short `evidence_excerpt` that contains the exact current supporting fact. Use "
+        "`operator_fact` only when the same fact is explicitly present in `operator_facts`. "
+        "Set `verification_status=verified` only when that "
+        "reference exists in the supplied data. If no evidence supports a proposed "
+        "claim, omit it or return it as `verification_status=unverified` for operator "
+        "review; do not phrase unsupported content as a product fact. "
         "Keep copy clear enough for a shopper to decide. "
         "Return only valid JSON with bullets, marketing_copy, translated_version, "
         "chinese_translation, target_language, seo_keywords, market_tags, and "
         "confidence_score. bullets must "
-        "be ranked by importance_score and each bullet should include a concrete benefit "
-        "or proof point. Do not include markdown or prose outside the JSON object."
+        "be ranked by importance_score; each bullet must contain id, category, text, "
+        "importance_score, evidence, evidence_excerpt, and verification_status. Do not "
+        "include markdown or prose outside the JSON object."
     )
 
 
@@ -187,7 +217,7 @@ def selling_points_instruction() -> str:
 
 AMAZON_COPY_SKILL_VERSION = "k-amazon-listing-copywriting-v1"
 DTC_COPY_SKILL_VERSION = "k-independent-site-seo-copywriting-v1"
-IMAGE_ART_DIRECTION_SKILL_VERSION = "k-product-image-art-direction-v2-house-rule"
+IMAGE_ART_DIRECTION_SKILL_VERSION = "k-product-image-art-direction-v3-evidence-proof"
 
 
 def _load_skill_markdown(folder: str, filename: str = "SKILL.md") -> tuple[str, str]:
@@ -239,9 +269,12 @@ def marketing_copy_instruction(channel: str) -> str:
     common = (
         f"You are the K-series {surface} copywriter. Use the supplied copy skill "
         "(skill_markdown) exactly as the authoritative playbook for HOW to write. "
-        "Base every claim only on the supplied product facts, approved non-risk "
-        "keywords, selling points, variant data, and manual product information; "
-        "never fabricate specs, numbers, certifications, or reviews. Respect every "
+        "Base every customer-facing claim ONLY on `selling_points_approved` and "
+        "the exact `product.structured_specs_json` facts referenced by those approved "
+        "points. The other product fields are neutral identity/record metadata, not a "
+        "claim source. Ignore legacy descriptions, candidate selling points, and any "
+        "marketing copy or SEO keywords embedded in a selling-point payload. Never "
+        "fabricate specs, numbers, certifications, capabilities, or reviews. Respect every "
         "红线 (hard rule) in the skill.\n"
         "VERIFIED SPEC RULE (absolute): `product.structured_specs_json` is the "
         "authoritative source for supplier specifications. Use its exact values and "
@@ -249,6 +282,10 @@ def marketing_copy_instruction(channel: str) -> str:
         "omit that specification everywhere; NEVER infer, estimate, round into a new "
         "claim, or copy an unsupported number from category expectations. Preserve the "
         "meaning of ranges.\n"
+        "APPROVED-POINT RULE (absolute): every benefit, capability, use scenario, "
+        "title modifier, bullet, and narrative claim must be traceable to one supplied "
+        "approved point. Do not turn a neutral product name or search keyword into a "
+        "claim. If the approved set does not support a statement, omit it.\n"
         "BRAND RULE (absolute, overrides everything): the ONLY brand that may "
         "ever appear in ANY output field is the site's own brand given in "
         "`site_brand`. NEVER mention any third-party brand, manufacturer, or "
@@ -308,9 +345,10 @@ def marketing_copy_instruction(channel: str) -> str:
         " this is perfect for + what makes buying easy — NO price/shipping"
         ' promises>"\n'
         "  },\n"
-        '  "page_faq": [{"question": "<a question a real shopper would ask>",'
-        ' "answer": "<confident, helpful, 1-3 sentences — never mention missing'
-        ' data>"}],\n'
+        '  "page_faq": [{"question": "<a real pain-point question supported by'
+        ' faq_research>", "answer": "<confident, evidence-bounded, 1-3 sentences>",'
+        ' "evidence_refs": ["<one or more exact faq_research.sources[].id values>"],'
+        ' "intent_cluster": "<the matching faq_research intent_cluster>"}],\n'
         '  "json_ld": {"data": {"@type": "Product", "name": "<...>", "description":'
         ' "<...>", "brand": {"@type": "Brand", "name": "<site_brand, NEVER any'
         ' other brand>"}}},\n'
@@ -324,14 +362,23 @@ def marketing_copy_instruction(channel: str) -> str:
         "use scenarios, convenience, fit/size confidence, care...); all copy "
         "fields are plain text except specifications_html_table; NEVER mention "
         "price/stock/shipping in any copy field (those are structured fields on "
-        "the store — duplicating them in prose creates feed/page inconsistency)."
+        "the store — duplicating them in prose creates feed/page inconsistency). "
+        "FAQ RULE (absolute): use only `faq_research.sources` and cite their exact IDs; "
+        "cover distinct real buyer-concern clusters, never restate a basic specification "
+        "as a question, and return an empty page_faq when research is insufficient. "
+        "Serper evidence proves that the question is real; answers still may contain only "
+        "facts supported by approved selling points/structured specs or cautious general "
+        "guidance already present in the cited snippets."
     )
 
 
 def image_art_direction_instruction() -> str:
     return (
-        "You are the K-series product-image art director. First read the product's finished "
-        "marketing copy, then use the supplied art-direction skill (skill_markdown) exactly. "
+        "You are the K-series product-image art director. Treat `selling_points_approved` "
+        "as the ONLY authority for visual marketing claims, then use the supplied "
+        "art-direction skill (skill_markdown) exactly. Product facts and verified "
+        "structured specs may support composition and programmatic overlays, but candidate "
+        "or marketing-copy claims are not inputs. "
         "The product's real photo is the immutable reference (never regenerate the product "
         "body -- AI only handles background/scene/lighting). Return ONLY a valid JSON object "
         "with EXACTLY these keys (no markdown, no prose outside the JSON):\n"
@@ -347,10 +394,15 @@ def image_art_direction_instruction() -> str:
         '  "main_prompt": "<ready-to-use English prompt for the hero/main image,'
         ' with the global STYLE BLOCK appended>",\n'
         '  "style_block": "<the reusable global STYLE BLOCK, English>",\n'
-        '  "images": [{"position": <int>, "role": "<主图/白底副图/细节图/场景图/信息图/...>",'
+        '  "images": [{"position": <int>, "role": "main" | "proof_scene" |'
+        ' "dimension" | "feature_callout" | "spec" | "accessory" | "detail",'
         ' "placement": "gallery" | "description",'
         ' "aspect_ratio": "<THIS image\'s ratio, machine-readable like 1:1 / 4:5 / 16:9>",'
         ' "mission": "<CTR/看懂/想要/...>", "prompt": "<English prompt for this image>",'
+        ' "selling_point_index": <1-based index in selling_points_approved, or null>,'
+        ' "selling_point_id": "<exact approved point id, or null>",'
+        ' "selling_point_text": "<exact approved point text, or null>",'
+        ' "proof_intent": "<visible action/detail that proves that one point, or null>",'
         ' "overlay": null | {"schema_version": "k-info-overlay-v1",'
         ' "role": "feature_callout" | "dimension" | "spec", "items": ['
         '{"type": "callout", "source_field": "<structured_specs_json path>",'
@@ -372,19 +424,26 @@ def image_art_direction_instruction() -> str:
         '  "compliance_checklist": ["<...>"],\n'
         '  "missing_assets": ["<what the user still needs to provide>"]\n'
         "}\n"
-        "image_count MUST equal len(images). Every prompt must be English and grounded in the "
-        "product facts + marketing copy; respect every 红线 in the skill.\n"
-        "COVERAGE (do NOT be stingy on main/gallery images): plan GENEROUS gallery coverage "
-        "with placement=gallery — aim for 6-8 gallery images total, more for richer "
-        "products. HARD RULE — position 1 MUST be the MAIN image: the product alone, "
+        "image_count MUST equal len(images). Every prompt must be English and grounded in "
+        "product facts plus the approved selling-point set; respect every 红线 in the skill.\n"
+        "EVIDENCE BINDING (absolute): every proof_scene/accessory/detail image must bind "
+        "EXACTLY ONE supplied approved point using its exact selling_point_id (and matching "
+        "1-based index/text), then state a concrete proof_intent that is visibly photographable. "
+        "Never bind an unapproved/candidate point and never add a second implied claim. "
+        "feature_callout/spec/dimension instead require a verified structured overlay; if "
+        "neither binding is available, omit the image.\n"
+        "COVERAGE: position 1 MUST be the one and only role=main image: the product alone, "
         "centered, on a clean pure-white background, no props, no people, no overlay text, "
         "filling ~85% of the frame (this becomes the store's main image and the feed "
-        "image). Lifestyle/hero scene shots come at position 2+, then detail/feature "
-        "close-ups and scale shots. THEN add placement=description images (infographics / "
-        "spec visuals / usage / size-in-context) as the copy sections need. "
+        "image). There must be NO white-background secondary role. Every position 2+ must "
+        "be a proof shot in active real use, a verified information image, a dimension "
+        "image, an accessory proof, or an evidence-bound detail — never decorative posing. "
+        "For products used in cooking/camping, show real ignition/cooking/steam and a real "
+        "camp environment when those approved points exist; lighting, contact shadows and "
+        "depth must physically integrate product and scene. "
         "gallery images go into the store's product image gallery; description images get "
         "embedded inside the product description at their position. All gallery images "
-        "are square 1:1.\n"
+        "are square 1:1. role=dimension is ALWAYS placement=gallery.\n"
         "SEO METADATA (mandatory, YOU write it — this is what goes on the live store): for "
         "EVERY image fill title + alt + caption + description in the target-market language "
         "(English for US). alt must describe the image accurately with the product's real "
@@ -404,8 +463,11 @@ def image_art_direction_instruction() -> str:
         "product.structured_specs_json (for example lumens, ip_rating, "
         "dimensions.height); labels are server-owned, so never emit `label`, `text`, or "
         "a value field, and never infer a missing field. Use overlay=null for all other "
-        "images. If there are no verified "
-        "fields for an infographic, plan a purely visual detail/usage/texture image."
+        "images. Overlay coordinates are only intent hints: the compositor detects the "
+        "actual rendered foreground bounds and snaps dimension lines to the product edges. "
+        "For a US target market, the compositor converts verified cm/kg values to inch/lb; "
+        "never type or calculate those values in the prompt. If there are no verified "
+        "fields for an infographic, use an approved-point-bound detail/usage proof instead."
     )
 
 

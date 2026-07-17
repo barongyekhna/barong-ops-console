@@ -8,9 +8,14 @@ export type SellingPointSource =
   | string;
 
 export type BulletPoint = {
+  id?: string | null;
   text: string;
   category: BulletCategory;
   importance_score: number;
+  evidence?: string | null;
+  evidence_excerpt?: string | null;
+  verification_status?: "verified" | "unverified";
+  review_decision?: "candidate" | "approve" | "edit" | "reject";
 };
 
 export type ProductSellingPoints = {

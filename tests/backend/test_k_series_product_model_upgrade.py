@@ -660,8 +660,7 @@ def test_workflow_gate_configuration_errors_are_not_reported_as_forbidden() -> N
 
 
 def test_house_style_block_enforced_on_clean_shots() -> None:
-    """视觉家规兜底：干净产品图（主图/画廊图）的 prompt 必带明亮暖白家规块，
-    场景图不套；家规块本身携带正确标记且强调"绝不发灰"。"""
+    """白底家规只套唯一 main；gallery 副图保留证据场景/信息使命。"""
     from backend.app.modules.k_series.product_knowledge import image_render_jobs as ir
 
     block = ir.HOUSE_STYLE_BLOCK
@@ -669,10 +668,11 @@ def test_house_style_block_enforced_on_clean_shots() -> None:
     assert "BRIGHT warm off-white" in block
     assert "never grey" in block
     assert "two stops brighter" in block
-    # 角色圈定：只有主图 + 画廊图套家规，场景图不套
+    # 角色圈定：恰好主图套白底家规。
     assert ir.ASSET_ROLE_MAIN in ir._HOUSE_STYLE_ROLES
-    assert ir.ASSET_ROLE_GALLERY in ir._HOUSE_STYLE_ROLES
+    assert ir.ASSET_ROLE_GALLERY not in ir._HOUSE_STYLE_ROLES
     assert ir.ASSET_ROLE_DESCRIPTION not in ir._HOUSE_STYLE_ROLES
+    assert "NOT a white-background catalog shot" in ir.PROOF_SCENE_BLOCK
 
     # 幂等：已含标记则不重复追加（模拟 _compose 已带家规的情况）
     prompt = "scene desc " + ir._HOUSE_STYLE_MARKER + " ..."
@@ -682,13 +682,15 @@ def test_house_style_block_enforced_on_clean_shots() -> None:
 
 
 def test_art_direction_skill_carries_house_rule() -> None:
-    """作图 skill 已升 v2 并携带品牌视觉家规章节（覆盖六选一风格原型）。"""
+    """作图 skill 携带品牌家规与证据图契约。"""
     from backend.app.modules.k_series.product_knowledge import prompt_skills as ps
 
-    assert ps.IMAGE_ART_DIRECTION_SKILL_VERSION.endswith("house-rule")
+    assert ps.IMAGE_ART_DIRECTION_SKILL_VERSION.endswith("evidence-proof")
     ctx = ps.image_art_direction_skill_context()
     md = ctx["skill_markdown"]
     assert "品牌视觉家规" in md
     assert "#F7F6F4" in md
     assert "绝不允许发灰" in md
     assert "干净产品图" in md and "生活场景图" in md
+    assert "selling_points_approved" in md
+    assert "proof_scene" in md

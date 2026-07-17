@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from ....schemas.common import reject_sensitive_data
 from .constants import DEFAULT_CANONICAL_LANGUAGE
+from .structured_specs import normalize_operator_structured_specs
 
 ReviewStatus = Literal[
     "draft",
@@ -152,6 +153,7 @@ class ProductKnowledgeCreate(BaseModel):
     price_currency: str | None = Field(default=None, max_length=3)
     dimensions_json: dict[str, Any] | list[Any] | None = None
     weight_json: dict[str, Any] | list[Any] | None = None
+    structured_specs_json: dict[str, Any] | None = None
     short_description_en: str | None = None
     long_description_en: str | None = None
     primary_use_case_en: str | None = None
@@ -162,20 +164,18 @@ class ProductKnowledgeCreate(BaseModel):
     keywords: list[ProductKnowledgeKeywordItem] = Field(default_factory=list)
     risk_terms: list[ProductKnowledgeRiskTermItem] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def reject_external_structured_specs(cls, value: Any) -> Any:
-        if isinstance(value, dict) and "structured_specs_json" in value:
-            raise ValueError(
-                "structured_specs_json is supplier-verified internal data and "
-                "cannot be provided through the K product API."
-            )
-        return value
-
     @field_validator("dimensions_json", "weight_json")
     @classmethod
     def validate_physical_json(cls, value: Any) -> Any:
         return reject_sensitive_data(value)
+
+    @field_validator("structured_specs_json")
+    @classmethod
+    def validate_manual_structured_specs(
+        cls, value: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        reject_sensitive_data(value)
+        return normalize_operator_structured_specs(value)
 
     @field_validator("channel")
     @classmethod
@@ -235,26 +235,25 @@ class ProductKnowledgeUpdate(BaseModel):
     price_currency: str | None = Field(default=None, max_length=3)
     dimensions_json: dict[str, Any] | list[Any] | None = None
     weight_json: dict[str, Any] | list[Any] | None = None
+    structured_specs_json: dict[str, Any] | None = None
     short_description_en: str | None = None
     long_description_en: str | None = None
     primary_use_case_en: str | None = None
     target_customer_en: str | None = None
     manual_notes: str | None = None
 
-    @model_validator(mode="before")
-    @classmethod
-    def reject_external_structured_specs(cls, value: Any) -> Any:
-        if isinstance(value, dict) and "structured_specs_json" in value:
-            raise ValueError(
-                "structured_specs_json is supplier-verified internal data and "
-                "cannot be provided through the K product API."
-            )
-        return value
-
     @field_validator("dimensions_json", "weight_json")
     @classmethod
     def validate_physical_json(cls, value: Any) -> Any:
         return reject_sensitive_data(value)
+
+    @field_validator("structured_specs_json")
+    @classmethod
+    def validate_manual_structured_specs(
+        cls, value: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        reject_sensitive_data(value)
+        return normalize_operator_structured_specs(value)
 
     @model_validator(mode="after")
     def normalize_languages(self) -> "ProductKnowledgeUpdate":
@@ -329,6 +328,9 @@ class ProductKnowledgeRead(BaseModel):
     shipping_assignment: dict[str, Any] | None = None
     contains_battery: bool = False
     structured_specs_json: dict[str, Any] | None = None
+    selling_points_candidates_json: dict[str, Any] | None = None
+    selling_points_approved_json: dict[str, Any] | None = None
+    faq_research_json: dict[str, Any] | None = None
     workspace_key: str
     business_context: str
     scope_mode: str

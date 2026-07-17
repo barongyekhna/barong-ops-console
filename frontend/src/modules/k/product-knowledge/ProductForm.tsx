@@ -15,6 +15,7 @@ import type {
   ProductCreateFormPayload,
   ProductFormValues,
   ProductKnowledgeAttributeInput,
+  ProductManualSpecInput,
   ProductVariantAttributeInput,
   ProductVariantAttributeType,
   ProductVariantFormInput,
@@ -399,6 +400,7 @@ const initialValues: ProductFormValues = {
     unit: "kg",
     value: "",
   },
+  manual_specs: [{ label: "", value: "", unit: "" }],
 };
 
 type ProductFormProps = {
@@ -875,6 +877,41 @@ export function ProductForm({
     clearFormErrors();
   }
 
+  function updateManualSpec(
+    index: number,
+    key: keyof ProductManualSpecInput,
+    value: string,
+  ) {
+    setValues((current) => ({
+      ...current,
+      manual_specs: current.manual_specs.map((spec, specIndex) =>
+        specIndex === index ? { ...spec, [key]: value } : spec,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function addManualSpec() {
+    setValues((current) => ({
+      ...current,
+      manual_specs: [
+        ...current.manual_specs,
+        { label: "", value: "", unit: "" },
+      ],
+    }));
+    clearFormErrors();
+  }
+
+  function removeManualSpec(index: number) {
+    setValues((current) => ({
+      ...current,
+      manual_specs: current.manual_specs.filter(
+        (_, specIndex) => specIndex !== index,
+      ),
+    }));
+    clearFormErrors();
+  }
+
   function updateVariantPrice(index: number, value: string) {
     setValues((current) => ({
       ...current,
@@ -1048,6 +1085,33 @@ export function ProductForm({
         ? buildVariantPayloads(parentSku, values.variants)
         : [];
 
+    const populatedManualSpecs = values.manual_specs.filter(
+      (spec) => spec.label.trim() || spec.value.trim() || spec.unit.trim(),
+    );
+    if (
+      populatedManualSpecs.some(
+        (spec) => !spec.label.trim() || !spec.value.trim(),
+      )
+    ) {
+      setValidationError("每条规格都必须同时填写规格名和真实值；未知项请留空。");
+      return;
+    }
+    const structuredSpecs =
+      populatedManualSpecs.length > 0
+        ? {
+            schema_version: "1.0",
+            source: { platform: "operator" },
+            additional_specs: populatedManualSpecs.map((spec, index) => ({
+              evidence: "operator_fact",
+              key: `operator_attribute_${index + 1}`,
+              label: spec.label.trim(),
+              raw_value: spec.value.trim(),
+              unit: spec.unit.trim() || undefined,
+              value: spec.value.trim(),
+            })),
+          }
+        : null;
+
     const multilingualFields = buildMultilingualFields(values, market);
     const attributes = buildAttributes({
       dimensions: dimensions.value,
@@ -1131,6 +1195,7 @@ export function ProductForm({
         target_market_label: market.label,
         variants,
         weight_json: weight.value,
+        structured_specs_json: structuredSpecs,
       });
       setValues(initialValues);
     } catch {
@@ -1507,6 +1572,59 @@ export function ProductForm({
             </select>
           </label>
         </div>
+      </section>
+
+      <section className={styles.formSection} aria-labelledby="k-manual-specs">
+        <div className={styles.formSectionHeading}>
+          <h4 id="k-manual-specs">规格（事实）</h4>
+          <span>只填写已核实事实；未知项留空，不要在这里写营销卖点。</span>
+          <button className="secondary-button" onClick={addManualSpec} type="button">
+            <Plus aria-hidden="true" size={15} />
+            添加规格
+          </button>
+        </div>
+        {values.manual_specs.map((spec, index) => (
+          <div className={styles.measurementGrid} key={`manual-spec-${index}`}>
+            <label className={styles.field}>
+              <span>规格名</span>
+              <input
+                onChange={(event) =>
+                  updateManualSpec(index, "label", event.target.value)
+                }
+                placeholder="例如：点火方式"
+                value={spec.label}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>真实值</span>
+              <input
+                onChange={(event) =>
+                  updateManualSpec(index, "value", event.target.value)
+                }
+                placeholder="例如：压电点火"
+                value={spec.value}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>单位（可选）</span>
+              <input
+                onChange={(event) =>
+                  updateManualSpec(index, "unit", event.target.value)
+                }
+                placeholder="inch / lb / W"
+                value={spec.unit}
+              />
+            </label>
+            <button
+              className="secondary-button"
+              disabled={values.manual_specs.length <= 1}
+              onClick={() => removeManualSpec(index)}
+              type="button"
+            >
+              删除
+            </button>
+          </div>
+        ))}
       </section>
 
       {values.product_type === "variable_product" ? (

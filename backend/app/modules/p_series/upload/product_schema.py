@@ -67,18 +67,26 @@ def _lookup(specs: dict[str, Any], path: str) -> tuple[Any, Any]:
 
 
 def _evidence_value(
-    specs: dict[str, Any], path: str
+    specs: dict[str, Any], path: str, *, source_platform: str
 ) -> tuple[str, str | None] | None:
     node, parent = _lookup(specs, path)
     if not isinstance(node, dict):
         return None
-    # Standard fields are publishable only when original supplier evidence is
-    # retained on the leaf or (for dimensions) its parent object.
-    evidence = _clean(node.get("raw_value")) and _clean(node.get("source_label"))
-    if not evidence and isinstance(parent, dict):
-        evidence = _clean(parent.get("raw_value")) and _clean(
-            parent.get("source_label")
+    # Supplier fields need the original label/value pair. Manually entered K
+    # facts instead carry the explicit operator_fact stamp written by the
+    # public payload normalizer. For dimensions that stamp lives on the parent.
+    if source_platform == "operator":
+        evidence = node.get("evidence") == "operator_fact"
+        if not evidence and isinstance(parent, dict):
+            evidence = parent.get("evidence") == "operator_fact"
+    else:
+        evidence = _clean(node.get("raw_value")) and _clean(
+            node.get("source_label")
         )
+        if not evidence and isinstance(parent, dict):
+            evidence = _clean(parent.get("raw_value")) and _clean(
+                parent.get("source_label")
+            )
     if not evidence:
         return None
     value = _clean(node.get("value"))
@@ -114,8 +122,8 @@ def project_verified_product_specs(
 ) -> tuple[list[ProductAttribute], ProductSchema]:
     """Return two views of the same verified facts, or two empty views.
 
-    Requiring the v1 contract and ``source.platform=1688`` prevents legacy or
-    model-authored dictionaries from silently becoming product claims.
+    Requiring the v1 contract plus a supported evidence source prevents legacy
+    or model-authored dictionaries from silently becoming product claims.
     """
     empty = ([], ProductSchema())
     if not isinstance(structured_specs_json, dict):
@@ -123,14 +131,26 @@ def project_verified_product_specs(
     if str(structured_specs_json.get("schema_version") or "") != "1.0":
         return empty
     source = structured_specs_json.get("source")
-    if not isinstance(source, dict) or source.get("platform") != "1688":
+    if not isinstance(source, dict):
+        return empty
+    source_platform = str(source.get("platform") or "")
+    if source_platform not in {"1688", "operator"}:
+        return empty
+    if (
+        source_platform == "operator"
+        and source.get("evidence_type") != "operator_fact"
+    ):
         return empty
 
     attributes: list[ProductAttribute] = []
     properties: list[ProductSchemaProperty] = []
     seen: set[str] = set()
     for path, name in _STANDARD_FIELDS:
-        resolved = _evidence_value(structured_specs_json, path)
+        resolved = _evidence_value(
+            structured_specs_json,
+            path,
+            source_platform=source_platform,
+        )
         if resolved is None:
             continue
         value, unit = resolved
@@ -152,6 +172,11 @@ def project_verified_product_specs(
             value = _clean(item.get("value"))
             raw_value = _clean(item.get("raw_value"))
             if not name or not value or not raw_value:
+                continue
+            if (
+                source_platform == "operator"
+                and item.get("evidence") != "operator_fact"
+            ):
                 continue
             _append(
                 attributes,

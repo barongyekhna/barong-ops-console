@@ -140,6 +140,7 @@ from .service import (
     get_keywords,
     get_product,
     get_risk_terms,
+    invalidate_evidence_outputs,
     list_products,
     patch_attributes,
     patch_keywords,
@@ -326,9 +327,16 @@ class ProviderExecutionResponse(BaseModel):
 
 
 class SellingPointBullet(BaseModel):
+    id: str | None = None
     category: str
     text: str
     importance_score: int | float
+    evidence: str | None = Field(default=None, max_length=512)
+    evidence_excerpt: str | None = Field(default=None, max_length=1000)
+    evidence_snapshot: dict[str, Any] | None = None
+    evidence_digest: str | None = Field(default=None, max_length=64)
+    verification_status: Literal["verified", "unverified"] = "unverified"
+    review_decision: Literal["candidate", "approve", "edit", "reject"] = "candidate"
 
 
 class SellingPointsResponse(BaseModel):
@@ -1346,12 +1354,18 @@ def _product_full_ai_payload(
     ]
     attributes = [
         {
+            "id": str(row.id),
             "attribute_key": row.attribute_key,
             "attribute_value_text": row.attribute_value_text,
             "attribute_value_json": row.attribute_value_json,
             "attribute_unit": row.attribute_unit,
             "attribute_group": row.attribute_group,
             "source": row.source,
+            "requires_review": row.requires_review,
+            "reviewed_by_user_id": (
+                str(row.reviewed_by_user_id) if row.reviewed_by_user_id else None
+            ),
+            "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
         }
         for row in db.scalars(
             select(KProductKnowledgeAttribute)
@@ -1417,6 +1431,376 @@ def _product_full_ai_payload(
             "currency": product.price_currency,
         },
     }
+
+
+def _evidence_syntax_is_valid(evidence: str | None) -> bool:
+    value = str(evidence or "").strip()
+    return bool(
+        value == "operator_fact"
+        or (value.startswith("spec:") and value[5:].strip())
+        or (value.startswith("verified_feature:") and value[17:].strip())
+    )
+
+
+def _structured_spec_path_exists(specs: Any, path: str) -> bool:
+    return _structured_spec_evidence_snapshot(specs, path) is not None
+
+
+def _evidence_value_text(value: Any, unit: Any = None) -> str:
+    if isinstance(value, (dict, list)):
+        rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    else:
+        rendered = str(value or "").strip()
+    clean_unit = str(unit or "").strip()
+    return f"{rendered} {clean_unit}".strip()
+
+
+def _structured_spec_evidence_snapshot(
+    specs: Any,
+    path: str,
+) -> dict[str, Any] | None:
+    if not isinstance(specs, dict):
+        return None
+    cleaned = path.strip().strip(".")
+    if not cleaned:
+        return None
+    if cleaned in {"schema_version", "source", "additional_specs"} or cleaned.startswith(
+        "source."
+    ):
+        return None
+    current: Any = specs
+    found = True
+    for segment in cleaned.split("."):
+        if isinstance(current, dict) and segment in current:
+            current = current[segment]
+        else:
+            found = False
+            break
+    if found and current not in (None, "", [], {}):
+        if isinstance(current, dict):
+            raw_value = current.get("raw_value")
+            value = current.get("value")
+            if raw_value in (None, "") and value in (None, "", [], {}):
+                return None
+            label = str(current.get("source_label") or cleaned).strip()
+            value_text = _evidence_value_text(
+                raw_value if raw_value not in (None, "") else value,
+                current.get("unit"),
+            )
+        else:
+            label = cleaned
+            value = current
+            raw_value = current
+            value_text = _evidence_value_text(current)
+        return {
+            "evidence": f"spec:{cleaned}",
+            "kind": "spec",
+            "path": cleaned,
+            "label": label,
+            "value": value,
+            "raw_value": raw_value,
+            "value_text": value_text,
+        }
+    # Extensible manual/supplier fields are addressed by their stable key or
+    # label, e.g. ``spec:ignition_type``.
+    normalized = re.sub(r"[^a-z0-9]+", "_", cleaned.casefold()).strip("_")
+    for item in specs.get("additional_specs") or []:
+        if not isinstance(item, dict):
+            continue
+        aliases = {
+            str(item.get("key") or "").casefold(),
+            re.sub(
+                r"[^a-z0-9]+",
+                "_",
+                str(item.get("label") or "").casefold(),
+            ).strip("_"),
+        }
+        if cleaned.casefold() in aliases or normalized in aliases:
+            raw_value = item.get("raw_value")
+            value = item.get("value")
+            if raw_value in (None, "") and value in (None, "", [], {}):
+                return None
+            value_text = _evidence_value_text(
+                raw_value if raw_value not in (None, "") else value,
+                item.get("unit"),
+            )
+            return {
+                "evidence": f"spec:{cleaned}",
+                "kind": "spec",
+                "path": str(item.get("key") or cleaned),
+                "label": str(item.get("label") or item.get("key") or cleaned),
+                "value": value,
+                "raw_value": raw_value,
+                "value_text": value_text,
+            }
+    return None
+
+
+_TRUSTED_FEATURE_SOURCE_PREFIXES = (
+    "operator",
+    "manual",
+    "frontend",
+    "supplier",
+    "verified",
+    "crawler_verified",
+    "f_series",
+    "r_series",
+    "import",
+    "1688",
+)
+_UNTRUSTED_FEATURE_SOURCE_MARKERS = (
+    "ai",
+    "model",
+    "unverified",
+    "candidate",
+    "generated",
+    "claude",
+    "chatgpt",
+    "deepseek",
+)
+
+
+def _feature_source_is_trusted(source: Any) -> bool:
+    normalized = str(source or "").strip().casefold()
+    return bool(
+        normalized
+        and not any(marker in normalized for marker in _UNTRUSTED_FEATURE_SOURCE_MARKERS)
+        and any(
+            normalized == prefix
+            or normalized.startswith(f"{prefix}:")
+            or normalized.startswith(f"{prefix}_")
+            for prefix in _TRUSTED_FEATURE_SOURCE_PREFIXES
+        )
+    )
+
+
+def _selling_points_evidence_payload(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> dict[str, Any]:
+    """Claim-safe AI input: identities are separated from evidence sources."""
+
+    verified_features: list[dict[str, Any]] = []
+    for attribute in db.scalars(
+        select(KProductKnowledgeAttribute)
+        .where(KProductKnowledgeAttribute.product_id == product.id)
+        .order_by(KProductKnowledgeAttribute.created_at.asc())
+    ):
+        source = str(attribute.source or "").strip().casefold()
+        human_reviewed = bool(
+            attribute.reviewed_by_user_id is not None and attribute.reviewed_at is not None
+        )
+        trusted_source = _feature_source_is_trusted(source)
+        if attribute.requires_review or not (trusted_source or human_reviewed):
+            continue
+        value: Any = (
+            attribute.attribute_value_text
+            if attribute.attribute_value_text not in (None, "")
+            else attribute.attribute_value_json
+        )
+        verified_features.append(
+            {
+                "id": str(attribute.id),
+                "key": attribute.attribute_key,
+                "value": value,
+                "unit": attribute.attribute_unit,
+                "source": attribute.source,
+            }
+        )
+
+    approved_keywords = [
+        row.keyword_text
+        for row in db.scalars(
+            select(KProductKnowledgeKeyword)
+            .where(
+                KProductKnowledgeKeyword.product_id == product.id,
+                KProductKnowledgeKeyword.status == "approved",
+            )
+            .order_by(KProductKnowledgeKeyword.created_at.asc())
+        )
+    ]
+    return {
+        "identity": {
+            "product_id": str(product.id),
+            "product_key": product.product_key,
+            "sku": product.sku,
+            "name": product.product_name_en,
+            "product_type": product.product_type,
+            "target_market": product.target_market,
+            "target_language": product.canonical_language,
+            "main_keyword": product.primary_keyword,
+        },
+        "structured_specs_json": product.structured_specs_json,
+        "verified_features": verified_features,
+        "operator_facts": [product.manual_notes] if product.manual_notes else [],
+        # Keywords guide wording/search intent only; the prompt explicitly
+        # forbids using them as claim evidence.
+        "approved_non_risk_keywords": approved_keywords,
+    }
+
+
+def _verified_feature_evidence_snapshot(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    feature_ref: str,
+) -> tuple[dict[str, Any] | None, str | None]:
+    normalized_ref = feature_ref.strip().casefold()
+    attributes = list(
+        db.scalars(
+            select(KProductKnowledgeAttribute).where(
+                KProductKnowledgeAttribute.product_id == product.id
+            )
+        )
+    )
+    for attribute in attributes:
+        if normalized_ref not in {
+            str(attribute.id).casefold(),
+            str(attribute.attribute_key or "").casefold(),
+        }:
+            continue
+        source = str(attribute.source or "").strip().casefold()
+        human_reviewed = bool(
+            attribute.reviewed_by_user_id is not None and attribute.reviewed_at is not None
+        )
+        trusted_source = _feature_source_is_trusted(source)
+        if attribute.requires_review or not (trusted_source or human_reviewed):
+            return None, (
+                "Verified feature must have an explicit trusted/operator source or "
+                f"completed human review: verified_feature:{feature_ref}"
+            )
+        raw_value: Any = (
+            attribute.attribute_value_text
+            if attribute.attribute_value_text not in (None, "")
+            else attribute.attribute_value_json
+        )
+        return {
+            "evidence": f"verified_feature:{feature_ref}",
+            "kind": "verified_feature",
+            "feature_id": str(attribute.id),
+            "key": attribute.attribute_key,
+            "value": raw_value,
+            "unit": attribute.attribute_unit,
+            "value_text": _evidence_value_text(raw_value, attribute.attribute_unit),
+            "source": attribute.source,
+        }, None
+    return None, f"Verified feature evidence was not found: verified_feature:{feature_ref}"
+
+
+def _selling_point_evidence_snapshot(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    evidence: str | None,
+    *,
+    operator_excerpt: str | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    value = str(evidence or "").strip()
+    if not _evidence_syntax_is_valid(value):
+        return None, "Evidence must be spec:<field>, verified_feature:<id>, or operator_fact."
+    if value == "operator_fact":
+        excerpt = str(operator_excerpt or "").strip()
+        if not excerpt:
+            return None, "operator_fact requires a concrete evidence_excerpt supplied by the operator."
+        return {
+            "evidence": value,
+            "kind": "operator_fact",
+            "value_text": excerpt,
+        }, None
+    if value.startswith("spec:"):
+        snapshot = _structured_spec_evidence_snapshot(
+            product.structured_specs_json, value[5:]
+        )
+        if snapshot is None:
+            return None, f"Structured specification evidence was not found: {value}"
+        return snapshot, None
+    return _verified_feature_evidence_snapshot(db, product, value.split(":", 1)[1])
+
+
+def _selling_point_evidence_error(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    evidence: str | None,
+) -> str | None:
+    # Syntax/existence helper retained for read-only status projection. The
+    # approval endpoint additionally validates the exact snapshot and claim.
+    if str(evidence or "").strip() == "operator_fact":
+        return None
+    _, error = _selling_point_evidence_snapshot(db, product, evidence)
+    return error
+
+
+_EVIDENCE_TOPIC_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("wind", ("wind", "windproof", "wind-resistant", "wind resistant")),
+    ("water", ("waterproof", "water-resistant", "water resistant", "ip65", "ip67")),
+    ("indoor", ("indoor", "indoors", "home use")),
+    ("safety", ("safe", "safety", "hazard-free")),
+    ("runtime", ("runtime", "run time", "battery life", "hours", "hour")),
+    ("ignition", ("ignition", "ignite", "piezo", "lighter-free")),
+    ("weight", ("lightweight", "weight", "weighs", "lb", "kg")),
+    ("size", ("compact", "dimensions", "dimension", "folded", "inch", "cm")),
+    ("material", ("material", "steel", "aluminum", "aluminium", "abs")),
+    ("certification", ("certified", "certification", "ce", "rohs", "ul")),
+)
+
+
+def _normalized_evidence_text(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+
+
+def _selling_point_support_error(
+    bullet: SellingPointBullet,
+    snapshot: dict[str, Any],
+) -> str | None:
+    claim = _normalized_evidence_text(bullet.text)
+    fact = _normalized_evidence_text(
+        " ".join(
+            str(snapshot.get(key) or "")
+            for key in ("path", "label", "key", "value_text")
+        )
+    )
+    operator_bridge = _normalized_evidence_text(bullet.evidence_excerpt)
+    support = f"{fact} {operator_bridge}".strip()
+
+    claim_numbers = set(re.findall(r"\d+(?:\.\d+)?", claim))
+    support_numbers = set(re.findall(r"\d+(?:\.\d+)?", support))
+    unsupported_numbers = sorted(claim_numbers - support_numbers)
+    if unsupported_numbers:
+        return "Claim contains numbers absent from the current evidence: " + ", ".join(unsupported_numbers)
+
+    for topic, terms in _EVIDENCE_TOPIC_TERMS:
+        claim_has_topic = any(_normalized_evidence_text(term) in claim for term in terms)
+        if claim_has_topic and not any(
+            _normalized_evidence_text(term) in support for term in terms
+        ):
+            return f"Evidence does not support the claim topic '{topic}'."
+
+    if snapshot.get("kind") == "operator_fact" and not operator_bridge:
+        return "operator_fact requires a concrete evidence_excerpt."
+    return None
+
+
+def _mark_selling_point_evidence_status(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    response: SellingPointsResponse,
+) -> SellingPointsResponse:
+    bullets = []
+    for bullet in response.bullets:
+        error = _selling_point_evidence_error(db, product, bullet.evidence)
+        # ``operator_fact`` becomes verified only when the operator explicitly
+        # approves/edits the row at the manual gate below.
+        operator_attestation_pending = bullet.evidence == "operator_fact"
+        bullets.append(
+            bullet.model_copy(
+                update={
+                    "verification_status": (
+                        "unverified"
+                        if error or operator_attestation_pending
+                        else "verified"
+                    )
+                }
+            )
+        )
+    return response.model_copy(update={"bullets": bullets})
 
 
 def _normalize_selling_points_response(
@@ -1486,10 +1870,17 @@ def _normalize_selling_points_response(
                     or raw.get("权重")
                     or 1
                 )
+                evidence = str(raw.get("evidence") or "").strip() or None
+                evidence_excerpt = (
+                    str(raw.get("evidence_excerpt") or raw.get("proof") or "").strip()
+                    or None
+                )
             else:
                 text = str(raw).strip()
                 category = "conversion"
                 score_raw = index
+                evidence = None
+                evidence_excerpt = None
             if not text:
                 continue
             try:
@@ -1498,9 +1889,19 @@ def _normalize_selling_points_response(
                 score = float(index)
             bullets.append(
                 SellingPointBullet(
+                    id=(
+                        str(raw.get("id")).strip()
+                        if isinstance(raw, dict) and raw.get("id")
+                        else f"sp-{index}"
+                    ),
                     category=category or "conversion",
                     text=text,
                     importance_score=score,
+                    evidence=evidence,
+                    evidence_excerpt=evidence_excerpt,
+                    # Provider claims are candidates. Syntax is not proof and
+                    # only the product-aware/manual gate may mark them verified.
+                    verification_status="unverified",
                 )
             )
     if not bullets and isinstance(provider_output.get("content"), str):
@@ -1509,6 +1910,7 @@ def _normalize_selling_points_response(
                 category="marketing",
                 text=str(provider_output["content"]).strip(),
                 importance_score=1,
+                verification_status="unverified",
             )
         )
     if not bullets:
@@ -1759,13 +2161,24 @@ def _active_media_snapshot(
 
 def _stored_selling_points_payload(
     product: KProductKnowledgeProduct,
+    *,
+    approved_only: bool = False,
 ) -> dict[str, Any] | None:
+    approved = product.selling_points_approved_json
+    if isinstance(approved, dict):
+        return approved
+    if approved_only:
+        return None
+    candidates = product.selling_points_candidates_json
+    if isinstance(candidates, dict):
+        return candidates
+    # Read-only compatibility for records written before the evidence columns.
     payload = _product_ai_warnings(product).get("selling_points")
     return payload if isinstance(payload, dict) else None
 
 
 def _selling_points_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any]:
-    payload = _stored_selling_points_payload(product)
+    payload = _stored_selling_points_payload(product, approved_only=True)
     if payload is None:
         empty = {"count": 0, "payload": None}
         return {**empty, "digest": _stable_payload_digest(empty)}
@@ -1782,6 +2195,7 @@ def _selling_points_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any
         "source": payload.get("source"),
         "target_language": payload.get("target_language"),
         "translated_version": payload.get("translated_version"),
+        "review_status": payload.get("review_status"),
     }
     snapshot_payload = {"count": count, "payload": stable_payload}
     return {
@@ -3437,7 +3851,7 @@ def generate_product_selling_points(
         key_requirements={"deepseek": "deepseek"},
     )
     key = context.key_for_step("deepseek")
-    product_payload = _product_full_ai_payload(db, product)
+    product_payload = _selling_points_evidence_payload(db, product)
     scope_context = _scope_context(request)
     source_name = key.name
     db.rollback()
@@ -3481,6 +3895,7 @@ def generate_product_selling_points(
             product=product,
             source=source_name,
         )
+        response = _mark_selling_point_evidence_status(db, product, response)
     except HTTPException:
         raise
     except Exception as exc:
@@ -3514,12 +3929,21 @@ def generate_product_selling_points(
         created_by_user_id=_user_uuid(user),
         updated_by_user_id=_user_uuid(user),
     )
+    invalidate_evidence_outputs(product)
     product.deepseek_structured_output_json = {
         **(product.deepseek_structured_output_json or {}),
         "selling_points_generation": provider_output,
     }
+    output_payload["review_status"] = "candidate"
+    output_payload["generated_at"] = _now().isoformat()
+    product.selling_points_candidates_json = output_payload
+    prior_warnings = _product_ai_warnings(product)
     product.ai_warnings_json = {
-        **(product.ai_warnings_json or {}),
+        **{
+            key: value
+            for key, value in prior_warnings.items()
+            if key != "selling_points_review"
+        },
         "selling_points": output_payload,
     }
     latest_execution = KWorkflowOrchestratorV2(db).latest_execution_for_product(
@@ -3608,6 +4032,93 @@ def approve_product_selling_points(
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
 
+    approved_bullets: list[SellingPointBullet] = []
+    rejected_bullets: list[SellingPointBullet] = []
+    review_errors: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, bullet in enumerate(payload.bullets):
+        bullet_id = str(bullet.id or f"sp-{index + 1}").strip()
+        if bullet_id in seen_ids:
+            review_errors.append(
+                {
+                    "index": index,
+                    "text": bullet.text,
+                    "error": f"Duplicate selling-point id: {bullet_id}",
+                }
+            )
+            continue
+        seen_ids.add(bullet_id)
+        bullet = bullet.model_copy(update={"id": bullet_id})
+        if bullet.review_decision == "candidate":
+            review_errors.append(
+                {
+                    "index": index,
+                    "text": bullet.text,
+                    "error": "Every candidate must be approved, edited, or rejected.",
+                }
+            )
+            continue
+        if bullet.review_decision == "reject":
+            rejected_bullets.append(bullet)
+            continue
+        evidence_snapshot, evidence_error = _selling_point_evidence_snapshot(
+            db,
+            product,
+            bullet.evidence,
+            operator_excerpt=bullet.evidence_excerpt,
+        )
+        if evidence_error:
+            review_errors.append(
+                {"index": index, "text": bullet.text, "error": evidence_error}
+            )
+            continue
+        assert evidence_snapshot is not None
+        support_error = _selling_point_support_error(bullet, evidence_snapshot)
+        if support_error:
+            review_errors.append(
+                {"index": index, "text": bullet.text, "error": support_error}
+            )
+            continue
+        snapshot_digest = hashlib.sha256(
+            _canonical_payload(evidence_snapshot).encode("utf-8")
+        ).hexdigest()
+        approved_bullets.append(
+            bullet.model_copy(
+                update={
+                    "verification_status": "verified",
+                    "evidence_excerpt": str(
+                        evidence_snapshot.get("value_text") or ""
+                    ).strip(),
+                    "evidence_snapshot": evidence_snapshot,
+                    "evidence_digest": snapshot_digest,
+                }
+            )
+        )
+    if review_errors:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_structured_execution_error_detail(
+                reason="invalid_state",
+                code="SELLING_POINT_EVIDENCE_REQUIRED",
+                message=(
+                    "Every retained selling point must have valid evidence and an "
+                    "explicit per-item review decision."
+                ),
+                module_id=MODULE_KEY,
+                extra={"items": review_errors},
+            ),
+        )
+    if not approved_bullets:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_structured_execution_error_detail(
+                reason="invalid_state",
+                code="SELLING_POINTS_EMPTY_AFTER_REVIEW",
+                message="At least one evidence-backed selling point must be approved.",
+                module_id=MODULE_KEY,
+            ),
+        )
+
     source = (payload.source or "manual_review").strip() or "manual_review"
     target_language = (
         payload.target_language.strip()
@@ -3615,7 +4126,10 @@ def approve_product_selling_points(
         else product.canonical_language
     )
     output_payload = {
-        "bullets": [bullet.model_dump(mode="json") for bullet in payload.bullets],
+        "bullets": [bullet.model_dump(mode="json") for bullet in approved_bullets],
+        "rejected_bullets": [
+            bullet.model_dump(mode="json") for bullet in rejected_bullets
+        ],
         "seo_keywords": _safe_string_list(payload.seo_keywords),
         "market_tags": _safe_string_list(payload.market_tags),
         "confidence_score": payload.confidence_score,
@@ -3629,7 +4143,7 @@ def approve_product_selling_points(
         "approved_at": _now().isoformat(),
     }
     response = SellingPointsResponse(
-        bullets=payload.bullets,
+        bullets=approved_bullets,
         seo_keywords=output_payload["seo_keywords"],
         market_tags=output_payload["market_tags"],
         confidence_score=payload.confidence_score,
@@ -3651,7 +4165,8 @@ def approve_product_selling_points(
             json.dumps(output_payload, sort_keys=True, default=str)
         ),
         output_summary_json={
-            "bullet_count": len(payload.bullets),
+            "bullet_count": len(approved_bullets),
+            "rejected_count": len(rejected_bullets),
             "target_language": target_language,
             "review_status": "approved",
         },
@@ -3673,9 +4188,18 @@ def approve_product_selling_points(
             "source": output_payload.get("source"),
             "target_language": output_payload.get("target_language"),
             "translated_version": output_payload.get("translated_version"),
+            "review_status": output_payload.get("review_status"),
         },
     }
     selling_points_digest = _stable_payload_digest(pending_snapshot_payload)
+    # A new human-approved authority invalidates copy/image/FAQ derived from
+    # any previous approval before the reviewed snapshot is persisted.
+    invalidate_evidence_outputs(product)
+    product.selling_points_candidates_json = {
+        **output_payload,
+        "review_status": "reviewed",
+    }
+    product.selling_points_approved_json = output_payload
     product.ai_warnings_json = {
         **_product_ai_warnings(product),
         "selling_points": output_payload,
@@ -3687,6 +4211,19 @@ def approve_product_selling_points(
             "bullet_count": len(output_payload["bullets"]),
         },
     }
+    orchestrator = KWorkflowOrchestratorV2(db)
+    latest_execution = orchestrator.latest_execution_for_product(
+        product_id=product.id,
+        scope_context=_scope_context(request),
+    )
+    if (
+        latest_execution is not None
+        and orchestrator._risk_review_is_approved(latest_execution)
+        and bool(latest_execution.final_keyword_set_json)
+        and orchestrator._image_is_bound(product, latest_execution)
+    ):
+        orchestrator._mark_export_ready(product, latest_execution)
+        db.add(latest_execution)
     db.add_all([product, event])
     db.commit()
     db.refresh(event)

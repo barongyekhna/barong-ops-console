@@ -23,6 +23,7 @@ from ....models.user import User
 from ....modules.k_series.product_knowledge.category_resolver import (
     bind_google_category_id,
 )
+from ....modules.k_series.product_knowledge.scope_shim import KScopeContext
 from ....modules.k_series.product_knowledge.sku_allocator import ensure_product_sku
 from ....services.data_isolation import without_org_data_isolation
 from ..enrichment import constants as C
@@ -301,14 +302,17 @@ def import_candidate_to_k(
     *,
     candidate: FCategoryCandidate,
     user: User | None,
+    scope_context: KScopeContext,
 ) -> dict[str, Any]:
     """人工放行（approved）的候选搬进 K：channel=dtc + 直绑谷歌类目。"""
     from ...k_series.product_knowledge.constants import (
         TARGET_ORGANIZATION_NAME as K_ORG_NAME,
     )
     from ...k_series.product_knowledge.models import KProductKnowledgeProduct
-    from ...k_series.product_knowledge.scope_shim import default_scope_context
-    from ...k_series.product_knowledge.service import _generate_unique_product_key
+    from ...k_series.product_knowledge.service import (
+        _generate_unique_product_key,
+        ensure_default_product_variant,
+    )
 
     if candidate.status == "imported_to_k":
         raise ValueError("该候选已经搬进 K 了。")
@@ -364,13 +368,12 @@ def import_candidate_to_k(
     if candidate.notes:
         raw_lines.append(f"备注: {candidate.notes}")
 
-    scope = default_scope_context()
     product = KProductKnowledgeProduct(
         id=uuid4(),
         product_key=_generate_unique_product_key(db),
-        workspace_key=scope.workspace_key,
-        business_context=scope.business_context,
-        scope_mode=scope.scope_mode,
+        workspace_key=scope_context.workspace_key,
+        business_context=scope_context.business_context,
+        scope_mode=scope_context.scope_mode,
         organization_name=K_ORG_NAME,
         product_name_en=candidate.title[:512],
         primary_keyword=str(primary_keyword)[:512],
@@ -397,6 +400,7 @@ def import_candidate_to_k(
     )
     ensure_product_sku(db, product, force_allocate=True)
     db.add(product)
+    ensure_default_product_variant(db, product)
     candidate.status = "imported_to_k"
     candidate.k_product_id = product.id
     candidate.reviewed_by_user_id = user.id if user is not None else None

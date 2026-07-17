@@ -599,6 +599,7 @@ def f_candidate_review(
 @router.post("/candidates/{candidate_id}/import-to-k", response_model=ImportToKResponse)
 def f_candidate_import_to_k(
     candidate_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_f_permission(C.PERMISSION_REVIEW)),
 ) -> ImportToKResponse:
@@ -606,8 +607,29 @@ def f_candidate_import_to_k(
     candidate = db.get(FCategoryCandidate, candidate_id)
     if candidate is None:
         raise HTTPException(status_code=404, detail="候选不存在。")
+    from ..k_series.product_knowledge.constants import (
+        DEFAULT_BUSINESS_CONTEXT,
+        DEFAULT_WORKSPACE_KEY,
+    )
+    from ..k_series.product_knowledge.scope_shim import KScopeContext
+
+    org_id = getattr(request.state, "org_id", None)
+    if org_id is None:
+        org_context = getattr(request.state, "org_context", None)
+        org_id = getattr(org_context, "org_id", None)
+    workspace_key = str(org_id).strip() if org_id else DEFAULT_WORKSPACE_KEY
+    scope_context = KScopeContext(
+        workspace_key=workspace_key,
+        business_context=DEFAULT_BUSINESS_CONTEXT,
+        scope_mode="production",
+    )
     try:
-        result = service.import_candidate_to_k(db, candidate=candidate, user=user)
+        result = service.import_candidate_to_k(
+            db,
+            candidate=candidate,
+            user=user,
+            scope_context=scope_context,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()

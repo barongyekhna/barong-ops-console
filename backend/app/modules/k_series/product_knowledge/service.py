@@ -55,6 +55,7 @@ PRODUCT_CREATE_FIELDS = frozenset(
         "price_currency",
         "dimensions_json",
         "weight_json",
+        "structured_specs_json",
         "short_description_en",
         "long_description_en",
         "primary_use_case_en",
@@ -81,6 +82,7 @@ PRODUCT_UPDATE_FIELDS = frozenset(
         "price_currency",
         "dimensions_json",
         "weight_json",
+        "structured_specs_json",
         "short_description_en",
         "long_description_en",
         "primary_use_case_en",
@@ -138,6 +140,41 @@ def _apply_manual_category(
 ) -> None:
     """手动上传：用户为该 channel 选的类目直接落（下拉来自对应类目树，可信）。"""
     assign_manual_category(db, product, category_id)
+
+
+def invalidate_evidence_outputs(product: KProductKnowledgeProduct) -> None:
+    """Fail closed when a fact source changes beneath approved claims."""
+
+    product.selling_points_candidates_json = None
+    product.selling_points_approved_json = None
+    product.faq_research_json = None
+    product.marketing_copy_json = None
+    product.marketing_copy_zh = None
+    product.marketing_copy_skill_version = None
+    product.image_instruction_json = None
+    product.image_instruction_zh = None
+    product.image_instruction_skill_version = None
+
+    warnings = (
+        product.ai_warnings_json
+        if isinstance(product.ai_warnings_json, dict)
+        else {}
+    )
+    product.ai_warnings_json = {
+        key: value
+        for key, value in warnings.items()
+        if key not in {"selling_points", "selling_points_review"}
+    }
+    deepseek = (
+        product.deepseek_structured_output_json
+        if isinstance(product.deepseek_structured_output_json, dict)
+        else {}
+    )
+    product.deepseek_structured_output_json = {
+        key: value
+        for key, value in deepseek.items()
+        if key != "selling_points_generation"
+    } or None
 
 
 def create_product(
@@ -199,10 +236,12 @@ def create_product(
         try:
             db.flush()
             for item in payload.attributes:
+                attribute_data = item.model_dump()
+                attribute_data["source"] = attribute_data.get("source") or "operator"
                 db.add(
                     KProductKnowledgeAttribute(
                         product_id=product.id,
-                        **item.model_dump(),
+                        **attribute_data,
                     )
                 )
             for item in payload.keywords:
@@ -259,12 +298,19 @@ def update_product(
     if payload.main_keyword is not None:
         product.primary_keyword = payload.main_keyword
 
-    # No-op patches are accepted as idempotent in this skeleton.
-    for field_name, value in _selected_model_dump(
+    # No-op patches are accepted as idempotent. A changed fact snapshot,
+    # however, invalidates every approval/output derived from the old facts.
+    updates = _selected_model_dump(
         payload,
         PRODUCT_UPDATE_FIELDS,
         exclude_unset=True,
-    ).items():
+    )
+    if (
+        "structured_specs_json" in updates
+        and product.structured_specs_json != updates["structured_specs_json"]
+    ):
+        invalidate_evidence_outputs(product)
+    for field_name, value in updates.items():
         setattr(product, field_name, value)
 
     _commit(db)
@@ -389,11 +435,14 @@ def patch_attributes(
             )
         )
     }
+    evidence_changed = False
     for item in payload.items:
         data = item.model_dump()
+        data["source"] = data.get("source") or "operator"
         key = (item.attribute_key, item.attribute_group or "")
         attribute = existing.get(key)
         if attribute is None:
+            evidence_changed = True
             db.add(
                 KProductKnowledgeAttribute(
                     product_id=product.id,
@@ -402,7 +451,11 @@ def patch_attributes(
             )
             continue
         for field_name, value in data.items():
+            if getattr(attribute, field_name) != value:
+                evidence_changed = True
             setattr(attribute, field_name, value)
+    if evidence_changed:
+        invalidate_evidence_outputs(product)
     _commit(db)
     return get_attributes(db, product_id=product.id, scope_context=scope_context)
 
@@ -726,6 +779,56 @@ def _variant_rows_for_payload(
             )
         )
     return rows
+
+
+def ensure_default_product_variant(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> KProductKnowledgeVariant:
+    """Persist the canonical default variant for an imported simple product.
+
+    F→K and R→K bypass ``create_product`` and therefore do not pass through
+    ``_variant_rows_for_payload``.  Keep their default row identical to the
+    regular K create path so image APIs can resolve the product by variant SKU.
+    """
+
+    existing = db.scalar(
+        select(KProductKnowledgeVariant)
+        .where(KProductKnowledgeVariant.product_id == product.id)
+        .order_by(KProductKnowledgeVariant.created_at.asc())
+        .limit(1)
+    )
+    if existing is not None:
+        return existing
+
+    parent_sku = ensure_product_sku(db, product)
+    attributes: dict[str, object] = {"default_variant": True}
+    seed = {
+        "attributes": attributes,
+        "color": None,
+        "function": None,
+        "index": 0,
+        "size": None,
+    }
+    variant_hash, variant_sku = _variant_identity(
+        db,
+        parent_sku=parent_sku,
+        seed=seed,
+        used_variant_hashes=set(),
+        used_variant_skus=set(),
+    )
+    variant = KProductKnowledgeVariant(
+        id=uuid4(),
+        product_id=product.id,
+        parent_sku=parent_sku,
+        variant_sku=variant_sku,
+        variant_hash=variant_hash,
+        attributes_json=attributes,
+        image_folder=_variant_image_folder(product.product_key, variant_sku),
+    )
+    db.add(variant)
+    db.flush()
+    return variant
 
 
 def _commit(db: Session) -> None:

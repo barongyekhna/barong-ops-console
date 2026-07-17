@@ -205,6 +205,107 @@ def has_standard_specs(value: Any) -> bool:
     return isinstance(value, dict) and any(key in value for key in STANDARD_SPEC_KEYS)
 
 
+def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
+    """Validate the public K manual-spec contract without inventing values.
+
+    Manual K entry is deliberately a separate evidence source from the 1688
+    normalizer.  Operators may submit standard fields in the existing v1 shape
+    or extensible ``additional_specs`` rows.  Blank rows are omitted and every
+    retained row is stamped as an ``operator_fact`` so selling-point evidence
+    can refer to it explicitly.
+    """
+
+    if payload is None:
+        return None
+    if not isinstance(payload, dict):
+        raise ValueError("structured_specs_json must be an object")
+
+    source = payload.get("source")
+    if not isinstance(source, dict) or str(source.get("platform") or "") != "operator":
+        raise ValueError(
+            "Manual structured_specs_json must use source.platform=operator"
+        )
+
+    output: dict[str, Any] = {
+        "schema_version": STRUCTURED_SPECS_SCHEMA_VERSION,
+        "source": {
+            "platform": "operator",
+            "evidence_type": "operator_fact",
+        },
+    }
+    if source.get("note"):
+        output["source"]["note"] = _clean_text(source.get("note"))[:1000]
+
+    for key in STANDARD_SPEC_KEYS:
+        raw = payload.get(key)
+        if raw in (None, "", [], {}):
+            continue
+        if not isinstance(raw, dict):
+            raise ValueError(f"Manual standard spec '{key}' must be an object")
+        # Keep the established source-preserving shape.  A manual standard
+        # value without a value/raw_value is not evidence and is discarded.
+        value = raw.get("value")
+        raw_value = _clean_text(raw.get("raw_value"))
+        if value in (None, "", [], {}) and not raw_value:
+            continue
+        item = dict(raw)
+        if raw_value:
+            item["raw_value"] = raw_value[:1000]
+        item["evidence"] = "operator_fact"
+        output[key] = item
+
+    additional: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    seen_keys: set[str] = set()
+    raw_additional = payload.get("additional_specs")
+    if raw_additional is not None and not isinstance(raw_additional, list):
+        raise ValueError("additional_specs must be a list")
+    for index, raw in enumerate(raw_additional or [], start=1):
+        if not isinstance(raw, dict):
+            raise ValueError("Every manual specification must be an object")
+        label = _clean_text(raw.get("label") or raw.get("source_label"))
+        value = _clean_text(raw.get("raw_value") or raw.get("value"))
+        if not label and not value:
+            continue
+        if not label or not value:
+            raise ValueError("Manual specification label and value are both required")
+        if any(term in _label_token(label) for term in _IDENTITY_LABEL_TERMS):
+            raise ValueError("Brand/manufacturer identity is not a product specification")
+        dedupe_key = (label.casefold(), value.casefold())
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        stable_key = _clean_text(raw.get("key")) or (
+            "operator_attribute_"
+            + hashlib.sha1(f"{label}:{index}".encode("utf-8")).hexdigest()[:10]
+        )
+        stable_key = re.sub(r"[^A-Za-z0-9_.-]+", "_", stable_key).strip("_.-")
+        if not stable_key:
+            raise ValueError("Manual specification key must contain letters or numbers")
+        stable_key = stable_key[:128]
+        normalized_key = stable_key.casefold()
+        if normalized_key in seen_keys:
+            raise ValueError(f"Manual specification key must be unique: {stable_key}")
+        seen_keys.add(normalized_key)
+        item: dict[str, Any] = {
+            "key": stable_key,
+            "label": label[:255],
+            "value": value[:1000],
+            "raw_value": value[:1000],
+            "evidence": "operator_fact",
+        }
+        unit = _clean_text(raw.get("unit"))
+        if unit:
+            item["unit"] = unit[:50]
+        additional.append(item)
+    if additional:
+        output["additional_specs"] = additional[:100]
+
+    if not any(key in output for key in STANDARD_SPEC_KEYS) and not additional:
+        return None
+    return output
+
+
 def _source_record(payload: dict[str, Any], *, source_url: str | None) -> dict[str, Any]:
     record: dict[str, Any] = {"platform": "1688"}
     offer_id = _clean_text(payload.get("offer_id") or payload.get("offerId"))

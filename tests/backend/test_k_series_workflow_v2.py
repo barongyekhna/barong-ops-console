@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from decimal import Decimal
 from types import SimpleNamespace
@@ -51,6 +52,42 @@ from backend.app.services.module_execution_gate import (
 pytestmark = pytest.mark.unit
 
 ORG_ID = "org_11111111111111111111111111111111"
+
+
+def _approve_operator_point(
+    product: KProductKnowledgeProduct,
+    text_value: str = "Operator verified steel construction",
+) -> None:
+    snapshot = {
+        "evidence": "operator_fact",
+        "kind": "operator_fact",
+        "value_text": text_value,
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    product.selling_points_approved_json = {
+        "review_status": "approved",
+        "bullets": [
+            {
+                "id": "operator-steel",
+                "category": "construction",
+                "text": text_value,
+                "importance_score": 1,
+                "evidence": "operator_fact",
+                "evidence_excerpt": text_value,
+                "evidence_snapshot": snapshot,
+                "evidence_digest": digest,
+                "verification_status": "verified",
+                "review_decision": "approve",
+            }
+        ],
+    }
 
 
 def _session():
@@ -230,6 +267,9 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
     ]
     assert KWorkflowStateMachineV2.current_state(reviewed, product) == "UNIT_NORMALIZED"
 
+    _approve_operator_point(product)
+    db.add(product)
+    db.commit()
     ready = engine.bind_image_asset(
         product_id=product.id,
         payload=ProductKnowledgeImageBindRequest(
@@ -245,10 +285,6 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
     assert ready.current_step == "export_p_series"
     assert KWorkflowStateMachineV2.current_state(ready, product) == "EXPORT_READY"
 
-    product.ai_warnings_json = {
-        **(product.ai_warnings_json or {}),
-        "selling_points": {"review_status": "approved"},
-    }
     # The K→P hard gate requires a bound category for the product channel.
     product.google_product_category = "7401"
     db.add(product)
@@ -589,6 +625,40 @@ def test_marketing_copy_keeps_google_id_and_p_builds_wc_category_hierarchy(
         "before": None,
         "after": category_path_text,
     }
+
+    _approve_operator_point(product, "Operator verified pathway illumination")
+    db.add(product)
+    db.commit()
+    # Evidence-driven gate (added after this test): marketing copy now requires
+    # at least one approved, evidence-backed selling point (with a matching
+    # evidence snapshot + digest).
+    _sp_snapshot = {
+        "evidence": "operator_fact",
+        "kind": "operator_fact",
+        "value_text": "Lights outdoor pathways at dusk",
+    }
+    product.selling_points_approved_json = {
+        "review_status": "approved",
+        "bullets": [
+            {
+                "id": "pathway",
+                "text": "Lights outdoor pathways at dusk",
+                "evidence": "operator_fact",
+                "verification_status": "verified",
+                "evidence_snapshot": _sp_snapshot,
+                "evidence_digest": hashlib.sha256(
+                    json.dumps(
+                        _sp_snapshot,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode("utf-8")
+                ).hexdigest(),
+            }
+        ],
+    }
+    db.add(product)
+    db.commit()
 
     generated = engine.generate_marketing_copy(
         product_id=product.id,

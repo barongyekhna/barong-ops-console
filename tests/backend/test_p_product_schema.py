@@ -29,8 +29,17 @@ def _run_n8n_code(
 const code = JSON.parse(process.argv[1]);
 const nodes = JSON.parse(process.argv[2]);
 const inputJson = JSON.parse(process.argv[3]);
-const $ = (name) => ({ first: () => ({ json: nodes[name] }) });
-const $input = { first: () => ({ json: inputJson }) };
+const items = (value) => (Array.isArray(value) ? value : [value])
+  .map((json) => ({ json }));
+const $ = (name) => ({
+  first: () => items(nodes[name])[0],
+  all: () => items(nodes[name]),
+});
+const inputItems = items(inputJson);
+const $input = {
+  first: () => inputItems[0],
+  all: () => inputItems,
+};
 const result = new Function('$', '$input', code)($, $input);
 process.stdout.write(JSON.stringify(result));
 """
@@ -156,6 +165,63 @@ def test_unverified_or_evidence_free_specs_never_become_product_claims() -> None
     )
 
 
+def test_operator_facts_feed_attributes_and_schema_only_with_explicit_stamps() -> None:
+    operator_specs = {
+        "schema_version": "1.0",
+        "source": {
+            "platform": "operator",
+            "evidence_type": "operator_fact",
+        },
+        "material": {
+            "value": "Stainless steel",
+            "evidence": "operator_fact",
+        },
+        "dimensions": {
+            "length": {"value": 12},
+            "unit": "cm",
+            "evidence": "operator_fact",
+        },
+        "runtime_h": {"value": 8},
+        "additional_specs": [
+            {
+                "key": "fuel_type",
+                "label": "Fuel Type",
+                "value": "Butane",
+                "raw_value": "Butane",
+                "evidence": "operator_fact",
+            },
+            {
+                "key": "unstamped_claim",
+                "label": "Unstamped Claim",
+                "value": "Must stay private",
+                "raw_value": "Must stay private",
+            },
+        ],
+    }
+
+    attributes, schema = project_verified_product_specs(operator_specs)
+
+    assert [item.model_dump() for item in attributes] == [
+        {"name": "Length", "value": "12", "unit": "cm"},
+        {"name": "Material", "value": "Stainless steel", "unit": None},
+        {"name": "Fuel Type", "value": "Butane", "unit": None},
+    ]
+    assert [item.name for item in schema.additional_property] == [
+        "Length",
+        "Material",
+        "Fuel Type",
+    ]
+    assert all(item.name != "Runtime" for item in schema.additional_property)
+
+    missing_root_stamp = {
+        **operator_specs,
+        "source": {"platform": "operator"},
+    }
+    attributes, schema = project_verified_product_specs(missing_root_stamp)
+    assert attributes == []
+    assert schema.additional_property == []
+
+
 def test_wordpress_filter_preserves_woo_owned_real_review_fields() -> None:
     plugin = (
         Path(__file__).resolve().parents[2]
@@ -163,14 +229,80 @@ def test_wordpress_filter_preserves_woo_owned_real_review_fields() -> None:
     ).read_text(encoding="utf-8")
 
     assert "woocommerce_structured_data_product" in plugin
+    assert "woocommerce_structured_data_product_offer" in plugin
+    assert "wpseo_schema_product" in plugin
+    assert "wpseo_schema_offer" in plugin
     assert "additionalProperty" in plugin
     assert "PropertyValue" in plugin
     assert "Barong Yekhna" in plugin
     assert "PHP_INT_MAX" in plugin
+    assert "get_sale_price" in plugin
+    assert "get_regular_price" in plugin
+    assert "priceValidUntil" in plugin
+    assert "priceCurrency" in plugin
+    assert "availability" in plugin
+    assert "itemCondition" in plugin
+    assert "_yoast_wpseo_metadesc" in plugin
+    assert "_yoast_wpseo_title" in plugin
+    assert "html_entity_decode" in plugin
+    assert "$product->get_description()" not in plugin
     # This adapter must never manufacture or override review data. Woo core
     # owns it and conditionally emits it from real approved reviews.
     assert "$markup['aggregateRating']" not in plugin
     assert "$markup['review']" not in plugin
+
+
+def test_n8n_transform_sends_only_k_short_slug_to_woocommerce() -> None:
+    workflow_path = (
+        Path(__file__).resolve().parents[2]
+        / "backend/app/modules/p_series/n8n/p_upload_workflow.json"
+    )
+    workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+    code = next(
+        item for item in workflow["nodes"] if item["name"] == "转 Woo 格式"
+    )["parameters"]["jsCode"]
+    package = {
+        "product": {
+            "title": "Long H1 That Must Never Become The Product URL",
+            "sku": "CCD-002",
+            "price": {"regular": "39.99", "sale": "34.99"},
+            "stock": {"status": "in_stock"},
+            "description": {"html": "<p>Clean copy.</p>", "faq": []},
+            "category": {},
+            "seo": {
+                "title": "Camp Stove & Cookset",
+                "description": "A clean authored description.",
+                "url_slug": "compact-camp-stove",
+            },
+        },
+        "shipping": {},
+    }
+
+    transformed = _run_n8n_code(
+        code,
+        nodes={"取数-上架包": package, "拆图": []},
+        input_json=[],
+    )[0]["json"]["woo_body"]
+
+    assert transformed["name"] == package["product"]["title"]
+    assert transformed["slug"] == "compact-camp-stove"
+    assert transformed["regular_price"] == "39.99"
+    assert transformed["sale_price"] == "34.99"
+    assert transformed["meta_data"] == [
+        {"key": "_yoast_wpseo_title", "value": "Camp Stove & Cookset"},
+        {
+            "key": "_yoast_wpseo_metadesc",
+            "value": "A clean authored description.",
+        },
+    ]
+
+    package["product"]["seo"].pop("url_slug")
+    without_k_slug = _run_n8n_code(
+        code,
+        nodes={"取数-上架包": package, "拆图": []},
+        input_json=[],
+    )[0]["json"]["woo_body"]
+    assert "slug" not in without_k_slug
 
 
 def test_n8n_writes_specs_to_visible_attributes_and_schema_meta() -> None:

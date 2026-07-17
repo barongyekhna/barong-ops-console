@@ -4,13 +4,17 @@ from io import BytesIO
 from pathlib import Path
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from backend.app.modules.k_series.product_knowledge import image_render_jobs
 from backend.app.modules.k_series.product_knowledge.info_overlay import (
     OVERLAY_SCHEMA_VERSION,
     OVERLAY_SOURCE_FIELDS,
     _FONT_CANDIDATES,
+    _font,
+    _foreground_bbox,
+    _snapped_dimension_geometry,
+    _text_box,
     OverlayContractError,
     compose_info_overlay,
     normalize_overlay_contract,
@@ -23,7 +27,11 @@ pytestmark = pytest.mark.unit
 
 def _png() -> bytes:
     output = BytesIO()
-    Image.new("RGB", (800, 600), "#f7f6f4").save(output, format="PNG")
+    image = Image.new("RGB", (800, 600), "#f7f6f4")
+    ImageDraw.Draw(image).rounded_rectangle(
+        (250, 120, 550, 500), radius=30, fill="#355b48"
+    )
+    image.save(output, format="PNG")
     return output.getvalue()
 
 
@@ -84,6 +92,17 @@ def _verified_specs() -> dict[str, object]:
             "raw_value": "8-12小时",
             "source_label": "续航时间",
         },
+        "weight": {
+            "value": 2,
+            "unit": "kg",
+            "raw_value": "2千克",
+            "source_label": "重量",
+        },
+        "material": {
+            "value": "304 stainless steel",
+            "raw_value": "304不锈钢",
+            "source_label": "材质",
+        },
     }
 
 
@@ -121,6 +140,25 @@ def test_overlay_contract_rejects_unbound_text_and_bad_coordinates() -> None:
         normalize_overlay_contract(value)
 
 
+def test_us_overlay_converts_metric_display_only() -> None:
+    specs = _verified_specs()
+
+    assert (
+        resolve_structured_spec_text(
+            specs,
+            "dimensions.height",
+            target_market="US",
+        )
+        == "Height: 16.54 inch"
+    )
+    assert (
+        resolve_structured_spec_text(specs, "weight", target_market="en-US")
+        == "Weight: 4.41 lb"
+    )
+    assert resolve_structured_spec_text(specs, "weight") == "Weight: 2 kg"
+    # Display conversion never mutates the canonical metric evidence.
+    assert specs["dimensions"]["height"]["value"] == 42  # type: ignore[index]
+
 def test_overlay_contract_allowlists_source_paths_and_drops_model_labels() -> None:
     normalized = normalize_overlay_contract(_overlay())
     assert normalized is not None
@@ -155,6 +193,71 @@ def test_overlay_composes_callout_and_dimension_then_reports_missing_specs() -> 
     assert report["warnings"] == [
         "unverified structured specs: schema_version must be 1.0",
     ]
+
+
+def test_feature_callout_and_spec_roles_both_render_verified_text() -> None:
+    source = _png()
+    specs = _verified_specs()
+    for role, source_field in (
+        ("feature_callout", "ip_rating"),
+        ("spec", "material"),
+    ):
+        overlay = {
+            "schema_version": OVERLAY_SCHEMA_VERSION,
+            "role": role,
+            "items": [
+                {
+                    "type": "callout",
+                    "source_field": source_field,
+                    "anchor": {"x": 0.5, "y": 0.5},
+                    "text_anchor": {"x": 0.82, "y": 0.2},
+                    "leader_direction": "right",
+                }
+            ],
+        }
+        rendered, report = compose_info_overlay(source, overlay, specs)
+        assert rendered != source
+        assert report == {"status": "applied", "applied_items": 1, "warnings": []}
+
+
+def test_dimension_geometry_snaps_to_detected_product_bounds() -> None:
+    with Image.open(BytesIO(_png())) as image:
+        bbox = _foreground_bbox(image)
+    assert bbox is not None
+    left, top, right, bottom = bbox
+    assert 240 <= left <= 260
+    assert 110 <= top <= 130
+    assert 540 <= right <= 560
+    assert 490 <= bottom <= 510
+
+    start, end, label_anchor, direction = _snapped_dimension_geometry(
+        source_field="dimensions.height",
+        foreground_bbox=bbox,
+        text_anchor=(20, 300),
+        image_size=(800, 600),
+    )
+    assert start[1] == top
+    assert end[1] == bottom
+    assert start[0] == end[0] < left
+    assert direction == "left"
+    assert 0 <= label_anchor[0] < 800
+
+
+def test_overlay_text_box_wraps_long_tokens_and_stays_inside_canvas() -> None:
+    image = Image.new("RGBA", (220, 120), "white")
+    draw = ImageDraw.Draw(image, "RGBA")
+    left, top, right, bottom, rendered, _fitted_font = _text_box(
+        draw,
+        text="Certifications: ULTRA_LONG_UNBROKEN_VERIFIED_VALUE_1234567890",
+        anchor=(219, 1),
+        direction="right",
+        font=_font(28),
+        image_size=image.size,
+        padding=6,
+    )
+    assert "\n" in rendered
+    assert 0 <= left < right <= image.width
+    assert 0 <= top < bottom <= image.height
 
 
 def test_overlay_rejects_wrong_provenance_and_evidence_free_leaves() -> None:
@@ -287,6 +390,10 @@ def test_art_direction_output_contract_uses_structured_overlay_not_ai_text() -> 
     assert "image model must render NO text" in instruction
     assert "never emit `label`, `text`, or a value field" in instruction
     assert "there is NO post-production step" not in instruction
-    assert "严格使用 `k-info-overlay-v1`" in skill
-    assert "不得输出 `text`、`label` 或数值字段" in skill
-    assert "K 图片渲染 worker" in skill
+    assert "`k-info-overlay-v1` 的 `overlay`" in skill
+    assert "不得输出 `text`/`label`/数值" in skill
+    assert "K 渲染 worker" in skill
+    assert "selling_points_approved" in instruction
+    assert "selling_point_id" in instruction
+    assert "proof_intent" in instruction
+    assert "role=dimension is ALWAYS placement=gallery" in instruction

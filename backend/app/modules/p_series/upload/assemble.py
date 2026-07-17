@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import html
+import json
 import logging
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -40,6 +43,7 @@ from ...k_series.product_knowledge.category_resolver import (
     google_category_path,
     repair_legacy_google_category_path,
 )
+from ...k_series.product_knowledge.faq_research import faq_schema_is_eligible
 from ...k_series.product_knowledge.sku_allocator import ensure_product_sku
 from .description_html import (
     build_description_html,
@@ -50,6 +54,88 @@ from .wc_categories import ensure_wc_category_path
 
 LAYOUT_SKILL_VERSION = "p-product-page-layout-v1"
 logger = logging.getLogger(__name__)
+
+
+def _stable_hash(value: Any, *, compact: bool = False) -> str:
+    kwargs: dict[str, Any] = {
+        "sort_keys": True,
+        "default": str,
+    }
+    if compact:
+        kwargs.update({"ensure_ascii": False, "separators": (",", ":")})
+    return hashlib.sha256(json.dumps(value, **kwargs).encode("utf-8")).hexdigest()
+
+
+def _approved_evidence_points(product: Any) -> list[dict[str, Any]]:
+    payload = getattr(product, "selling_points_approved_json", None)
+    if not isinstance(payload, dict) or payload.get("review_status") != "approved":
+        return []
+    raw_bullets = payload.get("bullets")
+    if not isinstance(raw_bullets, list):
+        return []
+    points: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(raw_bullets, start=1):
+        if not isinstance(raw, dict):
+            return []
+        point = dict(raw)
+        point_id = str(point.get("id") or f"sp-{index}").strip()
+        evidence = str(point.get("evidence") or "").strip()
+        snapshot = point.get("evidence_snapshot")
+        snapshot_digest = str(point.get("evidence_digest") or "").strip()
+        if (
+            not point_id
+            or point_id in seen_ids
+            or not str(point.get("text") or "").strip()
+            or point.get("verification_status") != "verified"
+            or not (
+                evidence == "operator_fact"
+                or evidence.startswith("spec:")
+                or evidence.startswith("verified_feature:")
+            )
+            or not isinstance(snapshot, dict)
+            or snapshot_digest != _stable_hash(snapshot, compact=True)
+        ):
+            return []
+        seen_ids.add(point_id)
+        point["id"] = point_id
+        point["text"] = str(point["text"]).strip()
+        points.append(point)
+    return points
+
+
+def _evidence_gate_blockers(product: Any) -> list[str]:
+    points = _approved_evidence_points(product)
+    if not points:
+        return ["卖点未通过逐条证据审批"]
+    copy = getattr(product, "marketing_copy_json", None)
+    if not isinstance(copy, dict) or copy.get("evidence_contract") != "pdp-evidence-v1":
+        return ["文案缺少证据契约，请从已审卖点重新生成"]
+    expected = _stable_hash(
+        {
+            "selling_points_approved": points,
+            "structured_specs_json": getattr(product, "structured_specs_json", None),
+        }
+    )
+    if str(copy.get("evidence_digest") or "") != expected:
+        return ["卖点或规格已变化，文案证据快照过期"]
+    return []
+
+
+def _title_for_upload(marketing_copy_json: Any, product: Any) -> str:
+    seo = (
+        marketing_copy_json.get("seo")
+        if isinstance(marketing_copy_json, dict)
+        and isinstance(marketing_copy_json.get("seo"), dict)
+        else {}
+    )
+    value = (
+        _optional_text(seo.get("h1"))
+        or _optional_text(seo.get("title"))
+        or _optional_text(getattr(product, "product_name_en", None))
+        or str(getattr(product, "product_key", "Product"))
+    )
+    return " ".join(html.unescape(value).split())
 
 
 def _rollback_category_failure(db: Session) -> None:
@@ -69,6 +155,7 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
         blockers.append("标题缺失（product_name_en）")
     if not getattr(product, "marketing_copy_json", None):
         blockers.append("文案未生成（含卖点/关键词）")
+    blockers.extend(_evidence_gate_blockers(product))
     if not _has_bound_image(db, product):
         blockers.append("未绑定图片")
     if not category_is_bound(product):
@@ -141,6 +228,9 @@ def _seo_for_upload(marketing_copy_json: Any, product: Any) -> Seo:
             or _optional_text(generated_seo.get("description"))
             or _optional_text(getattr(product, "seo_description_en", None))
         ),
+        # Deliberately no product.slug / H1-derived fallback: a missing K slug
+        # is safer than silently publishing the old 15-word permalink again.
+        url_slug=_optional_text(generated_seo.get("url_slug")),
     )
 
 
@@ -184,9 +274,17 @@ def _image_assets(
     if rows:
         for r in rows:
             meta = r["metadata_json"] if isinstance(r["metadata_json"], dict) else {}
+            overlay = meta.get("overlay")
+            overlay_role = (
+                str(overlay.get("role") or "").strip().lower()
+                if isinstance(overlay, dict)
+                else ""
+            )
+            role_label = str(meta.get("role_label") or "").strip()
+            is_dimension = role_label.lower() in {"dimension", "尺寸图"} or overlay_role == "dimension"
             placement = (
                 "description"
-                if (meta.get("placement") == "description")
+                if (meta.get("placement") == "description" and not is_dimension)
                 else "gallery"
             )
             position = int(meta.get("position") or 0)
@@ -203,7 +301,7 @@ def _image_assets(
                     placement=placement,
                     position=position,
                     is_main=(r["asset_role"] == "main"),
-                    role=str(meta.get("role_label") or "") or None,
+                    role=role_label or None,
                     filename=str(meta.get("filename") or "") or None,
                     mime_type=r["mime_type"],
                     title=str(meta.get("title") or "") or None,
@@ -356,7 +454,10 @@ def assemble_upload_package(
 ) -> UploadPackage:
     """门禁必须已通过（调用方先查 gate_blockers）。"""
     sku_before_allocation = str(getattr(product, "sku", None) or "").strip()
-    mcj = product.marketing_copy_json or {}
+    raw_mcj = getattr(product, "marketing_copy_json", None)
+    # Legacy/malformed copy must degrade to an empty schema verdict instead of
+    # making publication fail. Normal K-generated copy is always a dictionary.
+    mcj = raw_mcj if isinstance(raw_mcj, dict) else {}
     images = _image_assets(
         db, product, base_url, job_id=job_id, job_token=job_token
     )
@@ -372,23 +473,24 @@ def assemble_upload_package(
         if img.placement == "description" and img.embed_token
     ]
     desc = build_description_html(mcj, description_images)
+    raw_faq_items = mcj.get("page_faq")
     faq_items = [
         FaqItem(question=str(f.get("question")), answer=str(f.get("answer")))
-        for f in (mcj.get("page_faq") or [])
+        for f in (raw_faq_items if isinstance(raw_faq_items, list) else [])
         if isinstance(f, dict)
         and str(f.get("question") or "").strip()
         and str(f.get("answer") or "").strip()
     ]
+    raw_ppc = mcj.get("product_page_copy")
+    ppc = raw_ppc if isinstance(raw_ppc, dict) else {}
+    raw_bullets = ppc.get("key_bullets")
     bullets = [
         str(b).strip()
-        for b in (
-            ((mcj.get("product_page_copy") or {}).get("key_bullets") or [])
-            if isinstance(mcj, dict)
-            else []
-        )
+        for b in (raw_bullets if isinstance(raw_bullets, list) else [])
         if str(b).strip()
     ]
     currency = (product.price_currency or "USD")[:3]
+    upload_seo = _seo_for_upload(mcj, product)
     category_path, wc_category_id = _resolve_wc_category(db, product)
     attributes, product_schema = project_verified_product_specs(
         getattr(product, "structured_specs_json", None)
@@ -416,7 +518,7 @@ def assemble_upload_package(
         gate=Gate(ready=True, blockers=[]),
         product=Product(
             sku=product.sku,
-            title=(product.product_name_en or product.product_key),
+            title=_title_for_upload(mcj, product),
             # 死命令：上架包/GMC feed 的品牌永远是站点自有品牌
             brand=SITE_BRAND,
             product_type=product.product_type,
@@ -430,6 +532,7 @@ def assemble_upload_package(
                 text=plain_text_from_copy(mcj),
                 bullets=bullets,
                 faq=faq_items,
+                faq_schema_eligible=faq_schema_is_eligible(mcj),
                 layout_skill_version=LAYOUT_SKILL_VERSION,
                 category_block=desc["sections_emitted"][-1]
                 if desc["sections_emitted"]
@@ -449,7 +552,9 @@ def assemble_upload_package(
                 qty=product.inventory_quantity,
             ),
             category=Category(
-                slug=getattr(product, "slug", None),
+                # Retained in the legacy category slot for older package
+                # readers; new consumers read product.seo.url_slug.
+                slug=upload_seo.url_slug,
                 google_product_category=product.google_product_category,
                 merchant_product_type=product.merchant_product_type,
                 path=category_path,
@@ -461,7 +566,7 @@ def assemble_upload_package(
             keywords=Keywords(
                 primary=[product.primary_keyword] if product.primary_keyword else [],
             ),
-            seo=_seo_for_upload(mcj, product),
+            seo=upload_seo,
             variants=variants,
             item_group_id=product.product_key,
         ),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from uuid import uuid4
 
 import pytest
@@ -37,6 +39,39 @@ from backend.app.services.module_execution_gate import (
 pytestmark = pytest.mark.unit
 
 ORG_ID = "org_11111111111111111111111111111111"
+
+
+def _approve_operator_point(product: KProductKnowledgeProduct) -> None:
+    text_value = "Operator verified steel construction"
+    snapshot = {
+        "evidence": "operator_fact",
+        "kind": "operator_fact",
+        "value_text": text_value,
+    }
+    product.selling_points_approved_json = {
+        "review_status": "approved",
+        "bullets": [
+            {
+                "id": "operator-steel",
+                "category": "construction",
+                "text": text_value,
+                "importance_score": 1,
+                "evidence": "operator_fact",
+                "evidence_excerpt": text_value,
+                "evidence_snapshot": snapshot,
+                "evidence_digest": hashlib.sha256(
+                    json.dumps(
+                        snapshot,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ).encode("utf-8")
+                ).hexdigest(),
+                "verification_status": "verified",
+                "review_decision": "approve",
+            }
+        ],
+    }
 
 
 def _session():
@@ -177,6 +212,9 @@ def _workflow_ready_for_image():
         scope_context=scope,
         user=user,
     )
+    _approve_operator_point(product)
+    db.add(product)
+    db.commit()
     return db, user, scope, engine, product, reviewed
 
 
@@ -295,6 +333,9 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
     db.add(asset)
     db.flush()
 
+    _approve_operator_point(product)
+    db.add(product)
+    db.flush()
     ready = engine.bind_image_asset(
         product_id=product.id,
         payload=ProductKnowledgeImageBindRequest(
@@ -307,10 +348,6 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
     )
     assert ready.status == "ready_for_export"
 
-    product.ai_warnings_json = {
-        **(product.ai_warnings_json or {}),
-        "selling_points": {"review_status": "approved"},
-    }
     # The K→P hard gate requires a bound category for the product channel.
     product.google_product_category = "7401"
     db.add(product)

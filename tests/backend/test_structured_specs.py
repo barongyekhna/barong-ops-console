@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.db.base import Base
@@ -13,6 +13,7 @@ from backend.app.modules.f_series.enrichment.models import FCategoryCandidate
 from backend.app.modules.f_series.enrichment.service import import_candidate_to_k
 from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeProduct,
+    KProductKnowledgeVariant,
 )
 from backend.app.modules.k_series.product_knowledge.prompt_skills import (
     marketing_copy_instruction,
@@ -25,8 +26,11 @@ from backend.app.modules.k_series.product_knowledge.schemas import (
     ProductKnowledgeCreate,
     ProductKnowledgeUpdate,
 )
+from backend.app.modules.k_series.product_knowledge.scope_shim import KScopeContext
+from backend.app.modules.k_series.product_knowledge.service import get_product
 from backend.app.modules.k_series.product_knowledge.structured_specs import (
     normalize_1688_structured_specs,
+    normalize_operator_structured_specs,
 )
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
     _product_snapshot,
@@ -172,13 +176,73 @@ def test_measurements_never_promote_a_partial_multi_option_match() -> None:
 
 
 @pytest.mark.parametrize("schema", [ProductKnowledgeCreate, ProductKnowledgeUpdate])
-def test_public_k_payloads_reject_internal_structured_specs(schema: type) -> None:
-    payload = {"structured_specs_json": _verified_specs()}
+def test_public_k_payloads_accept_only_operator_evidenced_specs(schema: type) -> None:
+    manual = {
+        "schema_version": "1.0",
+        "source": {"platform": "operator"},
+        "additional_specs": [
+            {"key": "ignition", "label": "Ignition", "value": "Piezo"}
+        ],
+    }
+    payload = {"structured_specs_json": manual}
     if schema is ProductKnowledgeCreate:
         payload["raw_input_text"] = "manual product"
 
-    with pytest.raises(ValidationError, match="supplier-verified internal data"):
-        schema.model_validate(payload)
+    parsed = schema.model_validate(payload)
+    assert parsed.structured_specs_json == {
+        "schema_version": "1.0",
+        "source": {
+            "platform": "operator",
+            "evidence_type": "operator_fact",
+        },
+        "additional_specs": [
+            {
+                "key": "ignition",
+                "label": "Ignition",
+                "value": "Piezo",
+                "raw_value": "Piezo",
+                "evidence": "operator_fact",
+            }
+        ],
+    }
+
+    supplier_payload = {"structured_specs_json": _verified_specs()}
+    if schema is ProductKnowledgeCreate:
+        supplier_payload["raw_input_text"] = "manual product"
+
+    with pytest.raises(ValidationError, match="source.platform=operator"):
+        schema.model_validate(supplier_payload)
+
+
+def test_operator_specs_drop_blank_rows_and_reject_identity_fields() -> None:
+    assert (
+        normalize_operator_structured_specs(
+            {
+                "source": {"platform": "operator"},
+                "additional_specs": [{"label": "", "value": ""}],
+            }
+        )
+        is None
+    )
+    with pytest.raises(ValueError, match="identity"):
+        normalize_operator_structured_specs(
+            {
+                "source": {"platform": "operator"},
+                "additional_specs": [
+                    {"label": "Manufacturer", "value": "ThirdParty"}
+                ],
+            }
+        )
+    with pytest.raises(ValueError, match="key must be unique"):
+        normalize_operator_structured_specs(
+            {
+                "source": {"platform": "operator"},
+                "additional_specs": [
+                    {"key": "runtime", "label": "Runtime", "value": "2 h"},
+                    {"key": "runtime", "label": "Battery Duration", "value": "3 h"},
+                ],
+            }
+        )
 
 
 def test_k_copy_and_selling_point_payloads_receive_the_same_verified_specs() -> None:
@@ -202,6 +266,7 @@ def test_k_copy_and_selling_point_payloads_receive_the_same_verified_specs() -> 
     assert _product_snapshot(product)["structured_specs_json"] == specs
     assert _product_full_ai_payload(db, product)["structured_specs_json"] == specs
     assert "If a key is absent" in marketing_copy_instruction("dtc")
+    assert "evidence_refs" in marketing_copy_instruction("dtc")
     assert "never infer, estimate, or fill it" in selling_points_instruction()
 
 
@@ -241,9 +306,32 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
     db.add(candidate)
     db.commit()
 
-    result = import_candidate_to_k(db, candidate=candidate, user=None)
+    scope = KScopeContext(
+        workspace_key="org_structured_specs",
+        business_context="independent_store",
+        scope_mode="production",
+    )
+    result = import_candidate_to_k(
+        db,
+        candidate=candidate,
+        user=None,
+        scope_context=scope,
+    )
     product = db.get(KProductKnowledgeProduct, UUID(result["product_id"]))
     assert product is not None
+    variant = db.scalar(
+        select(KProductKnowledgeVariant).where(
+            KProductKnowledgeVariant.product_id == product.id
+        )
+    )
+    assert product.workspace_key == "org_structured_specs"
+    assert product.business_context == "independent_store"
+    assert product.scope_mode == "production"
+    assert get_product(db, product_id=product.id, scope_context=scope).id == product.id
     assert product.structured_specs_json == specs
     assert product.google_product_category == "990991"
     assert product.sku == "PL-001"
+    assert variant is not None
+    assert variant.parent_sku == product.sku
+    assert variant.variant_sku.startswith(f"{product.sku}-")
+    assert variant.attributes_json == {"default_variant": True}
