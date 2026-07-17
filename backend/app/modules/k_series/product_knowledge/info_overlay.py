@@ -40,13 +40,14 @@ from __future__ import annotations
 
 import math
 import os
-from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from pathlib import Path
 from statistics import median
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+from .buyer_display import imperial_measurement
 
 OVERLAY_SCHEMA_VERSION = "k-info-overlay-v1"
 OVERLAY_ROLES = frozenset({"feature_callout", "dimension", "spec"})
@@ -100,13 +101,6 @@ LINE_COLOR = (27, 26, 24, 255)
 IMPERIAL_TARGET_MARKETS = frozenset(
     {"US", "USA", "UNITED STATES", "UNITED STATES OF AMERICA"}
 )
-_IMPERIAL_OVERLAY_CONVERSIONS = {
-    "dimensions.length": ("cm", "inch", Decimal("0.3937007874")),
-    "dimensions.width": ("cm", "inch", Decimal("0.3937007874")),
-    "dimensions.height": ("cm", "inch", Decimal("0.3937007874")),
-    "weight": ("kg", "lb", Decimal("2.2046226218")),
-}
-
 _FONT_CANDIDATES = (
     "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -280,30 +274,6 @@ def _uses_imperial_units(target_market: Any) -> bool:
     return market in IMPERIAL_TARGET_MARKETS or market.endswith("-US")
 
 
-def _convert_numeric_value(value: Any, factor: Decimal) -> Any:
-    """Convert numbers/ranges without trying to interpret supplier prose."""
-    if isinstance(value, bool) or value is None:
-        return value
-    if isinstance(value, dict):
-        return {
-            key: _convert_numeric_value(item, factor)
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_convert_numeric_value(item, factor) for item in value]
-    if not isinstance(value, (int, float, Decimal)):
-        return value
-    try:
-        converted = (Decimal(str(value)) * factor).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError):
-        return value
-    if not converted.is_finite():
-        return value
-    if converted == converted.to_integral():
-        return int(converted)
-    return float(converted)
-
-
 def _display_value_and_unit(
     *,
     source_field: str,
@@ -311,16 +281,11 @@ def _display_value_and_unit(
     unit: Any,
     target_market: Any,
 ) -> tuple[Any, Any]:
+    del source_field
     if not _uses_imperial_units(target_market):
         return value, unit
-    conversion = _IMPERIAL_OVERLAY_CONVERSIONS.get(source_field)
-    if conversion is None:
-        return value, unit
-    source_unit, target_unit, factor = conversion
-    normalized_unit = str(unit or "").strip().lower()
-    if normalized_unit != source_unit:
-        return value, unit
-    return _convert_numeric_value(value, factor), target_unit
+    converted = imperial_measurement(value, unit)
+    return converted if converted is not None else (value, unit)
 
 
 def resolve_structured_spec_text(

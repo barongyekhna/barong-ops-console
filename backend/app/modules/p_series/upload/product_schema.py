@@ -10,6 +10,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...k_series.product_knowledge.buyer_display import (
+    buyer_english_text,
+    contains_cjk,
+    imperial_measurement,
+    imperialize_text,
+    normalize_package_includes,
+)
 from ..contract.upload_package import (
     ProductAttribute,
     ProductSchema,
@@ -34,6 +41,7 @@ _STANDARD_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 _MAX_PROPERTIES = 100
+_IMPERIAL_MARKETS = {"US", "USA", "UNITED STATES", "UNITED STATES OF AMERICA"}
 
 
 def _clean(value: Any, *, limit: int = 500) -> str | None:
@@ -89,13 +97,43 @@ def _evidence_value(
             )
     if not evidence:
         return None
-    value = _clean(node.get("value"))
+    raw_value = node.get("value")
+    value = _clean(raw_value)
+    if not value:
+        return None
+    if contains_cjk(value):
+        value = buyer_english_text(node.get("value_en"), limit=500)
+        raw_value = node.get("value_en")
     if not value:
         return None
     unit = _clean(node.get("unit"), limit=40)
     if not unit and isinstance(parent, dict):
         unit = _clean(parent.get("unit"), limit=40)
     return value, unit
+
+
+def _buyer_measurement(
+    value: Any,
+    unit: str | None,
+    *,
+    target_market: str,
+) -> tuple[str, str | None] | None:
+    rendered = _clean(value)
+    if not rendered or contains_cjk(rendered):
+        return None
+    if target_market.strip().upper() in _IMPERIAL_MARKETS and unit:
+        converted = imperial_measurement(value, unit)
+        if converted is not None:
+            return converted
+    safe = imperialize_text(rendered)
+    if not safe:
+        return None
+    # A value such as ``1.4 L`` carries its own converted unit; do not append
+    # the old metric unit again in n8n/schema.
+    if safe != rendered and unit:
+        return safe, None
+    clean_unit = buyer_english_text(unit, limit=40) if unit else None
+    return safe, clean_unit
 
 
 def _append(
@@ -107,6 +145,8 @@ def _append(
     unit: str | None,
     seen: set[str],
 ) -> None:
+    if contains_cjk(name) or contains_cjk(value) or (unit and contains_cjk(unit)):
+        return
     key = name.casefold()
     if key in seen or len(properties) >= _MAX_PROPERTIES:
         return
@@ -119,6 +159,9 @@ def _append(
 
 def project_verified_product_specs(
     structured_specs_json: Any,
+    *,
+    package_includes: Any = None,
+    target_market: str = "US",
 ) -> tuple[list[ProductAttribute], ProductSchema]:
     """Return two views of the same verified facts, or two empty views.
 
@@ -154,6 +197,14 @@ def project_verified_product_specs(
         if resolved is None:
             continue
         value, unit = resolved
+        buyer_value = _buyer_measurement(
+            value,
+            unit,
+            target_market=target_market,
+        )
+        if buyer_value is None:
+            continue
+        value, unit = buyer_value
         _append(
             attributes,
             properties,
@@ -168,8 +219,10 @@ def project_verified_product_specs(
         for item in additional:
             if not isinstance(item, dict):
                 continue
-            name = _clean(item.get("label"), limit=120)
-            value = _clean(item.get("value"))
+            # Raw supplier/operator labels are audit evidence, never public
+            # copy.  Only the one-time, persisted English projection may leave K.
+            name = buyer_english_text(item.get("label_en"), limit=120)
+            value = buyer_english_text(item.get("value_en"), limit=500)
             raw_value = _clean(item.get("raw_value"))
             if not name or not value or not raw_value:
                 continue
@@ -178,13 +231,32 @@ def project_verified_product_specs(
                 and item.get("evidence") != "operator_fact"
             ):
                 continue
+            buyer_value = _buyer_measurement(
+                value,
+                _clean(item.get("unit"), limit=40),
+                target_market=target_market,
+            )
+            if buyer_value is None:
+                continue
+            value, unit = buyer_value
             _append(
                 attributes,
                 properties,
                 name=name,
                 value=value,
-                unit=_clean(item.get("unit"), limit=40),
+                unit=unit,
                 seen=seen,
             )
+
+    package_items = normalize_package_includes(package_includes, reject_cjk=False)
+    if package_items:
+        _append(
+            attributes,
+            properties,
+            name="What's included",
+            value=", ".join(package_items),
+            unit=None,
+            seen=seen,
+        )
 
     return attributes, ProductSchema(additional_property=properties)

@@ -110,6 +110,9 @@ def selling_points_skill_context() -> dict[str, Any]:
             "Use target-market language, spelling, units, and ecommerce phrasing; translate final copy to the market language.",
             "Avoid unsupported superlatives, medical/legal/safety promises, trademark misuse, and absolute guarantees.",
             "Every bullet carries exactly one evidence reference: spec:<field>, verified_feature:<id>, or operator_fact.",
+            "Every number in a bullet must appear verbatim in that one cited evidence snapshot; the package item count is the sole exception for a matching N-piece claim.",
+            "Mention a concrete component such as kettle, pot, pan, or bowl only when it appears in package_includes or a component-specific structured-spec key.",
+            "Use an N-piece claim only when package_includes exists and its list length is exactly N; otherwise describe it simply as a set.",
             "If no supplied evidence supports a proposed claim, omit it or mark it unverified for operator review; never phrase it as a product fact.",
         ],
         "required_copy_blocks": [
@@ -188,8 +191,10 @@ def selling_points_instruction() -> str:
         "search keywords, and identity metadata identify the category but NEVER prove a "
         "claim. Base every claim only on `structured_specs_json`, a listed "
         "`verified_features` record, or an explicit `operator_facts` excerpt. Translate into "
-        "the target market language. `structured_specs_json` contains verified supplier/operator "
-        "specifications: quote its exact values and units when they support a useful benefit. "
+        "the target market language. `structured_specs_json` contains raw verified evidence, "
+        "while `structured_specs_buyer_display` contains server-converted buyer wording. For a "
+        "US market, every buyer-visible measurement MUST use its exact imperial "
+        "display_value/display_unit; never calculate conversions or expose raw metric wording. "
         "If a specification key is absent, omit that claim; never infer, estimate, or fill it. "
         "Every bullet MUST include an `evidence` string using exactly one of these "
         "forms: `spec:<field>`, `verified_feature:<id>`, or `operator_fact`, plus a "
@@ -199,6 +204,19 @@ def selling_points_instruction() -> str:
         "reference exists in the supplied data. If no evidence supports a proposed "
         "claim, omit it or return it as `verification_status=unverified` for operator "
         "review; do not phrase unsupported content as a product fact. "
+        "NUMBER RULE (absolute): every number in a bullet MUST appear verbatim in the "
+        "single cited evidence value. Do not calculate, convert, round, or copy a number "
+        "from identity/keyword text. A matching N-piece count may use "
+        "`spec:package_includes` only when N exactly equals len(package_includes). "
+        "COMPONENT RULE (absolute): mention kettle, pot, pan, bowl, or any other concrete "
+        "included component only when it is named in `package_includes` or in a "
+        "component-specific structured-spec key. Product names and keywords do not prove "
+        "components. If package_includes is missing, never claim an N-piece count. "
+        "TRANSLATION SIDECAR: when `customer_translation_requests` is non-empty, also "
+        "return top-level `customer_translations`, one object per request, preserving the "
+        "exact request_id. Translate only the supplied source text into buyer-facing "
+        "English and fill exactly the requested label_en/value_en/package_includes keys; "
+        "do not summarize, add components, convert units, or infer facts. "
         "Keep copy clear enough for a shopper to decide. "
         "Return only valid JSON with bullets, marketing_copy, translated_version, "
         "chinese_translation, target_language, seo_keywords, market_tags, and "
@@ -276,16 +294,30 @@ def marketing_copy_instruction(channel: str) -> str:
         "marketing copy or SEO keywords embedded in a selling-point payload. Never "
         "fabricate specs, numbers, certifications, capabilities, or reviews. Respect every "
         "红线 (hard rule) in the skill.\n"
-        "VERIFIED SPEC RULE (absolute): `product.structured_specs_json` is the "
-        "authoritative source for supplier specifications. Use its exact values and "
-        "units (for example K, mAh, lm, h, IP codes) where useful. If a key is absent, "
-        "omit that specification everywhere; NEVER infer, estimate, round into a new "
-        "claim, or copy an unsupported number from category expectations. Preserve the "
-        "meaning of ranges.\n"
+        "VERIFIED SPEC RULE (absolute): `product.structured_specs_json` is the raw "
+        "evidence record, but ALL buyer-visible numeric wording must be copied only from "
+        "`product.structured_specs_buyer_display.rows[].display_value/display_unit`. That "
+        "server-owned field already contains US/imperial display conversions; never "
+        "calculate or convert units yourself and never expose raw metric values to a US "
+        "buyer. If a display row is absent, omit that specification everywhere; NEVER "
+        "infer, estimate, round into a new claim, or copy an unsupported number from "
+        "category expectations. Preserve the meaning of ranges.\n"
         "APPROVED-POINT RULE (absolute): every benefit, capability, use scenario, "
         "title modifier, bullet, and narrative claim must be traceable to one supplied "
         "approved point. Do not turn a neutral product name or search keyword into a "
         "claim. If the approved set does not support a statement, omit it.\n"
+        "KEYWORD RULE: `final_keywords` is the risk-reviewed SEO wording set, never "
+        "claim evidence. Put the primary keyword naturally in H1 and above-the-fold "
+        "copy. Weave relevant long-tail keywords naturally into H2 section headings and "
+        "their body copy; prioritize clarity and intent, never keyword-stuff or force an "
+        "unsupported modifier.\n"
+        "PACKAGE EVIDENCE RULE (absolute): `product.package_includes` is the canonical "
+        "reviewed component list. A concrete component (for example kettle, pot, pan, or "
+        "bowl) may appear in a title, bullet, or narrative only if it is named there or "
+        "in a component-specific structured-spec key. A product name/keyword is not "
+        "proof. Say N-piece only when package_includes exists and len(package_includes) "
+        "equals N; otherwise say only 'set'. When the list exists, include a 'What's in "
+        "the box' H2 block whose items exactly project that list without additions.\n"
         "BRAND RULE (absolute, overrides everything): the ONLY brand that may "
         "ever appear in ANY output field is the site's own brand given in "
         "`site_brand`. NEVER mention any third-party brand, manufacturer, or "
@@ -335,7 +367,8 @@ def marketing_copy_instruction(channel: str) -> str:
         ' plain text>"},\n'
         '    "key_bullets": ["<benefit bullet: outcome first, fact second;'
         ' punchy, <=14 words>", "... 4-6 bullets"],\n'
-        '    "chunk_sections": [{"heading": "<H3: a buyer-desire theme, e.g.'
+        '    "chunk_sections": [{"heading": "<H2: a buyer-desire theme with a relevant'
+        ' final keyword woven in naturally, e.g.'
         " 'Practice anywhere, store it in seconds' — NEVER questionnaire-style"
         " headings like 'Who is it for?'>\", \"body\": \"<2-4 sentence"
         ' paragraph: concrete scene + benefit + supporting fact, plain text>"}],\n'
@@ -368,7 +401,11 @@ def marketing_copy_instruction(channel: str) -> str:
         "as a question, and return an empty page_faq when research is insufficient. "
         "Serper evidence proves that the question is real; answers still may contain only "
         "facts supported by approved selling points/structured specs or cautious general "
-        "guidance already present in the cited snippets."
+        "guidance already present in the cited snippets. FAQ answers must answer with "
+        "advice, method, or tradeoffs and MUST NOT repeat any product-specific numeric "
+        "value from structured_specs_json (including dimensions, weight, capacity, or "
+        "piece count); use qualitative wording such as 'nests compactly' and leave exact "
+        "numbers to the specifications table."
     )
 
 
@@ -443,7 +480,9 @@ def image_art_direction_instruction() -> str:
         "depth must physically integrate product and scene. "
         "gallery images go into the store's product image gallery; description images get "
         "embedded inside the product description at their position. All gallery images "
-        "are square 1:1. role=dimension is ALWAYS placement=gallery.\n"
+        "are square 1:1. role=dimension is ALWAYS placement=gallery. If verified "
+        "product.structured_specs_json.dimensions exist, the plan MUST include at least "
+        "one role=dimension image; omission makes the entire brief invalid.\n"
         "SEO METADATA (mandatory, YOU write it — this is what goes on the live store): for "
         "EVERY image fill title + alt + caption + description in the target-market language "
         "(English for US). alt must describe the image accurately with the product's real "

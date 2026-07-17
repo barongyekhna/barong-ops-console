@@ -39,12 +39,20 @@ from ...k_series.product_knowledge.brand_guard import (
     SITE_BRAND,
     audit_gate_blockers,
 )
+from ...k_series.product_knowledge.buyer_display import (
+    buyer_english_text,
+    buyer_safe_tree,
+    contains_cjk,
+    imperialize_text,
+    normalize_package_includes,
+)
 from ...k_series.product_knowledge.category_resolver import (
     category_is_bound,
     google_category_path,
     repair_legacy_google_category_path,
 )
 from ...k_series.product_knowledge.faq_research import faq_schema_is_eligible
+from ...k_series.product_knowledge.evidence_guard import canonical_package_includes
 from ...k_series.product_knowledge.sku_allocator import ensure_product_sku
 from .description_html import (
     build_description_html,
@@ -113,12 +121,17 @@ def _evidence_gate_blockers(product: Any) -> list[str]:
     copy = getattr(product, "marketing_copy_json", None)
     if not isinstance(copy, dict) or copy.get("evidence_contract") != "pdp-evidence-v1":
         return ["文案缺少证据契约，请从已审卖点重新生成"]
-    expected = _stable_hash(
-        {
-            "selling_points_approved": points,
-            "structured_specs_json": getattr(product, "structured_specs_json", None),
-        }
+    evidence_payload = {
+        "selling_points_approved": points,
+        "structured_specs_json": getattr(product, "structured_specs_json", None),
+    }
+    package_includes = canonical_package_includes(
+        getattr(product, "package_includes_json", None),
+        getattr(product, "structured_specs_json", None),
     )
+    if package_includes:
+        evidence_payload["package_includes"] = package_includes
+    expected = _stable_hash(evidence_payload)
     if str(copy.get("evidence_digest") or "") != expected:
         return ["卖点或规格已变化，文案证据快照过期"]
     return []
@@ -137,7 +150,8 @@ def _title_for_upload(marketing_copy_json: Any, product: Any) -> str:
         or _optional_text(getattr(product, "product_name_en", None))
         or str(getattr(product, "product_key", "Product"))
     )
-    return " ".join(html.unescape(value).split())
+    safe = imperialize_text(" ".join(html.unescape(value).split()))
+    return safe or "Product"
 
 
 def _rollback_category_failure(db: Session) -> None:
@@ -236,16 +250,18 @@ def _seo_for_upload(marketing_copy_json: Any, product: Any) -> Seo:
         if isinstance(candidate, dict):
             generated_seo = candidate
 
-    return Seo(
-        title=(
+    title = (
             _optional_text(generated_seo.get("title"))
             or _optional_text(getattr(product, "seo_title_en", None))
-        ),
-        description=(
+        )
+    description = (
             _optional_text(generated_seo.get("meta_description"))
             or _optional_text(generated_seo.get("description"))
             or _optional_text(getattr(product, "seo_description_en", None))
-        ),
+        )
+    return Seo(
+        title=imperialize_text(title) if title else None,
+        description=imperialize_text(description) if description else None,
         # Deliberately no product.slug / H1-derived fallback: a missing K slug
         # is safer than silently publishing the old 15-word permalink again.
         url_slug=_short_url_slug(generated_seo.get("url_slug")),
@@ -319,13 +335,17 @@ def _image_assets(
                     placement=placement,
                     position=position,
                     is_main=(r["asset_role"] == "main"),
-                    role=role_label or None,
-                    filename=str(meta.get("filename") or "") or None,
+                    role=imperialize_text(role_label) if role_label else None,
+                    filename=buyer_english_text(
+                        str(meta.get("filename") or ""), limit=255
+                    ),
                     mime_type=r["mime_type"],
-                    title=str(meta.get("title") or "") or None,
-                    alt=str(meta.get("alt") or "") or None,
-                    caption=str(meta.get("caption") or "") or None,
-                    description=str(meta.get("description") or "") or None,
+                    title=imperialize_text(str(meta.get("title") or "")),
+                    alt=imperialize_text(str(meta.get("alt") or "")),
+                    caption=imperialize_text(str(meta.get("caption") or "")),
+                    description=imperialize_text(
+                        str(meta.get("description") or "")
+                    ),
                     embed_token=(
                         f"{{{{KP_IMG_{position}}}}}"
                         if placement == "description"
@@ -392,9 +412,11 @@ def _variants(db: Session, product: Any) -> list[Variant]:
         out.append(
             Variant(
                 sku=r["variant_sku"],
-                color=r["color"],
-                size=r["size"],
-                function=r["function"],
+                color=imperialize_text(r["color"]) if r["color"] else None,
+                size=imperialize_text(r["size"]) if r["size"] else None,
+                function=(
+                    imperialize_text(r["function"]) if r["function"] else None
+                ),
                 price=price,
             )
         )
@@ -459,6 +481,70 @@ def _resolve_wc_category(
     return category_path, wc_category_id
 
 
+def _deterministic_specifications_table(attributes: list[Any]) -> str | None:
+    """Build the public spec table only from the verified P projection."""
+
+    rows: list[str] = []
+    for item in attributes:
+        name = buyer_english_text(getattr(item, "name", None), limit=120)
+        value = imperialize_text(getattr(item, "value", None))
+        unit = buyer_english_text(getattr(item, "unit", None), limit=40)
+        if not name or not value or name.casefold() == "what's included":
+            continue
+        rendered = f"{value} {unit}" if unit else value
+        rows.append(
+            "<tr><th scope=\"row\">"
+            + html.escape(name)
+            + "</th><td>"
+            + html.escape(rendered)
+            + "</td></tr>"
+        )
+    if not rows:
+        return None
+    return "<table><tbody>" + "".join(rows) + "</tbody></table>"
+
+
+def _project_buyer_copy(
+    marketing_copy: dict[str, Any],
+    *,
+    attributes: list[Any],
+) -> dict[str, Any]:
+    """Strip CJK/metric leakage and replace the AI-authored spec table."""
+
+    projected = buyer_safe_tree(marketing_copy, field_path="marketing_copy")
+    output = projected if isinstance(projected, dict) else {}
+    if contains_cjk(json.dumps(marketing_copy, ensure_ascii=False, default=str)):
+        logger.warning("CJK buyer-facing copy was removed during P assembly")
+    raw_ppc = output.get("product_page_copy")
+    ppc = dict(raw_ppc) if isinstance(raw_ppc, dict) else {}
+    table = _deterministic_specifications_table(attributes)
+    if table:
+        ppc["specifications_html_table"] = table
+    else:
+        ppc.pop("specifications_html_table", None)
+    output["product_page_copy"] = ppc
+    return output
+
+
+def _append_package_includes_section(
+    description_html: str,
+    package_includes: list[str],
+) -> str:
+    if not package_includes:
+        return description_html
+    items = "".join(
+        f"<li>{html.escape(item)}</li>" for item in package_includes
+    )
+    section = (
+        '<section class="kp-box"><h2>What\'s in the box</h2>'
+        f"<ul>{items}</ul></section>"
+    )
+    closing = description_html.rfind("</div>")
+    if closing < 0:
+        return description_html + section
+    return description_html[:closing] + section + description_html[closing:]
+
+
 def assemble_upload_package(
     db: Session,
     product: Any,
@@ -475,7 +561,20 @@ def assemble_upload_package(
     raw_mcj = getattr(product, "marketing_copy_json", None)
     # Legacy/malformed copy must degrade to an empty schema verdict instead of
     # making publication fail. Normal K-generated copy is always a dictionary.
-    mcj = raw_mcj if isinstance(raw_mcj, dict) else {}
+    raw_copy = raw_mcj if isinstance(raw_mcj, dict) else {}
+    package_includes = normalize_package_includes(
+        canonical_package_includes(
+            getattr(product, "package_includes_json", None),
+            getattr(product, "structured_specs_json", None),
+        ),
+        reject_cjk=False,
+    )
+    attributes, product_schema = project_verified_product_specs(
+        getattr(product, "structured_specs_json", None),
+        package_includes=package_includes,
+        target_market=str(getattr(product, "target_market", None) or "US"),
+    )
+    mcj = _project_buyer_copy(raw_copy, attributes=attributes)
     images = _image_assets(
         db, product, base_url, job_id=job_id, job_token=job_token
     )
@@ -491,6 +590,9 @@ def assemble_upload_package(
         if img.placement == "description" and img.embed_token
     ]
     desc = build_description_html(mcj, description_images)
+    desc["html"] = _append_package_includes_section(
+        desc["html"], package_includes
+    )
     raw_faq_items = mcj.get("page_faq")
     faq_items = [
         FaqItem(question=str(f.get("question")), answer=str(f.get("answer")))
@@ -510,9 +612,6 @@ def assemble_upload_package(
     currency = (product.price_currency or "USD")[:3]
     upload_seo = _seo_for_upload(mcj, product)
     category_path, wc_category_id = _resolve_wc_category(db, product)
-    attributes, product_schema = project_verified_product_specs(
-        getattr(product, "structured_specs_json", None)
-    )
     # Category fail-safe handling above may roll back its transaction. Allocate
     # afterwards so a legacy ASIN replacement cannot be undone by that rollback.
     issued_sku = ensure_product_sku(db, product)
@@ -574,15 +673,31 @@ def assemble_upload_package(
                 # readers; new consumers read product.seo.url_slug.
                 slug=upload_seo.url_slug,
                 google_product_category=product.google_product_category,
-                merchant_product_type=product.merchant_product_type,
-                path=category_path,
+                merchant_product_type=buyer_english_text(
+                    getattr(product, "merchant_product_type", None), limit=512
+                ),
+                path=[
+                    safe
+                    for segment in (category_path or [])
+                    if (safe := buyer_english_text(segment, limit=255))
+                ]
+                or None,
                 wc_category_id=wc_category_id,
             ),
             images=images,
             attributes=attributes,
             structured_data=product_schema,
+            package_includes=package_includes,
             keywords=Keywords(
-                primary=[product.primary_keyword] if product.primary_keyword else [],
+                primary=(
+                    [safe_primary]
+                    if (
+                        safe_primary := buyer_english_text(
+                            getattr(product, "primary_keyword", None), limit=512
+                        )
+                    )
+                    else []
+                ),
             ),
             seo=upload_seo,
             variants=variants,

@@ -6,8 +6,13 @@
 
 from __future__ import annotations
 
+from io import BytesIO
+from uuid import UUID
+
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
+from sqlalchemy import select
 from sqlalchemy import text
 
 from backend.app.db.session import SessionLocal
@@ -130,6 +135,13 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
         db.execute(text("DELETE FROM f_category_candidates"))
         db.execute(text("DELETE FROM f_category_keywords"))
         db.execute(text("DELETE FROM f_enrichment_runs"))
+        db.execute(
+            text(
+                "DELETE FROM k_product_knowledge_media_assets WHERE product_id IN ("
+                "SELECT id FROM k_product_knowledge_products "
+                "WHERE source_system = 'f_enrichment')"
+            )
+        )
         db.execute(
             text(
                 "DELETE FROM k_product_knowledge_variants WHERE product_id IN ("
@@ -338,6 +350,128 @@ def test_candidate_red_flag_review_and_import_to_k(f_env: TestClient) -> None:
         json={"action": "reopen"},
     )
     assert response.status_code == 409  # 已进 K 不能再改状态
+
+
+def test_f_import_requires_alicdn_reference_to_be_persisted_atomically(
+    f_env: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from backend.app.modules.f_series.enrichment import images
+    from backend.app.modules.k_series.product_knowledge import image_render_jobs
+    from backend.app.modules.k_series.product_knowledge.models import (
+        KProductKnowledgeMediaAsset,
+        KProductKnowledgeProduct,
+    )
+
+    monkeypatch.setenv("K_PRODUCT_MEDIA_STORAGE_DIR", str(tmp_path / "k-media"))
+    output = BytesIO()
+    Image.new("RGB", (24, 24), "#355b48").save(output, format="PNG")
+    reference_bytes = output.getvalue()
+    fetches: list[tuple[str, str]] = []
+
+    def fake_fetch(candidate_id: str, url: str, variant: str):
+        fetches.append((url, variant))
+        if "unavailable" in url:
+            raise images.FImageUnavailableError("supplier CDN unavailable")
+        return reference_bytes, "image/png"
+
+    monkeypatch.setattr(images, "get_candidate_image", fake_fetch)
+
+    def import_candidate(title: str, image_url: str):
+        created = f_env.post(
+            "/api/app/f/candidates",
+            json={
+                "category_id": "990991",
+                "title": title,
+                "image_url": image_url,
+            },
+        )
+        assert created.status_code == 201, created.text
+        candidate_id = created.json()["id"]
+        approved = f_env.patch(
+            f"/api/app/f/candidates/{candidate_id}",
+            json={"action": "approve"},
+        )
+        assert approved.status_code == 200, approved.text
+        imported = f_env.post(f"/api/app/f/candidates/{candidate_id}/import-to-k")
+        return candidate_id, imported
+
+    stored_candidate_id, stored_response = import_candidate(
+        "locally persisted supplier reference",
+        "https://cbu01.alicdn.com/reference.png",
+    )
+    assert stored_response.status_code == 200, stored_response.text
+    stored_product_id = str(stored_response.json()["product_id"])
+
+    failed_candidate_id, failed_response = import_candidate(
+        "supplier reference download can fail",
+        "https://cbu01.alicdn.com/unavailable.png",
+    )
+    assert failed_response.status_code == 409, failed_response.text
+    assert "未导入 K" in failed_response.json()["detail"]
+
+    with SessionLocal() as db:
+        stored_product = db.get(KProductKnowledgeProduct, UUID(stored_product_id))
+        assert stored_product is not None
+        stored_assets = list(
+            db.scalars(
+                select(KProductKnowledgeMediaAsset).where(
+                    KProductKnowledgeMediaAsset.product_id == stored_product.id,
+                    KProductKnowledgeMediaAsset.source == "f_supplier_reference",
+                )
+            )
+        )
+        assert len(stored_assets) == 1
+        asset = stored_assets[0]
+        assert asset.asset_role == "reference"
+        assert asset.status == "available"
+        assert asset.object_key
+        assert (tmp_path / "k-media" / asset.object_key).read_bytes() == reference_bytes
+
+        # Local persisted bytes must win even though the compatibility URL is
+        # still retained on the product.
+        monkeypatch.setattr(
+            image_render_jobs,
+            "download_reference_image",
+            lambda _url: (_ for _ in ()).throw(AssertionError("CDN must not be used")),
+        )
+        _filename, resolved, mime = image_render_jobs._resolve_reference_image(
+            db, stored_product
+        )
+        assert resolved == reference_bytes
+        assert mime == "image/png"
+
+        # Mandatory persistence failure rolls the whole import savepoint back:
+        # no K product/variant/media row can survive behind the alicdn URL.
+        assert db.scalar(
+            select(KProductKnowledgeProduct).where(
+                KProductKnowledgeProduct.source_system == "f_enrichment",
+                KProductKnowledgeProduct.source_record_id == failed_candidate_id,
+            )
+        ) is None
+        failed_candidate = db.execute(
+            text(
+                "SELECT status, k_product_id FROM f_category_candidates WHERE id = :id"
+            ),
+            {"id": failed_candidate_id},
+        ).mappings().one()
+        assert failed_candidate["status"] == "approved"
+        assert failed_candidate["k_product_id"] is None
+
+        stored_candidate = db.execute(
+            text(
+                "SELECT status, k_product_id FROM f_category_candidates WHERE id = :id"
+            ),
+            {"id": stored_candidate_id},
+        ).mappings().one()
+        assert stored_candidate["status"] == "imported_to_k"
+        assert str(stored_candidate["k_product_id"]) == stored_product_id
+
+    assert fetches == [
+        ("https://cbu01.alicdn.com/reference.png", "full"),
+        ("https://cbu01.alicdn.com/unavailable.png", "full"),
+    ]
 
 
 class _FakeSourcingProvider:

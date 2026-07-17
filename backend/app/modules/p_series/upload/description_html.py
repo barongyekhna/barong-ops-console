@@ -124,7 +124,7 @@ def build_description_html(
         heading, body = _s(chunk.get("heading")), _s(chunk.get("body"))
         text_html: list[str] = []
         if heading:
-            text_html.append(f"<h3>{escape(heading)}</h3>")
+            text_html.append(f"<h2>{escape(heading)}</h2>")
         if body:
             text_html.append(f"<p>{escape(body)}</p>")
         fig_html = ""
@@ -161,7 +161,7 @@ def build_description_html(
     spec_table = _s(ppc.get("specifications_html_table"))
     if spec_table:
         parts.append(
-            '<section class="kp-specs"><h3>Specifications</h3>'
+            '<section class="kp-specs"><h2>Specifications</h2>'
             f"{spec_table}</section>"
         )
         emitted.append("kp-specs")
@@ -181,7 +181,7 @@ def build_description_html(
             for q, a in faqs
         )
         parts.append(
-            '<section class="kp-faq"><h3>Frequently Asked Questions</h3>'
+            '<section class="kp-faq"><h2>Frequently Asked Questions</h2>'
             f"{rows}</section>"
         )
         emitted.append("kp-faq")

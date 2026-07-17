@@ -13,9 +13,11 @@ and push the WordPress media SEO fields.
 
 Reference photo resolution order (the original product photo is sacred; a
 previously *rendered* image must never become the next render's reference):
-1. ``product.reference_image_url`` (R->K 搬运带来的原图外链, downloaded
-   server-side against a host whitelist);
-2. the earliest available K image asset NOT produced by this pipeline.
+1. the earliest available K image asset NOT produced by this pipeline (F->K
+   persists its supplier reference here during import);
+2. ``product.reference_image_url`` as a compatibility fallback for older
+   non-alicdn imports, downloaded server-side against a host whitelist.
+   alicdn is never fetched by the renderer and must have a local asset.
 """
 
 from __future__ import annotations
@@ -136,6 +138,7 @@ REFERENCE_URL_HOST_SUFFIXES = (
 )
 _REFERENCE_DOWNLOAD_TIMEOUT_SECONDS = 20.0
 _REFERENCE_MAX_BYTES = 20 * 1024 * 1024
+_RENDER_MODEL_MAX_ATTEMPTS = 3
 
 _RATIO_RE = re.compile(r"(\d{1,2})\s*:\s*(\d{1,2})")
 
@@ -158,6 +161,14 @@ def _render_concurrency(value: int | None = None) -> int:
 
 def _poll_seconds() -> float:
     return max(1.0, float(os.getenv("K_IMAGE_RENDER_POLL_SECONDS", "3")))
+
+
+def _render_retry_backoff_seconds(failed_attempt: int) -> float:
+    try:
+        base = float(os.getenv("K_IMAGE_RENDER_RETRY_BACKOFF_SECONDS", "2"))
+    except ValueError:
+        base = 2.0
+    return min(30.0, max(0.0, base) * (2 ** max(0, failed_attempt - 1)))
 
 
 # --- brief parsing ----------------------------------------------------------
@@ -356,6 +367,18 @@ def reference_url_host_allowed(url: str) -> bool:
     )
 
 
+def render_reference_url_fallback_allowed(url: str) -> bool:
+    """Renderer fallback excludes alicdn; those bytes must already be local."""
+
+    if not reference_url_host_allowed(url):
+        return False
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return not (host == "alicdn.com" or host.endswith(".alicdn.com"))
+
+
 def download_reference_image(url: str) -> tuple[str, bytes, str]:
     """Download the external reference photo. Returns (filename, bytes, mime)."""
     if not reference_url_host_allowed(url):
@@ -367,6 +390,20 @@ def download_reference_image(url: str) -> tuple[str, bytes, str]:
     with httpx.Client(
         timeout=_REFERENCE_DOWNLOAD_TIMEOUT_SECONDS,
         follow_redirects=True,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/126.0.0.0 Safari/537.36"
+            ),
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.8",
+            **(
+                {"Referer": "https://detail.1688.com/"}
+                if (urlparse(url).hostname or "").lower().endswith("alicdn.com")
+                else {}
+            ),
+        },
     ) as client:
         response = client.get(url)
         response.raise_for_status()
@@ -402,6 +439,116 @@ def _detect_image_mime(contents: bytes) -> str | None:
 
 def _media_storage_root_path() -> Path:
     return Path(os.getenv("K_PRODUCT_MEDIA_STORAGE_DIR", "/var/lib/barong/k-media"))
+
+
+def store_reference_image_asset(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    contents: bytes,
+    mime_type: str,
+    source_url: str,
+    user: User | None,
+) -> KProductKnowledgeMediaAsset:
+    """Persist an F supplier reference through the canonical K media path.
+
+    This happens before the import transaction commits, so every future render
+    can read stable local bytes instead of hitting an expiring/rate-limited CDN.
+    F imports from 1688/alicdn treat any fetch or storage error as fatal to that
+    import; legacy non-supplier callers may still choose a best-effort policy.
+    """
+
+    detected_mime = _detect_image_mime(contents)
+    if detected_mime is None or detected_mime != mime_type.split(";", 1)[0].lower():
+        raise KImageRenderError(
+            "REFERENCE_NOT_IMAGE",
+            "参考图回源内容与图片类型不匹配。",
+            status_code=422,
+        )
+    if not contents or len(contents) > _REFERENCE_MAX_BYTES:
+        raise KImageRenderError(
+            "REFERENCE_DOWNLOAD_INVALID",
+            "参考图下载为空或超过大小上限。",
+            status_code=422,
+        )
+
+    variant = _first_variant(db, product)
+    if variant is None:
+        raise KImageRenderError(
+            "REFERENCE_VARIANT_MISSING",
+            "产品默认变体尚未建立，无法存储参考图。",
+        )
+    original_name = os.path.basename(urlparse(source_url).path) or "supplier-reference"
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", original_name).strip(".-_")
+    extension = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+    }[detected_mime]
+    if not safe_name.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")):
+        safe_name = f"{safe_name or 'supplier-reference'}{extension}"
+    filename = f"{uuid4()}-{safe_name[:160]}"
+    object_key = (
+        f"images/{product.product_key}/{variant.variant_sku}/reference/{filename}"
+    )
+    root = _media_storage_root_path()
+    storage_file = write_media_file(root, object_key, contents)
+    thumbnail_path, thumbnail_object_key, _ = ensure_image_derivative(
+        root=root,
+        object_key=object_key,
+        kind="thumbnail",
+        max_side=320,
+        contents=contents,
+    )
+    preview_path, preview_object_key, _ = ensure_image_derivative(
+        root=root,
+        object_key=object_key,
+        kind="preview",
+        max_side=1280,
+        contents=contents,
+    )
+    user_id = _user_uuid(user) if user is not None else None
+    row = KProductKnowledgeMediaAsset(
+        id=uuid4(),
+        product_id=product.id,
+        variant_id=variant.id,
+        variant_sku=variant.variant_sku,
+        asset_type="image",
+        asset_role="reference",
+        status="available",
+        review_status="not_applicable",
+        storage_provider="local_filesystem",
+        object_key=object_key,
+        file_url_placeholder=None,
+        file_size=len(contents),
+        mime_type=detected_mime,
+        source="f_supplier_reference",
+        metadata_json={
+            "content_sha256": hashlib.sha256(contents).hexdigest(),
+            "filename": safe_name,
+            "storage_provider": "local_filesystem",
+            "storage_relative_path": object_key,
+            "storage_path": str(storage_file),
+            "preview_object_key": preview_object_key,
+            "preview_path": str(preview_path),
+            "thumbnail_object_key": thumbnail_object_key,
+            "thumbnail_path": str(thumbnail_path),
+            "source_type": "f_supplier_reference",
+            "source_url": source_url,
+            "product_key": product.product_key,
+            "variant_sku": variant.variant_sku,
+            "sku": product.sku,
+            "imported_reference": True,
+            "k_image_ai_generation_allowed": False,
+            "k_image_review_allowed": False,
+        },
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
+    )
+    db.add(row)
+    db.flush()
+    return row
 
 
 def _original_photo_assets(
@@ -452,7 +599,15 @@ def _resolve_reference_image(
     db: Session,
     product: KProductKnowledgeProduct,
 ) -> tuple[str, bytes, str]:
-    if product.reference_image_url:
+    # F imports persist supplier bytes up front. Prefer that immutable local
+    # copy so the renderer never depends on alicdn at job time.
+    for row in _original_photo_assets(db, product):
+        resolved = _asset_file_bytes(row)
+        if resolved is not None:
+            return resolved
+    if product.reference_image_url and render_reference_url_fallback_allowed(
+        product.reference_image_url
+    ):
         reference_url = product.reference_image_url
         # Release the read transaction before the slow external download so the
         # DB doesn't kill the connection on idle-in-transaction timeout.
@@ -465,10 +620,11 @@ def _resolve_reference_image(
                 product.id,
                 exc,
             )
-    for row in _original_photo_assets(db, product):
-        resolved = _asset_file_bytes(row)
-        if resolved is not None:
-            return resolved
+    elif product.reference_image_url:
+        _LOGGER.error(
+            "renderer refused non-local supplier reference product=%s",
+            product.id,
+        )
     raise KImageRenderError(
         "REFERENCE_IMAGE_MISSING",
         "产品没有可用的作图参考图：请先上传/绑定产品原图，或从 R 搬运带参考图。",
@@ -477,11 +633,13 @@ def _resolve_reference_image(
 
 
 def reference_available(db: Session, product: KProductKnowledgeProduct) -> bool:
-    if product.reference_image_url and reference_url_host_allowed(
+    if _original_photo_assets(db, product):
+        return True
+    if product.reference_image_url and render_reference_url_fallback_allowed(
         product.reference_image_url
     ):
         return True
-    return bool(_original_photo_assets(db, product))
+    return False
 
 
 # --- enqueue + status (request path) ----------------------------------------
@@ -1085,6 +1243,54 @@ def _store_render_asset(
     return row
 
 
+def _retryable_model_error(exc: Exception) -> bool:
+    """Only classify errors raised by the model call, never setup/validation."""
+
+    if isinstance(exc, KImageRenderError):
+        return exc.code == "RENDER_EMPTY_RESULT"
+    status_code = getattr(exc, "status_code", None)
+    if isinstance(status_code, int) and 400 <= status_code < 500:
+        return status_code in {408, 409, 425, 429}
+    # Provider SDK/network exceptions are not stable across adapters. They are
+    # safe to retry here because this wrapper surrounds generation only; asset
+    # persistence has not started yet.
+    return True
+
+
+def _generate_candidates_with_retry(
+    generate: Callable[[], list[Any]],
+    *,
+    job_id: UUID,
+    sleep: Callable[[float], None] | None = None,
+) -> list[Any]:
+    """Run one model request plus two automatic retries with backoff."""
+
+    sleeper = sleep or time.sleep
+    for attempt in range(1, _RENDER_MODEL_MAX_ATTEMPTS + 1):
+        try:
+            candidates = generate()
+            if not candidates:
+                raise KImageRenderError(
+                    "RENDER_EMPTY_RESULT",
+                    "图片模型没有返回任何图片。",
+                )
+            return candidates
+        except Exception as exc:  # noqa: BLE001 - adapter exception types vary
+            if attempt >= _RENDER_MODEL_MAX_ATTEMPTS or not _retryable_model_error(exc):
+                raise
+            delay = _render_retry_backoff_seconds(attempt)
+            _LOGGER.warning(
+                "render job %s model attempt %s/%s failed; retrying in %.2fs: %s",
+                job_id,
+                attempt,
+                _RENDER_MODEL_MAX_ATTEMPTS,
+                delay,
+                exc,
+            )
+            sleeper(delay)
+    raise AssertionError("unreachable render retry loop")
+
+
 def _process_render_job(job: dict[str, Any]) -> None:
     job_id = job["id"]
     asset_id: UUID | None = None
@@ -1114,22 +1320,20 @@ def _process_render_job(job: dict[str, Any]) -> None:
             # request=None: key resolution goes through the module execution
             # gate with the explicit I-series org (same as the K worker's
             # request=None generate calls).
-            candidates = engine.generate_candidates(
-                event_id=job_id,
-                source_type=SOURCE_EDIT,
-                image_prompt_enhanced=prompt,
-                aspect_ratio=str(job["aspect_ratio"] or "1:1"),
-                generation_count=1,
-                request=None,  # type: ignore[arg-type]
-                user=user,  # type: ignore[arg-type]
-                reference_image_count=1,
-                reference_images=[reference],
+            candidates = _generate_candidates_with_retry(
+                lambda: engine.generate_candidates(
+                    event_id=job_id,
+                    source_type=SOURCE_EDIT,
+                    image_prompt_enhanced=prompt,
+                    aspect_ratio=str(job["aspect_ratio"] or "1:1"),
+                    generation_count=1,
+                    request=None,  # type: ignore[arg-type]
+                    user=user,  # type: ignore[arg-type]
+                    reference_image_count=1,
+                    reference_images=[reference],
+                ),
+                job_id=job_id,
             )
-            if not candidates:
-                raise KImageRenderError(
-                    "RENDER_EMPTY_RESULT",
-                    "图片模型没有返回任何图片。",
-                )
             candidate = candidates[0]
             contents = base64.b64decode(candidate.image_base64)
             asset = _store_render_asset(

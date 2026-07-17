@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ....schemas.common import reject_sensitive_data
+from .buyer_display import normalize_package_includes
 from .constants import DEFAULT_CANONICAL_LANGUAGE
 from .structured_specs import normalize_operator_structured_specs
 
@@ -154,6 +155,7 @@ class ProductKnowledgeCreate(BaseModel):
     dimensions_json: dict[str, Any] | list[Any] | None = None
     weight_json: dict[str, Any] | list[Any] | None = None
     structured_specs_json: dict[str, Any] | None = None
+    package_includes_json: list[str] | None = None
     short_description_en: str | None = None
     long_description_en: str | None = None
     primary_use_case_en: str | None = None
@@ -176,6 +178,13 @@ class ProductKnowledgeCreate(BaseModel):
     ) -> dict[str, Any] | None:
         reject_sensitive_data(value)
         return normalize_operator_structured_specs(value)
+
+    @field_validator("package_includes_json")
+    @classmethod
+    def validate_package_includes(cls, value: list[str] | None) -> list[str] | None:
+        reject_sensitive_data(value)
+        normalized = normalize_package_includes(value)
+        return normalized or None
 
     @field_validator("channel")
     @classmethod
@@ -236,6 +245,7 @@ class ProductKnowledgeUpdate(BaseModel):
     dimensions_json: dict[str, Any] | list[Any] | None = None
     weight_json: dict[str, Any] | list[Any] | None = None
     structured_specs_json: dict[str, Any] | None = None
+    package_includes_json: list[str] | None = None
     short_description_en: str | None = None
     long_description_en: str | None = None
     primary_use_case_en: str | None = None
@@ -254,6 +264,13 @@ class ProductKnowledgeUpdate(BaseModel):
     ) -> dict[str, Any] | None:
         reject_sensitive_data(value)
         return normalize_operator_structured_specs(value)
+
+    @field_validator("package_includes_json")
+    @classmethod
+    def validate_package_includes(cls, value: list[str] | None) -> list[str] | None:
+        reject_sensitive_data(value)
+        normalized = normalize_package_includes(value)
+        return normalized or None
 
     @model_validator(mode="after")
     def normalize_languages(self) -> "ProductKnowledgeUpdate":
@@ -328,6 +345,7 @@ class ProductKnowledgeRead(BaseModel):
     shipping_assignment: dict[str, Any] | None = None
     contains_battery: bool = False
     structured_specs_json: dict[str, Any] | None = None
+    package_includes_json: list[str] | None = None
     selling_points_candidates_json: dict[str, Any] | None = None
     selling_points_approved_json: dict[str, Any] | None = None
     faq_research_json: dict[str, Any] | None = None

@@ -11,6 +11,10 @@ import pytest
 from backend.app.modules.p_series.upload.product_schema import (
     project_verified_product_specs,
 )
+from backend.app.modules.p_series.upload.assemble import (
+    _append_package_includes_section,
+    _deterministic_specifications_table,
+)
 
 
 pytestmark = pytest.mark.unit
@@ -91,7 +95,9 @@ def _verified_specs() -> dict[str, object]:
             {
                 "key": "solar_panel",
                 "label": "Solar Panel",
+                "label_en": "Solar Panel",
                 "value": "Monocrystalline",
+                "value_en": "Monocrystalline",
                 "raw_value": "单晶硅",
             }
         ],
@@ -105,8 +111,8 @@ def test_verified_specs_feed_woo_attributes_and_schema_property_values() -> None
         {"name": "Luminous Flux", "value": "300", "unit": "lm"},
         {"name": "Runtime", "value": "8–12", "unit": "h"},
         {"name": "IP Rating", "value": "IP65", "unit": None},
-        {"name": "Length", "value": "18", "unit": "cm"},
-        {"name": "Height", "value": "42", "unit": "cm"},
+        {"name": "Length", "value": "7.1", "unit": "in"},
+        {"name": "Height", "value": "16.5", "unit": "in"},
         {"name": "Solar Panel", "value": "Monocrystalline", "unit": None},
     ]
     assert [item.model_dump() for item in schema.additional_property] == [
@@ -131,14 +137,14 @@ def test_verified_specs_feed_woo_attributes_and_schema_property_values() -> None
         {
             "type": "PropertyValue",
             "name": "Length",
-            "value": "18",
-            "unit_text": "cm",
+            "value": "7.1",
+            "unit_text": "in",
         },
         {
             "type": "PropertyValue",
             "name": "Height",
-            "value": "42",
-            "unit_text": "cm",
+            "value": "16.5",
+            "unit_text": "in",
         },
         {
             "type": "PropertyValue",
@@ -186,14 +192,18 @@ def test_operator_facts_feed_attributes_and_schema_only_with_explicit_stamps() -
             {
                 "key": "fuel_type",
                 "label": "Fuel Type",
+                "label_en": "Fuel Type",
                 "value": "Butane",
+                "value_en": "Butane",
                 "raw_value": "Butane",
                 "evidence": "operator_fact",
             },
             {
                 "key": "unstamped_claim",
                 "label": "Unstamped Claim",
+                "label_en": "Unstamped Claim",
                 "value": "Must stay private",
+                "value_en": "Must stay private",
                 "raw_value": "Must stay private",
             },
         ],
@@ -202,7 +212,7 @@ def test_operator_facts_feed_attributes_and_schema_only_with_explicit_stamps() -
     attributes, schema = project_verified_product_specs(operator_specs)
 
     assert [item.model_dump() for item in attributes] == [
-        {"name": "Length", "value": "12", "unit": "cm"},
+        {"name": "Length", "value": "4.7", "unit": "in"},
         {"name": "Material", "value": "Stainless steel", "unit": None},
         {"name": "Fuel Type", "value": "Butane", "unit": None},
     ]
@@ -220,6 +230,73 @@ def test_operator_facts_feed_attributes_and_schema_only_with_explicit_stamps() -
     attributes, schema = project_verified_product_specs(missing_root_stamp)
     assert attributes == []
     assert schema.additional_property == []
+
+
+def test_buyer_projection_skips_untranslated_cjk_and_adds_package_contents() -> None:
+    specs = {
+        "schema_version": "1.0",
+        "source": {"platform": "1688"},
+        "weight": {
+            "value": 0.72,
+            "unit": "kg",
+            "raw_value": "720克",
+            "source_label": "净重",
+        },
+        "material": {
+            "value": "铝合金",
+            "value_en": "Aluminum alloy",
+            "raw_value": "铝合金",
+            "source_label": "材质",
+        },
+        "additional_specs": [
+            {
+                "key": "capacity",
+                "label": "主锅容量",
+                "label_en": "Main Pot Capacity",
+                "value": "1.4升",
+                "value_en": "1.4 L",
+                "raw_value": "1.4升",
+            },
+            {
+                "key": "coating",
+                "label": "涂层",
+                "value": "不粘涂层",
+                "raw_value": "不粘涂层",
+            },
+        ],
+    }
+
+    attributes, schema = project_verified_product_specs(
+        specs,
+        package_includes=["Pot", "Frying pan", "Bowl"],
+    )
+
+    assert [item.model_dump() for item in attributes] == [
+        {"name": "Weight", "value": "1.6", "unit": "lb"},
+        {"name": "Material", "value": "Aluminum alloy", "unit": None},
+        {"name": "Main Pot Capacity", "value": "1.5 qt", "unit": None},
+        {
+            "name": "What's included",
+            "value": "Pot, Frying pan, Bowl",
+            "unit": None,
+        },
+    ]
+    assert [item.name for item in schema.additional_property] == [
+        "Weight",
+        "Material",
+        "Main Pot Capacity",
+        "What's included",
+    ]
+    assert "涂层" not in str(attributes)
+
+    table = _deterministic_specifications_table(attributes)
+    assert table is not None
+    assert "1.6 lb" in table
+    assert "1.5 qt" in table
+    assert "What's included" not in table
+    html = _append_package_includes_section("<div><p>Body</p></div>", ["Pot", "Bowl"])
+    assert "<h2>What's in the box</h2>" in html
+    assert "<li>Pot</li><li>Bowl</li>" in html
 
 
 def test_wordpress_filter_preserves_woo_owned_real_review_fields() -> None:
@@ -317,7 +394,7 @@ def test_n8n_writes_specs_to_visible_attributes_and_schema_meta() -> None:
     code = node["parameters"]["jsCode"]
 
     assert "body.attributes = attrs" in code
-    assert "pkg.schema_version !== 'p-upload-package-v4'" in code
+    assert "pkg.schema_version !== 'p-upload-package-v5'" in code
     assert "if (attrs.length)" not in code
     assert "visible: true" in code
     assert "variation: false" in code
@@ -360,7 +437,7 @@ def test_n8n_preserves_manual_attributes_and_removes_only_pipeline_owned_specs()
     )["parameters"]["jsCode"]
 
     package = {
-        "schema_version": "p-upload-package-v4",
+        "schema_version": "p-upload-package-v5",
         "woo_lookup_sku": "B0BYTEST01",
         "woo_existing_product_id": "3778",
         "product": {

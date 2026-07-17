@@ -11,9 +11,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 from sqlalchemy import bindparam, func, select, text
@@ -25,6 +27,9 @@ from ....modules.k_series.product_knowledge.category_resolver import (
 )
 from ....modules.k_series.product_knowledge.scope_shim import KScopeContext
 from ....modules.k_series.product_knowledge.sku_allocator import ensure_product_sku
+from ....modules.k_series.product_knowledge.structured_specs import (
+    package_includes_from_structured_specs,
+)
 from ....services.data_isolation import without_org_data_isolation
 from ..enrichment import constants as C
 from .models import FCategoryCandidate, FCategoryKeyword
@@ -32,6 +37,7 @@ from .models import FCategoryCandidate, FCategoryKeyword
 # 共享的全局谷歌类目树（K 建的，无 org 列的参考数据）。裸 SQL 读取要包
 # without_org_data_isolation()，否则 C18G 严格隔离会拒掉不带 org_id 的语句。
 _GOOGLE_TREE = "k_category_google"
+_LOGGER = logging.getLogger("f-enrichment")
 
 # 红线类目/词（确定性匹配，只标记不毙掉）。锂电池明确不在红线内（用户规则）。
 _RED_LINE_TERMS: tuple[tuple[str, str], ...] = (
@@ -297,6 +303,24 @@ def _contains_cjk(value: str) -> bool:
     return any("一" <= ch <= "鿿" for ch in value)
 
 
+def _requires_local_supplier_reference(
+    image_url: str | None,
+    source_url: str | None,
+) -> bool:
+    """1688 supplier images must be durable before a K product may exist."""
+
+    for value in (image_url, source_url):
+        try:
+            host = (urlparse(value or "").hostname or "").lower()
+        except ValueError:
+            continue
+        if host in {"1688.com", "alicdn.com"} or host.endswith(
+            (".1688.com", ".alicdn.com")
+        ):
+            return True
+    return False
+
+
 def import_candidate_to_k(
     db: Session,
     *,
@@ -368,6 +392,10 @@ def import_candidate_to_k(
     if candidate.notes:
         raw_lines.append(f"备注: {candidate.notes}")
 
+    # Keep every new K row behind one savepoint until a mandatory supplier
+    # reference is durably stored. A failed 1688/alcdn fetch therefore cannot
+    # leave a product/variant that later appears renderable through its URL.
+    import_savepoint = db.begin_nested()
     product = KProductKnowledgeProduct(
         id=uuid4(),
         product_key=_generate_unique_product_key(db),
@@ -394,6 +422,10 @@ def import_candidate_to_k(
         raw_input_text="\n".join(raw_lines),
         raw_input_language="zh" if _contains_cjk(candidate.title) else "en",
         structured_specs_json=candidate.structured_specs_json,
+        package_includes_json=(
+            package_includes_from_structured_specs(candidate.structured_specs_json)
+            or None
+        ),
     )
     product.category_review_needed = not bind_google_category_id(
         db, product, candidate.category_id
@@ -401,8 +433,57 @@ def import_candidate_to_k(
     ensure_product_sku(db, product, force_allocate=True)
     db.add(product)
     ensure_default_product_variant(db, product)
+    if candidate.image_url:
+        try:
+            # Reuse F's guarded, cached supplier fetch path (including its
+            # alicdn browser headers), then persist through K's canonical
+            # media storage before the import commits.
+            from .images import get_candidate_image
+            from ...k_series.product_knowledge.image_render_jobs import (
+                store_reference_image_asset,
+            )
+
+            contents, mime_type = get_candidate_image(
+                str(candidate.id), candidate.image_url, "full"
+            )
+            with db.begin_nested():
+                store_reference_image_asset(
+                    db,
+                    product=product,
+                    contents=contents,
+                    mime_type=mime_type,
+                    source_url=candidate.image_url,
+                    user=user,
+                )
+        except Exception as exc:  # noqa: BLE001 - adapters/storage vary
+            if _requires_local_supplier_reference(
+                candidate.image_url,
+                candidate.source_url,
+            ):
+                failed_candidate_id = candidate.id
+                failed_product_id = product.id
+                import_savepoint.rollback()
+                _LOGGER.error(
+                    "F->K mandatory supplier reference persistence failed "
+                    "candidate=%s product=%s: %s",
+                    failed_candidate_id,
+                    failed_product_id,
+                    exc,
+                )
+                raise ValueError(
+                    "1688 参考图未能完成本地持久化，本次未导入 K；"
+                    "请稍后重试或更换有效图源。"
+                ) from exc
+            _LOGGER.warning(
+                "F->K optional reference persistence failed candidate=%s "
+                "product=%s: %s",
+                candidate.id,
+                product.id,
+                exc,
+            )
     candidate.status = "imported_to_k"
     candidate.k_product_id = product.id
     candidate.reviewed_by_user_id = user.id if user is not None else None
     db.flush()
+    import_savepoint.commit()
     return {"product_id": str(product.id), "deduped": False}

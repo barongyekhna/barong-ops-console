@@ -400,6 +400,7 @@ const initialValues: ProductFormValues = {
     unit: "kg",
     value: "",
   },
+  package_includes: [""],
   manual_specs: [{ label: "", value: "", unit: "" }],
 };
 
@@ -912,6 +913,34 @@ export function ProductForm({
     clearFormErrors();
   }
 
+  function updatePackageItem(index: number, value: string) {
+    setValues((current) => ({
+      ...current,
+      package_includes: current.package_includes.map((item, itemIndex) =>
+        itemIndex === index ? value : item,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function addPackageItem() {
+    setValues((current) => ({
+      ...current,
+      package_includes: [...current.package_includes, ""],
+    }));
+    clearFormErrors();
+  }
+
+  function removePackageItem(index: number) {
+    setValues((current) => ({
+      ...current,
+      package_includes: current.package_includes.filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
+    clearFormErrors();
+  }
+
   function updateVariantPrice(index: number, value: string) {
     setValues((current) => ({
       ...current,
@@ -1096,6 +1125,13 @@ export function ProductForm({
       setValidationError("每条规格都必须同时填写规格名和真实值；未知项请留空。");
       return;
     }
+    const packageIncludes = values.package_includes
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (packageIncludes.some((item) => /[\u3400-\u9fff]/u.test(item))) {
+      setValidationError("包装清单必须逐项使用英文，不能包含中文。");
+      return;
+    }
     const structuredSpecs =
       populatedManualSpecs.length > 0
         ? {
@@ -1195,6 +1231,7 @@ export function ProductForm({
         target_market_label: market.label,
         variants,
         weight_json: weight.value,
+        package_includes_json: packageIncludes.length > 0 ? packageIncludes : null,
         structured_specs_json: structuredSpecs,
       });
       setValues(initialValues);
@@ -1619,6 +1656,38 @@ export function ProductForm({
               className="secondary-button"
               disabled={values.manual_specs.length <= 1}
               onClick={() => removeManualSpec(index)}
+              type="button"
+            >
+              删除
+            </button>
+          </div>
+        ))}
+      </section>
+
+      <section className={styles.formSection} aria-labelledby="k-package-includes">
+        <div className={styles.formSectionHeading}>
+          <h4 id="k-package-includes">包装清单 (What's in the box)</h4>
+          <span>每行一个真实组件，必须用英文；未知项留空。</span>
+          <button className="secondary-button" onClick={addPackageItem} type="button">
+            <Plus aria-hidden="true" size={15} />
+            添加组件
+          </button>
+        </div>
+        {values.package_includes.map((item, index) => (
+          <div className={styles.measurementGrid} key={`package-item-${index}`}>
+            <label className={styles.field}>
+              <span>组件 {index + 1}</span>
+              <input
+                lang="en"
+                onChange={(event) => updatePackageItem(index, event.target.value)}
+                placeholder="e.g. 1.5 qt pot"
+                value={item}
+              />
+            </label>
+            <button
+              className="secondary-button"
+              disabled={values.package_includes.length <= 1}
+              onClick={() => removePackageItem(index)}
               type="button"
             >
               删除

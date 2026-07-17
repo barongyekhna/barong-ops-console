@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import re
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlparse
+
+from .buyer_display import buyer_display_structured_specs
 
 
 _FORUM_DOMAINS = (
@@ -64,6 +67,31 @@ _ANSWER_CLAIM_TOPICS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("altitude", ("high altitude", "elevation")),
     ("cold", ("cold weather", "low temperature", "winter")),
 )
+_SPEC_NUMBER = re.compile(r"(?<!\d)\d[\d,]*(?:\.\d+)?")
+_SPEC_FACT_VALUE_KEYS = {
+    "value",
+    "raw_value",
+    "value_en",
+    "raw_value_en",
+    "min",
+    "max",
+}
+_SPEC_METADATA_SUBTREE_KEYS = {
+    "schema_version",
+    "source",
+    "buyer_translation",
+    "customer_translations",
+    "translation_requests",
+    "package_includes_source",
+    "source_url",
+    "url",
+    "platform",
+    "evidence_type",
+    "retrieved_at",
+    "observed_at",
+    "created_at",
+    "updated_at",
+}
 
 
 def _clean_text(value: Any, *, limit: int = 2000) -> str:
@@ -264,18 +292,93 @@ def _flatten_fact_text(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _canonical_number(value: str) -> str:
+    try:
+        number = Decimal(value.replace(",", ""))
+    except InvalidOperation:
+        return value.replace(",", "")
+    rendered = format(number.normalize(), "f")
+    return "0" if rendered in {"-0", ""} else rendered
+
+
+def structured_spec_number_tokens(structured_specs: Any) -> set[str]:
+    """Collect only factual spec values plus their US buyer-display numbers.
+
+    Identifiers, digests, labels, stable additional-spec keys, and translation
+    bookkeeping are metadata even when they contain digits.  Restricting the
+    source walk to explicit value fields prevents those digits from suppressing
+    an otherwise supported FAQ answer.
+    """
+
+    output: set[str] = set()
+
+    def collect_fact_value(value: Any) -> None:
+        if isinstance(value, dict):
+            for nested in value.values():
+                collect_fact_value(nested)
+            return
+        if isinstance(value, list):
+            for nested in value:
+                collect_fact_value(nested)
+            return
+        if value is None or isinstance(value, bool):
+            return
+        output.update(_canonical_number(match.group(0)) for match in _SPEC_NUMBER.finditer(str(value)))
+
+    def visit(value: Any) -> None:
+        if isinstance(value, dict):
+            for nested_key, nested in value.items():
+                key = str(nested_key).casefold()
+                if key in _SPEC_METADATA_SUBTREE_KEYS:
+                    continue
+                if key in _SPEC_FACT_VALUE_KEYS:
+                    collect_fact_value(nested)
+                elif isinstance(nested, (dict, list)):
+                    visit(nested)
+            return
+        if isinstance(value, list):
+            for nested in value:
+                visit(nested)
+
+    visit(structured_specs or {})
+    buyer_display = buyer_display_structured_specs(
+        structured_specs,
+        target_market="US",
+    )
+    for row in buyer_display.get("rows") or []:
+        if isinstance(row, dict):
+            collect_fact_value(row.get("display_value"))
+    return output
+
+
+def answer_spec_number_matches(answer: Any, structured_specs: Any) -> set[str]:
+    answer_numbers = {
+        _canonical_number(match.group(0))
+        for match in _SPEC_NUMBER.finditer(str(answer or ""))
+    }
+    return answer_numbers & structured_spec_number_tokens(structured_specs)
+
+
 def _answer_support_error(
     answer: str,
     *,
     cited_sources: list[dict[str, Any]],
     fact_corpus: str,
+    structured_spec_numbers: set[str] | None = None,
 ) -> str | None:
     cited_snippets = " ".join(
         str(source.get("snippet") or "") for source in cited_sources
     ).casefold()
     support = f"{fact_corpus} {cited_snippets}".casefold()
-    answer_numbers = set(re.findall(r"\d+(?:\.\d+)?", answer))
-    support_numbers = set(re.findall(r"\d+(?:\.\d+)?", support))
+    answer_numbers = {
+        _canonical_number(match.group(0)) for match in _SPEC_NUMBER.finditer(answer)
+    }
+    repeated_spec_numbers = answer_numbers & (structured_spec_numbers or set())
+    if repeated_spec_numbers:
+        return "answer_repeats_product_specification_number"
+    support_numbers = {
+        _canonical_number(match.group(0)) for match in _SPEC_NUMBER.finditer(support)
+    }
     if answer_numbers - support_numbers:
         return "answer_contains_unsupported_number"
     if _ABSOLUTE_SAFETY.search(answer) and not _ABSOLUTE_SAFETY.search(fact_corpus):
@@ -296,6 +399,7 @@ def validate_generated_faq(
     *,
     approved_selling_points: list[dict[str, Any]] | None = None,
     structured_specs: dict[str, Any] | None = None,
+    package_includes: list[str] | None = None,
 ) -> dict[str, Any]:
     """Drop fabricated/spec-parroting FAQ and stamp schema eligibility."""
 
@@ -314,6 +418,9 @@ def validate_generated_faq(
             *_flatten_fact_text(structured_specs or {}),
         ]
     ).casefold()
+    structured_spec_numbers = structured_spec_number_tokens(structured_specs)
+    if isinstance(package_includes, list) and package_includes:
+        structured_spec_numbers.add(str(len(package_includes)))
     raw_items = result.get("page_faq") if isinstance(result, dict) else None
     for raw in raw_items or []:
         if not isinstance(raw, dict):
@@ -347,6 +454,7 @@ def validate_generated_faq(
                 answer,
                 cited_sources=[sources[ref] for ref in refs],
                 fact_corpus=fact_corpus,
+                structured_spec_numbers=structured_spec_numbers,
             ) or ""
         if reason:
             dropped.append({"question": question, "reason": reason})

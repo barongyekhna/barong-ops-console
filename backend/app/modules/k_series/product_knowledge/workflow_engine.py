@@ -53,12 +53,19 @@ from .prompt_skills import (
     plain_chinese_instruction,
 )
 from .category_resolver import bind_google_category_id, category_is_bound
+from .buyer_display import buyer_display_structured_specs
 from .errors import KProductNotFoundError
 from .evidence_guard import (
+    canonical_package_includes,
+    enforce_package_evidence_consistency,
     enforce_title_evidence_consistency,
     project_approved_selling_points,
 )
-from .faq_research import build_faq_research, validate_generated_faq
+from .faq_research import (
+    build_faq_research,
+    structured_spec_number_tokens,
+    validate_generated_faq,
+)
 from .info_overlay import OverlayContractError, normalize_overlay_contract
 from .models import (
     KProductKnowledgeAIEvent,
@@ -2514,6 +2521,10 @@ def _product_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any]:
         "primary_use_case_en": product.primary_use_case_en,
         "target_customer_en": product.target_customer_en,
         "structured_specs_json": product.structured_specs_json,
+        "structured_specs_buyer_display": buyer_display_structured_specs(
+            product.structured_specs_json,
+            target_market=product.target_market or "US",
+        ),
         "organization_name": product.organization_name,
     }
 
@@ -2523,6 +2534,10 @@ def _copy_evidence_product_snapshot(
 ) -> dict[str, Any]:
     """Minimal copy input: identity plus facts, never legacy narrative claims."""
 
+    package_includes = canonical_package_includes(
+        getattr(product, "package_includes_json", None),
+        product.structured_specs_json,
+    )
     return {
         "id": str(product.id),
         "product_key": product.product_key,
@@ -2530,8 +2545,105 @@ def _copy_evidence_product_snapshot(
         "product_name_en": product.product_name_en,
         "product_type": product.product_type,
         "structured_specs_json": product.structured_specs_json,
+        "structured_specs_buyer_display": buyer_display_structured_specs(
+            product.structured_specs_json,
+            target_market=product.target_market or "US",
+        ),
+        "package_includes": package_includes,
         "organization_name": product.organization_name,
     }
+
+
+def _final_keywords_for_copy(
+    execution: KProductKnowledgeWorkflowExecution | None,
+) -> list[str]:
+    """Project the post-risk-review keyword set into copy-generation order."""
+
+    keyword_set = (
+        execution.final_keyword_set_json
+        if execution is not None
+        and (execution.risk_approval_log_json or {}).get("approved") is True
+        and isinstance(execution.final_keyword_set_json, dict)
+        else {}
+    )
+    return _dedupe_strings(
+        [
+            *_safe_string_list(keyword_set.get("primary_keywords")),
+            *_safe_string_list(keyword_set.get("secondary_keywords")),
+            *_safe_string_list(keyword_set.get("longtail_keywords")),
+        ]
+    )
+
+
+def _keyword_coverage_receipt(
+    result: dict[str, Any],
+    final_keywords: list[str],
+    *,
+    threshold: float = 0.60,
+) -> dict[str, Any]:
+    """Measure exact normalized phrase coverage on customer-facing copy only."""
+
+    surfaces = [
+        result.get("listing_copy"),
+        result.get("a_plus_outline"),
+        result.get("product_page_copy"),
+        result.get("page_faq"),
+        result.get("json_ld"),
+        result.get("seo"),
+    ]
+
+    def flatten(value: Any) -> list[str]:
+        if isinstance(value, dict):
+            return [text for nested in value.values() for text in flatten(nested)]
+        if isinstance(value, list):
+            return [text for nested in value for text in flatten(nested)]
+        return [str(value)] if isinstance(value, str) else []
+
+    corpus = " ".join(text for surface in surfaces for text in flatten(surface))
+    corpus = re.sub(r"<[^>]+>", " ", corpus)
+    corpus = re.sub(r"[^a-z0-9]+", " ", corpus.casefold()).strip()
+    keywords = _dedupe_strings(_safe_string_list(final_keywords))
+    covered: list[str] = []
+    missing: list[str] = []
+    for keyword in keywords:
+        normalized = re.sub(r"[^a-z0-9]+", " ", keyword.casefold()).strip()
+        if normalized and re.search(rf"(?:^|\s){re.escape(normalized)}(?:$|\s)", corpus):
+            covered.append(keyword)
+        else:
+            missing.append(keyword)
+    rate = (len(covered) / len(keywords)) if keywords else None
+    warning = rate is not None and rate < threshold
+    return {
+        "status": "warning" if warning else "passed" if keywords else "not_applicable",
+        "threshold": threshold,
+        "rate": round(rate, 4) if rate is not None else None,
+        "percent": round(rate * 100, 1) if rate is not None else None,
+        "keyword_count": len(keywords),
+        "covered_count": len(covered),
+        "covered_keywords": covered,
+        "missing_keywords": missing,
+        "warning": warning,
+    }
+
+
+def _stamp_keyword_coverage(
+    result: dict[str, Any], final_keywords: list[str]
+) -> dict[str, Any]:
+    output = dict(result)
+    coverage = _keyword_coverage_receipt(output, final_keywords)
+    output["coverage"] = coverage
+    if coverage["warning"]:
+        raw_warnings = output.get("warnings")
+        warnings = list(raw_warnings) if isinstance(raw_warnings, list) else []
+        warnings.append(
+            {
+                "code": "FINAL_KEYWORD_COVERAGE_LOW",
+                "message": "Final keyword coverage is below 60%; review copy wording.",
+                "coverage_rate": coverage["rate"],
+            }
+        )
+        output["warnings"] = warnings
+    return output
 
 
 _IMAGE_BRIEF_ROLE_ALIASES = {
@@ -2622,12 +2734,17 @@ def _image_brief_evidence_digest(
         if approved_points is not None
         else _approved_selling_points_snapshot(product)
     )
-    return _hash_json(
-        {
-            "selling_points_approved": points,
-            "structured_specs_json": getattr(product, "structured_specs_json", None),
-        }
+    payload = {
+        "selling_points_approved": points,
+        "structured_specs_json": getattr(product, "structured_specs_json", None),
+    }
+    package_includes = canonical_package_includes(
+        getattr(product, "package_includes_json", None),
+        getattr(product, "structured_specs_json", None),
     )
+    if package_includes:
+        payload["package_includes"] = package_includes
+    return _hash_json(payload)
 
 
 def _image_brief_error(message: str) -> KWorkflowExecutionError:
@@ -2691,6 +2808,8 @@ def _bind_image_to_selling_point(
 def _normalize_evidence_driven_image_brief(
     result: Any,
     approved_points: list[dict[str, Any]],
+    *,
+    require_dimension: bool = False,
 ) -> dict[str, Any]:
     """Validate the AI plan before it becomes an executable image brief."""
     if not isinstance(result, dict):
@@ -2700,6 +2819,7 @@ def _normalize_evidence_driven_image_brief(
         raise _image_brief_error("Image brief must include a non-empty images array.")
     images: list[dict[str, Any]] = []
     main_count = 0
+    dimension_count = 0
     seen_positions: set[int] = set()
     approved_ids = {
         str(point.get("id") or ""): index
@@ -2731,6 +2851,7 @@ def _normalize_evidence_driven_image_brief(
             image["placement"] = "gallery"
             image["overlay"] = None
         elif role == "dimension":
+            dimension_count += 1
             image["placement"] = "gallery"
 
         if role in _IMAGE_BRIEF_POINT_BOUND_ROLES:
@@ -2766,6 +2887,10 @@ def _normalize_evidence_driven_image_brief(
         images.append(image)
     if main_count != 1:
         raise _image_brief_error("Image brief must contain exactly one main image.")
+    if require_dimension and dimension_count == 0:
+        raise _image_brief_error(
+            "Image brief must contain a dimension image when verified dimensions exist."
+        )
     normalized = dict(result)
     normalized["images"] = images
     normalized["image_count"] = len(images)
@@ -3941,6 +4066,145 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "fail_safe": True,
             }
 
+    def _validate_faq_with_single_rewrite(
+        self,
+        result: dict[str, Any],
+        *,
+        research: dict[str, Any],
+        approved_points: list[dict[str, Any]],
+        structured_specs: dict[str, Any] | None,
+        package_includes: list[str],
+        key: ModuleExecutionKey,
+        gate_context: ModuleExecutionContext,
+    ) -> dict[str, Any]:
+        """Rewrite spec-number-parroting FAQ once, then fail-safe by dropping it."""
+
+        validated = validate_generated_faq(
+            result,
+            research,
+            approved_selling_points=approved_points,
+            structured_specs=structured_specs,
+            package_includes=package_includes,
+        )
+        quality = validated.get("faq_quality")
+        dropped = quality.get("dropped") if isinstance(quality, dict) else []
+        numeric_questions = {
+            str(item.get("question") or "").strip()
+            for item in dropped or []
+            if isinstance(item, dict)
+            and item.get("reason") == "answer_repeats_product_specification_number"
+            and str(item.get("question") or "").strip()
+        }
+        raw_faq = result.get("page_faq")
+        if not numeric_questions or not isinstance(raw_faq, list):
+            return validated
+        rewrite_items = [
+            item
+            for item in raw_faq
+            if isinstance(item, dict)
+            and str(item.get("question") or "").strip() in numeric_questions
+        ]
+        if not rewrite_items:
+            return validated
+        rewrite_audit: dict[str, Any] = {
+            "attempted": True,
+            "requested_count": len(rewrite_items),
+            "status": "failed",
+        }
+        try:
+            rewritten = self._execute_provider(
+                provider="chatgpt",
+                task_type="generate",
+                key=key,
+                gate_context=gate_context,
+                payload={
+                    "module_id": MODULE_KEY,
+                    "task": "faq_answer_rewrite",
+                    "instruction": (
+                        "Rewrite only each FAQ answer. Keep question, evidence_refs, and "
+                        "intent_cluster unchanged. Answer with practical advice, method, "
+                        "or tradeoffs; never repeat a product-specific number. Return only "
+                        "JSON with page_faq."
+                    ),
+                    "page_faq": rewrite_items,
+                    "faq_research": research,
+                    "forbidden_product_spec_numbers": sorted(
+                        {
+                            *structured_spec_number_tokens(structured_specs),
+                            *([str(len(package_includes))] if package_includes else []),
+                        }
+                    ),
+                },
+            )
+            rewritten_items = (
+                rewritten.get("page_faq") if isinstance(rewritten, dict) else None
+            )
+            if not isinstance(rewritten_items, list):
+                raise ValueError("FAQ rewrite response did not contain page_faq")
+            rewritten_answers = {
+                str(item.get("question") or "").strip(): str(
+                    item.get("answer") or ""
+                ).strip()
+                for item in rewritten_items
+                if isinstance(item, dict)
+                and str(item.get("question") or "").strip() in numeric_questions
+                and str(item.get("answer") or "").strip()
+            }
+            safe_rewrites: list[dict[str, Any]] = []
+            for original in rewrite_items:
+                question = str(original.get("question") or "").strip()
+                rewritten_answer = rewritten_answers.get(question)
+                # On an unknown/changed question, retain the original invalid
+                # item so deterministic validation drops it. Never trust the
+                # provider to rewrite refs, clusters, or the research question.
+                merged = dict(original)
+                if rewritten_answer:
+                    merged["answer"] = rewritten_answer
+                safe_rewrites.append(merged)
+            safe_by_question = {
+                str(item.get("question") or "").strip(): item
+                for item in safe_rewrites
+            }
+            retry_input = dict(result)
+            retry_input["page_faq"] = [
+                safe_by_question.get(str(item.get("question") or "").strip(), item)
+                if isinstance(item, dict)
+                else item
+                for item in raw_faq
+            ]
+            validated = validate_generated_faq(
+                retry_input,
+                research,
+                approved_selling_points=approved_points,
+                structured_specs=structured_specs,
+                package_includes=package_includes,
+            )
+            final_dropped = (validated.get("faq_quality") or {}).get("dropped") or []
+            repeated = sum(
+                1
+                for item in final_dropped
+                if isinstance(item, dict)
+                and item.get("reason")
+                == "answer_repeats_product_specification_number"
+            )
+            rewrite_audit.update(
+                {
+                    "status": "succeeded" if repeated == 0 else "discarded_after_retry",
+                    "discarded_after_retry": repeated,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 - FAQ never blocks copy/P
+            logger.warning(
+                "FAQ numeric-answer rewrite degraded error=%s",
+                exc.__class__.__name__,
+                exc_info=True,
+            )
+            rewrite_audit["error_class"] = exc.__class__.__name__
+        final_quality = dict(validated.get("faq_quality") or {})
+        final_quality["numeric_answer_rewrite"] = rewrite_audit
+        validated["faq_quality"] = final_quality
+        return validated
+
     def generate_marketing_copy(
         self,
         *,
@@ -3963,6 +4227,12 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "Approve at least one evidence-backed selling point before generating marketing copy.",
                 status_code=409,
             )
+        execution = self._latest_execution(product)
+        final_keywords = _final_keywords_for_copy(execution)
+        package_includes = canonical_package_includes(
+            getattr(product, "package_includes_json", None),
+            product.structured_specs_json,
+        )
         evidence_digest = _image_brief_evidence_digest(product, approved_points)
         faq_research = (
             self._research_faq_pain_points_fail_safe(
@@ -4004,6 +4274,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 _copy_evidence_product_snapshot(product), product
             ),
             "selling_points_approved": approved_points,
+            # SEO wording only. The instruction explicitly prevents keywords
+            # from becoming evidence for claims or concrete components.
+            "final_keywords": final_keywords,
             "evidence_digest": evidence_digest,
             "faq_research": faq_research,
             "site_brand": SITE_BRAND,
@@ -4026,12 +4299,20 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 status_code=502,
             )
         result = project_approved_selling_points(result, approved_points)
+        result = enforce_package_evidence_consistency(
+            result,
+            package_includes=package_includes,
+            structured_specs=product.structured_specs_json,
+        )
         if channel == "dtc":
-            result = validate_generated_faq(
+            result = self._validate_faq_with_single_rewrite(
                 result,
-                faq_research,
-                approved_selling_points=approved_points,
+                research=faq_research,
+                approved_points=approved_points,
                 structured_specs=product.structured_specs_json,
+                package_includes=package_includes,
+                key=key,
+                gate_context=gate_context,
             )
             # The neutral identity comes from the reviewed main keyword rather
             # than the raw long product name, which may itself contain an
@@ -4043,7 +4324,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 site_brand=SITE_BRAND,
                 approved_selling_points={"bullets": approved_points},
                 structured_specs=product.structured_specs_json,
+                package_includes=package_includes,
             )
+        result = _stamp_keyword_coverage(result, final_keywords)
         result["evidence_contract"] = "pdp-evidence-v1"
         result["evidence_digest"] = evidence_digest
         result["selling_points_digest"] = _hash_json(approved_points)
@@ -4141,14 +4424,65 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         # Release the read transaction before the long (~80s) AI call so the DB
         # does not drop the connection on idle-in-transaction timeout.
         self.db.commit()
-        result = self._execute_provider(
+        provider_result = self._execute_provider(
             provider="chatgpt",
             task_type="generate",
             key=key,
             gate_context=gate_context,
             payload=ai_input,
         )
-        result = _normalize_evidence_driven_image_brief(result, approved_points)
+        structured_specs = (
+            product.structured_specs_json
+            if isinstance(product.structured_specs_json, dict)
+            else {}
+        )
+        dimensions = structured_specs.get("dimensions")
+        require_dimension = isinstance(dimensions, dict) and any(
+            isinstance(dimensions.get(axis), dict)
+            and dimensions[axis].get("value") not in (None, "")
+            for axis in ("length", "width", "height")
+        )
+        try:
+            result = _normalize_evidence_driven_image_brief(
+                provider_result,
+                approved_points,
+                require_dimension=require_dimension,
+            )
+        except KWorkflowExecutionError as exc:
+            missing_required_dimension = (
+                require_dimension
+                and exc.code == "IMAGE_BRIEF_EVIDENCE_CONTRACT_INVALID"
+                and "must contain a dimension image" in str(exc).casefold()
+            )
+            if not missing_required_dimension:
+                raise
+            retry_input = {
+                **ai_input,
+                "task": "image_brief_generation_dimension_retry",
+                "correction": (
+                    "The previous plan omitted the mandatory role=dimension image. "
+                    "Return a corrected full brief with exactly one main plus at least "
+                    "one gallery dimension image whose structured overlay resolves to "
+                    "the supplied verified dimensions."
+                ),
+                "previous_invalid_output": provider_result,
+            }
+            retry_result = self._execute_provider(
+                provider="chatgpt",
+                task_type="generate",
+                key=key,
+                gate_context=gate_context,
+                payload=retry_input,
+            )
+            result = _normalize_evidence_driven_image_brief(
+                retry_result,
+                approved_points,
+                require_dimension=True,
+            )
+            result["dimension_retry"] = {
+                "attempted": True,
+                "status": "succeeded",
+            }
         result["evidence_digest"] = evidence_digest
         zh = self._plain_chinese(result, "作图指令", user=user, request=request)
         product = self._require_product(product_id, scope_context)

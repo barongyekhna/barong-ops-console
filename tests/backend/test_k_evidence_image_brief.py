@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -176,6 +177,91 @@ def test_image_brief_rejects_unbound_or_white_secondary_images(
     assert caught.value.code == "IMAGE_BRIEF_EVIDENCE_CONTRACT_INVALID"
 
 
+def test_image_brief_requires_dimension_role_when_dimensions_exist() -> None:
+    brief = _valid_brief()
+    brief["images"] = [
+        image
+        for image in brief["images"]
+        if isinstance(image, dict) and image.get("role") != "dimension"
+    ]
+
+    with pytest.raises(KWorkflowExecutionError, match="must contain a dimension image"):
+        _normalize_evidence_driven_image_brief(
+            brief,
+            _points(),
+            require_dimension=True,
+        )
+
+
+def test_render_model_automatically_retries_twice_with_exponential_backoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("K_IMAGE_RENDER_RETRY_BACKOFF_SECONDS", "0.25")
+    outcomes = iter([RuntimeError("provider timeout"), [], ["rendered"]])
+    delays: list[float] = []
+    calls = 0
+
+    def generate() -> list[object]:
+        nonlocal calls
+        calls += 1
+        outcome = next(outcomes)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    result = image_render_jobs._generate_candidates_with_retry(
+        generate,
+        job_id=uuid4(),
+        sleep=delays.append,
+    )
+
+    assert result == ["rendered"]
+    assert calls == 3
+    assert delays == [0.25, 0.5]
+
+
+def test_renderer_never_uses_alicdn_as_an_external_reference_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    product = SimpleNamespace(
+        id=uuid4(),
+        reference_image_url="https://cbu01.alicdn.com/supplier-reference.jpg",
+    )
+    download_calls: list[str] = []
+
+    class _DB:
+        commits = 0
+
+        def commit(self) -> None:
+            self.commits += 1
+
+    db = _DB()
+    monkeypatch.setattr(
+        image_render_jobs,
+        "_original_photo_assets",
+        lambda _db, _product: [],
+    )
+    monkeypatch.setattr(
+        image_render_jobs,
+        "download_reference_image",
+        lambda url: download_calls.append(url),
+    )
+
+    with pytest.raises(image_render_jobs.KImageRenderError) as caught:
+        image_render_jobs._resolve_reference_image(db, product)  # type: ignore[arg-type]
+
+    assert caught.value.code == "REFERENCE_IMAGE_MISSING"
+    assert download_calls == []
+    assert db.commits == 0
+    assert image_render_jobs.reference_available(db, product) is False  # type: ignore[arg-type]
+    assert (
+        image_render_jobs.render_reference_url_fallback_allowed(
+            "https://images-na.ssl-images-amazon.com/example.jpg"
+        )
+        is True
+    )
+
+
 def test_render_boundary_forces_dimension_gallery_and_white_style_only_on_main() -> None:
     dimension = {
         "role": "dimension",
@@ -200,3 +286,4 @@ def test_prompt_contracts_require_evidence_for_points_and_proof_shots() -> None:
     assert "proof_intent" in image
     assert "NO white-background secondary" in image
     assert "role=dimension is ALWAYS placement=gallery" in image
+    assert "MUST include at least one role=dimension image" in image

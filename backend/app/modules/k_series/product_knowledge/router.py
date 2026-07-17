@@ -132,6 +132,10 @@ from .schemas import (
 )
 from .scope_shim import KScopeContext, apply_scope_filters
 from .sku_allocator import ensure_product_sku
+from .structured_specs import (
+    apply_customer_translations,
+    pending_customer_translation_requests,
+)
 from .service import (
     archive_product,
     create_product,
@@ -156,6 +160,8 @@ from .workflow_engine import (
 )
 from ....services.module_execution_gate import ModuleExecutionGateError
 from .generation_jobs import enqueue_generation_jobs, jobs_status
+from .buyer_display import buyer_display_structured_specs
+from .evidence_guard import canonical_package_includes, package_claim_error
 from .image_render_jobs import (
     KImageRenderError,
     download_reference_image,
@@ -1418,6 +1424,7 @@ def _product_full_ai_payload(
         "short_description": product.short_description_en,
         "long_description": product.long_description_en,
         "structured_specs_json": product.structured_specs_json,
+        "package_includes": product.package_includes_json,
         "attributes": attributes,
         "variants": variants,
         "keywords": keywords,
@@ -1625,6 +1632,15 @@ def _selling_points_evidence_payload(
             .order_by(KProductKnowledgeKeyword.created_at.asc())
         )
     ]
+    package_includes = canonical_package_includes(
+        getattr(product, "package_includes_json", None),
+        product.structured_specs_json,
+    )
+    structured_specs = dict(product.structured_specs_json or {})
+    if package_includes:
+        # This compatibility projection makes ``spec:package_includes`` a real,
+        # resolvable evidence reference without changing the canonical K column.
+        structured_specs["package_includes"] = package_includes
     return {
         "identity": {
             "product_id": str(product.id),
@@ -1636,7 +1652,12 @@ def _selling_points_evidence_payload(
             "target_language": product.canonical_language,
             "main_keyword": product.primary_keyword,
         },
-        "structured_specs_json": product.structured_specs_json,
+        "structured_specs_json": structured_specs,
+        "structured_specs_buyer_display": buyer_display_structured_specs(
+            structured_specs,
+            target_market=product.target_market or "US",
+        ),
+        "package_includes": package_includes,
         "verified_features": verified_features,
         "operator_facts": [product.manual_notes] if product.manual_notes else [],
         # Keywords guide wording/search intent only; the prompt explicitly
@@ -1712,11 +1733,44 @@ def _selling_point_evidence_snapshot(
             "value_text": excerpt,
         }, None
     if value.startswith("spec:"):
+        structured_specs = dict(product.structured_specs_json or {})
+        package_includes = canonical_package_includes(
+            getattr(product, "package_includes_json", None),
+            product.structured_specs_json,
+        )
+        if package_includes:
+            structured_specs["package_includes"] = package_includes
         snapshot = _structured_spec_evidence_snapshot(
-            product.structured_specs_json, value[5:]
+            structured_specs, value[5:]
         )
         if snapshot is None:
             return None, f"Structured specification evidence was not found: {value}"
+        display_rows = buyer_display_structured_specs(
+            structured_specs,
+            target_market=product.target_market or "US",
+        ).get("rows") or []
+        display = next(
+            (
+                row
+                for row in display_rows
+                if isinstance(row, dict)
+                and (
+                    str(row.get("path") or "")
+                    == str(snapshot.get("path") or "")
+                    or str(row.get("path") or "").endswith(
+                        "." + str(snapshot.get("path") or "")
+                    )
+                )
+            ),
+            None,
+        )
+        if display is not None:
+            display_text = _evidence_value_text(
+                display.get("display_value"), display.get("display_unit")
+            )
+            snapshot["source_value_text"] = snapshot.get("value_text")
+            snapshot["buyer_display"] = display
+            snapshot["value_text"] = display_text
         return snapshot, None
     return _verified_feature_evidence_snapshot(db, product, value.split(":", 1)[1])
 
@@ -1763,6 +1817,9 @@ def _contains_evidence_phrase(haystack: str, phrase: str) -> bool:
 def _selling_point_support_error(
     bullet: SellingPointBullet,
     snapshot: dict[str, Any],
+    *,
+    package_includes: Any = None,
+    structured_specs: dict[str, Any] | None = None,
 ) -> str | None:
     claim = _normalized_evidence_text(bullet.text)
     fact = _normalized_evidence_text(
@@ -1771,11 +1828,18 @@ def _selling_point_support_error(
             for key in ("path", "label", "key", "value_text")
         )
     )
-    operator_bridge = _normalized_evidence_text(bullet.evidence_excerpt)
+    operator_bridge = (
+        _normalized_evidence_text(bullet.evidence_excerpt)
+        if snapshot.get("kind") == "operator_fact"
+        else ""
+    )
     support = f"{fact} {operator_bridge}".strip()
 
     claim_numbers = set(re.findall(r"\d+(?:\.\d+)?", claim))
     support_numbers = set(re.findall(r"\d+(?:\.\d+)?", support))
+    package_items = canonical_package_includes(package_includes, structured_specs)
+    if re.search(r"\b\d+\s*(?:-|\s)?\s*(?:piece|pieces|pc|pcs)\b", claim):
+        support_numbers.add(str(len(package_items)))
     unsupported_numbers = sorted(claim_numbers - support_numbers)
     if unsupported_numbers:
         return "Claim contains numbers absent from the current evidence: " + ", ".join(unsupported_numbers)
@@ -1791,6 +1855,13 @@ def _selling_point_support_error(
 
     if snapshot.get("kind") == "operator_fact" and not operator_bridge:
         return "operator_fact requires a concrete evidence_excerpt."
+    package_error = package_claim_error(
+        bullet.text,
+        package_includes=package_includes,
+        structured_specs=structured_specs,
+    )
+    if package_error:
+        return package_error
     return None
 
 
@@ -1801,7 +1872,22 @@ def _mark_selling_point_evidence_status(
 ) -> SellingPointsResponse:
     bullets = []
     for bullet in response.bullets:
-        error = _selling_point_evidence_error(db, product, bullet.evidence)
+        snapshot, error = _selling_point_evidence_snapshot(
+            db,
+            product,
+            bullet.evidence,
+            operator_excerpt=bullet.evidence_excerpt,
+        )
+        support_error = (
+            _selling_point_support_error(
+                bullet,
+                snapshot,
+                package_includes=getattr(product, "package_includes_json", None),
+                structured_specs=product.structured_specs_json,
+            )
+            if snapshot is not None
+            else None
+        )
         # ``operator_fact`` becomes verified only when the operator explicitly
         # approves/edits the row at the manual gate below.
         operator_attestation_pending = bullet.evidence == "operator_fact"
@@ -1810,7 +1896,7 @@ def _mark_selling_point_evidence_status(
                 update={
                     "verification_status": (
                         "unverified"
-                        if error or operator_attestation_pending
+                        if error or support_error or operator_attestation_pending
                         else "verified"
                     )
                 }
@@ -3868,6 +3954,9 @@ def generate_product_selling_points(
     )
     key = context.key_for_step("deepseek")
     product_payload = _selling_points_evidence_payload(db, product)
+    customer_translation_requests = pending_customer_translation_requests(
+        product.structured_specs_json
+    )
     scope_context = _scope_context(request)
     source_name = key.name
     db.rollback()
@@ -3878,12 +3967,14 @@ def generate_product_selling_points(
         "provider": "deepseek",
         "task_type": "selling_points",
         "selling_points_skill": selling_points_skill_context(),
+        "customer_translation_requests": customer_translation_requests,
         "required_output": [
             "high_conversion_selling_points",
             "structured_bullet_points",
             "marketing_optimized_copy",
             "translated_version",
             "chinese_translation",
+            *(["customer_translations"] if customer_translation_requests else []),
         ],
     }
     ai_payload["messages"] = _strict_json_messages(
@@ -3905,6 +3996,15 @@ def generate_product_selling_points(
         )
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
+    if customer_translation_requests:
+        translated_specs, translated_package = apply_customer_translations(
+            product.structured_specs_json,
+            provider_output,
+        )
+        if translated_specs is not None:
+            product.structured_specs_json = translated_specs
+        if translated_package:
+            product.package_includes_json = translated_package
     try:
         response = _normalize_selling_points_response(
             provider_output,
@@ -4089,7 +4189,12 @@ def approve_product_selling_points(
             )
             continue
         assert evidence_snapshot is not None
-        support_error = _selling_point_support_error(bullet, evidence_snapshot)
+        support_error = _selling_point_support_error(
+            bullet,
+            evidence_snapshot,
+            package_includes=getattr(product, "package_includes_json", None),
+            structured_specs=product.structured_specs_json,
+        )
         if support_error:
             review_errors.append(
                 {"index": index, "text": bullet.text, "error": support_error}

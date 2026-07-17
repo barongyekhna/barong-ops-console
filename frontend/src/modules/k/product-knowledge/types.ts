@@ -54,6 +54,7 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
     review_reason?: string | null;
   } | null;
   contains_battery?: boolean;
+  package_includes_json?: string[] | null;
   structured_specs_json?: Record<string, unknown> | null;
   selling_points_candidates_json?: Record<string, unknown> | null;
   selling_points_approved_json?: Record<string, unknown> | null;
@@ -112,6 +113,7 @@ export type ProductKnowledgeCreatePayload = {
   price_currency?: string | null;
   dimensions_json?: Record<string, unknown> | null;
   weight_json?: Record<string, unknown> | null;
+  package_includes_json?: string[] | null;
   structured_specs_json?: Record<string, unknown> | null;
   short_description_en?: string | null;
   long_description_en?: string | null;
@@ -126,6 +128,7 @@ export type ProductKnowledgeCreatePayload = {
 
 export type ProductKnowledgeUpdatePayload = Partial<{
   review_status: ProductReviewStatus;
+  package_includes_json: string[] | null;
   structured_specs_json: Record<string, unknown> | null;
 }>;
 
@@ -217,6 +220,7 @@ export type ProductFormValues = {
   target_market: string;
   dimensions_input: ProductDimensionsInput;
   weight_input: ProductWeightInput;
+  package_includes: string[];
   manual_specs: ProductManualSpecInput[];
   raw_input_text: string;
   variants: ProductVariantFormInput[];

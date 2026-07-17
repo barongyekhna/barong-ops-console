@@ -56,6 +56,7 @@ PRODUCT_CREATE_FIELDS = frozenset(
         "dimensions_json",
         "weight_json",
         "structured_specs_json",
+        "package_includes_json",
         "short_description_en",
         "long_description_en",
         "primary_use_case_en",
@@ -83,6 +84,7 @@ PRODUCT_UPDATE_FIELDS = frozenset(
         "dimensions_json",
         "weight_json",
         "structured_specs_json",
+        "package_includes_json",
         "short_description_en",
         "long_description_en",
         "primary_use_case_en",
@@ -305,10 +307,14 @@ def update_product(
         PRODUCT_UPDATE_FIELDS,
         exclude_unset=True,
     )
-    if (
+    facts_changed = (
         "structured_specs_json" in updates
         and product.structured_specs_json != updates["structured_specs_json"]
-    ):
+    ) or (
+        "package_includes_json" in updates
+        and product.package_includes_json != updates["package_includes_json"]
+    )
+    if facts_changed:
         invalidate_evidence_outputs(product)
     for field_name, value in updates.items():
         setattr(product, field_name, value)

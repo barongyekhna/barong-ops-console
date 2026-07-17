@@ -29,8 +29,10 @@ from backend.app.modules.k_series.product_knowledge.schemas import (
 from backend.app.modules.k_series.product_knowledge.scope_shim import KScopeContext
 from backend.app.modules.k_series.product_knowledge.service import get_product
 from backend.app.modules.k_series.product_knowledge.structured_specs import (
+    apply_customer_translations,
     normalize_1688_structured_specs,
     normalize_operator_structured_specs,
+    pending_customer_translation_requests,
 )
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
     _product_snapshot,
@@ -102,6 +104,7 @@ def test_1688_specs_are_normalized_with_original_evidence() -> None:
             "label": "输入电压",
             "value": "5V",
             "raw_value": "5V",
+            "value_en": "5V",
         }
     ]
     assert "ThirdParty" not in str(specs)
@@ -175,6 +178,88 @@ def test_measurements_never_promote_a_partial_multi_option_match() -> None:
     ]
 
 
+def test_1688_inline_english_and_package_list_are_persisted_once() -> None:
+    specs = normalize_1688_structured_specs(
+        {
+            "structured_attributes": [
+                {
+                    "name": "主锅容量",
+                    "value": "1.4升",
+                    "label_en": "Main Pot Capacity",
+                    "value_en": "1.4 L",
+                },
+                {
+                    "name": "包装清单",
+                    "value": "主锅、煎盘、碗",
+                    "value_en": "Pot; Frying pan; Bowl",
+                },
+            ]
+        }
+    )
+
+    assert specs is not None
+    assert specs["additional_specs"][0]["label_en"] == "Main Pot Capacity"
+    assert specs["additional_specs"][0]["value_en"] == "1.4 L"
+    assert specs["package_includes"] == ["Pot", "Frying pan", "Bowl"]
+    assert specs["package_includes_source"]["raw_value"] == "主锅、煎盘、碗"
+
+
+def test_customer_translation_requests_are_bound_and_failed_rows_do_not_repeat() -> None:
+    specs = normalize_1688_structured_specs(
+        {
+            "structured_attributes": [
+                {"name": "材质", "value": "铝合金"},
+                {"name": "主锅容量", "value": "1.4升"},
+                {"name": "包装清单", "value": "主锅、煎盘、碗"},
+            ]
+        }
+    )
+    assert specs is not None
+    requests = pending_customer_translation_requests(specs)
+    assert {item["kind"] for item in requests} == {
+        "standard_value",
+        "additional_spec",
+        "package_includes",
+    }
+    provider_rows = []
+    for request in requests:
+        if request["kind"] == "standard_value":
+            provider_rows.append(
+                {"request_id": request["request_id"], "value_en": "Aluminum alloy"}
+            )
+        elif request["kind"] == "additional_spec":
+            provider_rows.append(
+                {
+                    "request_id": request["request_id"],
+                    "label_en": "Main Pot Capacity",
+                    "value_en": "1.4 L",
+                }
+            )
+        else:
+            provider_rows.append(
+                {
+                    "request_id": request["request_id"],
+                    "package_includes": ["Pot", "Frying pan", "Bowl"],
+                }
+            )
+
+    translated, package = apply_customer_translations(
+        specs, {"customer_translations": provider_rows}
+    )
+
+    assert translated is not None
+    assert translated["material"]["value_en"] == "Aluminum alloy"
+    assert translated["additional_specs"][0]["label_en"] == "Main Pot Capacity"
+    assert package == ["Pot", "Frying pan", "Bowl"]
+    assert translated["buyer_translation"]["status"] == "succeeded"
+    assert pending_customer_translation_requests(translated) == []
+
+    failed, _ = apply_customer_translations(specs, {"customer_translations": []})
+    assert failed is not None
+    assert failed["buyer_translation"]["status"] == "failed"
+    assert pending_customer_translation_requests(failed) == []
+
+
 @pytest.mark.parametrize("schema", [ProductKnowledgeCreate, ProductKnowledgeUpdate])
 def test_public_k_payloads_accept_only_operator_evidenced_specs(schema: type) -> None:
     manual = {
@@ -202,6 +287,8 @@ def test_public_k_payloads_accept_only_operator_evidenced_specs(schema: type) ->
                 "value": "Piezo",
                 "raw_value": "Piezo",
                 "evidence": "operator_fact",
+                "label_en": "Ignition",
+                "value_en": "Piezo",
             }
         ],
     }
@@ -282,7 +369,7 @@ def test_k_copy_and_selling_point_payloads_receive_the_same_verified_specs() -> 
 
     assert _product_snapshot(product)["structured_specs_json"] == specs
     assert _product_full_ai_payload(db, product)["structured_specs_json"] == specs
-    assert "If a key is absent" in marketing_copy_instruction("dtc")
+    assert "structured_specs_buyer_display" in marketing_copy_instruction("dtc")
     assert "evidence_refs" in marketing_copy_instruction("dtc")
     assert "never infer, estimate, or fill it" in selling_points_instruction()
 
@@ -308,7 +395,7 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
             )
         )
     db = sessionmaker(bind=engine, expire_on_commit=False)()
-    specs = _verified_specs()
+    specs = {**_verified_specs(), "package_includes": ["Light", "Ground stake"]}
     candidate = FCategoryCandidate(
         id=uuid4(),
         category_id="990991",
@@ -346,6 +433,7 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
     assert product.scope_mode == "production"
     assert get_product(db, product_id=product.id, scope_context=scope).id == product.id
     assert product.structured_specs_json == specs
+    assert product.package_includes_json == ["Light", "Ground stake"]
     assert product.google_product_category == "990991"
     assert product.sku == "PL-001"
     assert variant is not None

@@ -14,6 +14,38 @@ from scripts.seed_google_taxonomy_zh import parse as parse_taxonomy_zh
 pytestmark = pytest.mark.unit
 
 
+def test_alicdn_download_uses_browser_identity_and_1688_referer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.modules.f_series.enrichment import images
+
+    captured: dict[str, str] = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return b"image-bytes"
+
+    def fake_urlopen(request, *, timeout: int):
+        assert timeout == images._DOWNLOAD_TIMEOUT_SECONDS
+        captured.update(
+            {key.lower(): value for key, value in request.header_items()}
+        )
+        return _Response()
+
+    monkeypatch.setattr(images, "urlopen", fake_urlopen)
+
+    assert images._download("https://cbu01.alicdn.com/example.jpg") == b"image-bytes"
+    assert captured["referer"] == "https://detail.1688.com/"
+    assert "Mozilla/5.0" in captured["user-agent"]
+    assert captured["accept"].startswith("image/")
+
+
 def test_extract_keywords_three_channels_deduped() -> None:
     raw = {
         "relatedSearches": [

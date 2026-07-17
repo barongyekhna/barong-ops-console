@@ -25,7 +25,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v4"
+UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v5"
 # n8n barongPupload001 must write ``shipping.shipping_class`` to the Woo
 # product's shipping_class; the n8n workflow change is intentionally external.
 
@@ -185,6 +185,9 @@ class Product(BaseModel):
     # attributes and its server-side Product JSON-LD filter.
     attributes: list[ProductAttribute] = Field(default_factory=list)
     structured_data: ProductSchema = Field(default_factory=ProductSchema)
+    # Reviewed English component list.  The same list renders the PDP box
+    # section and the Woo ``What's included`` attribute.
+    package_includes: list[str] = Field(default_factory=list)
     keywords: Keywords = Field(default_factory=Keywords)
     seo: Seo = Field(default_factory=Seo)
     variants: list[Variant] = Field(default_factory=list)

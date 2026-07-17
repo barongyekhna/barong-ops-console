@@ -560,6 +560,9 @@ export function ProductDetail({
   const [manualSpecs, setManualSpecs] = useState<ManualSpecDraft[]>([]);
   const [specError, setSpecError] = useState("");
   const [isSavingSpecs, setIsSavingSpecs] = useState(false);
+  const [packageIncludes, setPackageIncludes] = useState<string[]>([""]);
+  const [packageError, setPackageError] = useState("");
+  const [isSavingPackage, setIsSavingPackage] = useState(false);
   const activeProductIdRef = useRef<string | null>(product?.id ?? null);
   activeProductIdRef.current = product?.id ?? null;
 
@@ -809,6 +812,16 @@ export function ProductDetail({
     setSpecError("");
   }, [shippingProduct?.id, shippingProduct?.structured_specs_json]);
 
+  useEffect(() => {
+    const items = Array.isArray(shippingProduct?.package_includes_json)
+      ? shippingProduct.package_includes_json.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [];
+    setPackageIncludes(items.length > 0 ? items : [""]);
+    setPackageError("");
+  }, [shippingProduct?.id, shippingProduct?.package_includes_json]);
+
   const loadKeywordEntries = useCallback(async () => {
     if (!product) {
       setKeywordEntries([]);
@@ -1003,6 +1016,35 @@ export function ProductDetail({
       setSpecError(error instanceof Error ? error.message : "规格保存失败。");
     } finally {
       setIsSavingSpecs(false);
+    }
+  }
+
+  function updatePackageItem(index: number, value: string) {
+    setPackageIncludes((current) =>
+      current.map((item, itemIndex) => (itemIndex === index ? value : item)),
+    );
+    setPackageError("");
+  }
+
+  async function savePackageIncludes() {
+    const populated = packageIncludes.map((item) => item.trim()).filter(Boolean);
+    if (populated.some((item) => /[\u3400-\u9fff]/u.test(item))) {
+      setPackageError("包装清单必须逐项使用英文，不能包含中文。");
+      return;
+    }
+    setIsSavingPackage(true);
+    setPackageError("");
+    try {
+      await updateProduct(currentProduct.id, {
+        package_includes_json: populated.length > 0 ? populated : null,
+      });
+      await refreshProductDetail(currentProduct.id);
+    } catch (error) {
+      setPackageError(
+        error instanceof Error ? error.message : "包装清单保存失败。",
+      );
+    } finally {
+      setIsSavingPackage(false);
     }
   }
 
@@ -1696,6 +1738,70 @@ export function ProductDetail({
           ) : null}
         </section>
       ) : null}
+
+      <section className={styles.workflowSection} aria-labelledby="k-package-includes">
+        <div className={styles.sellingPointsHeading}>
+          <div>
+            <span className={styles.eyebrow}>套装证据</span>
+            <h4 id="k-package-includes">包装清单 (What's in the box)</h4>
+          </div>
+          <button
+            className="secondary-button"
+            onClick={() => setPackageIncludes((current) => [...current, ""])}
+            type="button"
+          >
+            <Plus aria-hidden="true" size={15} />
+            添加组件
+          </button>
+        </div>
+        <p className={styles.keywordAiNotice}>
+          每行一个已核实的组件，必须用英文；件数声明将严格按此清单校验。
+        </p>
+        {packageIncludes.map((item, index) => (
+          <div className={styles.workflowStartGrid} key={`package-item-${index}`}>
+            <label className={styles.field}>
+              <span>组件 {index + 1}</span>
+              <input
+                lang="en"
+                onChange={(event) => updatePackageItem(index, event.target.value)}
+                placeholder="e.g. 1.5 qt pot"
+                value={item}
+              />
+            </label>
+            <button
+              className="secondary-button"
+              disabled={packageIncludes.length <= 1}
+              onClick={() =>
+                setPackageIncludes((current) =>
+                  current.filter((_, itemIndex) => itemIndex !== index),
+                )
+              }
+              type="button"
+            >
+              删除
+            </button>
+          </div>
+        ))}
+        {packageError ? (
+          <p className={styles.sellingPointsError}>{packageError}</p>
+        ) : null}
+        <div className={styles.sectionFooter}>
+          <span>留空表示未知，不会自动补齐或猜测组件。</span>
+          <button
+            className="primary-button"
+            disabled={isSavingPackage}
+            onClick={() => void savePackageIncludes()}
+            type="button"
+          >
+            {isSavingPackage ? (
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <Save aria-hidden="true" size={16} />
+            )}
+            保存包装清单
+          </button>
+        </div>
+      </section>
 
       <section className={styles.workflowSection} aria-labelledby="k-fact-specs">
         <div className={styles.sellingPointsHeading}>

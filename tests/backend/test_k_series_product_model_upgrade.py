@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from base64 import b64decode
 from io import BytesIO
 from types import SimpleNamespace
@@ -516,12 +518,32 @@ def test_product_readiness_requires_submitted_snapshots_and_detects_keyword_drif
         )
     db.flush()
 
+    evidence_snapshot = {
+        "evidence": "operator_fact",
+        "kind": "operator_fact",
+        "value_text": "Ready selling point",
+    }
+    evidence_digest = hashlib.sha256(
+        json.dumps(
+            evidence_snapshot,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
     selling_points_payload = {
         "bullets": [
             {
+                "id": "ready-point",
                 "category": "conversion",
                 "importance_score": 1,
                 "text": "Ready selling point",
+                "evidence": "operator_fact",
+                "evidence_excerpt": "Ready selling point",
+                "evidence_snapshot": evidence_snapshot,
+                "evidence_digest": evidence_digest,
+                "verification_status": "verified",
+                "review_decision": "approve",
             }
         ],
         "seo_keywords": ["ready keyword"],
@@ -535,6 +557,7 @@ def test_product_readiness_requires_submitted_snapshots_and_detects_keyword_drif
         "product_id": str(product.id),
         "review_status": "approved",
     }
+    product.selling_points_approved_json = selling_points_payload
     product.ai_warnings_json = {"selling_points": selling_points_payload}
     db.add(product)
     db.flush()

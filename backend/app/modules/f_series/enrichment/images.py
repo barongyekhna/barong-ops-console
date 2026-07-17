@@ -70,12 +70,25 @@ def sniff_media_type(data: bytes) -> str:
 
 
 def _download(url: str) -> bytes:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    # 1688's CDN intermittently returns 420/403 to bare server clients.  Use a
+    # normal browser identity and the supplier-detail origin, never a user
+    # supplied Referer.  Amazon hosts only need the neutral browser headers.
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/126.0.0.0 Safari/537.36"
+        ),
+        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.8",
+    }
+    if host == "alicdn.com" or host.endswith(".alicdn.com"):
+        headers["Referer"] = "https://detail.1688.com/"
     request = Request(
         url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (barong-f-image-cache)",
-            "Accept": "image/*",
-        },
+        headers=headers,
     )
     with urlopen(request, timeout=_DOWNLOAD_TIMEOUT_SECONDS) as response:
         return response.read(_MAX_BYTES + 1)

@@ -943,3 +943,83 @@ def test_image_brief_uses_only_approved_points_and_minimal_fact_snapshot() -> No
     assert captured["selling_points_approved"][0]["id"] == "operator-steel"
     assert len(captured["evidence_digest"]) == 64
     assert generated.image_instruction_json["evidence_digest"] == captured["evidence_digest"]
+
+
+def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None:
+    db, user, scope, engine, product = _setup_engine()
+    _approve_operator_point(product)
+    product.marketing_copy_json = {"evidence_contract": "pdp-evidence-v1"}
+    product.structured_specs_json = {
+        "dimensions": {
+            "unit": "cm",
+            "height": {"value": 16, "unit": "cm", "evidence": "operator_fact"},
+        }
+    }
+    db.add(product)
+    db.commit()
+    image_calls: list[dict[str, Any]] = []
+
+    def provider(key: ModuleExecutionKey, payload: dict[str, Any]) -> dict[str, Any]:
+        if key.step_name == "image_brief_generation":
+            image_calls.append(payload)
+            if len(image_calls) == 1:
+                return {
+                    "images": [
+                        {
+                            "position": 1,
+                            "role": "main",
+                            "placement": "gallery",
+                            "prompt": "Pure white product main.",
+                        }
+                    ]
+                }
+            return {
+                "images": [
+                    {
+                        "position": 1,
+                        "role": "main",
+                        "placement": "gallery",
+                        "prompt": "Pure white product main.",
+                    },
+                    {
+                        "position": 2,
+                        "role": "dimension",
+                        "placement": "gallery",
+                        "prompt": "Clean dimension base without rendered text.",
+                        "overlay": {
+                            "schema_version": "k-info-overlay-v1",
+                            "role": "dimension",
+                            "items": [
+                                {
+                                    "type": "dimension",
+                                    "source_field": "dimensions.height",
+                                    "line": {
+                                        "start": {"x": 0.2, "y": 0.2},
+                                        "end": {"x": 0.2, "y": 0.8},
+                                    },
+                                    "text_anchor": {"x": 0.1, "y": 0.5},
+                                }
+                            ],
+                        },
+                    },
+                ]
+            }
+        if key.step_name == "translate_zh":
+            return {"content": "图片指令"}
+        raise AssertionError(key.step_name)
+
+    engine.provider_client = provider
+    generated = engine.generate_image_brief(
+        product_id=product.id,
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert len(image_calls) == 2
+    assert image_calls[1]["task"] == "image_brief_generation_dimension_retry"
+    assert "mandatory role=dimension" in image_calls[1]["correction"]
+    assert generated.image_instruction_json["dimension_retry"] == {
+        "attempted": True,
+        "status": "succeeded",
+    }

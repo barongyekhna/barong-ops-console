@@ -11,12 +11,19 @@ original label and value so downstream consumers can audit what was claimed.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
 from typing import Any
+
+from .buyer_display import (
+    buyer_english_text,
+    contains_cjk,
+    normalize_package_includes,
+)
 
 
 STRUCTURED_SPECS_SCHEMA_VERSION = "1.0"
@@ -97,6 +104,35 @@ _VALUE_KEYS = (
     "value",
 )
 
+_LABEL_EN_KEYS = (
+    "label_en",
+    "name_en",
+    "attribute_name_en",
+    "property_name_en",
+    "source_label_en",
+)
+_VALUE_EN_KEYS = (
+    "value_en",
+    "attribute_value_en",
+    "property_value_en",
+    "raw_value_en",
+)
+
+_PACKAGE_LABEL_TERMS = (
+    "包装清单",
+    "装箱清单",
+    "配件清单",
+    "套装清单",
+    "包装内容",
+    "清单",
+    "packageincludes",
+    "packagelist",
+    "packinglist",
+    "whatsincluded",
+    "includeditems",
+    "boxcontents",
+)
+
 _EMPTY_VALUE_MARKERS = frozenset(
     {
         "",
@@ -155,8 +191,15 @@ def normalize_1688_structured_specs(
     }
     additional: list[dict[str, Any]] = []
     additional_seen: set[tuple[str, str]] = set()
+    inline_translations = _collect_inline_translations(source_payload)
 
-    for label, raw_value in _collect_attribute_pairs(source_payload):
+    source_pairs = _dedupe_pairs(
+        [
+            *_collect_attribute_pairs(source_payload),
+            *_collect_package_pairs(source_payload),
+        ]
+    )
+    for label, raw_value in source_pairs:
         value_text = _value_text(raw_value)
         if not _usable_value(value_text):
             continue
@@ -164,9 +207,37 @@ def normalize_1688_structured_specs(
             # Identity fields are not product specifications and must never
             # smuggle a supplier/third-party brand into K generation prompts.
             continue
+        translation = inline_translations.get(
+            (label.casefold(), value_text.casefold()),
+            {},
+        )
+        if _is_package_includes_label(label):
+            source_record: dict[str, Any] = {
+                "raw_value": value_text[:4000],
+                "source_label": label[:255],
+            }
+            translated_value = buyer_english_text(translation.get("value_en"))
+            if translated_value:
+                source_record["value_en"] = translated_value[:4000]
+            output["package_includes_source"] = source_record
+            public_source: Any = translated_value
+            if public_source is None and not contains_cjk(value_text):
+                public_source = value_text
+            package_includes = normalize_package_includes(
+                public_source,
+                reject_cjk=False,
+            )
+            if package_includes:
+                output["package_includes"] = package_includes
+            continue
         spec_key = _standard_key(label)
         if spec_key is None:
-            item = _additional_spec(label, value_text)
+            item = _additional_spec(
+                label,
+                value_text,
+                label_en=translation.get("label_en"),
+                value_en=translation.get("value_en"),
+            )
             dedupe_key = (item["label"].casefold(), item["raw_value"].casefold())
             if dedupe_key not in additional_seen:
                 additional_seen.add(dedupe_key)
@@ -177,12 +248,20 @@ def normalize_1688_structured_specs(
             # The supplier supplied something, but it was not strong enough to
             # support the standard claim (for example "waterproof" without an
             # IP code).  Preserve the evidence only as an unmapped attribute.
-            item = _additional_spec(label, value_text)
+            item = _additional_spec(
+                label,
+                value_text,
+                label_en=translation.get("label_en"),
+                value_en=translation.get("value_en"),
+            )
             dedupe_key = (item["label"].casefold(), item["raw_value"].casefold())
             if dedupe_key not in additional_seen:
                 additional_seen.add(dedupe_key)
                 additional.append(item)
             continue
+        translated_value = buyer_english_text(translation.get("value_en"))
+        if translated_value:
+            parsed["value_en"] = translated_value[:1000]
         _merge_standard_spec(output, spec_key, parsed)
 
     _merge_detail_measurements(output, source_payload)
@@ -194,7 +273,11 @@ def normalize_1688_structured_specs(
     if additional:
         output["additional_specs"] = additional[:100]
 
-    if not any(key in output for key in STANDARD_SPEC_KEYS) and not additional:
+    if (
+        not any(key in output for key in STANDARD_SPEC_KEYS)
+        and not additional
+        and "package_includes_source" not in output
+    ):
         return None
     return output
 
@@ -203,6 +286,241 @@ def has_standard_specs(value: Any) -> bool:
     """Whether a stored contract contains at least one normalized standard key."""
 
     return isinstance(value, dict) and any(key in value for key in STANDARD_SPEC_KEYS)
+
+
+def package_includes_from_structured_specs(value: Any) -> list[str]:
+    """Read only a completed English package list from the specs contract."""
+
+    if not isinstance(value, dict):
+        return []
+    return normalize_package_includes(
+        value.get("package_includes"),
+        reject_cjk=False,
+    )
+
+
+def _translation_request_id(path: str, source: Any) -> str:
+    raw = json.dumps(
+        {"path": path, "source": source},
+        ensure_ascii=False,
+        sort_keys=True,
+        default=str,
+    )
+    return "buyer-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _customer_translation_requests(
+    structured_specs: Any,
+) -> list[dict[str, Any]]:
+    if not isinstance(structured_specs, dict):
+        return []
+    requests: list[dict[str, Any]] = []
+    for key in sorted(STANDARD_SPEC_KEYS):
+        node = structured_specs.get(key)
+        if not isinstance(node, dict):
+            continue
+        source_value = node.get("value")
+        if not contains_cjk(source_value) or buyer_english_text(node.get("value_en")):
+            continue
+        path = key
+        requests.append(
+            {
+                "request_id": _translation_request_id(path, source_value),
+                "path": path,
+                "kind": "standard_value",
+                "source_label": node.get("source_label") or key,
+                "source_value": source_value,
+                "required_output": ["value_en"],
+            }
+        )
+
+    additional = structured_specs.get("additional_specs")
+    if isinstance(additional, list):
+        for index, item in enumerate(additional):
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key") or f"row_{index + 1}").strip()
+            needs: list[str] = []
+            if not buyer_english_text(item.get("label_en")):
+                needs.append("label_en")
+            if not buyer_english_text(item.get("value_en")):
+                needs.append("value_en")
+            if not needs:
+                continue
+            source = {
+                "label": item.get("label") or item.get("source_label"),
+                "value": item.get("raw_value") or item.get("value"),
+            }
+            path = f"additional_specs.{key}"
+            requests.append(
+                {
+                    "request_id": _translation_request_id(path, source),
+                    "path": path,
+                    "kind": "additional_spec",
+                    "source_label": source["label"],
+                    "source_value": source["value"],
+                    "required_output": needs,
+                }
+            )
+
+    package_source = structured_specs.get("package_includes_source")
+    if (
+        isinstance(package_source, dict)
+        and not package_includes_from_structured_specs(structured_specs)
+    ):
+        source_value = package_source.get("raw_value")
+        if source_value not in (None, "", [], {}):
+            path = "package_includes"
+            requests.append(
+                {
+                    "request_id": _translation_request_id(path, source_value),
+                    "path": path,
+                    "kind": "package_includes",
+                    "source_label": package_source.get("source_label"),
+                    "source_value": source_value,
+                    "required_output": ["package_includes"],
+                    "instruction": "Return one English component per list item.",
+                }
+            )
+    return requests
+
+
+def _translation_request_digest(requests: list[dict[str, Any]]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            requests,
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+
+def pending_customer_translation_requests(
+    structured_specs: Any,
+) -> list[dict[str, Any]]:
+    """List stable, evidence-bound fields that still need English translation.
+
+    A failed attempt for the same exact source digest is not returned again;
+    changing the supplier/operator fact creates a new request digest and makes
+    it eligible for one fresh attempt.
+    """
+
+    requests = _customer_translation_requests(structured_specs)
+    if not requests or not isinstance(structured_specs, dict):
+        return requests
+    attempt = structured_specs.get("buyer_translation")
+    if isinstance(attempt, dict) and attempt.get("attempted") is True:
+        attempted_ids = {
+            str(item)
+            for key in ("completed_request_ids", "failed_request_ids")
+            for item in (attempt.get(key) or [])
+        }
+        requests = [
+            request
+            for request in requests
+            if request["request_id"] not in attempted_ids
+        ]
+    return requests
+
+
+def apply_customer_translations(
+    structured_specs: Any,
+    provider_output: Any,
+) -> tuple[dict[str, Any] | None, list[str] | None]:
+    """Safely persist one provider translation pass.
+
+    Only request IDs generated from the current facts are accepted.  Any CJK
+    or missing required result fails that row closed.  Valid rows are retained,
+    while the root attempt marker prevents an unchanged failed payload from
+    causing repeated provider calls.
+    """
+
+    if not isinstance(structured_specs, dict):
+        return None, None
+    output = copy.deepcopy(structured_specs)
+    requests = _customer_translation_requests(output)
+    digest = _translation_request_digest(requests)
+    raw_translations = (
+        provider_output.get("customer_translations")
+        if isinstance(provider_output, dict)
+        else None
+    )
+    if not isinstance(raw_translations, list) and isinstance(provider_output, dict):
+        raw_translations = provider_output.get("translations")
+    rows = raw_translations if isinstance(raw_translations, list) else []
+    by_id = {
+        str(item.get("request_id") or "").strip(): item
+        for item in rows
+        if isinstance(item, dict) and str(item.get("request_id") or "").strip()
+    }
+    completed: list[str] = []
+    failed: list[str] = []
+    package_includes = package_includes_from_structured_specs(output)
+
+    for request in requests:
+        request_id = request["request_id"]
+        row = by_id.get(request_id, {})
+        kind = request["kind"]
+        if kind == "package_includes":
+            candidate = row.get("package_includes") if isinstance(row, dict) else None
+            if candidate is None and isinstance(provider_output, dict):
+                candidate = provider_output.get("package_includes")
+            try:
+                translated_package = normalize_package_includes(candidate)
+            except ValueError:
+                translated_package = []
+            if not translated_package:
+                failed.append(request_id)
+                continue
+            output["package_includes"] = translated_package
+            package_includes = translated_package
+            completed.append(request_id)
+            continue
+
+        label_en = buyer_english_text(row.get("label_en"), limit=255)
+        value_en = buyer_english_text(row.get("value_en"), limit=1000)
+        required = set(request.get("required_output") or [])
+        if ("label_en" in required and not label_en) or (
+            "value_en" in required and not value_en
+        ):
+            failed.append(request_id)
+            continue
+        if kind == "standard_value":
+            node = output.get(request["path"])
+            if not isinstance(node, dict) or not value_en:
+                failed.append(request_id)
+                continue
+            node["value_en"] = value_en
+        else:
+            stable_key = request["path"].split(".", 1)[1]
+            matched = False
+            for item in output.get("additional_specs") or []:
+                if not isinstance(item, dict) or str(item.get("key") or "") != stable_key:
+                    continue
+                if label_en:
+                    item["label_en"] = label_en
+                if value_en:
+                    item["value_en"] = value_en
+                matched = True
+                break
+            if not matched:
+                failed.append(request_id)
+                continue
+        completed.append(request_id)
+
+    status = "succeeded" if not failed else "failed"
+    if not requests:
+        status = "not_required"
+    output["buyer_translation"] = {
+        "attempted": bool(requests),
+        "status": status,
+        "request_digest": digest,
+        "completed_request_ids": completed,
+        "failed_request_ids": failed,
+    }
+    return output, (package_includes or None)
 
 
 def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
@@ -317,8 +635,18 @@ def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
             "raw_value": value[:1000],
             "evidence": "operator_fact",
         }
+        label_en = buyer_english_text(raw.get("label_en"), limit=255)
+        if label_en is None:
+            label_en = buyer_english_text(label, limit=255)
+        value_en = buyer_english_text(raw.get("value_en"), limit=1000)
+        if value_en is None:
+            value_en = buyer_english_text(value, limit=1000)
+        if label_en:
+            item["label_en"] = label_en
+        if value_en:
+            item["value_en"] = value_en
         unit = _clean_text(raw.get("unit"))
-        if unit:
+        if unit and not contains_cjk(unit):
             item["unit"] = unit[:50]
         additional.append(item)
     if additional:
@@ -338,6 +666,78 @@ def _source_record(payload: dict[str, Any], *, source_url: str | None) -> dict[s
     if url:
         record["url"] = url[:2048]
     return record
+
+
+def _collect_inline_translations(
+    payload: dict[str, Any],
+) -> dict[tuple[str, str], dict[str, str]]:
+    """Collect already-authored English fields without treating them as proof.
+
+    F/provider payloads differ in casing and nesting, so this scans the same
+    bounded object graph as attribute extraction.  Only non-CJK English text
+    is retained; source labels/values remain the evidence of record.
+    """
+
+    output: dict[tuple[str, str], dict[str, str]] = {}
+
+    def visit(value: Any, *, depth: int) -> None:
+        if depth > 6:
+            return
+        if isinstance(value, list):
+            for item in value:
+                visit(item, depth=depth + 1)
+            return
+        if not isinstance(value, dict):
+            return
+        normalized = {_normalized_key(key): nested for key, nested in value.items()}
+        label = next(
+            (
+                _clean_text(normalized.get(key))
+                for key in _LABEL_KEYS
+                if normalized.get(key) is not None
+            ),
+            None,
+        )
+        raw_value = next(
+            (normalized.get(key) for key in _VALUE_KEYS if normalized.get(key) is not None),
+            None,
+        )
+        value_text = _value_text(raw_value)
+        if label and value_text:
+            translation: dict[str, str] = {}
+            label_en = next(
+                (
+                    buyer_english_text(normalized.get(key), limit=255)
+                    for key in _LABEL_EN_KEYS
+                    if normalized.get(key) is not None
+                ),
+                None,
+            )
+            value_en = next(
+                (
+                    buyer_english_text(normalized.get(key), limit=1000)
+                    for key in _VALUE_EN_KEYS
+                    if normalized.get(key) is not None
+                ),
+                None,
+            )
+            if label_en:
+                translation["label_en"] = label_en
+            if value_en:
+                translation["value_en"] = value_en
+            if translation:
+                output[(label.casefold(), value_text.casefold())] = translation
+        for nested in value.values():
+            if isinstance(nested, (dict, list)):
+                visit(nested, depth=depth + 1)
+
+    visit(payload, depth=0)
+    return output
+
+
+def _is_package_includes_label(label: str) -> bool:
+    token = _label_token(label)
+    return any(term in token for term in _PACKAGE_LABEL_TERMS)
 
 
 def _collect_attribute_pairs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
@@ -362,6 +762,33 @@ def _collect_attribute_pairs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
     pairs: list[tuple[str, Any]] = []
     for container in containers:
         pairs.extend(_pairs_from_container(container))
+    return _dedupe_pairs(pairs)
+
+
+def _collect_package_pairs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
+    """Find real package-list fields in attributes or detail crawler payloads."""
+
+    pairs: list[tuple[str, Any]] = []
+
+    def visit(value: Any, *, depth: int) -> None:
+        if depth > 7:
+            return
+        if isinstance(value, list):
+            for nested in value:
+                if isinstance(nested, (dict, list)):
+                    visit(nested, depth=depth + 1)
+            return
+        if not isinstance(value, dict):
+            return
+        for raw_key, nested in value.items():
+            if _is_package_includes_label(str(raw_key)) and not isinstance(nested, dict):
+                rendered = _value_text(nested)
+                if rendered:
+                    pairs.append((str(raw_key), rendered))
+            if isinstance(nested, (dict, list)):
+                visit(nested, depth=depth + 1)
+
+    visit(payload, depth=0)
     return _dedupe_pairs(pairs)
 
 
@@ -788,17 +1215,34 @@ def _merge_detail_measurements(output: dict[str, Any], payload: dict[str, Any]) 
             )
 
 
-def _additional_spec(label: str, raw_value: str) -> dict[str, Any]:
+def _additional_spec(
+    label: str,
+    raw_value: str,
+    *,
+    label_en: Any = None,
+    value_en: Any = None,
+) -> dict[str, Any]:
     ascii_key = re.sub(r"[^a-z0-9]+", "_", unicodedata.normalize("NFKC", label).lower()).strip("_")
     if not ascii_key:
         digest = hashlib.sha256(label.encode("utf-8")).hexdigest()[:10]
         ascii_key = f"supplier_attribute_{digest}"
-    return {
+    item = {
         "key": ascii_key[:128],
         "label": label[:255],
         "value": raw_value[:1000],
         "raw_value": raw_value[:1000],
     }
+    public_label = buyer_english_text(label_en, limit=255)
+    if public_label is None:
+        public_label = buyer_english_text(label, limit=255)
+    public_value = buyer_english_text(value_en, limit=1000)
+    if public_value is None:
+        public_value = buyer_english_text(raw_value, limit=1000)
+    if public_label:
+        item["label_en"] = public_label
+    if public_value:
+        item["value_en"] = public_value
+    return item
 
 
 def _evidence(

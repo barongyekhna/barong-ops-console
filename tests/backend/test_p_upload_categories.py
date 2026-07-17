@@ -109,8 +109,8 @@ def test_assemble_includes_resolved_path_and_wc_leaf_id(
 
     payload = _assemble(_product(), db).model_dump(mode="json")
 
-    assert payload["schema_version"] == "p-upload-package-v4"
-    assert UPLOAD_PACKAGE_SCHEMA_VERSION == "p-upload-package-v4"
+    assert payload["schema_version"] == "p-upload-package-v5"
+    assert UPLOAD_PACKAGE_SCHEMA_VERSION == "p-upload-package-v5"
     assert payload["product"]["category"]["path"] == [
         "Home & Garden",
         "Kitchen & Dining",

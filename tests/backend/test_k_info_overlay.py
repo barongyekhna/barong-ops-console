@@ -149,11 +149,11 @@ def test_us_overlay_converts_metric_display_only() -> None:
             "dimensions.height",
             target_market="US",
         )
-        == "Height: 16.54 inch"
+        == "Height: 16.5 in"
     )
     assert (
         resolve_structured_spec_text(specs, "weight", target_market="en-US")
-        == "Weight: 4.41 lb"
+        == "Weight: 4.4 lb"
     )
     assert resolve_structured_spec_text(specs, "weight") == "Weight: 2 kg"
     # Display conversion never mutates the canonical metric evidence.
@@ -195,29 +195,60 @@ def test_overlay_composes_callout_and_dimension_then_reports_missing_specs() -> 
     ]
 
 
-def test_feature_callout_and_spec_roles_both_render_verified_text() -> None:
+def test_callout_spec_and_imperial_dimension_roles_all_render_verified_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.modules.k_series.product_knowledge import info_overlay
+
     source = _png()
     specs = _verified_specs()
-    for role, source_field in (
-        ("feature_callout", "ip_rating"),
-        ("spec", "material"),
+    rendered_labels: list[str] = []
+    original_draw_label = info_overlay._draw_label
+
+    def capture_label(*args, **kwargs):
+        rendered_labels.append(str(kwargs.get("text") or ""))
+        return original_draw_label(*args, **kwargs)
+
+    monkeypatch.setattr(info_overlay, "_draw_label", capture_label)
+    for role, source_field, expected in (
+        ("feature_callout", "ip_rating", "IP65"),
+        ("spec", "material", "304 stainless steel"),
+        ("dimension", "dimensions.height", "16.5"),
     ):
+        item = {
+            "type": "callout",
+            "source_field": source_field,
+            "anchor": {"x": 0.5, "y": 0.5},
+            "text_anchor": {"x": 0.82, "y": 0.2},
+            "leader_direction": "right",
+        }
+        if role == "dimension":
+            item = {
+                "type": "dimension",
+                "source_field": source_field,
+                "line": {
+                    "start": {"x": 0.15, "y": 0.2},
+                    "end": {"x": 0.15, "y": 0.8},
+                },
+                "text_anchor": {"x": 0.1, "y": 0.5},
+            }
         overlay = {
             "schema_version": OVERLAY_SCHEMA_VERSION,
             "role": role,
-            "items": [
-                {
-                    "type": "callout",
-                    "source_field": source_field,
-                    "anchor": {"x": 0.5, "y": 0.5},
-                    "text_anchor": {"x": 0.82, "y": 0.2},
-                    "leader_direction": "right",
-                }
-            ],
+            "items": [item],
         }
-        rendered, report = compose_info_overlay(source, overlay, specs)
+        rendered_labels.clear()
+        rendered, report = compose_info_overlay(
+            source,
+            overlay,
+            specs,
+            target_market="US",
+        )
         assert rendered != source
         assert report == {"status": "applied", "applied_items": 1, "warnings": []}
+        assert any(expected in label for label in rendered_labels)
+        if role == "dimension":
+            assert any("in" in label.lower() for label in rendered_labels)
 
 
 def test_dimension_geometry_snaps_to_detected_product_bounds() -> None:
