@@ -191,7 +191,23 @@ def normalize_1688_structured_specs(
     }
     additional: list[dict[str, Any]] = []
     additional_seen: set[tuple[str, str]] = set()
+    additional_keys: dict[str, str] = {}
     inline_translations = _collect_inline_translations(source_payload)
+
+    def retain_additional(item: dict[str, Any]) -> None:
+        dedupe_key = (item["label"].casefold(), item["raw_value"].casefold())
+        if dedupe_key in additional_seen:
+            return
+        normalized_key = str(item["key"]).casefold()
+        existing_label = additional_keys.get(normalized_key)
+        if existing_label is not None:
+            raise ValueError(
+                "Supplier additional specification key collision for "
+                f"'{item['key']}': '{existing_label}' and '{item['label']}'"
+            )
+        additional_seen.add(dedupe_key)
+        additional_keys[normalized_key] = item["label"]
+        additional.append(item)
 
     source_pairs = _dedupe_pairs(
         [
@@ -238,10 +254,7 @@ def normalize_1688_structured_specs(
                 label_en=translation.get("label_en"),
                 value_en=translation.get("value_en"),
             )
-            dedupe_key = (item["label"].casefold(), item["raw_value"].casefold())
-            if dedupe_key not in additional_seen:
-                additional_seen.add(dedupe_key)
-                additional.append(item)
+            retain_additional(item)
             continue
         parsed = _standard_spec(spec_key, label=label, raw_value=value_text)
         if parsed is None:
@@ -254,10 +267,7 @@ def normalize_1688_structured_specs(
                 label_en=translation.get("label_en"),
                 value_en=translation.get("value_en"),
             )
-            dedupe_key = (item["label"].casefold(), item["raw_value"].casefold())
-            if dedupe_key not in additional_seen:
-                additional_seen.add(dedupe_key)
-                additional.append(item)
+            retain_additional(item)
             continue
         translated_value = buyer_english_text(translation.get("value_en"))
         if translated_value:

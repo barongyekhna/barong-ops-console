@@ -260,11 +260,10 @@ def _lookup_path(specs: dict[str, Any], source_field: str) -> tuple[Any, Any]:
         rows = specs.get("additional_specs")
         if not isinstance(rows, list):
             return None, None
-        normalized_key = additional_key.casefold()
         for item in rows:
             if not isinstance(item, dict):
                 continue
-            if str(item.get("key") or "").strip().casefold() == normalized_key:
+            if str(item.get("key") or "").strip() == additional_key:
                 return item, rows
         return None, None
 

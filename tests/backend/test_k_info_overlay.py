@@ -238,6 +238,10 @@ def test_additional_spec_overlay_rejects_non_english_label_and_unknown_key() -> 
         resolve_structured_spec_text(specs, "additional_specs.capacity_pan")
         is None
     )
+    assert (
+        resolve_structured_spec_text(specs, "additional_specs.CAPACITY_POT")
+        is None
+    )
 
 
 def test_overlay_contract_rejects_unbound_text_and_bad_coordinates() -> None:

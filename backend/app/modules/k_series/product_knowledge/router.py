@@ -160,7 +160,7 @@ from .workflow_engine import (
 )
 from ....services.module_execution_gate import ModuleExecutionGateError
 from .generation_jobs import enqueue_generation_jobs, jobs_status
-from .buyer_display import buyer_display_structured_specs
+from .buyer_display import buyer_display_structured_specs, imperial_measurement
 from .evidence_guard import canonical_package_includes, package_claim_error
 from .faq_research import (
     evidence_number_tokens,
@@ -1481,20 +1481,22 @@ def _structured_spec_evidence_snapshot(
     cleaned = path.strip().strip(".")
     if not cleaned:
         return None
+    canonical_additional = cleaned.casefold().startswith("additional_specs.")
     if cleaned in {"schema_version", "source", "additional_specs"} or cleaned.startswith(
         "source."
     ):
         return None
     current: Any = specs
     parent: Any = None
-    found = True
-    for segment in cleaned.split("."):
-        if isinstance(current, dict) and segment in current:
-            parent = current
-            current = current[segment]
-        else:
-            found = False
-            break
+    found = not canonical_additional
+    if found:
+        for segment in cleaned.split("."):
+            if isinstance(current, dict) and segment in current:
+                parent = current
+                current = current[segment]
+            else:
+                found = False
+                break
     if found and current not in (None, "", [], {}):
         unit = (
             current.get("unit")
@@ -1526,11 +1528,10 @@ def _structured_spec_evidence_snapshot(
             "unit": unit,
             "value_text": value_text,
         }
-    # Extensible manual/supplier fields are addressed by their stable key or
-    # label. Accept both the legacy short form ``spec:ignition_type`` and the
-    # canonical model path ``spec:additional_specs.ignition_type``.
+    # Canonical additional-spec paths are bound only to the exact stable key.
+    # The legacy short form keeps its historical key/label aliases.
     additional_lookup = cleaned
-    if cleaned.casefold().startswith("additional_specs."):
+    if canonical_additional:
         additional_lookup = cleaned.split(".", 1)[1].strip().strip(".")
         if not additional_lookup:
             return None
@@ -1540,33 +1541,41 @@ def _structured_spec_evidence_snapshot(
     for item in specs.get("additional_specs") or []:
         if not isinstance(item, dict):
             continue
-        aliases = {
-            str(item.get("key") or "").casefold(),
-            re.sub(
-                r"[^a-z0-9]+",
-                "_",
-                str(item.get("label") or "").casefold(),
-            ).strip("_"),
-        }
-        if additional_lookup.casefold() in aliases or normalized in aliases:
-            raw_value = item.get("raw_value")
-            value = item.get("value")
-            if raw_value in (None, "") and value in (None, "", [], {}):
-                return None
-            value_text = _evidence_value_text(
-                raw_value if raw_value not in (None, "") else value,
-                item.get("unit"),
-            )
-            return {
-                "evidence": f"spec:{cleaned}",
-                "kind": "spec",
-                "path": str(item.get("key") or cleaned),
-                "label": str(item.get("label") or item.get("key") or cleaned),
-                "value": value,
-                "raw_value": raw_value,
-                "unit": item.get("unit"),
-                "value_text": value_text,
+        if canonical_additional:
+            if str(item.get("key") or "") != additional_lookup:
+                continue
+        else:
+            aliases = {
+                str(item.get("key") or "").casefold(),
+                re.sub(
+                    r"[^a-z0-9]+",
+                    "_",
+                    str(item.get("label") or "").casefold(),
+                ).strip("_"),
             }
+            if (
+                additional_lookup.casefold() not in aliases
+                and normalized not in aliases
+            ):
+                continue
+        raw_value = item.get("raw_value")
+        value = item.get("value")
+        if raw_value in (None, "") and value in (None, "", [], {}):
+            return None
+        value_text = _evidence_value_text(
+            raw_value if raw_value not in (None, "") else value,
+            item.get("unit"),
+        )
+        return {
+            "evidence": f"spec:{cleaned}",
+            "kind": "spec",
+            "path": str(item.get("key") or cleaned),
+            "label": str(item.get("label") or item.get("key") or cleaned),
+            "value": value,
+            "raw_value": raw_value,
+            "unit": item.get("unit"),
+            "value_text": value_text,
+        }
     return None
 
 
@@ -1822,6 +1831,139 @@ _EVIDENCE_TOPIC_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("certification", ("certified", "certification", "ce", "rohs", "ul")),
 )
 
+_MEASUREMENT_NUMBER_PATTERN = (
+    r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?|\.[0-9]+"
+)
+_CLAIM_MEASUREMENT_PATTERN = re.compile(
+    rf"(?<![A-Za-z0-9.,])(?P<number>{_MEASUREMENT_NUMBER_PATTERN})\s*"
+    r"(?P<unit>millimeters?|millimetres?|centimeters?|centimetres?|"
+    r"kilograms?|grams?|milliliters?|millilitres?|liters?|litres?|"
+    r"inches?|quarts?|ounces?|pounds?|mm|cm|kg|ml|qt|oz|lb|in|g|l)\b",
+    flags=re.IGNORECASE,
+)
+
+_MEASUREMENT_UNIT_ALIASES = {
+    "millimeter": "mm",
+    "millimeters": "mm",
+    "millimetre": "mm",
+    "millimetres": "mm",
+    "centimeter": "cm",
+    "centimeters": "cm",
+    "centimetre": "cm",
+    "centimetres": "cm",
+    "kilogram": "kg",
+    "kilograms": "kg",
+    "gram": "g",
+    "grams": "g",
+    "milliliter": "ml",
+    "milliliters": "ml",
+    "millilitre": "ml",
+    "millilitres": "ml",
+    "liter": "l",
+    "liters": "l",
+    "litre": "l",
+    "litres": "l",
+    "inch": "in",
+    "inches": "in",
+    "quart": "qt",
+    "quarts": "qt",
+    "ounce": "oz",
+    "ounces": "oz",
+    "pound": "lb",
+    "pounds": "lb",
+}
+_CONVERTIBLE_MEASUREMENT_UNITS = frozenset({"mm", "cm", "kg", "g", "ml", "l"})
+_MEASUREMENT_UNIT_DIMENSIONS = {
+    "mm": "length",
+    "cm": "length",
+    "in": "length",
+    "kg": "mass",
+    "g": "mass",
+    "lb": "mass",
+    "oz": "mass",
+    "ml": "volume",
+    "l": "volume",
+    "qt": "volume",
+}
+
+
+def _canonical_measurement_unit(value: Any) -> str:
+    cleaned = str(value or "").strip().casefold()
+    return _MEASUREMENT_UNIT_ALIASES.get(cleaned, cleaned)
+
+
+def _measurement_pairs(value: Any) -> set[tuple[str, str]]:
+    pairs: set[tuple[str, str]] = set()
+    for match in _CLAIM_MEASUREMENT_PATTERN.finditer(str(value or "")):
+        numbers = evidence_number_tokens(match.group("number"))
+        if not numbers:
+            continue
+        pairs.add(
+            (
+                next(iter(numbers)),
+                _canonical_measurement_unit(match.group("unit")),
+            )
+        )
+    return pairs
+
+
+def _supported_measurement_pairs(snapshot: dict[str, Any]) -> set[tuple[str, str]]:
+    """Bind factual and buyer-display numbers to their verified units."""
+
+    explicit_pairs: set[tuple[str, str]] = set()
+    for key in ("value", "raw_value", "value_text"):
+        explicit_pairs.update(_measurement_pairs(snapshot.get(key)))
+
+    source_unit = _canonical_measurement_unit(snapshot.get("unit"))
+    if source_unit not in _CONVERTIBLE_MEASUREMENT_UNITS:
+        pairs = set(explicit_pairs)
+        for number, explicit_unit in explicit_pairs:
+            if explicit_unit not in _CONVERTIBLE_MEASUREMENT_UNITS:
+                continue
+            converted = imperial_measurement(number, explicit_unit)
+            if converted is None:
+                continue
+            rendered, converted_unit = converted
+            pairs.update(
+                (converted_number, converted_unit)
+                for converted_number in evidence_number_tokens(rendered)
+            )
+        return pairs
+
+    metric_value = snapshot.get("value")
+    if metric_value in (None, "", [], {}):
+        metric_value = snapshot.get("raw_value")
+
+    pairs = {
+        (number, source_unit)
+        for number in evidence_number_tokens(metric_value)
+    }
+    source_dimension = _MEASUREMENT_UNIT_DIMENSIONS[source_unit]
+    pairs.update(
+        pair
+        for pair in explicit_pairs
+        if _MEASUREMENT_UNIT_DIMENSIONS.get(pair[1]) == source_dimension
+    )
+
+    converted = imperial_measurement(metric_value, source_unit)
+    if converted is not None:
+        rendered, converted_unit = converted
+        pairs.update(
+            (number, converted_unit)
+            for number in evidence_number_tokens(rendered)
+        )
+    else:
+        for number in evidence_number_tokens(metric_value):
+            scalar = imperial_measurement(number, source_unit)
+            if scalar is None:
+                continue
+            rendered, converted_unit = scalar
+            pairs.update(
+                (converted_number, converted_unit)
+                for converted_number in evidence_number_tokens(rendered)
+            )
+    return pairs
+
 
 def _normalized_evidence_text(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
@@ -1876,12 +2018,25 @@ def _selling_point_support_error(
     support_numbers.update(
         imperial_equivalent_number_tokens(metric_value, snapshot.get("unit"))
     )
+    claimed_measurements = _measurement_pairs(bullet.text)
+    supported_measurements = _supported_measurement_pairs(snapshot)
+    support_numbers.update(number for number, _unit in supported_measurements)
     package_items = canonical_package_includes(package_includes, structured_specs)
     if re.search(r"\b\d+\s*(?:-|\s)?\s*(?:piece|pieces|pc|pcs)\b", claim):
         support_numbers.add(str(len(package_items)))
     unsupported_numbers = sorted(claim_numbers - support_numbers)
     if unsupported_numbers:
         return "Claim contains numbers absent from the current evidence: " + ", ".join(unsupported_numbers)
+
+    unsupported_measurements = sorted(claimed_measurements - supported_measurements)
+    if unsupported_measurements:
+        rendered = ", ".join(
+            f"{number} {unit}" for number, unit in unsupported_measurements
+        )
+        return (
+            "Claim contains number/unit pairs absent from the current evidence: "
+            + rendered
+        )
 
     for topic, terms in _EVIDENCE_TOPIC_TERMS:
         claim_has_topic = any(

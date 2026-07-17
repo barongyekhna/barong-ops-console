@@ -102,6 +102,15 @@ def _question_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
 
 
+def is_specification_paraphrase_question(value: Any) -> bool:
+    """Return whether a question would be rejected as a basic-spec restatement."""
+
+    question = _clean_text(value, limit=512)
+    return bool(
+        _SPEC_PARAPHRASE.match(question) or _SPEC_PARAPHRASE_ZH.match(question)
+    )
+
+
 def _question_id(source_type: str, question: str, url: str) -> str:
     digest = hashlib.sha1(
         f"{source_type}\n{_question_key(question)}\n{url}".encode("utf-8")
@@ -240,6 +249,7 @@ def build_faq_research(
         for source in sources
         if source["source_type"]
         in {"people_also_ask", "forum_question", "review_pain_point", "organic_question"}
+        and not is_specification_paraphrase_question(source.get("question"))
     ]
     strong_clusters = {
         str(source.get("intent_cluster") or "buyer_concern")
@@ -446,10 +456,15 @@ def validate_generated_faq(
 ) -> dict[str, Any]:
     """Drop fabricated/spec-parroting FAQ and stamp schema eligibility."""
 
-    output = dict(result)
+    safe_result = result if isinstance(result, dict) else {}
+    safe_research = research if isinstance(research, dict) else {}
+    output = dict(safe_result)
+    raw_research_sources = safe_research.get("sources")
     research_sources = [
         item
-        for item in ((research or {}).get("sources") or [])
+        for item in (
+            raw_research_sources if isinstance(raw_research_sources, list) else []
+        )
         if isinstance(item, dict) and item.get("id")
     ]
     sources = {
@@ -457,7 +472,7 @@ def validate_generated_faq(
         for item in research_sources
     }
     source_clusters: dict[str, set[str]] = {}
-    raw_clusters = (research or {}).get("clusters")
+    raw_clusters = safe_research.get("clusters")
     clusters = raw_clusters if isinstance(raw_clusters, dict) else {}
     for cluster, source_ids in clusters.items():
         if not isinstance(source_ids, list):
@@ -482,20 +497,27 @@ def validate_generated_faq(
     structured_spec_numbers = structured_spec_number_tokens(structured_specs)
     if isinstance(package_includes, list) and package_includes:
         structured_spec_numbers.add(str(len(package_includes)))
-    raw_items = result.get("page_faq") if isinstance(result, dict) else None
+    raw_items_value = safe_result.get("page_faq")
+    raw_items = raw_items_value if isinstance(raw_items_value, list) else []
     evidence_autobind_count = 0
-    for raw in raw_items or []:
+    for raw in raw_items:
         if not isinstance(raw, dict):
             continue
         raw = dict(raw)
         question = _clean_text(raw.get("question"), limit=512)
         answer = _clean_text(raw.get("answer"), limit=2000)
+        raw_refs = raw.get("evidence_refs")
+        malformed_refs = raw_refs is not None and (
+            not isinstance(raw_refs, list)
+            or any(not isinstance(ref, str) for ref in raw_refs)
+        )
         provided_refs = [
             str(ref).strip()
-            for ref in (raw.get("evidence_refs") or [])
+            for ref in (raw_refs if isinstance(raw_refs, list) else [])
+            if isinstance(ref, str)
             if str(ref).strip() in sources
         ]
-        if not provided_refs:
+        if not malformed_refs and not provided_refs:
             exact_matches = exact_sources.get(_question_key(question), [])
             if len(exact_matches) == 1:
                 source = exact_matches[0]
@@ -515,8 +537,9 @@ def validate_generated_faq(
         refs = [
             str(ref).strip()
             for ref in (raw.get("evidence_refs") or [])
+            if isinstance(ref, str)
             if str(ref).strip() in sources
-        ]
+        ] if not malformed_refs else []
         ref_clusters: set[str] = set()
         for ref in refs:
             source_cluster = str(sources[ref].get("intent_cluster") or "").strip()
@@ -534,9 +557,11 @@ def validate_generated_faq(
         reason = ""
         if not question or not answer:
             reason = "empty_question_or_answer"
+        elif malformed_refs:
+            reason = "malformed_evidence_refs"
         elif key in seen:
             reason = "duplicate_question"
-        elif _SPEC_PARAPHRASE.match(question) or _SPEC_PARAPHRASE_ZH.match(question):
+        elif is_specification_paraphrase_question(question):
             reason = "specification_paraphrase"
         elif not refs:
             reason = "missing_serper_evidence"
@@ -575,7 +600,7 @@ def validate_generated_faq(
         str(item.get("intent_cluster") or "buyer_concern") for item in accepted
     }
     eligible = (
-        bool((research or {}).get("quality_ready"))
+        bool(safe_research.get("quality_ready"))
         and len(accepted) >= 2
         and len(accepted_clusters) >= 2
     )

@@ -137,6 +137,21 @@ def test_1688_specs_do_not_invent_missing_or_weak_claims() -> None:
     }
 
 
+def test_1688_additional_spec_key_collisions_fail_closed() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Supplier additional specification key collision for 'power_type'",
+    ):
+        normalize_1688_structured_specs(
+            {
+                "structured_attributes": [
+                    {"name": "Power-Type", "value": "Gas"},
+                    {"name": "Power Type", "value": "Electric"},
+                ]
+            }
+        )
+
+
 def test_label_unit_measurements_reject_option_lists_but_accept_scalar_and_range() -> None:
     specs = normalize_1688_structured_specs(
         {
@@ -282,11 +297,11 @@ def test_public_k_payloads_accept_only_operator_evidenced_specs(schema: type) ->
             "evidence_type": "operator_fact",
         },
         "additional_specs": [
-                {
-                    "key": "ignition",
-                    "label": "Ignition",
-                    "source_label": "Ignition",
-                    "value": "Piezo",
+            {
+                "key": "ignition",
+                "label": "Ignition",
+                "source_label": "Ignition",
+                "value": "Piezo",
                 "raw_value": "Piezo",
                 "evidence": "operator_fact",
                 "label_en": "Ignition",

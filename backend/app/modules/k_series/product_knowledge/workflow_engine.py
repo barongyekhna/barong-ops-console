@@ -65,6 +65,7 @@ from .evidence_guard import (
 )
 from .faq_research import (
     build_faq_research,
+    is_specification_paraphrase_question,
     structured_spec_number_tokens,
     validate_generated_faq,
 )
@@ -3519,6 +3520,7 @@ def _faq_question_clusters(research: Any) -> list[dict[str, Any]]:
         if isinstance(source, dict)
         and str(source.get("id") or "").strip()
         and str(source.get("question") or "").strip()
+        and not is_specification_paraphrase_question(source.get("question"))
     ]
     sources_by_id = {
         str(source.get("id")).strip(): source
@@ -3577,6 +3579,60 @@ def _faq_question_clusters(research: Any) -> list[dict[str, Any]]:
                     "preferred_evidence_refs": [cluster_sources[0]["id"]],
                 }
             )
+    return output
+
+
+def _canonicalize_generated_faq(
+    result: Any,
+    clusters: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Keep only exact server-projected FAQ questions and provenance.
+
+    The general FAQ validator intentionally supports evidence-bound paraphrases
+    for non-generation callers.  The generation workflow has a stricter Round 5
+    contract: providers may write answers, but questions, source IDs, and intent
+    clusters remain server-owned.
+    """
+
+    output = dict(result) if isinstance(result, dict) else {}
+    raw_items = output.get("page_faq")
+    items = raw_items if isinstance(raw_items, list) else []
+    canonical_by_question: dict[str, dict[str, Any]] = {}
+    for cluster in clusters:
+        if not isinstance(cluster, dict):
+            continue
+        question = str(cluster.get("preferred_question") or "").strip()
+        intent_cluster = str(cluster.get("intent_cluster") or "").strip()
+        raw_refs = cluster.get("preferred_evidence_refs")
+        refs = (
+            [str(ref).strip() for ref in raw_refs if str(ref).strip()]
+            if isinstance(raw_refs, list)
+            else []
+        )
+        if question and intent_cluster and refs:
+            canonical_by_question[question] = {
+                "question": question,
+                "evidence_refs": refs,
+                "intent_cluster": intent_cluster,
+            }
+
+    canonical_items: list[dict[str, Any]] = []
+    seen_questions: set[str] = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        question = str(item.get("question") or "").strip()
+        canonical = canonical_by_question.get(question)
+        if canonical is None or question in seen_questions:
+            continue
+        seen_questions.add(question)
+        canonical_items.append(
+            {
+                **canonical,
+                "answer": item.get("answer"),
+            }
+        )
+    output["page_faq"] = canonical_items
     return output
 
 
@@ -4317,8 +4373,11 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
     ) -> dict[str, Any]:
         """Regenerate missing/invalid FAQ once from server-owned research clusters."""
 
+        quality_ready = research.get("quality_ready") is True
+        clusters = _faq_question_clusters(research) if quality_ready else []
+        canonical_result = _canonicalize_generated_faq(result, clusters)
         validated = validate_generated_faq(
-            result,
+            canonical_result,
             research,
             approved_selling_points=approved_points,
             structured_specs=structured_specs,
@@ -4333,14 +4392,12 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             and item.get("reason") == "answer_repeats_product_specification_number"
             and str(item.get("question") or "").strip()
         }
-        clusters = _faq_question_clusters(research)
         accepted = [
             dict(item)
             for item in (validated.get("page_faq") or [])
             if isinstance(item, dict)
         ]
         target_count = min(3, len(clusters))
-        quality_ready = research.get("quality_ready") is True
         eligible = isinstance(quality, dict) and quality.get("eligible_for_schema") is True
         if not quality_ready or target_count < 2 or (
             eligible and len(accepted) >= target_count
@@ -4459,7 +4516,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 str(item.get("question") or "").strip(): item
                 for item in safe_rewrites
             }
-            retry_input = dict(result)
+            retry_input = dict(canonical_result)
             retry_input["page_faq"] = [*accepted, *safe_by_question.values()]
             validated = validate_generated_faq(
                 retry_input,

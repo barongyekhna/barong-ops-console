@@ -5,6 +5,10 @@ from typing import Any
 
 import pytest
 
+from backend.app.modules.k_series.product_knowledge.faq_research import (
+    build_faq_research,
+    validate_generated_faq,
+)
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
     KWorkflowOrchestratorV2,
     _faq_question_clusters,
@@ -140,3 +144,164 @@ def test_missing_research_stays_empty_without_a_rewrite_call() -> None:
     assert validated["page_faq"] == []
     assert validated["faq_quality"]["eligible_for_schema"] is False
 
+
+def test_generation_rejects_similar_noncanonical_questions_before_validation() -> None:
+    research = _research()
+    noncanonical = {
+        "page_faq": [
+            {
+                "question": "How should cookware be prepared in cold weather?",
+                "answer": "Shelter the cooking area and preheat gradually.",
+                "evidence_refs": ["cold-use"],
+            },
+            {
+                "question": "How should cookware be maintained after a trip?",
+                "answer": "Let it cool, use mild soap, and dry it fully.",
+                "evidence_refs": ["care"],
+            },
+            {
+                "question": "What is the best method to pack cookware for a trip?",
+                "answer": "Keep dry pieces together and protect contact surfaces.",
+                "evidence_refs": ["packing"],
+            },
+        ]
+    }
+    # The reusable validator keeps its historical evidence-bound paraphrase
+    # behavior; the stricter canonical boundary belongs to generation.
+    assert validate_generated_faq(noncanonical, research)["faq_quality"][
+        "eligible_for_schema"
+    ] is True
+
+    engine = object.__new__(KWorkflowOrchestratorV2)
+    calls: list[dict[str, Any]] = []
+
+    def execute_provider(**kwargs: Any) -> dict[str, Any]:
+        payload = kwargs["payload"]
+        calls.append(payload)
+        answers = {
+            "cold_weather": "Shelter the cooking area and preheat gradually.",
+            "maintenance": "Let it cool, use mild soap, and dry it fully.",
+            "packing": "Keep dry pieces together and protect contact surfaces.",
+        }
+        return {
+            "page_faq": [
+                {**item, "answer": answers[item["intent_cluster"]]}
+                for item in payload["page_faq"]
+            ]
+        }
+
+    engine._execute_provider = execute_provider  # type: ignore[method-assign]
+    validated = engine._validate_faq_with_single_rewrite(
+        noncanonical,
+        research=research,
+        approved_points=[],
+        structured_specs={},
+        package_includes=[],
+        key=SimpleNamespace(),  # type: ignore[arg-type]
+        gate_context=SimpleNamespace(),  # type: ignore[arg-type]
+    )
+
+    assert len(calls) == 1
+    assert [item["question"] for item in validated["page_faq"]] == [
+        source["question"] for source in research["sources"]
+    ]
+    assert [item["evidence_refs"] for item in validated["page_faq"]] == [
+        ["cold-use"],
+        ["care"],
+        ["packing"],
+    ]
+
+
+def test_cluster_projection_skips_spec_question_and_uses_next_source() -> None:
+    research = {
+        "quality_ready": True,
+        "sources": [
+            {
+                "id": "weight",
+                "question": "What is the weight?",
+                "intent_cluster": "maintenance",
+            },
+            {
+                "id": "care",
+                "question": "How should cookware be cleaned after a trip?",
+                "intent_cluster": "maintenance",
+            },
+            {
+                "id": "packing",
+                "question": "What is the best way to pack cookware for a trip?",
+                "intent_cluster": "packing",
+            },
+        ],
+        "clusters": {
+            "maintenance": ["weight", "care"],
+            "packing": ["packing"],
+        },
+    }
+
+    clusters = _faq_question_clusters(research)
+
+    assert len(clusters) == 2
+    assert clusters[0]["preferred_question"] == (
+        "How should cookware be cleaned after a trip?"
+    )
+    assert clusters[0]["preferred_evidence_refs"] == ["care"]
+    assert [source["id"] for source in clusters[0]["sources"]] == ["care"]
+
+
+def test_spec_only_research_is_not_marked_quality_ready() -> None:
+    research = build_faq_research(
+        [
+            {
+                "peopleAlsoAsk": [
+                    {
+                        "question": "What is the weight in cold weather?",
+                        "snippet": "0.8 kg",
+                    },
+                    {
+                        "question": "What is the capacity in strong wind?",
+                        "snippet": "1.4 L",
+                    },
+                ]
+            }
+        ],
+        queries=["cookware questions"],
+    )
+
+    assert research["source_count"] == 2
+    assert research["quality_ready"] is False
+    assert research["intent_cluster_count"] == 0
+
+
+@pytest.mark.parametrize("malformed_page_faq", ["not-a-list", {"question": "x"}, 3])
+def test_malformed_page_faq_fails_safe_to_empty(malformed_page_faq: Any) -> None:
+    validated = validate_generated_faq(
+        {"page_faq": malformed_page_faq},
+        _research(),
+    )
+
+    assert validated["page_faq"] == []
+    assert validated["faq_quality"]["eligible_for_schema"] is False
+
+
+@pytest.mark.parametrize("malformed_refs", ["cold-use", {"id": "cold-use"}, 3])
+def test_malformed_evidence_refs_are_dropped(malformed_refs: Any) -> None:
+    validated = validate_generated_faq(
+        {
+            "page_faq": [
+                {
+                    "question": "How should cookware be used in cold weather?",
+                    "answer": "Shelter the cooking area and preheat gradually.",
+                    "evidence_refs": malformed_refs,
+                }
+            ]
+        },
+        _research(),
+    )
+
+    assert validated["page_faq"] == []
+    assert validated["faq_quality"]["dropped"] == [
+        {
+            "question": "How should cookware be used in cold weather?",
+            "reason": "malformed_evidence_refs",
+        }
+    ]

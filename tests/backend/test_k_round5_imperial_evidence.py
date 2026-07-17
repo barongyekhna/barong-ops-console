@@ -81,6 +81,90 @@ def test_selling_point_accepts_equivalent_inches_but_rejects_invented_number() -
     assert supported is None
     assert invented == "Claim contains numbers absent from the current evidence: 8.2"
 
+    metric = _selling_point_support_error(
+        SellingPointBullet(
+            category="size",
+            text="Packed dimensions are 17 x 17 x 12 cm.",
+            importance_score=1,
+            evidence="spec:packed_dimensions",
+        ),
+        snapshot,
+    )
+    wrong_volume_unit = _selling_point_support_error(
+        SellingPointBullet(
+            category="size",
+            text="Packed dimensions measure 6.7 qt.",
+            importance_score=1,
+            evidence="spec:packed_dimensions",
+        ),
+        snapshot,
+    )
+    wrong_weight_unit = _selling_point_support_error(
+        SellingPointBullet(
+            category="size",
+            text="Packed dimensions measure 6.7 oz.",
+            importance_score=1,
+            evidence="spec:packed_dimensions",
+        ),
+        snapshot,
+    )
+
+    assert metric is None
+    assert wrong_volume_unit == (
+        "Claim contains number/unit pairs absent from the current evidence: 6.7 qt"
+    )
+    assert wrong_weight_unit == (
+        "Claim contains number/unit pairs absent from the current evidence: 6.7 oz"
+    )
+
+    explicit_only_snapshot = {
+        "kind": "spec",
+        "path": "packed_size",
+        "label": "Packed size",
+        "value": "17 cm",
+        "raw_value": "17 cm",
+        "value_text": "17 cm",
+    }
+    assert (
+        _selling_point_support_error(
+            SellingPointBullet(
+                category="size",
+                text="Packed size is 6.7 inches.",
+                importance_score=1,
+                evidence="spec:packed_size",
+            ),
+            explicit_only_snapshot,
+        )
+        is None
+    )
+    assert _selling_point_support_error(
+        SellingPointBullet(
+            category="size",
+            text="Packed size is 6.7 qt.",
+            importance_score=1,
+            evidence="spec:packed_size",
+        ),
+        explicit_only_snapshot,
+    ) == "Claim contains number/unit pairs absent from the current evidence: 6.7 qt"
+
+    unitless_snapshot = {
+        "kind": "spec",
+        "path": "packed_size",
+        "label": "Packed size",
+        "value": 6.7,
+        "raw_value": "6.7",
+        "value_text": "6.7",
+    }
+    assert _selling_point_support_error(
+        SellingPointBullet(
+            category="size",
+            text="Packed size is 6.7 qt.",
+            importance_score=1,
+            evidence="spec:packed_size",
+        ),
+        unitless_snapshot,
+    ) == "Claim contains number/unit pairs absent from the current evidence: 6.7 qt"
+
     weight_snapshot = _structured_spec_evidence_snapshot(_metric_specs(), "weight")
     assert weight_snapshot is not None
     assert weight_snapshot["unit"] == "kg"

@@ -930,17 +930,18 @@ def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
     ] == ["weather_use", "pre_trip_check"]
     assert generated.faq_research_json == stored_research
     assert generated.marketing_copy_json["faq_quality"]["eligible_for_schema"] is True
-    assert generated.marketing_copy_json["faq_quality"]["evidence_autobind_count"] == 2
+    # Generation canonicalizes exact server-projected questions and refs before
+    # the reusable validator runs, so no advisory-ref autobind is needed.
+    assert generated.marketing_copy_json["faq_quality"]["evidence_autobind_count"] == 0
     assert [
         item["evidence_refs"] for item in generated.marketing_copy_json["page_faq"]
     ] == [["faq-cold-weather"], ["faq-ignition-check"]]
     assert [
         item["intent_cluster"] for item in generated.marketing_copy_json["page_faq"]
     ] == ["weather_use", "pre_trip_check"]
-    assert {
-        item["question"]: item["reason"]
-        for item in generated.marketing_copy_json["faq_quality"]["dropped"]
-    }["How do I get this pump ready for winter?"] == "missing_serper_evidence"
+    assert "How do I get this pump ready for winter?" not in {
+        item["question"] for item in generated.marketing_copy_json["page_faq"]
+    }
 
 
 def test_marketing_copy_degenerate_title_uses_product_name_not_primary_keyword() -> None:

@@ -142,6 +142,39 @@ def test_selling_point_evidence_resolves_specs_features_and_operator_fact() -> N
     )
 
 
+def test_canonical_additional_spec_path_requires_exact_stable_key() -> None:
+    specs = {
+        "additional_specs": [
+            {
+                "key": "capacity_pot",
+                "label": "Main Pot Capacity",
+                "value": 1.4,
+                "raw_value": "1.4 L",
+                "unit": "L",
+            }
+        ]
+    }
+
+    assert _structured_spec_path_exists(specs, "additional_specs.capacity_pot")
+    assert not _structured_spec_path_exists(
+        specs,
+        "additional_specs.main_pot_capacity",
+    )
+    assert not _structured_spec_path_exists(specs, "additional_specs.CAPACITY_POT")
+    assert not _structured_spec_path_exists(
+        {
+            "additional_specs": {
+                "capacity_pot": {"value": 1.4, "raw_value": "1.4 L"}
+            }
+        },
+        "additional_specs.capacity_pot",
+    )
+
+    # Legacy short-form evidence keeps its historical label/key aliases.
+    assert _structured_spec_path_exists(specs, "main_pot_capacity")
+    assert _structured_spec_path_exists(specs, "CAPACITY_POT")
+
+
 def test_faq_research_keeps_paa_and_forum_evidence_and_drops_spec_repeats() -> None:
     research = build_faq_research(
         [
