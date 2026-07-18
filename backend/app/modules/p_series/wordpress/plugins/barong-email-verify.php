@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Barong Email Verify
  * Description: 注册邮箱验证(瘦插件)。新注册用户必须点击邮件里的验证链接才能登录——不存在的邮箱收不到信,自然无法激活。旧用户与 Google 登录用户不受影响。
- * Version: 1.5.0
+ * Version: 1.6.0
  * Author: Barong Yekhna Console
  */
 
@@ -10,8 +10,25 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 const BY_EV_META_TOKEN    = '_by_verify_token';
 const BY_EV_META_VERIFIED = '_by_email_verified';
-const BY_EV_VERSION       = '1.5.0';
+const BY_EV_VERSION       = '1.6.0';
 
+
+/** 修复:间歇性 "Not enough data to create this user" —— 上游偶发生成空用户名,
+ * 这里兜底:用户名为空时从邮箱前缀派生(冲突自动加随机尾巴)。 */
+add_filter( 'woocommerce_new_customer_data', function ( $data ) {
+	if ( empty( $data['user_login'] ) && ! empty( $data['user_email'] ) ) {
+		$base = sanitize_user( current( explode( '@', $data['user_email'] ) ), true );
+		if ( '' === $base ) { $base = 'customer'; }
+		$login = $base;
+		$i     = 0;
+		while ( username_exists( $login ) && $i < 20 ) {
+			$login = $base . wp_rand( 100, 9999 );
+			$i++;
+		}
+		$data['user_login'] = $login;
+	}
+	return $data;
+} );
 
 /** 注册后:不自动登录,发验证邮件。 */
 add_filter( 'woocommerce_registration_auth_new_customer', '__return_false' );
