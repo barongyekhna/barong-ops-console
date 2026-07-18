@@ -74,6 +74,7 @@ def test_manual_faq_validation_rules() -> None:
     assert is_faq_question_candidate("Can PTFE cookware be cleaned easily?") is True
     assert is_faq_question_candidate("Is TrailForge cookware reliable?") is False
     assert is_faq_text_brand_safe("Dry ABS and PVC parts before storage.") is True
+    assert is_faq_text_brand_safe("Store cookware in a dry place.") is True
     assert is_faq_text_brand_safe("Store it like TrailForge cookware.") is False
     assert is_faq_text_brand_safe("Store it like Vango cookware.") is False
 
@@ -108,6 +109,8 @@ def _manual_route_setup(monkeypatch: pytest.MonkeyPatch) -> tuple[object, _FakeD
     [
         ("Has TrailForge cookware been tested?", "Use normal care."),
         ("Has this cookware been tested?", "Store it like Vango cookware."),
+        ("Can Tritan plastic be used for food?", "Use normal care."),
+        ("Has this cookware been tested?", "Cordura fabric handles abrasion."),
         (" ", "Use normal care."),
         ("Has this cookware been tested?", " "),
     ],
@@ -119,7 +122,7 @@ def test_manual_faq_route_rejects_brands_and_trimmed_empty_fields(
 ) -> None:
     from backend.app.modules.k_series.product_knowledge import router as router_module
 
-    _product, db = _manual_route_setup(monkeypatch)
+    product, db = _manual_route_setup(monkeypatch)
     payload = router_module.ProductFaqUpdateRequest(
         items=[{"question": question, "answer": answer}]
     )
@@ -135,6 +138,8 @@ def test_manual_faq_route_rejects_brands_and_trimmed_empty_fields(
 
     assert exc_info.value.status_code == 422
     assert exc_info.value.detail["code"] == "FAQ_MANUAL_VALIDATION_FAILED"
+    assert product.marketing_copy_json == {}
+    assert db.added == []
     assert db.commit_count == 0
 
 

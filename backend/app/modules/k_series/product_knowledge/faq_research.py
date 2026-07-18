@@ -57,6 +57,7 @@ _THIRD_PARTY_BRAND_BLACKLIST = (
     "boundless voyage",
     "bulin",
     "coleman",
+    "cordura",
     "decathlon",
     "fire-maple",
     "fire maple",
@@ -73,6 +74,8 @@ _THIRD_PARTY_BRAND_BLACKLIST = (
     "snow peak",
     "stanley",
     "toaks",
+    "tritan",
+    "vango",
     "widesea",
     "yeti",
 )
@@ -214,6 +217,7 @@ _TECHNICAL_ENTITY_ALLOWLIST = {
     "cfm",
     "co2",
     "db",
+    "dba",
     "dtc",
     "eva",
     "faq",
@@ -249,27 +253,41 @@ _TECHNICAL_ENTITY_ALLOWLIST = {
 }
 _MIXED_CASE_TECHNICAL_MEASUREMENT = re.compile(
     r"^(?:\d+(?:\.\d+)?(?:ah|mah|wh|kwh|db|rpm|cfm|psi)|"
-    r"ipx\d+|sus\d+|upf\d+|usb-[a-z0-9]+)$",
+    r"(?:ac|dc)\d+(?:\.\d+)?v?|ipx\d+|sus\d+|upf\d+|usb-[a-z0-9]+)$",
     re.IGNORECASE,
 )
 _GENERIC_ENTITY_TOKENS = {
+    "alloy",
+    "bamboo",
     "borosilicate",
     "charging",
     "clean",
+    "coated",
+    "copper",
+    "die",
     "dry",
     "enough",
+    "enamel",
     "fabric",
     "flame",
+    "fiber",
     "food",
     "grade",
     "glass",
     "high",
     "keep",
+    "natural",
+    "nylon",
+    "oxford",
     "pack",
     "place",
+    "polyester",
+    "polypropylene",
     "protection",
+    "ripstop",
     "silicone",
     "store",
+    "tempered",
 }
 _TITLECASE_PRODUCT_ENTITY = re.compile(
     r"\b(?P<brand>[A-Z][A-Za-z0-9&'’.-]{2,})\s+"
@@ -367,20 +385,28 @@ def _entity_token_is_technical(value: str) -> bool:
     )
 
 
+def _entity_atom_is_generic(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "", value.casefold())
+    return bool(
+        _entity_token_is_technical(value)
+        or normalized in _GENERIC_COMPARISON_TOKENS
+        or normalized in _COMPARISON_SCAFFOLD_TOKENS
+        or normalized in _GENERIC_ENTITY_TOKENS
+    )
+
+
 def _entity_phrase_is_generic(value: str) -> bool:
     tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9&'’./-]*", value)
     if not tokens:
         return False
     for token in tokens:
         stem = _entity_word_stem(token)
-        normalized = re.sub(r"[^a-z0-9]+", "", stem.casefold())
-        if _entity_token_is_technical(stem):
+        if _entity_atom_is_generic(stem):
             continue
-        if normalized in _GENERIC_COMPARISON_TOKENS:
-            continue
-        if normalized in _COMPARISON_SCAFFOLD_TOKENS:
-            continue
-        if normalized in _GENERIC_ENTITY_TOKENS:
+        compound_parts = re.findall(r"[A-Za-z0-9]+", stem)
+        if len(compound_parts) > 1 and all(
+            _entity_atom_is_generic(part) for part in compound_parts
+        ):
             continue
         return False
     return True

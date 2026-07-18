@@ -52,6 +52,31 @@ def test_generic_comparisons_ignore_trailing_buyer_context(question: str) -> Non
         "Is SUS304 cookware easy to clean?",
         "Is UPF50 enough for a camping canopy?",
         "Can USB-C charge a camping light?",
+        "Is SUS304 Stainless Steel Safe?",
+        "Is IPX7 Protection Enough?",
+        "Is UPF50 Fabric Suitable?",
+        "Is USB-C Charging Safe?",
+        "Is High Carbon Steel Safe?",
+        "Is Food Grade Silicone Safe?",
+        "Is Borosilicate Glass Safe?",
+        "Is Bamboo Cookware Durable?",
+        "Is Copper Cookware Durable?",
+        "Is Aluminum Alloy Durable?",
+        "Is Die-Cast Aluminum Durable?",
+        "Is Tempered Glass Safe?",
+        "Is Carbon Fiber Durable?",
+        "Is Natural Wood Suitable?",
+        "Is Polyester Fabric Durable?",
+        "Is Ripstop Nylon Durable?",
+        "Is Oxford Fabric Durable?",
+        "Is Ceramic-Coated Cookware Durable?",
+        "Is Enamel-Coated Cookware Durable?",
+        "Is Polypropylene Plastic Safe?",
+        "Is 40 dBA quiet enough for camping?",
+        "Is AC110V suitable for this product?",
+        "Is DC12V suitable for this product?",
+        "Is AC110 suitable for this product?",
+        "Is DC12 suitable for this product?",
     ],
 )
 def test_technical_notations_are_not_treated_as_brands(question: str) -> None:
@@ -83,6 +108,8 @@ def test_distinctive_camelcase_brands_are_rejected_anywhere(question: str) -> No
         "Does ALPICO-brand cookware last?",
         "Is Vango cookware reliable?",
         "Can Vango cookware be used in winter?",
+        "Is Tritan cookware suitable for camping?",
+        "Is Cordura fabric suitable for camping?",
     ],
 )
 def test_uppercase_and_titlecase_competitor_entities_are_rejected(
@@ -225,6 +252,20 @@ def test_competitor_entities_in_source_context_are_removed() -> None:
                     "source_type": "organic_question",
                     "intent_cluster": "operation",
                 },
+                {
+                    "id": "unsafe-trademark-snippet",
+                    "question": "How can plastic cookware be cleaned?",
+                    "snippet": "Tritan plastic is compared with other materials.",
+                    "source_type": "organic_question",
+                    "intent_cluster": "maintenance",
+                },
+                {
+                    "id": "unsafe-trademark-query",
+                    "question": "Can fabric gear handle rain?",
+                    "query": "Cordura fabric questions",
+                    "source_type": "people_also_ask",
+                    "intent_cluster": "wet_weather",
+                },
             ],
         }
     )
@@ -354,7 +395,15 @@ def test_persisted_competitor_research_cannot_reach_visible_faq_or_schema() -> N
 
 @pytest.mark.parametrize(
     "brand",
-    ["Odoland", "TrailForge", "Vango", "ALPICO's", "ALPICO-brand"],
+    [
+        "Odoland",
+        "TrailForge",
+        "Vango",
+        "Tritan",
+        "Cordura",
+        "ALPICO's",
+        "ALPICO-brand",
+    ],
 )
 def test_competitor_name_in_generated_answer_is_not_publishable(brand: str) -> None:
     question = "How should camping cookware be stored after a trip?"
