@@ -8,6 +8,7 @@ import {
   ExternalLink,
   ImagePlus,
   LoaderCircle,
+  RefreshCw,
   PackageOpen,
   Plus,
   RotateCcw,
@@ -36,6 +37,7 @@ import {
   deleteProduct,
   deleteMediaAsset,
   dispatchUpload,
+  republishProduct,
   enrichProductWithDeepSeek,
   generateProductCopyBatch,
   generateProductImageBriefBatch,
@@ -290,6 +292,8 @@ export function ProductListFull() {
   const [batchNotice, setBatchNotice] = useState("");
   const [batchError, setBatchError] = useState("");
   const [dispatchingId, setDispatchingId] = useState<string | null>(null);
+  const [republishingId, setRepublishingId] = useState<string | null>(null);
+  const [republishStage, setRepublishStage] = useState<string>("");
 
   const openProduct = useMemo(
     () => products.find((product) => product.id === openProductId) ?? null,
@@ -647,6 +651,46 @@ export function ProductListFull() {
       setBatchError(message);
     } finally {
       setDispatchingId(null);
+    }
+  }
+
+  async function handleRepublish(
+    product: ProductKnowledgeListItem,
+    event: MouseEvent<HTMLButtonElement>,
+  ) {
+    event.stopPropagation();
+    const label =
+      product.product_name_en || displayProductKey(product.product_key);
+    setRepublishingId(product.id);
+    setRepublishStage("品牌审查中…");
+    setBatchNotice("");
+    setBatchError("");
+    try {
+      const result = await republishProduct(product.id, (stage) => {
+        setRepublishStage(
+          stage === "auditing"
+            ? "品牌审查中…"
+            : stage === "exporting"
+              ? "导出上架包…"
+              : "派单上架中…",
+        );
+      });
+      setBatchNotice(
+        `「${label}」已重推（任务 ${result.job_id.slice(0, 8)}…）。` +
+          "同一链接原地更新，上架结果会进右上角通知铃铛。",
+      );
+    } catch (error) {
+      let message = formatError(error, "重推失败，请重试。");
+      if (error instanceof ProductKnowledgeApiError) {
+        const gateMessage = publishGateConflictMessage(label, error.detail);
+        if (gateMessage) {
+          message = gateMessage;
+        }
+      }
+      setBatchError(message);
+    } finally {
+      setRepublishingId(null);
+      setRepublishStage("");
     }
   }
 
@@ -1437,6 +1481,28 @@ export function ProductListFull() {
                                   <UploadCloud aria-hidden="true" size={15} />
                                 )}
                                 上架
+                              </button>
+                              <button
+                                className="secondary-button"
+                                disabled={republishingId === product.id}
+                                onClick={(event) =>
+                                  void handleRepublish(product, event)
+                                }
+                                title="改完内容一键重推：自动品牌审查→导出→上架。同一 SKU 原地更新，链接不变"
+                                type="button"
+                              >
+                                {republishingId === product.id ? (
+                                  <LoaderCircle
+                                    aria-hidden="true"
+                                    className="spin"
+                                    size={15}
+                                  />
+                                ) : (
+                                  <RefreshCw aria-hidden="true" size={15} />
+                                )}
+                                {republishingId === product.id
+                                  ? republishStage || "重推中…"
+                                  : "重推"}
                               </button>
                               <button
                                 className={`secondary-button ${styles.dangerButton}`}

@@ -525,6 +525,58 @@ export async function retryRenderJobs(
   return readJson<RenderJobsResult>(response, path);
 }
 
+export type RepublishStage = "auditing" | "exporting" | "dispatching";
+
+/** 一键重推：改完内容后重新上架同一产品（SKU upsert 原地更新，链接不变）。
+ * 串起既有三步：品牌审查（等出新结果且 clean）→ 导出 → 派单。
+ * 任一环失败即抛错并带清晰的下一步指引；绝不绕过品牌硬门。 */
+export async function republishProduct(
+  productId: string,
+  onStage?: (stage: RepublishStage) => void,
+): Promise<DispatchUploadResult> {
+  type AuditSnapshot = {
+    clean?: boolean | null;
+    audited_at?: string | null;
+    text_violations?: unknown[] | null;
+    image_violations?: unknown[] | null;
+  };
+  const readAudit = (detail: unknown): AuditSnapshot | null => {
+    const value = (detail as { brand_audit_json?: AuditSnapshot | null })
+      .brand_audit_json;
+    return value && typeof value === "object" ? value : null;
+  };
+  onStage?.("auditing");
+  const before = readAudit(await getProduct(productId));
+  await runBrandAudit(productId);
+  // 审查是异步任务：以 audited_at 变化判定"新结果"，避免读到旧快照。
+  const deadline = Date.now() + 240_000;
+  let audit: AuditSnapshot | null = null;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 8_000));
+    audit = readAudit(await getProduct(productId));
+    if (audit?.audited_at && audit.audited_at !== before?.audited_at) {
+      break;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        "品牌审查排队超时——稍后到详情页「品牌审查」面板确认结果后再点重推。",
+      );
+    }
+  }
+  if (audit?.clean !== true) {
+    const textCount = audit?.text_violations?.length ?? 0;
+    const imageCount = audit?.image_violations?.length ?? 0;
+    throw new Error(
+      `品牌审查未通过（文本 ${textCount} 项 / 图片 ${imageCount} 项）` +
+        "——到产品详情「品牌审查」面板处理违规后再重推。",
+    );
+  }
+  onStage?.("exporting");
+  await exportWorkflow(productId);
+  onStage?.("dispatching");
+  return dispatchUpload(productId);
+}
+
 export function runBrandAudit(productId: string): Promise<GenerationEnqueueResult> {
   return enqueueGeneration(
     productId,
