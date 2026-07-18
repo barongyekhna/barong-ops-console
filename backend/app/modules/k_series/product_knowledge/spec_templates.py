@@ -329,6 +329,25 @@ def normalize_template_fields(
                 )
 
         value_type = str(raw.get("value_type") or "").strip().lower()
+        if ai_draft and value_type not in CATEGORY_SPEC_VALUE_TYPES:
+            # Provider drafts drift across synonyms; coerce the common ones.
+            value_type = {
+                "string": "text",
+                "str": "text",
+                "varchar": "text",
+                "int": "number",
+                "integer": "number",
+                "float": "number",
+                "decimal": "number",
+                "numeric": "number",
+                "bool": "boolean",
+                "select": "enum",
+                "choice": "enum",
+                "options": "enum",
+                "list": "enum",
+            }.get(value_type, value_type)
+            if value_type not in CATEGORY_SPEC_VALUE_TYPES:
+                value_type = "text"
         if value_type not in CATEGORY_SPEC_VALUE_TYPES:
             raise SpecTemplateValidationError(
                 f"Template field '{key}' has an invalid value_type"
@@ -340,6 +359,16 @@ def normalize_template_fields(
 
         enum_options: list[str] | None = None
         raw_options = raw.get("enum_options")
+        if (
+            ai_draft
+            and value_type == "enum"
+            and isinstance(raw_options, list)
+            and any(contains_cjk(str(option or "")) for option in raw_options)
+        ):
+            # Draft came back with CJK options (buyer-facing red line).
+            # Demote to free text; the operator can rebuild the enum in review.
+            value_type = "text"
+            raw_options = None
         if value_type == "enum":
             if not isinstance(raw_options, list) or not raw_options:
                 raise SpecTemplateValidationError(
