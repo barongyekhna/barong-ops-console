@@ -7,6 +7,44 @@ export type ProductReviewStatus =
   | "blocked"
   | "archived";
 
+export type KCategoryTree = "google" | "amazon";
+
+export type CategorySpecFieldTarget = "additional" | "standard";
+export type CategorySpecFieldValueType = "number" | "text" | "enum" | "boolean";
+
+export type CategorySpecField = {
+  key: string;
+  target: CategorySpecFieldTarget;
+  label_zh: string;
+  label_en: string;
+  value_type: CategorySpecFieldValueType;
+  unit: string | null;
+  required: boolean;
+  enum_options: string[] | null;
+  hint_zh: string | null;
+};
+
+export type CategorySpecTemplate = {
+  category_id: string;
+  category_tree: KCategoryTree;
+  status: "draft" | "approved";
+  fields: CategorySpecField[];
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type SpecPasteMatch = {
+  value: unknown;
+  raw_value: string;
+  source_label: string;
+};
+
+export type SpecPasteParseResponse = {
+  matched: Record<string, SpecPasteMatch>;
+  unmatched_lines: string[];
+  missing_required: string[];
+};
+
 export type ProductKnowledgeListItem = {
   id: string;
   product_key: string;
@@ -54,8 +92,15 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
     review_reason?: string | null;
   } | null;
   contains_battery?: boolean;
+  category_id?: string | null;
+  category_tree?: KCategoryTree | null;
+  category_path?: string | null;
+  google_product_category?: string | null;
+  amazon_category_id?: string | null;
   package_includes_json?: string[] | null;
   structured_specs_json?: Record<string, unknown> | null;
+  specs_incomplete?: boolean;
+  missing_required_specs?: string[];
   selling_points_candidates_json?: Record<string, unknown> | null;
   selling_points_approved_json?: Record<string, unknown> | null;
   faq_research_json?: Record<string, unknown> | null;
@@ -212,7 +257,6 @@ export type ProductKnowledgeVariant = {
 export type ProductFormValues = {
   product_name_en: string;
   main_keyword: string;
-  parent_sku: string;
   brand_name: string;
   product_type: "simple_product" | "variable_product";
   price_value: string;

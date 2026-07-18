@@ -385,7 +385,6 @@ const initialValues: ProductFormValues = {
   main_keyword: "",
   product_type: "simple_product",
   raw_input_text: "",
-  parent_sku: "",
   target_market: "US",
   channel: "dtc",
   category_id: "",
@@ -591,10 +590,6 @@ function normalizePriceInput(
   };
 }
 
-function normalizeSku(value: string) {
-  return value.trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^[-_]+|[-_]+$/g, "").toUpperCase();
-}
-
 function parseOptionalInteger(value: string) {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -651,13 +646,8 @@ function variantAttributeTypeLabel(type: ProductVariantAttributeType) {
 }
 
 function buildVariantPayloads(
-  parentSku: string,
   variants: ProductVariantFormInput[],
 ): ProductVariantInput[] {
-  if (!normalizeSku(parentSku)) {
-    return [];
-  }
-
   return variants.map((variant) => {
     const attributes = normalizeVariantAttributes(variant.attributes);
     const firstValueFor = (type: ProductVariantAttributeType) =>
@@ -1048,7 +1038,6 @@ export function ProductForm({
       return;
     }
 
-    const parentSku = normalizeSku(values.parent_sku);
     const mainKeyword = values.main_keyword.trim();
     const rawInputText = values.raw_input_text.trim();
     const market = targetMarketForCode(values.target_market);
@@ -1057,7 +1046,13 @@ export function ProductForm({
       setValidationError(labels.marketInvalid);
       return;
     }
-    if (!parentSku || !mainKeyword || !rawInputText || !values.target_market) {
+    if (!values.category_id) {
+      setValidationError(
+        "请先选择类目——SKU 由系统按「叶子类目简写-编号」自动分配（如 IGL-001），不允许手填。",
+      );
+      return;
+    }
+    if (!mainKeyword || !rawInputText || !values.target_market) {
       setValidationError(labels.fieldRequired);
       return;
     }
@@ -1111,7 +1106,7 @@ export function ProductForm({
 
     const variants =
       values.product_type === "variable_product"
-        ? buildVariantPayloads(parentSku, values.variants)
+        ? buildVariantPayloads(values.variants)
         : [];
 
     const populatedManualSpecs = values.manual_specs.filter(
@@ -1160,7 +1155,7 @@ export function ProductForm({
       attribute_group: "sku_system",
       attribute_key: "sku_structure",
       attribute_value_json: {
-        parent_sku: parentSku,
+        parent_sku: "backend_allocated_from_leaf_category",
         product_type: values.product_type,
         variant_identity: "backend_generated_internal_id",
         variants:
@@ -1181,7 +1176,7 @@ export function ProductForm({
       dimensions_input: dimensions.value,
       multilingual_fields: multilingualFields,
       main_keyword: mainKeyword,
-      parent_sku: parentSku,
+      parent_sku: "backend_allocated_from_leaf_category",
       price_input: price.value,
       auto_key: "backend_generated_immutable",
       product_type: values.product_type,
@@ -1213,7 +1208,6 @@ export function ProductForm({
         long_description_en: rawInputText,
         main_keyword: mainKeyword,
         manual_notes: JSON.stringify(frontendSchemaSnapshot, null, 2),
-        parent_sku: parentSku,
         price_currency: price.value?.currency ?? values.price_currency,
         product_name_en: optionalText(values.product_name_en),
         product_status: "draft",
@@ -1224,7 +1218,6 @@ export function ProductForm({
         raw_input_text: rawInputText,
         review_status: "draft",
         short_description_en: rawInputText,
-        sku: parentSku,
         source_system: "manual",
         target_locale: market.contentLocale,
         target_market: market.code,
@@ -1293,13 +1286,11 @@ export function ProductForm({
           </label>
 
           <label className={styles.field}>
-            <span>{labels.parentSku}</span>
+            <span>SKU（自动分配）</span>
             <input
-              autoComplete="off"
-              onChange={(event) => updateValue("parent_sku", event.target.value)}
-              placeholder="SKU-1001"
-              required
-              value={values.parent_sku}
+              disabled
+              placeholder="选择类目后自动生成：叶子类目简写-编号（如 IGL-001）"
+              value=""
             />
           </label>
 

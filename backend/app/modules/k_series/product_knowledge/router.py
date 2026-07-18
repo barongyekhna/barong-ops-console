@@ -94,6 +94,7 @@ from .constants import (
     TARGET_ORGANIZATION_NAME,
 )
 from .errors import KConflictError, KProductKnowledgeError, KProductNotFoundError
+from .evidence_guard import TitleEvidenceConsistencyError
 from .models import (
     KProductKnowledgeAIEvent,
     KProductKnowledgeAttribute,
@@ -2819,6 +2820,17 @@ def product_knowledge_create(
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_CREATE)),
 ) -> ProductKnowledgeRead:
+    # 手动创建铁律:必须选类目 —— SKU 由叶子类目发号器统一签发(手填一律无效)。
+    if not str(payload.category_id or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "status": "failed",
+                "reason": "invalid_request",
+                "code": "CATEGORY_REQUIRED_FOR_SKU",
+                "message": "手动创建必须先选择类目;SKU 将按「叶子类目简写-编号」自动分配,不接受手填。",
+            },
+        )
     scope_context = _scope_context(request)
     fingerprint = _product_create_fingerprint(payload, scope_context)
     cache_key = _product_create_idempotency_cache_key(
@@ -3909,11 +3921,14 @@ def deepseek_enrich_product(
             "task": "deepseek_enrichment",
         },
     )
-    provider_output = sanitize_product_naming_output(
-        provider_output,
-        structured_specs=getattr(product, "structured_specs_json", None),
-        package_includes=getattr(product, "package_includes_json", None),
-    )
+    try:
+        provider_output = sanitize_product_naming_output(
+            provider_output,
+            structured_specs=getattr(product, "structured_specs_json", None),
+            package_includes=getattr(product, "package_includes_json", None),
+        )
+    except TitleEvidenceConsistencyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     product.deepseek_structured_output_json = provider_output
     product.review_status = "ai_structured"
     event = KProductKnowledgeAIEvent(
