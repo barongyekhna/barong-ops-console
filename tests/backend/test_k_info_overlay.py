@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from itertools import combinations
 from pathlib import Path
 
 import pytest
@@ -440,6 +441,90 @@ def test_dimension_geometry_snaps_to_detected_product_bounds() -> None:
     assert start[0] == end[0] < left
     assert direction == "left"
     assert 0 <= label_anchor[0] < 800
+
+
+def test_full_dimension_overlay_places_labels_disjoint_and_in_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.modules.k_series.product_knowledge import info_overlay
+
+    specs = _verified_specs()
+    dimensions = specs["dimensions"]
+    assert isinstance(dimensions, dict)
+    dimensions.update(
+        {
+            "length": {
+                "value": 17,
+                "unit": "cm",
+                "raw_value": "17厘米",
+                "source_label": "长度",
+            },
+            "width": {
+                "value": 17,
+                "unit": "cm",
+                "raw_value": "17厘米",
+                "source_label": "宽度",
+            },
+        }
+    )
+    # Reproduce the provider failure: every label asks for the bottom centre.
+    overlay = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "role": "dimension",
+        "items": [
+            {
+                "type": "dimension",
+                "source_field": f"dimensions.{axis}",
+                "line": {
+                    "start": {"x": 0.3, "y": 0.84},
+                    "end": {"x": 0.7, "y": 0.84},
+                },
+                "text_anchor": {"x": 0.5, "y": 0.94},
+            }
+            for axis in ("length", "width", "height")
+        ],
+    }
+    rendered_boxes: list[tuple[str, tuple[int, int, int, int], str]] = []
+    original_draw_label = info_overlay._draw_label
+
+    def capture_label(*args, **kwargs):
+        box = original_draw_label(*args, **kwargs)
+        rendered_boxes.append((kwargs["text"], box, kwargs["direction"]))
+        return box
+
+    monkeypatch.setattr(info_overlay, "_draw_label", capture_label)
+
+    rendered, report = compose_info_overlay(
+        _png(),
+        overlay,
+        specs,
+        target_market="US",
+    )
+
+    assert rendered != _png()
+    assert report == {"status": "applied", "applied_items": 3, "warnings": []}
+    assert {text.split(":", 1)[0] for text, _box, _direction in rendered_boxes} == {
+        "Length",
+        "Width",
+        "Height",
+    }
+    assert {direction for _text, _box, direction in rendered_boxes} == {
+        "down",
+        "up",
+        "left",
+    }
+    for _text, (left, top, right, bottom), _direction in rendered_boxes:
+        assert 0 <= left < right <= 800
+        assert 0 <= top < bottom <= 600
+    for first, second in combinations(rendered_boxes, 2):
+        left = first[1]
+        right = second[1]
+        assert (
+            left[2] <= right[0]
+            or right[2] <= left[0]
+            or left[3] <= right[1]
+            or right[3] <= left[1]
+        )
 
 
 def test_overlay_text_box_wraps_long_tokens_and_stays_inside_canvas() -> None:

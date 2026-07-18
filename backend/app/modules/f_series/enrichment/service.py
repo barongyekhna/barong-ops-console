@@ -25,6 +25,9 @@ from ....models.user import User
 from ....modules.k_series.product_knowledge.category_resolver import (
     bind_google_category_id,
 )
+from ....modules.k_series.product_knowledge.product_naming import (
+    strip_supplier_model_codes,
+)
 from ....modules.k_series.product_knowledge.scope_shim import KScopeContext
 from ....modules.k_series.product_knowledge.sku_allocator import ensure_product_sku
 from ....modules.k_series.product_knowledge.structured_specs import (
@@ -368,6 +371,10 @@ def import_candidate_to_k(
         .limit(1)
     ).first()
     primary_keyword = keyword_row[0] if keyword_row else candidate.title
+    clean_product_name = strip_supplier_model_codes(candidate.title)[:512] or None
+    clean_primary_keyword = (
+        strip_supplier_model_codes(str(primary_keyword))[:512] or None
+    )
     secondary_rows = db.execute(
         select(FCategoryKeyword.keyword_text)
         .where(FCategoryKeyword.category_id == candidate.category_id)
@@ -403,8 +410,8 @@ def import_candidate_to_k(
         business_context=scope_context.business_context,
         scope_mode=scope_context.scope_mode,
         organization_name=K_ORG_NAME,
-        product_name_en=candidate.title[:512],
-        primary_keyword=str(primary_keyword)[:512],
+        product_name_en=clean_product_name,
+        primary_keyword=clean_primary_keyword,
         secondary_keywords_json=secondary_keywords,
         brand_name=None,
         target_market="US",

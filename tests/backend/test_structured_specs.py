@@ -417,7 +417,7 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
         id=uuid4(),
         category_id="990991",
         category_path="Home & Garden > Lighting > Path Lights",
-        title="太阳能路径灯",
+        title="DS-101 Portable Path Light 7-Piece 1.5L Set",
         source="alibaba1688",
         source_url="https://detail.1688.com/offer/123456.html",
         price_cny=Decimal("12.50"),
@@ -448,6 +448,11 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
     assert product.workspace_key == "org_structured_specs"
     assert product.business_context == "independent_store"
     assert product.scope_mode == "production"
+    assert product.product_name_en == "Portable Path Light 7-Piece 1.5L Set"
+    assert product.primary_keyword == "Portable Path Light 7-Piece 1.5L Set"
+    assert product.raw_input_text.startswith(
+        "DS-101 Portable Path Light 7-Piece 1.5L Set\n"
+    )
     assert get_product(db, product_id=product.id, scope_context=scope).id == product.id
     assert product.structured_specs_json == specs
     assert product.package_includes_json == ["Light", "Ground stake"]

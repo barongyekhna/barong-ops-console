@@ -122,7 +122,7 @@ def _gate_resolver(_db, *, module_id, key_requirements, **_kwargs):
 def _provider(key: ModuleExecutionKey, _payload: dict):
     if key.step_name == "deepseek_enrichment":
         return {
-            "product_name_en": "DeepSeek enriched steel pump",
+            "product_name_en": "DS308 DeepSeek enriched steel pump 7-Piece 1.5L Set",
             "product_type": "simple_product",
             "short_description_en": "AI structured steel pump for wholesale buyers.",
             "confidence_score": 0.91,
@@ -233,7 +233,12 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
     assert execution.status == "blocked"
     assert execution.current_step == "risk_term_review_manual"
     assert product.deepseek_structured_output_json["confidence_score"] == 0.91
-    assert product.product_name_en == "DeepSeek enriched steel pump"
+    assert product.product_name_en == (
+        "DeepSeek enriched steel pump 7-Piece 1.5L Set"
+    )
+    assert product.deepseek_structured_output_json["product_name_en"] == (
+        "DeepSeek enriched steel pump 7-Piece 1.5L Set"
+    )
     assert KWorkflowStateMachineV2.current_state(execution, product) == (
         "RISK_PENDING_REVIEW"
     )

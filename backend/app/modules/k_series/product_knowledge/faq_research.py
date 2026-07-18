@@ -41,6 +41,101 @@ _QUESTION_START = re.compile(
     r"^(?:how|what|when|where|which|why|who|can|could|do|does|is|are|will|would|should)\b",
     re.IGNORECASE,
 )
+_QUESTION_END = re.compile(r"[?？]\s*$")
+_ARTICLE_OR_LISTICLE_TITLE = re.compile(
+    r"(?:^(?:the\s+)?(?:\d+\s+)?(?:best|top)\b"
+    r"|\btested\s*(?:&|and)\s*reviewed\b"
+    r"|\bput\s+to\s+the\s+test\b)",
+    re.IGNORECASE,
+)
+# Keep this list deliberately data-like and easy to extend when brand review
+# discovers another competitor leaking out of Serper.  Only distinctive third-
+# party names belong here; product/material words would create false positives.
+_THIRD_PARTY_BRAND_BLACKLIST = (
+    "bisgear",
+    "boundless voyage",
+    "bulin",
+    "coleman",
+    "fire-maple",
+    "fire maple",
+    "gsi outdoors",
+    "jetboil",
+    "mallo me",
+    "msr",
+    "odoland",
+    "primus",
+    "sea to summit",
+    "snow peak",
+    "stanley",
+    "toaks",
+    "widesea",
+)
+_BRAND_QUALITY_QUESTION = re.compile(
+    r"^is\s+.{1,60}\s+(?:an?\s+)?(?:good|reliable|reputable|legit|quality|premium)\s+brand\b",
+    re.IGNORECASE,
+)
+_IS_PROPER_NAME_QUESTION = re.compile(
+    r"^[Ii]s\s+(?:[Tt]he\s+)?"
+    r"(?P<brand>[A-Z][A-Za-z0-9&'’.-]{2,}(?:\s+[A-Z][A-Za-z0-9&'’.-]{2,}){0,2})\b"
+)
+_VS_COMPARISON = re.compile(
+    r"(?P<left>[a-z0-9][a-z0-9 &'’+./-]{0,45}?)\s+vs\.?\s+"
+    r"(?P<right>[a-z0-9][a-z0-9 &'’+./-]{0,45}?)(?=\s*(?:[,;:?]|\bis\b|\bwhich\b|$))",
+    re.IGNORECASE,
+)
+_GENERIC_COMPARISON_TOKENS = {
+    "aluminum",
+    "aluminium",
+    "anodized",
+    "butane",
+    "camp",
+    "camping",
+    "carbon",
+    "cast",
+    "ceramic",
+    "cookware",
+    "double",
+    "electric",
+    "fuel",
+    "gas",
+    "hard",
+    "iron",
+    "liquid",
+    "nonstick",
+    "pan",
+    "pans",
+    "pot",
+    "pots",
+    "propane",
+    "set",
+    "sets",
+    "single",
+    "steel",
+    "stove",
+    "stoves",
+    "stainless",
+    "titanium",
+    "wall",
+    "wood",
+}
+_COMPARISON_SCAFFOLD_TOKENS = {
+    "are",
+    "best",
+    "better",
+    "does",
+    "do",
+    "is",
+    "or",
+    "the",
+    "versus",
+    "what",
+    "which",
+    "worse",
+}
+_PROPER_NAME_REVIEW = re.compile(
+    r"\b(?P<brand>[A-Z][A-Za-z0-9&'’.-]{2,}(?:\s+[A-Z][A-Za-z0-9&'’.-]{2,}){0,2})\s+"
+    r"(?:(?:camping|outdoor|cookware|cookset|stove|gear|product)\s+){0,2}reviews?\b"
+)
 _SPEC_PARAPHRASE = re.compile(
     r"^(?:(?:what|which)\s+(?:is|are)\s+(?:the\s+)?"
     r"(?:dimensions?|size|weight|material|capacity|color|colour|quantity|voltage|wattage)"
@@ -102,6 +197,72 @@ def _question_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
 
 
+def _contains_third_party_brand(value: Any) -> bool:
+    normalized = f" {_question_key(_clean_text(value, limit=2000))} "
+    return any(
+        f" {_question_key(brand)} " in normalized
+        for brand in _THIRD_PARTY_BRAND_BLACKLIST
+    )
+
+
+def _comparison_side_is_generic(value: str) -> bool:
+    tokens = set(re.findall(r"[a-z0-9]+", value.casefold()))
+    tokens.difference_update(_COMPARISON_SCAFFOLD_TOKENS)
+    return bool(tokens) and tokens <= _GENERIC_COMPARISON_TOKENS
+
+
+def _looks_distinctive_proper_name(value: str) -> bool:
+    """Recognize proprietary casing without treating Title Case as a brand."""
+
+    words = re.findall(r"[A-Za-z][A-Za-z0-9&'’.-]*", value)
+    return any(
+        (word.isupper() and len(word) >= 2)
+        or any(character.isupper() for character in word[1:])
+        for word in words
+    )
+
+
+def _looks_like_third_party_brand_question(value: str) -> bool:
+    if _contains_third_party_brand(value) or _BRAND_QUALITY_QUESTION.search(value):
+        return True
+    proper_name_match = _IS_PROPER_NAME_QUESTION.search(value)
+    if proper_name_match is not None and _looks_distinctive_proper_name(
+        proper_name_match.group("brand")
+    ):
+        return True
+    for match in _VS_COMPARISON.finditer(value):
+        if not (
+            _comparison_side_is_generic(match.group("left"))
+            and _comparison_side_is_generic(match.group("right"))
+        ):
+            return True
+    review_match = _PROPER_NAME_REVIEW.search(value)
+    if review_match is not None and _looks_distinctive_proper_name(
+        review_match.group("brand")
+    ):
+        return True
+    return False
+
+
+def is_faq_question_candidate(value: Any) -> bool:
+    """Return whether search text is a buyer question safe to publish.
+
+    Search result titles are untrusted input.  Requiring both interrogative
+    grammar and terminal question punctuation rejects listicles/search titles;
+    the brand checks keep competitor entities out of research and provide a
+    reusable guard for persisted research and generated FAQ.
+    """
+
+    question = _clean_text(value, limit=512).strip(" -|:")
+    return bool(
+        question
+        and _QUESTION_START.match(question)
+        and _QUESTION_END.search(question)
+        and not _ARTICLE_OR_LISTICLE_TITLE.search(question)
+        and not _looks_like_third_party_brand_question(question)
+    )
+
+
 def is_specification_paraphrase_question(value: Any) -> bool:
     """Return whether a question would be rejected as a basic-spec restatement."""
 
@@ -157,7 +318,11 @@ def _append_source(
 ) -> None:
     text = _clean_text(question, limit=512).strip(" -|:")
     key = _question_key(text)
-    if not text or len(key.split()) < 3 or key in seen:
+    if (
+        not is_faq_question_candidate(text)
+        or len(key.split()) < 3
+        or key in seen
+    ):
         return
     seen.add(key)
     clean_url = _clean_text(url, limit=2048)
@@ -184,6 +349,10 @@ def build_faq_research(
 
     sources: list[dict[str, Any]] = []
     seen: set[str] = set()
+
+    # Traverse every PAA response first.  This makes provenance priority global
+    # (not merely per response) and ensures a duplicate organic result can never
+    # displace the stronger PAA source.
     for response_index, response in enumerate(responses):
         if not isinstance(response, dict):
             continue
@@ -209,6 +378,11 @@ def build_faq_research(
                     snippet=item.get("snippet") or item.get("answer"),
                 )
 
+    ranked_organic: list[dict[str, Any]] = []
+    for response_index, response in enumerate(responses):
+        if not isinstance(response, dict):
+            continue
+        query = queries[response_index] if response_index < len(queries) else ""
         organic = response.get("organic") or response.get("organic_results") or []
         if not isinstance(organic, list):
             continue
@@ -222,24 +396,43 @@ def build_faq_research(
             haystack = f"{title} {snippet}".casefold()
             is_forum = any(token in domain for token in _FORUM_DOMAINS)
             is_review = any(term in haystack for term in _REVIEW_TERMS)
-            is_question = bool("?" in title or _QUESTION_START.match(title))
-            if not (is_forum or is_review or is_question):
+            if not is_faq_question_candidate(title):
                 continue
             source_type = (
                 "forum_question"
                 if is_forum
                 else "review_pain_point" if is_review else "organic_question"
             )
-            _append_source(
-                sources,
-                seen,
-                question=title,
-                source_type=source_type,
-                query=query,
-                rank=rank,
-                url=url,
-                snippet=snippet,
+            ranked_organic.append(
+                {
+                    "question": title,
+                    "source_type": source_type,
+                    "query": query,
+                    "rank": rank,
+                    "url": url,
+                    "snippet": snippet,
+                }
             )
+
+    source_priority = {
+        "forum_question": 0,
+        "review_pain_point": 1,
+        "organic_question": 2,
+    }
+    for candidate in sorted(
+        ranked_organic,
+        key=lambda item: source_priority[str(item["source_type"])],
+    ):
+        _append_source(
+            sources,
+            seen,
+            question=candidate["question"],
+            source_type=str(candidate["source_type"]),
+            query=str(candidate["query"]),
+            rank=int(candidate["rank"]),
+            url=candidate["url"],
+            snippet=candidate["snippet"],
+        )
 
     clusters: dict[str, list[str]] = {}
     for source in sources:
@@ -465,7 +658,9 @@ def validate_generated_faq(
         for item in (
             raw_research_sources if isinstance(raw_research_sources, list) else []
         )
-        if isinstance(item, dict) and item.get("id")
+        if isinstance(item, dict)
+        and item.get("id")
+        and is_faq_question_candidate(item.get("question"))
     ]
     sources = {
         str(item.get("id")): item
@@ -557,6 +752,10 @@ def validate_generated_faq(
         reason = ""
         if not question or not answer:
             reason = "empty_question_or_answer"
+        elif not is_faq_question_candidate(question):
+            reason = "invalid_question_shape_or_third_party_brand"
+        elif _contains_third_party_brand(answer):
+            reason = "third_party_brand_reference"
         elif malformed_refs:
             reason = "malformed_evidence_refs"
         elif key in seen:

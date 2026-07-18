@@ -65,6 +65,7 @@ from .evidence_guard import (
 )
 from .faq_research import (
     build_faq_research,
+    is_faq_question_candidate,
     is_specification_paraphrase_question,
     structured_spec_number_tokens,
     validate_generated_faq,
@@ -84,6 +85,7 @@ from .models import (
     KProductKnowledgeVariant,
     KProductKnowledgeWorkflowExecution,
 )
+from .product_naming import sanitize_product_naming_output
 from .schemas import (
     ProductKnowledgeImageBindRequest,
     ProductKnowledgeRiskReviewRequest,
@@ -858,6 +860,10 @@ class KProductKnowledgeWorkflowEngine:
             gate_context=gate_context,
             payload=ai_input,
         )
+        # DeepSeek may repeat a supplier-private model code from raw_input_text.
+        # Normalize the buyer-visible name before diffing, persistence, audit
+        # event capture, or any downstream title/schema generation consumes it.
+        provider_output = sanitize_product_naming_output(provider_output)
         diff: dict[str, dict[str, Any]] = {}
         category_hint_before = product.category_hint
         _capture_ai_category_hint(product, provider_output)
@@ -3555,6 +3561,7 @@ def _faq_question_clusters(research: Any) -> list[dict[str, Any]]:
         if isinstance(source, dict)
         and str(source.get("id") or "").strip()
         and str(source.get("question") or "").strip()
+        and is_faq_question_candidate(source.get("question"))
         and not is_specification_paraphrase_question(source.get("question"))
     ]
     sources_by_id = {

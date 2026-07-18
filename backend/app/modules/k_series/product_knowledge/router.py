@@ -105,6 +105,7 @@ from .models import (
     KProductKnowledgeTranslation,
     KProductKnowledgeVariant,
 )
+from .product_naming import sanitize_product_naming_output
 from .schemas import (
     ArchiveProductKnowledgeRequest,
     ProductKnowledgeAttributeListResponse,
@@ -3903,6 +3904,7 @@ def deepseek_enrich_product(
             "task": "deepseek_enrichment",
         },
     )
+    provider_output = sanitize_product_naming_output(provider_output)
     product.deepseek_structured_output_json = provider_output
     product.review_status = "ai_structured"
     event = KProductKnowledgeAIEvent(

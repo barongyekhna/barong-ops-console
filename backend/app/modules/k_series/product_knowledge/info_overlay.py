@@ -665,6 +665,7 @@ def _snapped_dimension_geometry(
     text_anchor: tuple[int, int],
     image_size: tuple[int, int],
     lane: int = 0,
+    side: str | None = None,
 ) -> tuple[tuple[int, int], tuple[int, int], tuple[int, int], str]:
     """Attach a dimension line to the detected product edges, not AI guesses."""
     width, height = image_size
@@ -674,12 +675,14 @@ def _snapped_dimension_geometry(
     gap = max(10, round(min(width, height) * 0.025)) * (max(0, lane) + 1)
     edge_padding = max(4, round(min(width, height) * 0.008))
     if source_field.endswith(".height"):
-        prefer_left = text_anchor[0] < center_x
-        if prefer_left and left > gap * 2:
-            x = left - gap
+        if side not in {None, "left", "right"}:
+            raise ValueError("height dimension side must be left or right")
+        prefer_left = side == "left" or (side is None and text_anchor[0] < center_x)
+        if side == "left" or (prefer_left and left > gap * 2):
+            x = max(edge_padding, left - gap)
             direction = "left"
-        elif right + gap < width - edge_padding:
-            x = right + gap
+        elif side == "right" or right + gap < width - edge_padding:
+            x = min(width - edge_padding, right + gap)
             direction = "right"
         else:
             x = max(edge_padding, left - gap)
@@ -696,12 +699,14 @@ def _snapped_dimension_geometry(
             center_y,
         )
     else:
-        prefer_top = text_anchor[1] < center_y
-        if prefer_top and top > gap * 2:
-            y = top - gap
+        if side not in {None, "up", "down"}:
+            raise ValueError("horizontal dimension side must be up or down")
+        prefer_top = side == "up" or (side is None and text_anchor[1] < center_y)
+        if side == "up" or (prefer_top and top > gap * 2):
+            y = max(edge_padding, top - gap)
             direction = "up"
-        elif bottom + gap < height - edge_padding:
-            y = bottom + gap
+        elif side == "down" or bottom + gap < height - edge_padding:
+            y = min(height - edge_padding, bottom + gap)
             direction = "down"
         else:
             y = max(edge_padding, top - gap)
@@ -709,9 +714,119 @@ def _snapped_dimension_geometry(
         start, end = (left, y), (right, y)
         label_anchor = (
             center_x,
-            max(edge_padding, min(height - edge_padding, y + (-gap if direction == "up" else gap))),
+            max(
+                edge_padding,
+                min(
+                    height - edge_padding,
+                    y + (-gap if direction == "up" else gap),
+                ),
+            ),
         )
     return start, end, label_anchor, direction
+
+
+def _dimension_side_order(
+    *,
+    source_field: str,
+    foreground_bbox: tuple[int, int, int, int],
+    text_anchor: tuple[int, int],
+) -> tuple[str, str]:
+    """Give each physical axis a different primary edge.
+
+    Provider coordinates remain a hint for which vertical edge is clearer, but
+    they can no longer put both horizontal dimensions on the bottom edge.
+    """
+    if source_field.endswith(".length"):
+        return "down", "up"
+    if not source_field.endswith(".height"):
+        return "up", "down"
+    center_x = (foreground_bbox[0] + foreground_bbox[2]) // 2
+    if text_anchor[0] <= center_x:
+        return "left", "right"
+    return "right", "left"
+
+
+def _boxes_overlap(
+    first: tuple[int, int, int, int],
+    second: tuple[int, int, int, int],
+    *,
+    spacing: int = 0,
+) -> bool:
+    """Return whether two inclusive drawing boxes collide or sit too close."""
+    return not (
+        first[2] + spacing <= second[0]
+        or second[2] + spacing <= first[0]
+        or first[3] + spacing <= second[1]
+        or second[3] + spacing <= first[1]
+    )
+
+
+def _collision_free_label_placement(
+    draw: ImageDraw.ImageDraw,
+    *,
+    text: str,
+    anchor: tuple[int, int],
+    direction: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    image_size: tuple[int, int],
+    padding: int,
+    line_width: int,
+    occupied_boxes: list[tuple[int, int, int, int]],
+) -> tuple[tuple[int, int], tuple[int, int, int, int]] | None:
+    """Move a panel along its edge until its measured box is collision-free."""
+    preview = _text_box(
+        draw,
+        text=text,
+        anchor=anchor,
+        direction=direction,
+        font=font,
+        image_size=image_size,
+        padding=padding,
+    )
+    preview_box = preview[:4]
+    vertical_edge = direction in {"left", "right"}
+    axis_size = image_size[1] if vertical_edge else image_size[0]
+    box_extent = (
+        preview_box[3] - preview_box[1]
+        if vertical_edge
+        else preview_box[2] - preview_box[0]
+    )
+    step = max(padding * 2, box_extent + padding)
+    max_steps = max(1, math.ceil(axis_size / step))
+    offsets = [0]
+    for multiplier in range(1, max_steps + 1):
+        offsets.extend((-step * multiplier, step * multiplier))
+
+    seen_boxes: set[tuple[int, int, int, int]] = set()
+    for offset in offsets:
+        if vertical_edge:
+            adjusted_anchor = (
+                anchor[0],
+                min(max(0, anchor[1] + offset), image_size[1]),
+            )
+        else:
+            adjusted_anchor = (
+                min(max(0, anchor[0] + offset), image_size[0]),
+                anchor[1],
+            )
+        candidate = _text_box(
+            draw,
+            text=text,
+            anchor=adjusted_anchor,
+            direction=direction,
+            font=font,
+            image_size=image_size,
+            padding=padding,
+        )[:4]
+        if candidate in seen_boxes:
+            continue
+        seen_boxes.add(candidate)
+        if all(
+            not _boxes_overlap(candidate, occupied, spacing=line_width)
+            for occupied in occupied_boxes
+        ):
+            return adjusted_anchor, candidate
+    return None
 
 
 def _draw_arrow_line(
@@ -777,7 +892,7 @@ def compose_info_overlay(
     arrow_size = max(8, round(base * 0.013))
     warnings: list[str] = []
     applied = 0
-    dimension_lanes = {"vertical": 0, "horizontal": 0}
+    occupied_label_boxes: list[tuple[int, int, int, int]] = []
     foreground_bbox: tuple[int, int, int, int] | None = None
     if any(item["type"] == "dimension" for item in contract["items"]):
         foreground_bbox = _foreground_bbox(image)
@@ -809,6 +924,34 @@ def compose_info_overlay(
             direction = _auto_direction(
                 anchor, text_anchor, item.get("leader_direction", "auto")
             )
+            direction_order = [direction]
+            direction_order.extend(
+                candidate
+                for candidate in ("right", "left", "up", "down")
+                if candidate != direction
+            )
+            placement = None
+            for candidate_direction in direction_order:
+                placement = _collision_free_label_placement(
+                    draw,
+                    text=text,
+                    anchor=text_anchor,
+                    direction=candidate_direction,
+                    font=font,
+                    image_size=image.size,
+                    padding=padding,
+                    line_width=line_width,
+                    occupied_boxes=occupied_label_boxes,
+                )
+                if placement is not None:
+                    direction = candidate_direction
+                    text_anchor = placement[0]
+                    break
+            if placement is None:
+                warnings.append(
+                    f"overlay label skipped because no collision-free position: {source_field}"
+                )
+                continue
             box = _draw_label(
                 draw,
                 text=text,
@@ -819,6 +962,7 @@ def compose_info_overlay(
                 padding=padding,
                 line_width=line_width,
             )
+            occupied_label_boxes.append(box)
             leader_end = (
                 min(max(anchor[0], box[0]), box[2]),
                 min(max(anchor[1], box[1]), box[3]),
@@ -836,24 +980,96 @@ def compose_info_overlay(
             )
         else:
             if foreground_bbox is not None:
-                orientation = (
-                    "vertical"
-                    if source_field.endswith(".height")
-                    else "horizontal"
-                )
-                start, end, text_anchor, direction = _snapped_dimension_geometry(
+                placement = None
+                chosen_geometry = None
+                for side in _dimension_side_order(
                     source_field=source_field,
                     foreground_bbox=foreground_bbox,
                     text_anchor=text_anchor,
-                    image_size=image.size,
-                    lane=dimension_lanes[orientation],
-                )
-                dimension_lanes[orientation] += 1
+                ):
+                    for lane in range(2):
+                        candidate_geometry = _snapped_dimension_geometry(
+                            source_field=source_field,
+                            foreground_bbox=foreground_bbox,
+                            text_anchor=text_anchor,
+                            image_size=image.size,
+                            lane=lane,
+                            side=side,
+                        )
+                        (
+                            candidate_start,
+                            candidate_end,
+                            candidate_anchor,
+                            candidate_direction,
+                        ) = candidate_geometry
+                        placement = _collision_free_label_placement(
+                            draw,
+                            text=text,
+                            anchor=candidate_anchor,
+                            direction=candidate_direction,
+                            font=font,
+                            image_size=image.size,
+                            padding=padding,
+                            line_width=line_width,
+                            occupied_boxes=occupied_label_boxes,
+                        )
+                        if placement is not None:
+                            chosen_geometry = (
+                                candidate_start,
+                                candidate_end,
+                                placement[0],
+                                candidate_direction,
+                            )
+                            break
+                    if chosen_geometry is not None:
+                        break
+                if chosen_geometry is None:
+                    warnings.append(
+                        f"overlay label skipped because no collision-free position: {source_field}"
+                    )
+                    continue
+                start, end, text_anchor, direction = chosen_geometry
             else:
                 start = _pixels(item["line"]["start"], width, height)
                 end = _pixels(item["line"]["end"], width, height)
                 midpoint = ((start[0] + end[0]) // 2, (start[1] + end[1]) // 2)
                 direction = _auto_direction(midpoint, text_anchor, "auto")
+                gap = max(10, round(base * 0.025))
+                anchor_candidates = [(text_anchor, direction)]
+                for candidate_direction, delta in (
+                    ("up", (0, -gap)),
+                    ("down", (0, gap)),
+                    ("left", (-gap, 0)),
+                    ("right", (gap, 0)),
+                ):
+                    candidate = (
+                        (midpoint[0] + delta[0], midpoint[1] + delta[1]),
+                        candidate_direction,
+                    )
+                    if candidate not in anchor_candidates:
+                        anchor_candidates.append(candidate)
+                placement = None
+                for candidate_anchor, candidate_direction in anchor_candidates:
+                    placement = _collision_free_label_placement(
+                        draw,
+                        text=text,
+                        anchor=candidate_anchor,
+                        direction=candidate_direction,
+                        font=font,
+                        image_size=image.size,
+                        padding=padding,
+                        line_width=line_width,
+                        occupied_boxes=occupied_label_boxes,
+                    )
+                    if placement is not None:
+                        text_anchor = placement[0]
+                        direction = candidate_direction
+                        break
+                if placement is None:
+                    warnings.append(
+                        f"overlay label skipped because no collision-free position: {source_field}"
+                    )
+                    continue
             _draw_arrow_line(
                 draw,
                 start,
@@ -861,7 +1077,7 @@ def compose_info_overlay(
                 line_width=line_width,
                 arrow_size=arrow_size,
             )
-            _draw_label(
+            box = _draw_label(
                 draw,
                 text=text,
                 anchor=text_anchor,
@@ -871,6 +1087,7 @@ def compose_info_overlay(
                 padding=padding,
                 line_width=line_width,
             )
+            occupied_label_boxes.append(box)
         applied += 1
 
     if not applied:
