@@ -23,6 +23,7 @@ from .constants import TARGET_ORGANIZATION_NAME
 from .models import KProductKnowledgeProduct
 from .scope_shim import KScopeContext
 from .sku_allocator import ensure_product_sku
+from .spec_templates import refresh_product_spec_completeness
 
 _RW_COLUMNS = (
     "asin, marketplace, title, brand, category_id, category_path, "
@@ -168,6 +169,7 @@ def transfer_from_rw(
                 # 新 Keepa 类目自动创建（#7）+ 按 channel 自动落类目（#5/#6）
                 CR.ensure_amazon_category(db, rw["category_id"], rw["category_path"])
                 CR.assign_category(db, product)
+                refresh_product_spec_completeness(db, product)
                 ensure_product_sku(db, product, force_allocate=True)
                 db.add(product)
                 ensure_default_product_variant(db, product)

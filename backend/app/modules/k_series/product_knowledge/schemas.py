@@ -344,7 +344,13 @@ class ProductKnowledgeRead(BaseModel):
     shipping_review_needed: bool = False
     shipping_assignment: dict[str, Any] | None = None
     contains_battery: bool = False
+    category_id: str | None = None
+    category_tree: Literal["google", "amazon"] | None = None
+    google_product_category: str | None = None
+    amazon_category_id: str | None = None
     structured_specs_json: dict[str, Any] | None = None
+    specs_incomplete: bool = False
+    missing_required_specs: list[str] = Field(default_factory=list)
     package_includes_json: list[str] | None = None
     selling_points_candidates_json: dict[str, Any] | None = None
     selling_points_approved_json: dict[str, Any] | None = None

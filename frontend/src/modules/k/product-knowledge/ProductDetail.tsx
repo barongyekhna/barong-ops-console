@@ -41,6 +41,7 @@ import {
   updateProduct,
 } from "./api";
 import { CopyArtDirection } from "./CopyArtDirection";
+import { ProductSpecsPanel } from "./ProductSpecsPanel";
 import styles from "./ProductKnowledge.module.css";
 import {
   displayProductKey,
@@ -109,13 +110,6 @@ type PendingMediaUpload = {
   fileName: string;
   variantSku: string;
 };
-type ManualSpecDraft = {
-  key: string;
-  label: string;
-  value: string;
-  unit: string;
-};
-
 type ProductDetailProps = {
   isGeneratingSellingPoints?: boolean;
   isSavingProductInfo?: boolean;
@@ -352,15 +346,6 @@ function sellingPointsProgressPercent(
   return 0;
 }
 
-function nextOperatorAttributeKey(specs: ManualSpecDraft[]) {
-  const occupiedKeys = new Set(specs.map((spec) => spec.key));
-  let ordinal = 1;
-  while (occupiedKeys.has(`operator_attribute_${ordinal}`)) {
-    ordinal += 1;
-  }
-  return `operator_attribute_${ordinal}`;
-}
-
 function nextManualSellingPointId(bullets: BulletPoint[]) {
   const occupiedIds = new Set(
     bullets.map((bullet) => bullet.id).filter((id): id is string => Boolean(id)),
@@ -557,9 +542,6 @@ export function ProductDetail({
   const [shippingBusy, setShippingBusy] = useState<
     "save" | "assign" | "battery" | null
   >(null);
-  const [manualSpecs, setManualSpecs] = useState<ManualSpecDraft[]>([]);
-  const [specError, setSpecError] = useState("");
-  const [isSavingSpecs, setIsSavingSpecs] = useState(false);
   const [packageIncludes, setPackageIncludes] = useState<string[]>([""]);
   const [packageError, setPackageError] = useState("");
   const [isSavingPackage, setIsSavingPackage] = useState(false);
@@ -751,68 +733,6 @@ export function ProductDetail({
   }, [product?.id, shippingProduct?.channel, shippingProduct?.id]);
 
   useEffect(() => {
-    const specs = shippingProduct?.structured_specs_json;
-    const additional = Array.isArray(specs?.additional_specs)
-      ? specs.additional_specs
-      : [];
-    const standard = Object.entries(specs ?? {}).flatMap(([field, raw]) => {
-      if (
-        ["schema_version", "source", "additional_specs"].includes(field) ||
-        !raw ||
-        typeof raw !== "object" ||
-        Array.isArray(raw)
-      ) {
-        return [];
-      }
-      const node = raw as Record<string, unknown>;
-      if (node.value != null || node.raw_value != null) {
-        return [
-          {
-            key: field,
-            label: String(node.source_label ?? field),
-            unit: String(node.unit ?? ""),
-            value: String(
-              node.raw_value ??
-                (typeof node.value === "object"
-                  ? JSON.stringify(node.value)
-                  : node.value ?? ""),
-            ),
-          },
-        ];
-      }
-      return Object.entries(node).flatMap(([part, nested]) => {
-        if (!nested || typeof nested !== "object" || Array.isArray(nested)) {
-          return [];
-        }
-        const leaf = nested as Record<string, unknown>;
-        if (leaf.value == null && leaf.raw_value == null) {
-          return [];
-        }
-        return [
-          {
-            key: `${field}.${part}`,
-            label: String(leaf.source_label ?? `${field} ${part}`),
-            unit: String(leaf.unit ?? node.unit ?? ""),
-            value: String(leaf.raw_value ?? leaf.value ?? ""),
-          },
-        ];
-      });
-    });
-    const rows = [...standard, ...additional];
-    setManualSpecs(
-      rows
-        .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
-        .map((item, index) => ({
-          key: String(item.key ?? `operator_attribute_${index + 1}`),
-          label: String(item.label ?? ""),
-          unit: String(item.unit ?? ""),
-          value: String(item.raw_value ?? item.value ?? ""),
-        })),
-    );
-    setSpecError("");
-  }, [shippingProduct?.id, shippingProduct?.structured_specs_json]);
-
-  useEffect(() => {
     const items = Array.isArray(shippingProduct?.package_includes_json)
       ? shippingProduct.package_includes_json.filter(
           (item): item is string => typeof item === "string",
@@ -944,80 +864,6 @@ export function ProductDetail({
           shippingClass.slug === currentShippingProduct.shipping_class,
       )?.name ?? currentShippingProduct.shipping_class
     : null;
-
-  const structuredSpecSource = String(
-    currentShippingProduct?.structured_specs_json?.source &&
-      typeof currentShippingProduct.structured_specs_json.source === "object"
-      ? (currentShippingProduct.structured_specs_json.source as Record<string, unknown>)
-          .platform ?? ""
-      : "",
-  );
-  const supplierSpecsReadOnly = structuredSpecSource === "1688";
-
-  function updateManualSpec(
-    index: number,
-    key: keyof Pick<ManualSpecDraft, "label" | "value" | "unit">,
-    value: string,
-  ) {
-    setManualSpecs((current) =>
-      current.map((spec, specIndex) =>
-        specIndex === index ? { ...spec, [key]: value } : spec,
-      ),
-    );
-    setSpecError("");
-  }
-
-  function addManualSpec() {
-    setManualSpecs((current) => [
-      ...current,
-      {
-        key: nextOperatorAttributeKey(current),
-        label: "",
-        value: "",
-        unit: "",
-      },
-    ]);
-  }
-
-  async function saveManualSpecs() {
-    if (supplierSpecsReadOnly) {
-      setSpecError("供应商证据规格为只读，不能用人工值覆盖。");
-      return;
-    }
-    const populated = manualSpecs.filter(
-      (spec) => spec.label.trim() || spec.value.trim() || spec.unit.trim(),
-    );
-    if (populated.some((spec) => !spec.label.trim() || !spec.value.trim())) {
-      setSpecError("每条规格必须同时填写规格名和真实值；未知项请留空。");
-      return;
-    }
-    setIsSavingSpecs(true);
-    setSpecError("");
-    try {
-      await updateProduct(currentProduct.id, {
-        structured_specs_json:
-          populated.length > 0
-            ? {
-                schema_version: "1.0",
-                source: { platform: "operator" },
-                additional_specs: populated.map((spec, index) => ({
-                  evidence: "operator_fact",
-                  key: spec.key || `operator_attribute_${index + 1}`,
-                  label: spec.label.trim(),
-                  raw_value: spec.value.trim(),
-                  unit: spec.unit.trim() || undefined,
-                  value: spec.value.trim(),
-                })),
-              }
-            : null,
-      });
-      await refreshProductDetail(currentProduct.id);
-    } catch (error) {
-      setSpecError(error instanceof Error ? error.message : "规格保存失败。");
-    } finally {
-      setIsSavingSpecs(false);
-    }
-  }
 
   function updatePackageItem(index: number, value: string) {
     setPackageIncludes((current) =>
@@ -1803,87 +1649,23 @@ export function ProductDetail({
         </div>
       </section>
 
-      <section className={styles.workflowSection} aria-labelledby="k-fact-specs">
-        <div className={styles.sellingPointsHeading}>
-          <div>
-            <span className={styles.eyebrow}>规格</span>
-            <h4 id="k-fact-specs">事实规格</h4>
+      {currentShippingProduct ? (
+        <ProductSpecsPanel
+          onProductUpdated={(updated) => {
+            if (activeProductIdRef.current === updated.id) {
+              setShippingProduct(updated);
+            }
+          }}
+          product={currentShippingProduct}
+        />
+      ) : (
+        <section className={styles.workflowSection} aria-labelledby="k-fact-specs">
+          <div className={styles.specInlineState}>
+            <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            正在加载事实规格…
           </div>
-          {!supplierSpecsReadOnly ? (
-            <button className="secondary-button" onClick={addManualSpec} type="button">
-              <Plus aria-hidden="true" size={15} />
-              添加规格
-            </button>
-          ) : null}
-        </div>
-        <p className={styles.keywordAiNotice}>
-          规格只保存可核验事实；营销声明请在下方“卖点”区逐条挂证据审核。
-          {supplierSpecsReadOnly ? " 当前为 1688 供应商证据，只读展示。" : ""}
-        </p>
-        {manualSpecs.length === 0 ? (
-          <p className={styles.sellingPointsEmpty}>暂无事实规格，未知字段保持为空。</p>
-        ) : null}
-        {manualSpecs.map((spec, index) => (
-          <div className={styles.workflowStartGrid} key={spec.key || index}>
-            <label className={styles.field}>
-              <span>规格名 · 证据 spec:{spec.key}</span>
-              <input
-                disabled={supplierSpecsReadOnly}
-                onChange={(event) => updateManualSpec(index, "label", event.target.value)}
-                value={spec.label}
-              />
-            </label>
-            <label className={styles.field}>
-              <span>真实值</span>
-              <input
-                disabled={supplierSpecsReadOnly}
-                onChange={(event) => updateManualSpec(index, "value", event.target.value)}
-                value={spec.value}
-              />
-            </label>
-            <label className={styles.field}>
-              <span>单位</span>
-              <input
-                disabled={supplierSpecsReadOnly}
-                onChange={(event) => updateManualSpec(index, "unit", event.target.value)}
-                value={spec.unit}
-              />
-            </label>
-            {!supplierSpecsReadOnly ? (
-              <button
-                className="secondary-button"
-                onClick={() =>
-                  setManualSpecs((current) =>
-                    current.filter((_, specIndex) => specIndex !== index),
-                  )
-                }
-                type="button"
-              >
-                删除
-              </button>
-            ) : null}
-          </div>
-        ))}
-        {specError ? <p className={styles.sellingPointsError}>{specError}</p> : null}
-        {!supplierSpecsReadOnly ? (
-          <div className={styles.sectionFooter}>
-            <span>保存后可作为 spec:&lt;字段&gt; 或 operator_fact 的卖点证据。</span>
-            <button
-              className="primary-button"
-              disabled={isSavingSpecs}
-              onClick={() => void saveManualSpecs()}
-              type="button"
-            >
-              {isSavingSpecs ? (
-                <LoaderCircle aria-hidden="true" className="spin" size={16} />
-              ) : (
-                <Save aria-hidden="true" size={16} />
-              )}
-              保存规格
-            </button>
-          </div>
-        ) : null}
-      </section>
+        </section>
+      )}
 
       <section className={styles.workflowSection} aria-labelledby="k-keywords">
         <div className={styles.sellingPointsHeading}>

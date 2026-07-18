@@ -36,6 +36,7 @@ from .schemas import (
 )
 from .scope_shim import KScopeContext, apply_scope_filters, normalize_scope_context
 from .sku_allocator import ensure_product_sku
+from .spec_templates import refresh_product_spec_completeness
 
 PRODUCT_CREATE_FIELDS = frozenset(
     {
@@ -221,6 +222,10 @@ def create_product(
         )
         product.channel = (payload.channel or "dtc").strip().lower()
         _apply_manual_category(db, product, payload.category_id)
+        # Missing category-template fields are diagnostic only: creation still
+        # succeeds and the canonical P gate blocks only when an approved
+        # template exists.
+        refresh_product_spec_completeness(db, product)
         # User/source-provided SKU values are intentionally ignored.  K owns
         # the public identifier and issues it exactly once from the leaf.
         parent_sku = ensure_product_sku(db, product, force_allocate=True)
@@ -318,6 +323,8 @@ def update_product(
         invalidate_evidence_outputs(product)
     for field_name, value in updates.items():
         setattr(product, field_name, value)
+    if "structured_specs_json" in updates:
+        refresh_product_spec_completeness(db, product)
 
     _commit(db)
     db.refresh(product)

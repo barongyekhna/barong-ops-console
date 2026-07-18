@@ -45,6 +45,7 @@ REQUIRED_ALEMBIC_TABLES = {
     "ops_execution_unlock_tokens",
     "ops_canary_rollouts",
     "ops_rollback_guards",
+    "k_category_spec_templates",
     "k_product_knowledge_products",
     "k_product_knowledge_attributes",
     "k_product_knowledge_translations",

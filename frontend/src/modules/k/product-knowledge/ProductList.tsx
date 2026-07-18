@@ -6,6 +6,7 @@ import {
   ChevronRight,
   ClipboardList,
   ExternalLink,
+  FolderTree,
   ImagePlus,
   LoaderCircle,
   RefreshCw,
@@ -1055,6 +1056,10 @@ export function ProductListFull() {
           <p>创建产品后进入档案，逐步完成关键词、图片与卖点审核。</p>
         </div>
         <div className={styles.kCommandActions}>
+          <a className="secondary-button" href="/products/categories">
+            <FolderTree aria-hidden="true" size={16} />
+            类目规格模板
+          </a>
           <button
             className="primary-button"
             onClick={() => {

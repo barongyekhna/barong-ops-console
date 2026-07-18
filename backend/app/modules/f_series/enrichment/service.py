@@ -34,6 +34,9 @@ from ....modules.k_series.product_knowledge.evidence_guard import (
 )
 from ....modules.k_series.product_knowledge.scope_shim import KScopeContext
 from ....modules.k_series.product_knowledge.sku_allocator import ensure_product_sku
+from ....modules.k_series.product_knowledge.spec_templates import (
+    refresh_product_spec_completeness,
+)
 from ....modules.k_series.product_knowledge.structured_specs import (
     package_includes_from_structured_specs,
 )
@@ -454,6 +457,7 @@ def import_candidate_to_k(
     product.category_review_needed = not bind_google_category_id(
         db, product, candidate.category_id
     )
+    refresh_product_spec_completeness(db, product)
     ensure_product_sku(db, product, force_allocate=True)
     db.add(product)
     ensure_default_product_variant(db, product)

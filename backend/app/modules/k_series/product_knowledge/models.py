@@ -92,6 +92,34 @@ class KSkuSequence(Base):
     )
 
 
+class KCategorySpecTemplate(KTimestampMixin, Base):
+    """Operator-approved specification fields for one K leaf category."""
+
+    __tablename__ = "k_category_spec_templates"
+    __table_args__ = (
+        CheckConstraint(
+            "category_tree IN ('google', 'amazon')",
+            name=conv("ck_k_category_spec_templates_tree"),
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'approved')",
+            name=conv("ck_k_category_spec_templates_status"),
+        ),
+        Index("ix_k_category_spec_templates_status", "status"),
+    )
+
+    # Google and Amazon both use numeric category ids, so the tree is part of
+    # the identity instead of assuming the ids share one namespace.
+    category_tree: Mapped[str] = mapped_column(String(16), primary_key=True)
+    category_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default="draft",
+    )
+    fields_json: Mapped[Any] = mapped_column("fields", json_type(), nullable=False)
+
+
 class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     __tablename__ = "k_product_knowledge_products"
     __table_args__ = (
@@ -244,6 +272,18 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     structured_specs_json: Mapped[Any | None] = mapped_column(
         json_type(), nullable=True
     )
+    # Round 9 stores a diagnostic snapshot for the operator UI.  The P gate
+    # still re-evaluates the current approved template so a later template edit
+    # can never be bypassed by a stale flag.
+    specs_incomplete: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+    )
+    specs_missing_required_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
     # Evidence-driven selling-point contract.  Candidates are retained for
     # audit/editing, while every downstream consumer must read only the
     # operator-approved payload.
@@ -382,6 +422,27 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     )
     manual_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     field_diff_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+
+    @property
+    def category_tree(self) -> str | None:
+        if (self.channel or "dtc").strip().lower() == "amazon":
+            return "amazon" if self.amazon_category_id else None
+        return "google" if self.google_product_category else None
+
+    @property
+    def category_id(self) -> str | None:
+        if self.category_tree == "amazon":
+            return self.amazon_category_id
+        if self.category_tree == "google":
+            return self.google_product_category
+        return None
+
+    @property
+    def missing_required_specs(self) -> list[str]:
+        value = self.specs_missing_required_json
+        if not isinstance(value, list):
+            return []
+        return [str(item) for item in value if str(item).strip()]
 
 
 class KProductKnowledgeVariant(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):

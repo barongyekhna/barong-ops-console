@@ -572,9 +572,49 @@ def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
             raise ValueError(f"Manual standard spec '{key}' must be an object")
         if key == "dimensions":
             dimensions = dict(raw)
+            has_dimension_leaf = any(
+                isinstance(raw.get(axis), dict)
+                for axis in ("length", "width", "height")
+            )
+            # Round 9 templates describe one stable root key.  Accept the
+            # operator-confirmed ``L x W x H`` evidence at that boundary, but
+            # immediately project it back into the established v1 axis shape
+            # so downstream consumers never receive a new dimensions schema.
+            if not has_dimension_leaf:
+                root_raw_value = _clean_text(raw.get("raw_value"))
+                root_normalized_value = _clean_text(raw.get("value"))
+                root_source_label = _clean_text(raw.get("source_label"))
+                root_unit = _clean_text(raw.get("unit"))
+                parse_value = root_normalized_value or root_raw_value
+                if parse_value and root_unit:
+                    parse_value = f"{parse_value} {root_unit}"
+                if parse_value:
+                    parsed_dimensions = normalize_combined_dimensions(
+                        " ".join(
+                            part
+                            for part in (root_source_label, root_unit)
+                            if part
+                        ),
+                        parse_value,
+                    )
+                    if parsed_dimensions is None:
+                        raise ValueError(
+                            "Manual dimensions must be L x W x H with an explicit unit"
+                        )
+                    evidence_value = root_raw_value or parse_value
+                    for axis in ("length", "width", "height"):
+                        leaf = parsed_dimensions.get(axis)
+                        if isinstance(leaf, dict):
+                            leaf["raw_value"] = evidence_value[:1000]
+                            if root_source_label:
+                                leaf["source_label"] = root_source_label[:255]
+                    parsed_dimensions["raw_value"] = evidence_value[:1000]
+                    if root_source_label:
+                        parsed_dimensions["source_label"] = root_source_label[:255]
+                    dimensions = parsed_dimensions
             retained_dimension = False
             for axis in ("length", "width", "height"):
-                leaf = raw.get(axis)
+                leaf = dimensions.get(axis)
                 if not isinstance(leaf, dict):
                     continue
                 leaf_value = leaf.get("value")
@@ -614,15 +654,24 @@ def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
     for index, raw in enumerate(raw_additional or [], start=1):
         if not isinstance(raw, dict):
             raise ValueError("Every manual specification must be an object")
-        label = _clean_text(raw.get("label") or raw.get("source_label"))
-        value = _clean_text(raw.get("raw_value") or raw.get("value"))
-        if not label and not value:
+        source_label = _clean_text(raw.get("source_label"))
+        label = _clean_text(raw.get("label") or source_label)
+        raw_value = _clean_text(raw.get("raw_value"))
+        submitted_value = raw.get("value")
+        value_text = _clean_text(submitted_value)
+        evidence_value = raw_value or value_text
+        if not label and not evidence_value:
             continue
-        if not label or not value:
+        if not label or not evidence_value:
             raise ValueError("Manual specification label and value are both required")
-        if any(term in _label_token(label) for term in _IDENTITY_LABEL_TERMS):
+        if any(
+            term in _label_token(candidate)
+            for candidate in (label, source_label)
+            for term in _IDENTITY_LABEL_TERMS
+            if candidate
+        ):
             raise ValueError("Brand/manufacturer identity is not a product specification")
-        dedupe_key = (label.casefold(), value.casefold())
+        dedupe_key = (label.casefold(), evidence_value.casefold())
         if dedupe_key in seen:
             continue
         seen.add(dedupe_key)
@@ -638,20 +687,40 @@ def normalize_operator_structured_specs(payload: Any) -> dict[str, Any] | None:
         if normalized_key in seen_keys:
             raise ValueError(f"Manual specification key must be unique: {stable_key}")
         seen_keys.add(normalized_key)
+        if isinstance(submitted_value, str):
+            canonical_value: Any = (
+                submitted_value.strip()[:1000] or evidence_value[:1000]
+            )
+        elif isinstance(submitted_value, (bool, int, float)):
+            # Paste parsing returns typed normalized values.  Keep them typed;
+            # the separate raw_value remains the verbatim operator evidence.
+            canonical_value = submitted_value
+        else:
+            canonical_value = evidence_value[:1000]
         item: dict[str, Any] = {
             "key": stable_key,
             "label": label[:255],
-            "source_label": label[:255],
-            "value": value[:1000],
-            "raw_value": value[:1000],
+            # Paste parsing retains the supplier's original Chinese label even
+            # when the reviewed template supplies a different operator label.
+            "source_label": (source_label or label)[:255],
+            "value": canonical_value,
+            "raw_value": evidence_value[:1000],
             "evidence": "operator_fact",
         }
         label_en = buyer_english_text(raw.get("label_en"), limit=255)
         if label_en is None:
             label_en = buyer_english_text(label, limit=255)
         value_en = buyer_english_text(raw.get("value_en"), limit=1000)
+        if value_en is None and raw.get("raw_value") is not None:
+            # parse-paste sends its translated/normalized projection as
+            # ``value`` and the verbatim evidence as ``raw_value``.
+            value_en = buyer_english_text(raw.get("value"), limit=1000)
         if value_en is None:
-            value_en = buyer_english_text(value, limit=1000)
+            value_en = buyer_english_text(canonical_value, limit=1000)
+        if value_en is None and isinstance(canonical_value, bool):
+            value_en = "Yes" if canonical_value else "No"
+        elif value_en is None and isinstance(canonical_value, (int, float)):
+            value_en = str(canonical_value)[:1000]
         if label_en:
             item["label_en"] = label_en
         if value_en:
@@ -939,6 +1008,15 @@ def _standard_key(label: str) -> str | None:
     return None
 
 
+def standard_spec_key_for_label(label: str) -> str | None:
+    """Classify a human label into the public canonical root key, if any."""
+
+    key = _standard_key(label)
+    if key and key.startswith("dimensions."):
+        return "dimensions"
+    return key
+
+
 def _standard_spec(spec_key: str, *, label: str, raw_value: str) -> dict[str, Any] | None:
     if spec_key == "lumens":
         return _measurement_spec(label, raw_value, canonical_unit="lm", aliases=("lm", "流明"))
@@ -1118,6 +1196,15 @@ def _combined_dimensions_spec(label: str, raw_value: str) -> dict[str, Any] | No
         "raw_value": raw_value,
         "source_label": label,
     }
+
+
+def normalize_combined_dimensions(
+    label: str,
+    raw_value: str,
+) -> dict[str, Any] | None:
+    """Public fail-safe projection for an evidenced L x W x H value."""
+
+    return _combined_dimensions_spec(label, raw_value)
 
 
 def _dimension_leaf(label: str, raw_value: str) -> dict[str, Any] | None:

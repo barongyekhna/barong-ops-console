@@ -1284,6 +1284,26 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "GET";
   }
 
+  // 叶子类目规格模板：树命名空间由受校验的 ?tree=google|amazon 传递。
+  if (
+    path.length === 4 &&
+    path[1] === "categories" &&
+    isIntegerPathSegment(path[2]) &&
+    path[3] === "spec-template"
+  ) {
+    return method === "GET" || method === "PUT";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "categories" &&
+    isIntegerPathSegment(path[2]) &&
+    path[3] === "spec-template" &&
+    path[4] === "draft"
+  ) {
+    return method === "POST";
+  }
+
   // R→K 搬运
   if (path.length === 3 && path[1] === "products" && path[2] === "import-from-r") {
     return method === "POST";
@@ -1316,6 +1336,17 @@ function isAllowedKPath(method: string, path: string[]) {
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&
     path[3] === "archive"
+  ) {
+    return method === "POST";
+  }
+
+  // 1688 文本只解析不落库；运营确认后仍走产品 PATCH 保存。
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "specs" &&
+    path[4] === "parse-paste"
   ) {
     return method === "POST";
   }

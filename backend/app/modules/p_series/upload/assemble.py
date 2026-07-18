@@ -58,6 +58,10 @@ from ...k_series.product_knowledge.evidence_guard import (
 )
 from ...k_series.product_knowledge.models import KProductKnowledgeMediaAsset
 from ...k_series.product_knowledge.sku_allocator import ensure_product_sku
+from ...k_series.product_knowledge.spec_templates import (
+    effective_product_category,
+    missing_required_for_product,
+)
 from .description_html import (
     build_description_html,
     plain_text_from_copy,
@@ -184,6 +188,7 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
         blockers.append("未绑定类目")
     if getattr(product, "regular_price", None) is None:
         blockers.append("价格缺失")
+    blockers.extend(_required_spec_template_blockers(db, product))
     if (getattr(product, "channel", "") or "").strip().lower() == "dtc" and not (
         getattr(product, "shipping_class", None) or ""
     ).strip():
@@ -191,6 +196,27 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
     # 品牌硬门（fail-closed）：审查必须存在、通过、且内容未变
     blockers.extend(audit_gate_blockers(db, product))
     return blockers
+
+
+def _required_spec_template_blockers(db: Session, product: Any) -> list[str]:
+    """Dynamically enforce the latest approved leaf-category template."""
+
+    if effective_product_category(product) is None:
+        return []
+    try:
+        # A malformed/missing table must fail closed without poisoning the
+        # caller's outer transaction (notably P board batch evaluation).
+        with db.begin_nested():
+            missing = missing_required_for_product(db, product)
+    except Exception:  # noqa: BLE001 - gate must convert infrastructure errors
+        logger.exception(
+            "Category specification template gate failed product_id=%s",
+            getattr(product, "id", None),
+        )
+        return ["规格模板校验暂不可用"]
+    if not missing:
+        return []
+    return ["类目规格必填未齐：" + "、".join(missing)]
 
 
 def _has_bound_image(db: Session, product: Any) -> bool:

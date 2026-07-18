@@ -1,6 +1,8 @@
 "use client";
 
 import type {
+  CategorySpecField,
+  CategorySpecTemplate,
   KMediaAsset,
   KMediaCreatePayload,
   KImportISystemImagePayload,
@@ -17,6 +19,8 @@ import type {
   ProductKnowledgeDetail,
   ProductKnowledgeListResponse,
   ProductKnowledgeUpdatePayload,
+  KCategoryTree,
+  SpecPasteParseResponse,
   WShippingClassOption,
 } from "./types";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
@@ -929,6 +933,78 @@ export async function importISystemImagesToProduct(
   return readJson<KImportISystemImageResponse>(response, path);
 }
 
+function categorySpecTemplatePath(
+  categoryTree: KCategoryTree,
+  categoryId: string,
+  suffix = "",
+) {
+  const params = new URLSearchParams({ tree: categoryTree });
+  return `/k/categories/${encodeURIComponent(
+    categoryId,
+  )}/spec-template${suffix}?${params.toString()}`;
+}
+
+export async function getCategorySpecTemplate(
+  categoryTree: KCategoryTree,
+  categoryId: string,
+): Promise<CategorySpecTemplate | null> {
+  const path = categorySpecTemplatePath(categoryTree, categoryId);
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+  return readJson<CategorySpecTemplate>(response, path);
+}
+
+export async function draftCategorySpecTemplate(
+  categoryTree: KCategoryTree,
+  categoryId: string,
+): Promise<CategorySpecTemplate> {
+  const path = categorySpecTemplatePath(categoryTree, categoryId, "/draft");
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<CategorySpecTemplate>(response, path);
+}
+
+export async function putCategorySpecTemplate(
+  categoryTree: KCategoryTree,
+  categoryId: string,
+  payload: {
+    status: CategorySpecTemplate["status"];
+    fields: CategorySpecField[];
+  },
+): Promise<CategorySpecTemplate> {
+  const path = categorySpecTemplatePath(categoryTree, categoryId);
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "PUT",
+  });
+  return readJson<CategorySpecTemplate>(response, path);
+}
+
+export async function parseProductSpecsPaste(
+  productId: string,
+  rawText: string,
+): Promise<SpecPasteParseResponse> {
+  const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/specs/parse-paste`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ raw_text: rawText }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<SpecPasteParseResponse>(response, path);
+}
 
 export type CategoryTreeItem = {
   id: string;

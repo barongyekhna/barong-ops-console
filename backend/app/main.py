@@ -46,6 +46,9 @@ from .modules.i_series.image_system.router import (
 from .modules.k_series.product_knowledge.router import (
     router as k_product_knowledge_router,
 )
+from .modules.k_series.product_knowledge.spec_template_router import (
+    router as k_spec_template_router,
+)
 from .modules.key_health.router import router as key_health_router
 from .modules.notifications.router import (
     router as notifications_router,
@@ -985,6 +988,8 @@ app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(k_product_knowledge_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(k_product_knowledge_router)
+app.include_router(k_spec_template_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(k_spec_template_router)
 app.include_router(i_image_system_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(notifications_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(notifications_router)

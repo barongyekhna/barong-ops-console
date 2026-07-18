@@ -103,6 +103,7 @@ from .prompt_skills import (
     keyword_research_skill_context,
 )
 from .scope_shim import KScopeContext, apply_scope_filters
+from .spec_templates import effective_product_category, missing_required_for_product
 
 logger = logging.getLogger(__name__)
 
@@ -1718,6 +1719,24 @@ class KProductKnowledgeWorkflowEngine:
         if not category_is_bound(product):
             channel = (product.channel or "dtc").strip().lower()
             blockers.append(f"category not bound for {channel} channel")
+        if effective_product_category(product) is not None:
+            try:
+                with self.db.begin_nested():
+                    missing_specs = missing_required_for_product(self.db, product)
+            except Exception:  # noqa: BLE001 - unavailable gate must fail closed
+                logger.exception(
+                    "Category specification workflow gate failed product_id=%s",
+                    product.id,
+                )
+                blockers.append(
+                    "category specification template validation unavailable"
+                )
+            else:
+                if missing_specs:
+                    blockers.append(
+                        "required category specifications missing: "
+                        + ", ".join(missing_specs)
+                    )
         return blockers
 
     def _risk_review_is_approved(

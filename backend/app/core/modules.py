@@ -893,6 +893,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
         data_boundary=_data_boundary(
             reads=(
+                "k_category_spec_templates",
                 "k_product_knowledge_products",
                 "k_product_knowledge_keywords",
                 "k_product_knowledge_risk_terms",
@@ -900,6 +901,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
                 "credential_module_bindings",
             ),
             writes=(
+                "k_category_spec_templates",
                 "k_product_knowledge_products",
                 "k_product_knowledge_keywords",
                 "k_product_knowledge_risk_terms",
