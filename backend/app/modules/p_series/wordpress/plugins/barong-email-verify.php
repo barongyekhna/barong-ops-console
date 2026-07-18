@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Barong Email Verify
  * Description: 注册邮箱验证(瘦插件)。新注册用户必须点击邮件里的验证链接才能登录——不存在的邮箱收不到信,自然无法激活。旧用户与 Google 登录用户不受影响。
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Barong Yekhna Console
  */
 
@@ -29,14 +29,21 @@ function by_ev_send_mail( $user, $token ) {
 		home_url( '/' )
 	);
 	$subject = 'Verify your email — Barong Yekhna';
-	$body    = '<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:520px;margin:0 auto;padding:28px;color:#1b1a18">'
-		. '<h2 style="letter-spacing:-0.01em">Confirm your email address</h2>'
-		. '<p>Thanks for creating an account at <strong>Barong Yekhna</strong>. Click the button below to verify your email and activate your account.</p>'
-		. '<p style="margin:26px 0"><a href="' . esc_url( $link ) . '" style="background:#1b1a18;color:#faf9f6;text-decoration:none;padding:13px 26px;border-radius:999px;display:inline-block">Verify my email</a></p>'
-		. '<p style="color:#6f6b66;font-size:13px">If the button does not work, copy this link into your browser:<br>' . esc_url( $link ) . '</p>'
+	$logo    = home_url( '/wp-content/uploads/2026/07/byhome-phoenix-hero-v5-poster.jpg' );
+	$body    = '<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:520px;width:100%;box-sizing:border-box;margin:0 auto;padding:28px 22px;color:#1b1a18">'
+		. '<p style="text-align:center;margin:0 0 20px"><img src="' . esc_url( $logo ) . '" alt="Barong Yekhna" width="200" style="width:200px;max-width:70%;height:auto;border-radius:14px;display:inline-block"></p>'
+		. '<h2 style="letter-spacing:-0.01em;text-align:center;margin:0 0 14px">Confirm your email address</h2>'
+		. '<p style="text-align:center;color:#3d3a36">Thanks for creating an account at <strong>Barong Yekhna</strong>. Click the button below to verify your email and activate your account.</p>'
+		. '<p style="margin:26px 0;text-align:center"><a href="' . esc_url( $link ) . '" style="background:#1b1a18;color:#faf9f6;text-decoration:none;padding:13px 26px;border-radius:999px;display:inline-block">Verify my email</a></p>'
+		. '<p style="color:#6f6b66;font-size:13px;word-break:break-all;overflow-wrap:anywhere">If the button does not work, copy this link into your browser:<br>' . esc_url( $link ) . '</p>'
 		. '<p style="color:#6f6b66;font-size:13px">If you did not create this account, you can safely ignore this email.</p>'
 		. '</div>';
-	wp_mail( $user->user_email, $subject, $body, array( 'Content-Type: text/html; charset=UTF-8' ) );
+	$from    = get_option( 'woocommerce_email_from_address', 'service@' . wp_parse_url( home_url(), PHP_URL_HOST ) );
+	$headers = array(
+		'Content-Type: text/html; charset=UTF-8',
+		'From: Barong Yekhna (no reply) <' . $from . '>',
+	);
+	wp_mail( $user->user_email, $subject, $body, $headers );
 }
 
 /** 验证链接处理 + 重发。 */
