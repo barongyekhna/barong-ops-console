@@ -268,14 +268,21 @@ def normalize_template_fields(
         seen_keys.add(key)
 
         target = str(raw.get("target") or "").strip().lower()
+        if ai_draft and target not in CATEGORY_SPEC_TARGETS:
+            # AI drafts are pre-approval material: coerce made-up buckets
+            # ("common"/"custom"/...) instead of failing the whole draft.
+            target = "standard" if key in STANDARD_SPEC_KEYS else "additional"
         if target not in CATEGORY_SPEC_TARGETS:
             raise SpecTemplateValidationError(
                 f"Template field '{key}' has an invalid target"
             )
         if key in STANDARD_SPEC_KEYS and target != "standard":
-            raise SpecTemplateValidationError(
-                f"Standard spec key '{key}' must use target=standard"
-            )
+            if ai_draft:
+                target = "standard"
+            else:
+                raise SpecTemplateValidationError(
+                    f"Standard spec key '{key}' must use target=standard"
+                )
         if target == "standard" and key not in STANDARD_SPEC_KEYS:
             raise SpecTemplateValidationError(
                 f"target=standard requires a canonical standard key: {key}"
