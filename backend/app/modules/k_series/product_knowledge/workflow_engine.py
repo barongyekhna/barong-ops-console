@@ -21,9 +21,11 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import logging
 import re
+from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -62,6 +64,7 @@ from .evidence_guard import (
     enforce_package_evidence_consistency,
     enforce_title_evidence_consistency,
     project_approved_selling_points,
+    reconcile_title_numeric_claims,
 )
 from .faq_research import (
     build_faq_research,
@@ -864,7 +867,11 @@ class KProductKnowledgeWorkflowEngine:
         # DeepSeek may repeat a supplier-private model code from raw_input_text.
         # Normalize the buyer-visible name before diffing, persistence, audit
         # event capture, or any downstream title/schema generation consumes it.
-        provider_output = sanitize_product_naming_output(provider_output)
+        provider_output = sanitize_product_naming_output(
+            provider_output,
+            structured_specs=product.structured_specs_json,
+            package_includes=product.package_includes_json,
+        )
         diff: dict[str, dict[str, Any]] = {}
         category_hint_before = product.category_hint
         _capture_ai_category_hint(product, provider_output)
@@ -2587,6 +2594,298 @@ def _final_keywords_for_copy(
             *_safe_string_list(keyword_set.get("longtail_keywords")),
         ]
     )
+
+
+_DTC_H1_MAX_LENGTH = 70
+_DTC_SEO_TITLE_MAX_LENGTH = 60
+_DTC_META_DESCRIPTION_MAX_LENGTH = 160
+_SEO_WORD = re.compile(r"[A-Za-z0-9]+(?:[./+'-][A-Za-z0-9]+)*|&")
+_SEO_MINOR_WORDS = {
+    "a",
+    "an",
+    "and",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+}
+
+
+def _clean_seo_text(value: Any) -> str:
+    return re.sub(r"\s+", " ", html.unescape(str(value or ""))).strip()
+
+
+def _seo_words(value: Any) -> list[str]:
+    return _SEO_WORD.findall(_clean_seo_text(value))
+
+
+def _seo_word_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+
+
+def _heading_case(value: str) -> str:
+    """Title-case ordinary keyword text without damaging technical notation."""
+
+    output: list[str] = []
+    for index, word in enumerate(value.split()):
+        key = word.casefold().strip(".,;:–—|&")
+        if word == "&":
+            output.append(word)
+        elif index and key in _SEO_MINOR_WORDS:
+            output.append(key)
+        elif word.isupper() or any(char.isupper() for char in word[1:]):
+            output.append(word)
+        else:
+            output.append("-".join(part.capitalize() for part in word.split("-")))
+    return " ".join(output)
+
+
+def _phrase_is_projected_from_safe_h1(phrase: str, safe_h1: str) -> bool:
+    """Allow keyword ordering only when every word already survived evidence gates."""
+
+    phrase_counts = Counter(
+        key for word in _seo_words(phrase) if (key := _seo_word_key(word))
+    )
+    source_counts = Counter(
+        key for word in _seo_words(safe_h1) if (key := _seo_word_key(word))
+    )
+    meaningful = {
+        key
+        for key in phrase_counts
+        if key not in _SEO_MINOR_WORDS and key not in {"product", "products"}
+    }
+    return (
+        len(meaningful) >= 2
+        and len(_seo_words(phrase)) <= 7
+        and all(source_counts[key] >= count for key, count in phrase_counts.items())
+    )
+
+
+def _strip_site_brand_from_h1(value: str, site_brand: str) -> str:
+    clean = _clean_seo_text(value)
+    brand = _clean_seo_text(site_brand)
+    if not brand:
+        return clean
+    escaped = re.escape(brand)
+    clean = re.sub(
+        rf"^\s*{escaped}\s*(?:\||[-–—:]\s*)?",
+        "",
+        clean,
+        flags=re.IGNORECASE,
+    )
+    clean = re.sub(
+        rf"\s*(?:\||[-–—:])\s*{escaped}\s*$",
+        "",
+        clean,
+        flags=re.IGNORECASE,
+    )
+    return clean.strip()
+
+
+def _primary_phrase_from_safe_h1(
+    safe_h1: str,
+    final_keywords: list[str],
+) -> str:
+    # Only the first, risk-reviewed keyword is the primary keyword. It may
+    # reorder words that already survived the title evidence gate, but it must
+    # never introduce a new claim from search data.
+    primary = _clean_seo_text(final_keywords[0]) if final_keywords else ""
+    if primary and _phrase_is_projected_from_safe_h1(primary, safe_h1):
+        return _heading_case(primary)
+
+    first_clause = re.split(r"\s*(?:\||[–—,:;])\s*", safe_h1, maxsplit=1)[0]
+    words = _seo_words(first_clause)
+    if len(words) > 5:
+        words = words[:5]
+    while words and words[-1].casefold() in _SEO_MINOR_WORDS:
+        words.pop()
+    if len(words) < 2:
+        words = _seo_words(safe_h1)[:5]
+    return _heading_case(" ".join(words))
+
+
+def _remove_primary_words(safe_h1: str, primary_phrase: str) -> list[str]:
+    remaining = Counter(
+        key for word in _seo_words(primary_phrase) if (key := _seo_word_key(word))
+    )
+    output: list[str] = []
+    for word in _seo_words(safe_h1):
+        key = _seo_word_key(word)
+        if remaining[key]:
+            remaining[key] -= 1
+        elif word != "&":
+            output.append(word)
+    return output
+
+
+def _listify_supplier_tail(words: list[str]) -> str:
+    if not words:
+        return ""
+    items = list(words)
+    if len(items) >= 2 and items[-1].casefold() in {"kit", "set", "system"}:
+        items[-2:] = [f"{items[-2]} {items[-1]}"]
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return " & ".join(items)
+    return f"{', '.join(items[:-1])} & {items[-1]}"
+
+
+def _readable_h1(
+    safe_h1: str,
+    *,
+    final_keywords: list[str],
+    site_brand: str,
+) -> str:
+    source = _strip_site_brand_from_h1(safe_h1, site_brand)
+    source = re.sub(r"\s*(?:\||[–—])\s*", " – ", source).strip(" –")
+    primary = _primary_phrase_from_safe_h1(source, final_keywords)
+    if not primary:
+        return source
+
+    prefix = re.match(re.escape(_clean_seo_text(primary)), source, re.IGNORECASE)
+    if prefix and (prefix.end() == len(source) or not source[prefix.end()].isalnum()):
+        tail = source[prefix.end() :].strip()
+        if not tail:
+            return primary
+        if tail.startswith("–"):
+            return f"{primary} – {tail.lstrip('– ').strip()}"
+        if re.match(r"^(?:for|with|in|on|by|from|to)\b", tail, re.IGNORECASE):
+            return f"{primary} {tail}"
+        if any(mark in tail for mark in (",", "&", ";")):
+            return f"{primary} – {tail}"
+        return f"{primary} – {_listify_supplier_tail(_seo_words(tail))}"
+
+    tail_words = _remove_primary_words(source, primary)
+    tail = _listify_supplier_tail(tail_words)
+    return f"{primary} – {tail}" if tail else primary
+
+
+def _truncate_heading(value: str, limit: int) -> str:
+    clean = _clean_seo_text(value)
+    if len(clean) <= limit:
+        return clean
+    clipped = clean[: limit + 1]
+    if len(clipped) > limit and not clipped[-1].isspace():
+        clipped = clipped.rsplit(" ", 1)[0]
+    clipped = clipped[:limit].rstrip(" ,;:–—|-&")
+    # A boundary cut must not turn a complete audience/capacity phrase into
+    # an unsupported fragment such as "for 2-3", nor leave an orphaned
+    # preposition at the end of a heading.
+    clipped = re.sub(
+        r"\s+(?:for\s+)?\d+(?:\.\d+)?(?:\s*(?:-|–|to)\s*\d+(?:\.\d+)?)?\s*$",
+        "",
+        clipped,
+        flags=re.IGNORECASE,
+    ).rstrip(" ,;:–—|-&")
+    words = clipped.split()
+    while words and words[-1].casefold().strip(".,;:") in _SEO_MINOR_WORDS:
+        words.pop()
+    clipped = " ".join(words).rstrip(" ,;:–—|-&")
+    return clipped or clean[:limit].rstrip()
+
+
+def _truncate_meta_description(value: Any) -> str:
+    clean = _clean_seo_text(value)
+    if len(clean) <= _DTC_META_DESCRIPTION_MAX_LENGTH:
+        return clean
+    window = clean[:_DTC_META_DESCRIPTION_MAX_LENGTH]
+    sentence_ends = [match.end() for match in re.finditer(r"[.!?](?:\s|$)", window)]
+    if sentence_ends and sentence_ends[-1] >= 80:
+        return window[: sentence_ends[-1]].strip()
+    clipped = window.rsplit(" ", 1)[0].rstrip(" ,;:–—|-")
+    if not clipped:
+        return window.rstrip()
+    return f"{clipped[: _DTC_META_DESCRIPTION_MAX_LENGTH - 1].rstrip()}."
+
+
+def _finalize_dtc_seo(
+    result: dict[str, Any],
+    *,
+    final_keywords: list[str],
+    site_brand: str,
+    structured_specs: dict[str, Any] | None,
+    package_includes: Any = None,
+) -> dict[str, Any]:
+    """Close DTC title fallbacks into one evidence-safe publishing identity."""
+
+    output = dict(result)
+    raw_seo = output.get("seo")
+    seo = dict(raw_seo) if isinstance(raw_seo, dict) else {}
+    safe_h1 = reconcile_title_numeric_claims(
+        seo.get("h1"),
+        structured_specs,
+        package_includes=package_includes,
+    )
+    h1 = _readable_h1(
+        safe_h1,
+        final_keywords=final_keywords,
+        site_brand=site_brand,
+    )
+    h1 = reconcile_title_numeric_claims(
+        h1,
+        structured_specs,
+        package_includes=package_includes,
+    )
+    h1 = _truncate_heading(h1, _DTC_H1_MAX_LENGTH)
+    h1 = reconcile_title_numeric_claims(
+        h1,
+        structured_specs,
+        package_includes=package_includes,
+    )
+    h1 = _truncate_heading(h1, _DTC_H1_MAX_LENGTH)
+
+    primary_phrase = _primary_phrase_from_safe_h1(h1, final_keywords)
+    phrase_limit = _DTC_SEO_TITLE_MAX_LENGTH - len(f" | {site_brand}")
+    primary_phrase = _truncate_heading(primary_phrase, max(1, phrase_limit))
+    primary_phrase = reconcile_title_numeric_claims(
+        primary_phrase,
+        structured_specs,
+        package_includes=package_includes,
+    )
+    primary_phrase = _truncate_heading(primary_phrase, max(1, phrase_limit))
+    title = f"{primary_phrase} | {site_brand}"
+    title = reconcile_title_numeric_claims(
+        title,
+        structured_specs,
+        package_includes=package_includes,
+    )
+
+    seo["h1"] = h1
+    seo["title"] = title
+    raw_meta = seo.get("meta_description")
+    if not isinstance(raw_meta, str) or not raw_meta.strip():
+        raw_meta = seo.get("description")
+    if isinstance(raw_meta, str) and raw_meta.strip():
+        seo["meta_description"] = _truncate_meta_description(raw_meta)
+    output["seo"] = seo
+
+    json_ld = output.get("json_ld")
+    if isinstance(json_ld, dict) and isinstance(json_ld.get("data"), dict):
+        projected_json_ld = dict(json_ld)
+        data = dict(projected_json_ld["data"])
+        data["name"] = h1
+        projected_json_ld["data"] = data
+        output["json_ld"] = projected_json_ld
+
+    output["seo_format"] = {
+        "status": "normalized",
+        "h1_max_length": _DTC_H1_MAX_LENGTH,
+        "title_max_length": _DTC_SEO_TITLE_MAX_LENGTH,
+        "meta_description_max_length": _DTC_META_DESCRIPTION_MAX_LENGTH,
+        "schema_name_projected_from_h1": (
+            isinstance(output.get("json_ld"), dict)
+            and isinstance(output["json_ld"].get("data"), dict)
+        ),
+    }
+    return output
 
 
 def _keyword_coverage_receipt(
@@ -4722,11 +5021,18 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 status_code=502,
             )
         result = project_approved_selling_points(result, approved_points)
-        result = enforce_package_evidence_consistency(
-            result,
-            package_includes=package_includes,
-            structured_specs=product.structured_specs_json,
-        )
+        try:
+            result = enforce_package_evidence_consistency(
+                result,
+                package_includes=package_includes,
+                structured_specs=product.structured_specs_json,
+            )
+        except TitleEvidenceConsistencyError as exc:
+            raise KWorkflowExecutionError(
+                "MARKETING_COPY_TITLE_NUMERIC_UNSAFE",
+                str(exc),
+                status_code=409,
+            ) from exc
         if channel == "dtc":
             result = self._validate_faq_with_single_rewrite(
                 result,
@@ -4751,6 +5057,17 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                     ),
                     site_brand=SITE_BRAND,
                     approved_selling_points={"bullets": approved_points},
+                    structured_specs=product.structured_specs_json,
+                    package_includes=package_includes,
+                )
+                # Evidence and numeric reconciliation run before wording changes.
+                # The finalizer then closes normal and product-name fallback paths
+                # into the same H1/title/meta contract and re-runs the shared
+                # numeric helper as a last-mile publishing defense.
+                result = _finalize_dtc_seo(
+                    result,
+                    final_keywords=final_keywords,
+                    site_brand=SITE_BRAND,
                     structured_specs=product.structured_specs_json,
                     package_includes=package_includes,
                 )

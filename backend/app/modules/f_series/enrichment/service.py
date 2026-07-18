@@ -28,6 +28,10 @@ from ....modules.k_series.product_knowledge.category_resolver import (
 from ....modules.k_series.product_knowledge.product_naming import (
     strip_supplier_model_codes,
 )
+from ....modules.k_series.product_knowledge.evidence_guard import (
+    TitleEvidenceConsistencyError,
+    reconcile_title_numeric_claims,
+)
 from ....modules.k_series.product_knowledge.scope_shim import KScopeContext
 from ....modules.k_series.product_knowledge.sku_allocator import ensure_product_sku
 from ....modules.k_series.product_knowledge.structured_specs import (
@@ -371,10 +375,26 @@ def import_candidate_to_k(
         .limit(1)
     ).first()
     primary_keyword = keyword_row[0] if keyword_row else candidate.title
-    clean_product_name = strip_supplier_model_codes(candidate.title)[:512] or None
-    clean_primary_keyword = (
-        strip_supplier_model_codes(str(primary_keyword))[:512] or None
+    package_includes = package_includes_from_structured_specs(
+        candidate.structured_specs_json
     )
+    reconciled_product_name = reconcile_title_numeric_claims(
+        strip_supplier_model_codes(candidate.title),
+        candidate.structured_specs_json,
+        package_includes=package_includes,
+    )
+    if not reconciled_product_name:
+        raise TitleEvidenceConsistencyError(
+            "Supplier product title contains no evidence-backed identity after "
+            "numeric claim reconciliation; manual naming is required."
+        )
+    clean_product_name = reconciled_product_name[:512]
+    reconciled_primary_keyword = reconcile_title_numeric_claims(
+        strip_supplier_model_codes(str(primary_keyword)),
+        candidate.structured_specs_json,
+        package_includes=package_includes,
+    )
+    clean_primary_keyword = reconciled_primary_keyword[:512] or clean_product_name
     secondary_rows = db.execute(
         select(FCategoryKeyword.keyword_text)
         .where(FCategoryKeyword.category_id == candidate.category_id)
@@ -429,10 +449,7 @@ def import_candidate_to_k(
         raw_input_text="\n".join(raw_lines),
         raw_input_language="zh" if _contains_cjk(candidate.title) else "en",
         structured_specs_json=candidate.structured_specs_json,
-        package_includes_json=(
-            package_includes_from_structured_specs(candidate.structured_specs_json)
-            or None
-        ),
+        package_includes_json=(package_includes or None),
     )
     product.category_review_needed = not bind_google_category_id(
         db, product, candidate.category_id

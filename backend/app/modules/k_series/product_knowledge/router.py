@@ -3909,7 +3909,11 @@ def deepseek_enrich_product(
             "task": "deepseek_enrichment",
         },
     )
-    provider_output = sanitize_product_naming_output(provider_output)
+    provider_output = sanitize_product_naming_output(
+        provider_output,
+        structured_specs=getattr(product, "structured_specs_json", None),
+        package_includes=getattr(product, "package_includes_json", None),
+    )
     product.deepseek_structured_output_json = provider_output
     product.review_status = "ai_structured"
     event = KProductKnowledgeAIEvent(

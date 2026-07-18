@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import html
 import re
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
@@ -137,6 +139,480 @@ _PIECE_CLAIM = re.compile(
     re.IGNORECASE | re.VERBOSE,
 )
 
+_NUMERIC_ATOM_PATTERN = r"[0-9]+(?:\.[0-9]+)?"
+_NUMERIC_RANGE_SEPARATOR_PATTERN = r"(?:-|\u2013|\u2014|~|\uff5e|\u81f3|\u5230|to)"
+_NUMERIC_RANGE_PATTERN = (
+    rf"{_NUMERIC_ATOM_PATTERN}(?:\s*{_NUMERIC_RANGE_SEPARATOR_PATTERN}\s*"
+    rf"{_NUMERIC_ATOM_PATTERN})?"
+)
+_PEOPLE_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9])(?P<prefix>for\s+)?(?P<count>{_NUMERIC_RANGE_PATTERN})"
+    rf"(?P<separator>\s*-\s*|\s+)(?P<noun>people|persons?)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_CHINESE_PEOPLE_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9])(?P<prefix>\u9002\u7528|\u9002\u5408|\u53ef\u4f9b|\u4f9b)?"
+    rf"(?P<count>{_NUMERIC_RANGE_PATTERN})\s*\u4eba"
+)
+_CAPACITY_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9.])(?P<count>{_NUMERIC_RANGE_PATTERN})(?P<space>\s*)"
+    r"(?P<unit>qts?|quarts?|l(?:iters?|itres?)?|\u5347)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_SPEC_NUMBER_RANGE = re.compile(
+    rf"(?<![0-9.])(?P<minimum>{_NUMERIC_ATOM_PATTERN})"
+    rf"(?:\s*{_NUMERIC_RANGE_SEPARATOR_PATTERN}\s*"
+    rf"(?P<maximum>{_NUMERIC_ATOM_PATTERN}))?(?![0-9.])",
+    re.IGNORECASE,
+)
+_CAPACITY_UNIT = re.compile(
+    r"(?<![A-Za-z])(?P<unit>qts?|quarts?|l(?:iters?|itres?)?)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class _NumericSpecEvidence:
+    """One deterministic numeric fact read from structured specifications."""
+
+    kind: str
+    numbers: tuple[Decimal, ...]
+    source_path: str
+    unit: str | None = None
+    display_unit: str | None = None
+
+
+def _decimal(value: Any) -> Decimal | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return None
+    return number if number.is_finite() and number > 0 else None
+
+
+def _numeric_range(value: Any) -> tuple[Decimal, ...] | None:
+    """Read only a single positive scalar or an explicit two-value range."""
+
+    if isinstance(value, dict):
+        minimum = _decimal(value.get("min"))
+        maximum = _decimal(value.get("max"))
+        if minimum is None:
+            return None
+        if maximum is None:
+            return (minimum,)
+        if maximum < minimum:
+            return None
+        return (minimum, maximum)
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        number = _decimal(value)
+        return (number,) if number is not None else None
+    if not isinstance(value, str):
+        return None
+    matches = list(_SPEC_NUMBER_RANGE.finditer(value))
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    # Do not reinterpret two unrelated numbers as a range.  The range regex
+    # must have consumed every numeric atom present in the source value.
+    numeric_atoms = re.findall(_NUMERIC_ATOM_PATTERN, value)
+    consumed_atoms = [match.group("minimum")]
+    if match.group("maximum") is not None:
+        consumed_atoms.append(match.group("maximum"))
+    if len(numeric_atoms) != len(consumed_atoms):
+        return None
+    minimum = _decimal(match.group("minimum"))
+    maximum = _decimal(match.group("maximum"))
+    if minimum is None:
+        return None
+    if maximum is None:
+        return (minimum,)
+    if maximum < minimum:
+        return None
+    return (minimum, maximum)
+
+
+def _numeric_node_range(node: Any) -> tuple[Decimal, ...] | None:
+    if not isinstance(node, dict):
+        return _numeric_range(node)
+    for key in ("value", "value_en", "raw_value"):
+        candidate = node.get(key)
+        if candidate in (None, "", [], {}):
+            continue
+        parsed = _numeric_range(candidate)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _format_decimal(value: Decimal) -> str:
+    normalized = format(value.normalize(), "f")
+    return normalized.rstrip("0").rstrip(".") if "." in normalized else normalized
+
+
+def _numeric_range_text(numbers: tuple[Decimal, ...]) -> str:
+    if len(numbers) == 1:
+        return _format_decimal(numbers[0])
+    return f"{_format_decimal(numbers[0])}-{_format_decimal(numbers[1])}"
+
+
+def _integer_count(numbers: tuple[Decimal, ...] | None) -> tuple[Decimal, ...] | None:
+    if not numbers or any(number != number.to_integral_value() for number in numbers):
+        return None
+    return numbers
+
+
+def _normalized_descriptor(*values: Any) -> str:
+    text = " ".join(str(value or "") for value in values).casefold()
+    return re.sub(r"[\W_]+", "", text, flags=re.UNICODE)
+
+
+def _numeric_spec_kind(descriptor: str) -> str | None:
+    if any(
+        term in descriptor
+        for term in (
+            "capacitypeople",
+            "peoplecapacity",
+            "personcapacity",
+            "personsuitability",
+            "suitablepeople",
+            "\u9002\u7528\u4eba\u6570",
+            "\u4f7f\u7528\u4eba\u6570",
+            "\u5bb9\u7eb3\u4eba\u6570",
+            "\u5efa\u8bae\u4eba\u6570",
+            "\u5c31\u9910\u4eba\u6570",
+        )
+    ) or "\u4eba\u6570" in descriptor:
+        return "people"
+    if any(
+        term in descriptor
+        for term in (
+            "piececount",
+            "piecescount",
+            "numberofpieces",
+            "setcount",
+            "packagequantity",
+            "\u4ef6\u6570",
+            "\u5957\u88c5\u6570\u91cf",
+            "\u5305\u88c5\u6570\u91cf",
+        )
+    ):
+        return "piece"
+    if any(
+        term in descriptor
+        for term in ("batterycapacity", "\u7535\u6c60\u5bb9\u91cf", "\u7535\u82af\u5bb9\u91cf")
+    ):
+        return None
+    if "capacity" in descriptor or "\u5bb9\u91cf" in descriptor:
+        return "capacity"
+    return None
+
+
+def _capacity_unit(node: Any, *, descriptor_text: str) -> tuple[str, str] | None:
+    texts: list[str] = [descriptor_text]
+    if isinstance(node, dict):
+        texts.extend(
+            str(node.get(key) or "")
+            for key in ("unit", "value", "value_en", "raw_value")
+        )
+    else:
+        texts.append(str(node or ""))
+    combined = " ".join(texts)
+    if "\u5347" in combined:
+        return "l", "L"
+    match = _CAPACITY_UNIT.search(combined)
+    if match:
+        raw = match.group("unit").casefold()
+        return ("qt", "qt") if raw.startswith(("q", "quart")) else ("l", "L")
+    normalized = re.sub(r"[^a-z0-9]+", "_", descriptor_text.casefold()).strip("_")
+    if re.search(r"(?:^|_)capacity_l(?:$|_)", normalized):
+        return "l", "L"
+    if re.search(r"(?:^|_)capacity_(?:qt|quart)(?:$|_)", normalized):
+        return "qt", "qt"
+    return None
+
+
+def _iter_numeric_spec_nodes(
+    structured_specs: dict[str, Any] | None,
+) -> list[tuple[str, Any, str, str]]:
+    if not isinstance(structured_specs, dict):
+        return []
+    output: list[tuple[str, Any, str, str]] = []
+    for key, node in structured_specs.items():
+        if key in {
+            "schema_version",
+            "source",
+            "buyer_translation",
+            "package_includes",
+            "package_includes_source",
+            "additional_specs",
+        }:
+            continue
+        descriptor_text = " ".join(
+            [
+                str(key),
+                str(node.get("label") or "") if isinstance(node, dict) else "",
+                str(node.get("label_en") or "") if isinstance(node, dict) else "",
+                str(node.get("source_label") or "") if isinstance(node, dict) else "",
+            ]
+        )
+        output.append(
+            (
+                str(key),
+                node,
+                _normalized_descriptor(descriptor_text),
+                descriptor_text,
+            )
+        )
+    additional = structured_specs.get("additional_specs")
+    if isinstance(additional, dict):
+        additional_items = [
+            ({"key": key, **value} if isinstance(value, dict) else {"key": key, "value": value})
+            for key, value in additional.items()
+        ]
+    elif isinstance(additional, list):
+        additional_items = additional
+    else:
+        additional_items = []
+    for index, node in enumerate(additional_items):
+        if not isinstance(node, dict):
+            continue
+        key = str(node.get("key") or f"row_{index + 1}")
+        descriptor_text = " ".join(
+            str(node.get(field) or "")
+            for field in ("key", "label", "label_en", "source_label")
+        )
+        output.append(
+            (
+                f"additional_specs.{key}",
+                node,
+                _normalized_descriptor(descriptor_text),
+                descriptor_text,
+            )
+        )
+    return output
+
+
+def _numeric_spec_evidence(
+    kind: str,
+    structured_specs: dict[str, Any] | None,
+    *,
+    package_includes: Any,
+) -> tuple[list[_NumericSpecEvidence], list[str]]:
+    evidence: list[_NumericSpecEvidence] = []
+    malformed: list[str] = []
+    for path, node, descriptor, descriptor_text in _iter_numeric_spec_nodes(
+        structured_specs
+    ):
+        if _numeric_spec_kind(descriptor) != kind:
+            continue
+        numbers = _numeric_node_range(node)
+        if kind in {"people", "piece"}:
+            numbers = _integer_count(numbers)
+        if numbers is None:
+            malformed.append(path)
+            continue
+        unit: str | None = None
+        display_unit: str | None = None
+        if kind == "capacity":
+            capacity_unit = _capacity_unit(node, descriptor_text=descriptor_text)
+            if capacity_unit is None:
+                malformed.append(path)
+                continue
+            unit, display_unit = capacity_unit
+        evidence.append(
+            _NumericSpecEvidence(
+                kind=kind,
+                numbers=numbers,
+                source_path=path,
+                unit=unit,
+                display_unit=display_unit,
+            )
+        )
+    if kind == "piece":
+        includes = canonical_package_includes(package_includes, structured_specs)
+        if includes:
+            evidence.append(
+                _NumericSpecEvidence(
+                    kind="piece",
+                    numbers=(Decimal(len(includes)),),
+                    source_path="package_includes",
+                )
+            )
+    return evidence, malformed
+
+
+def _select_numeric_spec_evidence(
+    kind: str,
+    *,
+    current_numbers: tuple[Decimal, ...],
+    current_unit: str | None,
+    structured_specs: dict[str, Any] | None,
+    package_includes: Any,
+) -> _NumericSpecEvidence | None:
+    candidates, malformed = _numeric_spec_evidence(
+        kind,
+        structured_specs,
+        package_includes=package_includes,
+    )
+    unique: dict[tuple[tuple[Decimal, ...], str | None], _NumericSpecEvidence] = {}
+    for candidate in candidates:
+        unique.setdefault((candidate.numbers, candidate.unit), candidate)
+    candidates = list(unique.values())
+    if not candidates and not malformed:
+        return None
+    if malformed:
+        raise TitleEvidenceConsistencyError(
+            f"Cannot safely reconcile {kind} title claim from malformed specification "
+            f"field(s): {', '.join(sorted(malformed))}."
+        )
+    if len(candidates) == 1:
+        return candidates[0]
+    raise TitleEvidenceConsistencyError(
+        f"Cannot safely reconcile {kind} title claim because corresponding "
+        "structured specification fields disagree or are ambiguous."
+    )
+
+
+def _canonical_capacity_unit(value: str) -> str:
+    return "qt" if value.casefold().startswith(("q", "quart")) else "l"
+
+
+def _cleanup_numeric_claim_removal(value: str) -> str:
+    clean = re.sub(r"\(\s*\)|\[\s*\]|\{\s*\}", " ", value)
+    clean = re.sub(r"\s+([,;:.!?])", r"\1", clean)
+    clean = re.sub(r"\s+", " ", clean)
+    return clean.strip(" \t\r\n,;:/|\u00b7-\u2013\u2014")
+
+
+def reconcile_title_numeric_claims(
+    title: Any,
+    structured_specs: dict[str, Any] | None,
+    *,
+    package_includes: Any = None,
+) -> str:
+    """Reconcile buyer-visible numeric title claims with verified specs.
+
+    Missing corresponding evidence removes the claim.  A single verified fact
+    rewrites a mismatch.  Ambiguous or malformed corresponding evidence raises
+    ``TitleEvidenceConsistencyError`` rather than guessing which number is true.
+    This pure function is shared by generated SEO copy, supplier-name import,
+    and post-provider product naming.
+    """
+
+    output = html.unescape(str(title or ""))
+
+    def replace_people(match: re.Match[str]) -> str:
+        current = _numeric_range(match.group("count"))
+        if current is None:
+            raise TitleEvidenceConsistencyError(
+                "Cannot safely parse people count in title claim."
+            )
+        verified = _select_numeric_spec_evidence(
+            "people",
+            current_numbers=current,
+            current_unit=None,
+            structured_specs=structured_specs,
+            package_includes=package_includes,
+        )
+        if verified is None:
+            return ""
+        if verified.numbers == current:
+            return match.group(0)
+        noun = match.group("noun")
+        separator = match.group("separator")
+        if "-" not in separator and noun.casefold() == "person" and (
+            len(verified.numbers) > 1 or verified.numbers[0] != 1
+        ):
+            noun = "People" if noun[:1].isupper() else "people"
+        return (
+            (match.group("prefix") or "")
+            + _numeric_range_text(verified.numbers)
+            + separator
+            + noun
+        )
+
+    output = _PEOPLE_CLAIM.sub(replace_people, output)
+
+    def replace_chinese_people(match: re.Match[str]) -> str:
+        current = _numeric_range(match.group("count"))
+        if current is None:
+            raise TitleEvidenceConsistencyError(
+                "Cannot safely parse people count in supplier title claim."
+            )
+        verified = _select_numeric_spec_evidence(
+            "people",
+            current_numbers=current,
+            current_unit=None,
+            structured_specs=structured_specs,
+            package_includes=package_includes,
+        )
+        return (
+            f"{match.group('prefix') or ''}{_numeric_range_text(verified.numbers)}\u4eba"
+            if verified is not None
+            else ""
+        )
+
+    output = _CHINESE_PEOPLE_CLAIM.sub(replace_chinese_people, output)
+
+    def replace_piece(match: re.Match[str]) -> str:
+        current = (Decimal(_piece_claim_count(match)),)
+        verified = _select_numeric_spec_evidence(
+            "piece",
+            current_numbers=current,
+            current_unit=None,
+            structured_specs=structured_specs,
+            package_includes=package_includes,
+        )
+        if verified is None:
+            return "set" if re.search(r"\bset\b", match.group(0), re.IGNORECASE) else ""
+        if len(verified.numbers) != 1:
+            raise TitleEvidenceConsistencyError(
+                "A piece_count specification must be a single integer."
+            )
+        if verified.numbers == current:
+            return match.group(0)
+        group_name = "piece_count" if match.group("piece_count") else "set_count"
+        start, end = match.span(group_name)
+        relative_start = start - match.start()
+        relative_end = end - match.start()
+        raw = match.group(0)
+        return (
+            raw[:relative_start]
+            + _numeric_range_text(verified.numbers)
+            + raw[relative_end:]
+        )
+
+    output = _PIECE_CLAIM.sub(replace_piece, output)
+
+    def replace_capacity(match: re.Match[str]) -> str:
+        current = _numeric_range(match.group("count"))
+        if current is None:
+            raise TitleEvidenceConsistencyError(
+                "Cannot safely parse capacity in title claim."
+            )
+        current_unit = _canonical_capacity_unit(match.group("unit"))
+        verified = _select_numeric_spec_evidence(
+            "capacity",
+            current_numbers=current,
+            current_unit=current_unit,
+            structured_specs=structured_specs,
+            package_includes=package_includes,
+        )
+        if verified is None:
+            return ""
+        if verified.numbers == current and verified.unit == current_unit:
+            return match.group(0)
+        display_unit = verified.display_unit or verified.unit
+        spacing = match.group("space")
+        if not spacing and display_unit and len(display_unit) > 2:
+            spacing = " "
+        return f"{_numeric_range_text(verified.numbers)}{spacing}{display_unit or ''}"
+
+    output = _CAPACITY_CLAIM.sub(replace_capacity, output)
+    return _cleanup_numeric_claim_removal(output)
+
 
 def _piece_claim_count(match: re.Match[str]) -> int:
     raw = (match.group("piece_count") or match.group("set_count") or "").casefold()
@@ -228,7 +704,7 @@ def package_claim_error(
     package_includes: Any = None,
     structured_specs: dict[str, Any] | None = None,
 ) -> str | None:
-    """Validate component names and N-piece claims against the reviewed list."""
+    """Validate components and N-piece claims against verified count evidence."""
 
     unsupported = unsupported_component_terms(
         value,
@@ -237,15 +713,20 @@ def package_claim_error(
     )
     if unsupported:
         return "Unsupported package component(s): " + ", ".join(unsupported)
-    includes = canonical_package_includes(package_includes, structured_specs)
+    verified_count, count_error = _verified_piece_count(
+        package_includes=package_includes,
+        structured_specs=structured_specs,
+    )
     for match in _PIECE_CLAIM.finditer(str(value or "")):
         claimed = _piece_claim_count(match)
-        if not includes:
-            return f"{claimed}-piece claim requires a reviewed package_includes list."
-        if claimed != len(includes):
+        if count_error:
+            return count_error
+        if verified_count is None:
+            return f"{claimed}-piece claim requires a verified piece_count."
+        if claimed != verified_count:
             return (
-                f"{claimed}-piece claim does not match package_includes count "
-                f"({len(includes)})."
+                f"{claimed}-piece claim does not match verified piece count "
+                f"({verified_count})."
             )
     return None
 
@@ -272,10 +753,48 @@ def _remove_unsupported_component_sentences(
     return " ".join(kept).strip(), sorted(set(removed))
 
 
-def _downgrade_unverified_piece_claims(value: str, package_count: int) -> str:
+def _verified_piece_count(
+    *,
+    package_includes: Any,
+    structured_specs: dict[str, Any] | None,
+) -> tuple[int | None, str | None]:
+    candidates, malformed = _numeric_spec_evidence(
+        "piece",
+        structured_specs,
+        package_includes=package_includes,
+    )
+    if malformed:
+        return None, (
+            "Cannot safely reconcile piece claim from malformed specification "
+            f"field(s): {', '.join(sorted(malformed))}."
+        )
+    counts = {
+        int(candidate.numbers[0])
+        for candidate in candidates
+        if len(candidate.numbers) == 1
+        and candidate.numbers[0] == candidate.numbers[0].to_integral_value()
+    }
+    if len(counts) > 1:
+        return None, (
+            "Cannot safely reconcile piece claim because piece_count and "
+            "package_includes disagree."
+        )
+    return (next(iter(counts)) if counts else None), None
+
+
+def _downgrade_unverified_piece_claims(value: str, verified_count: int | None) -> str:
     def replace(match: re.Match[str]) -> str:
         claimed = _piece_claim_count(match)
-        return match.group(0) if package_count and claimed == package_count else "set"
+        if verified_count is None:
+            return "set"
+        if claimed == verified_count:
+            return match.group(0)
+        group_name = "piece_count" if match.group("piece_count") else "set_count"
+        start, end = match.span(group_name)
+        relative_start = start - match.start()
+        relative_end = end - match.start()
+        raw = match.group(0)
+        return raw[:relative_start] + str(verified_count) + raw[relative_end:]
 
     output = _PIECE_CLAIM.sub(replace, value)
     output = re.sub(r"\bset\s+set\b", "set", output, flags=re.IGNORECASE)
@@ -296,6 +815,10 @@ def enforce_package_evidence_consistency(
 
     output = dict(result)
     includes = canonical_package_includes(package_includes, structured_specs)
+    verified_piece_count, piece_count_error = _verified_piece_count(
+        package_includes=includes,
+        structured_specs=structured_specs,
+    )
     removed: list[dict[str, Any]] = []
     downgraded: list[str] = []
 
@@ -310,7 +833,9 @@ def enforce_package_evidence_consistency(
             return [item for item in cleaned_items if item not in (None, "", [], {})]
         if not isinstance(value, str):
             return value
-        piece_safe = _downgrade_unverified_piece_claims(value, len(includes))
+        if piece_count_error and _PIECE_CLAIM.search(value):
+            raise TitleEvidenceConsistencyError(piece_count_error)
+        piece_safe = _downgrade_unverified_piece_claims(value, verified_piece_count)
         if piece_safe != re.sub(r"\s+", " ", value).strip():
             downgraded.append(path)
         component_safe, terms = _remove_unsupported_component_sentences(
@@ -335,6 +860,7 @@ def enforce_package_evidence_consistency(
     output["package_evidence_consistency"] = {
         "status": "sanitized" if removed or downgraded else "passed",
         "package_count": len(includes),
+        "verified_piece_count": verified_piece_count,
         "removed_unsupported_components": removed,
         "downgraded_piece_claim_paths": sorted(set(downgraded)),
     }
@@ -392,8 +918,10 @@ def title_evidence_corpus(
     includes = canonical_package_includes(package_includes, structured_specs)
     clean_product_name = _strip_supplier_model_tokens(product_name)
     clean_category_name = _strip_supplier_model_tokens(category_name or product_type)
-    identity = _downgrade_unverified_piece_claims(
-        f"{clean_product_name} {clean_category_name}", len(includes)
+    identity = reconcile_title_numeric_claims(
+        f"{clean_product_name} {clean_category_name}",
+        structured_specs,
+        package_includes=includes,
     )
     identity_tokens = _claim_tokens(identity)
     tokens = identity_tokens - _UNTRUSTED_IDENTITY_CLAIMS
@@ -426,7 +954,11 @@ def _neutral_fallback(
 ) -> str:
     original = _strip_supplier_model_tokens(product_name or product_type or "Product")
     includes = canonical_package_includes(package_includes, structured_specs)
-    original = _downgrade_unverified_piece_claims(original, len(includes))
+    original = reconcile_title_numeric_claims(
+        original,
+        structured_specs,
+        package_includes=includes,
+    )
     unsupported = unsupported_component_terms(
         original,
         package_includes=includes,
@@ -528,7 +1060,8 @@ def enforce_title_evidence_consistency(
     """Remove unsupported SEO/H1 claim segments and decode HTML entities."""
 
     output = dict(result)
-    seo = dict(output.get("seo") or {})
+    raw_seo = output.get("seo")
+    seo = dict(raw_seo) if isinstance(raw_seo, dict) else {}
     fallback = _neutral_fallback(
         product_name,
         None,
@@ -546,9 +1079,20 @@ def enforce_title_evidence_consistency(
     )
     removed: dict[str, list[str]] = {}
     fallback_fields: list[str] = []
+    numeric_reconciled_fields: list[str] = []
     for field in ("title", "h1"):
+        raw_title = seo.get(field)
+        reconciled_title = reconcile_title_numeric_claims(
+            raw_title,
+            structured_specs,
+            package_includes=package_includes,
+        )
+        if reconciled_title != re.sub(
+            r"\s+", " ", html.unescape(str(raw_title or ""))
+        ).strip():
+            numeric_reconciled_fields.append(field)
         clean, dropped, used_fallback = _supported_title(
-            seo.get(field), corpus=corpus, fallback=fallback
+            reconciled_title, corpus=corpus, fallback=fallback
         )
         if _title_is_degenerate(clean, site_brand=site_brand):
             if _title_is_degenerate(fallback, site_brand=site_brand):
@@ -558,6 +1102,11 @@ def enforce_title_evidence_consistency(
                 )
             clean = fallback
             used_fallback = True
+        clean = reconcile_title_numeric_claims(
+            clean,
+            structured_specs,
+            package_includes=package_includes,
+        )
         if used_fallback:
             fallback_fields.append(field)
         seo[field] = clean
@@ -565,9 +1114,14 @@ def enforce_title_evidence_consistency(
             removed[field] = dropped
     output["seo"] = seo
     output["evidence_consistency"] = {
-        "status": "sanitized" if removed or fallback_fields else "passed",
+        "status": (
+            "sanitized"
+            if removed or fallback_fields or numeric_reconciled_fields
+            else "passed"
+        ),
         "removed_unsupported_title_segments": removed,
         "product_name_fallback_fields": fallback_fields,
+        "numeric_reconciled_fields": sorted(set(numeric_reconciled_fields)),
         "approved_selling_points_only": True,
     }
     return output

@@ -69,11 +69,17 @@ def test_standalone_deepseek_route_sanitizes_stored_and_returned_name(
         id=uuid4(),
         product_key="route-model-cleanup",
         raw_input_text="Supplier title DS-101",
+        structured_specs_json={
+            "capacity_people": {"value": {"min": 2, "max": 3}}
+        },
+        package_includes_json=None,
         deepseek_structured_output_json=None,
         review_status="draft",
     )
     provider_output = {
-        "product_name_en": "DS-101 Outdoor Cover IP68 UPF50 UV400 AC110/DC12",
+        "product_name_en": (
+            "DS-101 Outdoor Cover IP68 UPF50 UV400 AC110/DC12 for 1-2 People"
+        ),
         "structured_specs": {"supplier_model": "DS-101"},
     }
     context = SimpleNamespace(
@@ -118,7 +124,7 @@ def test_standalone_deepseek_route_sanitizes_stored_and_returned_name(
         user=SimpleNamespace(),  # type: ignore[arg-type]
     )
 
-    expected_name = "Outdoor Cover IP68 UPF50 UV400 AC110/DC12"
+    expected_name = "Outdoor Cover IP68 UPF50 UV400 AC110/DC12 for 2-3 People"
     assert response.output["product_name_en"] == expected_name
     assert product.deepseek_structured_output_json["product_name_en"] == expected_name
     assert product.deepseek_structured_output_json["structured_specs"] == {

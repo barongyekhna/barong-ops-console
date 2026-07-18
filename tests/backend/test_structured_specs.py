@@ -22,6 +22,9 @@ from backend.app.modules.k_series.product_knowledge.prompt_skills import (
 from backend.app.modules.k_series.product_knowledge.router import (
     _product_full_ai_payload,
 )
+from backend.app.modules.k_series.product_knowledge.evidence_guard import (
+    TitleEvidenceConsistencyError,
+)
 from backend.app.modules.k_series.product_knowledge.schemas import (
     ProductKnowledgeCreate,
     ProductKnowledgeUpdate,
@@ -413,11 +416,22 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
         )
     db = sessionmaker(bind=engine, expire_on_commit=False)()
     specs = {**_verified_specs(), "package_includes": ["Light", "Ground stake"]}
+    specs["additional_specs"] = [
+        *specs["additional_specs"],
+        {
+            "key": "supplier_attribute_ef381aa201",
+            "label": "\u9002\u7528\u4eba\u6570",
+            "source_label": "\u9002\u7528\u4eba\u6570",
+            "value": "2-3\u4eba",
+            "raw_value": "2-3\u4eba",
+            "value_en": "2-3 people",
+        },
+    ]
     candidate = FCategoryCandidate(
         id=uuid4(),
         category_id="990991",
         category_path="Home & Garden > Lighting > Path Lights",
-        title="DS-101 Portable Path Light 7-Piece 1.5L Set",
+        title="DS-101 Portable Path Light 7-Piece 1.5L Set for 1-2 People",
         source="alibaba1688",
         source_url="https://detail.1688.com/offer/123456.html",
         price_cny=Decimal("12.50"),
@@ -448,10 +462,10 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
     assert product.workspace_key == "org_structured_specs"
     assert product.business_context == "independent_store"
     assert product.scope_mode == "production"
-    assert product.product_name_en == "Portable Path Light 7-Piece 1.5L Set"
-    assert product.primary_keyword == "Portable Path Light 7-Piece 1.5L Set"
+    assert product.product_name_en == "Portable Path Light 2-Piece Set for 2-3 People"
+    assert product.primary_keyword == "Portable Path Light 2-Piece Set for 2-3 People"
     assert product.raw_input_text.startswith(
-        "DS-101 Portable Path Light 7-Piece 1.5L Set\n"
+        "DS-101 Portable Path Light 7-Piece 1.5L Set for 1-2 People\n"
     )
     assert get_product(db, product_id=product.id, scope_context=scope).id == product.id
     assert product.structured_specs_json == specs
@@ -462,3 +476,24 @@ def test_f_to_k_transfer_preserves_structured_specs_unchanged() -> None:
     assert variant.parent_sku == product.sku
     assert variant.variant_sku.startswith(f"{product.sku}-")
     assert variant.attributes_json == {"default_variant": True}
+
+    unsupported_numeric_only = FCategoryCandidate(
+        id=uuid4(),
+        category_id="990991",
+        category_path="Home & Garden > Lighting > Path Lights",
+        title="1-2 People",
+        source="manual",
+        status="approved",
+    )
+    db.add(unsupported_numeric_only)
+    db.commit()
+    with pytest.raises(
+        TitleEvidenceConsistencyError,
+        match="manual naming is required",
+    ):
+        import_candidate_to_k(
+            db,
+            candidate=unsupported_numeric_only,
+            user=None,
+            scope_context=scope,
+        )

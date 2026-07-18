@@ -233,11 +233,9 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
     assert execution.status == "blocked"
     assert execution.current_step == "risk_term_review_manual"
     assert product.deepseek_structured_output_json["confidence_score"] == 0.91
-    assert product.product_name_en == (
-        "DeepSeek enriched steel pump 7-Piece 1.5L Set"
-    )
+    assert product.product_name_en == "DeepSeek enriched steel pump Set"
     assert product.deepseek_structured_output_json["product_name_en"] == (
-        "DeepSeek enriched steel pump 7-Piece 1.5L Set"
+        "DeepSeek enriched steel pump Set"
     )
     assert KWorkflowStateMachineV2.current_state(execution, product) == (
         "RISK_PENDING_REVIEW"
@@ -1020,7 +1018,7 @@ def test_marketing_copy_degenerate_title_uses_product_name_not_primary_keyword()
     )
 
     assert generated.marketing_copy_json["seo"] == {
-        "title": "Portable Steel Pump",
+        "title": "Portable Steel Pump | Barong Yekhna",
         "h1": "Portable Steel Pump",
     }
     assert "wholesale" not in str(generated.marketing_copy_json["seo"]).casefold()

@@ -6,6 +6,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from .evidence_guard import reconcile_title_numeric_claims
+
 
 # Supplier titles frequently prefix a private model code such as ``DS-101`` or
 # ``DS308``.  Keep this deliberately narrower than a general alphanumeric
@@ -52,11 +54,18 @@ def strip_supplier_model_codes(value: str) -> str:
 
 def sanitize_product_naming_output(
     provider_output: Mapping[str, Any],
+    *,
+    structured_specs: dict[str, Any] | None = None,
+    package_includes: Any = None,
 ) -> dict[str, Any]:
-    """Return a copy with only the generated buyer-visible name sanitized."""
+    """Return a copy with the generated buyer-visible name evidence-sanitized."""
 
     sanitized = dict(provider_output)
     generated_name = sanitized.get("product_name_en")
     if isinstance(generated_name, str):
-        sanitized["product_name_en"] = strip_supplier_model_codes(generated_name)
+        sanitized["product_name_en"] = reconcile_title_numeric_claims(
+            strip_supplier_model_codes(generated_name),
+            structured_specs,
+            package_includes=package_includes,
+        )
     return sanitized

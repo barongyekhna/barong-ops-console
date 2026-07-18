@@ -310,7 +310,14 @@ def marketing_copy_instruction(channel: str) -> str:
         "claim evidence. Put the primary keyword naturally in H1 and above-the-fold "
         "copy. Weave relevant long-tail keywords naturally into H2 section headings and "
         "their body copy; prioritize clarity and intent, never keyword-stuff or force an "
-        "unsupported modifier.\n"
+        "unsupported modifier. For DTC SEO, write `seo.h1` as a natural English "
+        "product heading, not a supplier noun list: lead with the primary keyword, then "
+        "use an en dash or comma to separate a concise supported detail, targeting 70 "
+        "characters or fewer. Keep `seo.title` separate and short in the exact pattern "
+        "`<short primary keyword phrase> | Barong Yekhna`, never over 60 characters. "
+        "Write `seo.meta_description` as one natural sentence of at most 160 characters; "
+        "when supported and relevant, naturally cover one or two high-conversion long-tail "
+        "intents such as nested storage or backpacking, without keyword stuffing.\n"
         "PACKAGE EVIDENCE RULE (absolute): `product.package_includes` is the canonical "
         "reviewed component list. A concrete component (for example kettle, pot, pan, or "
         "bowl) may appear in a title, bullet, or narrative only if it is named there or "
@@ -385,8 +392,10 @@ def marketing_copy_instruction(channel: str) -> str:
         '  "json_ld": {"data": {"@type": "Product", "name": "<...>", "description":'
         ' "<...>", "brand": {"@type": "Brand", "name": "<site_brand, NEVER any'
         ' other brand>"}}},\n'
-        '  "seo": {"title": "<meta title>", "meta_description": "<...>",'
-        ' "h1": "<...>", "url_slug": "<lowercase, hyphenated, 3-5 meaningful words>"},\n'
+        '  "seo": {"title": "<short primary keyword phrase | Barong Yekhna, <=60 chars>",'
+        ' "meta_description": "<natural sentence, <=160 chars>",'
+        ' "h1": "<primary keyword first; natural English with an en dash or comma, about'
+        ' <=70 chars>", "url_slug": "<lowercase, hyphenated, 3-5 meaningful words>"},\n'
         '  "compliance_self_check": {"<check>": "<pass/fail + why>"},\n'
         '  "missing_inputs": ["<unsupported claims you had to drop>"]\n'
         "}\n"
