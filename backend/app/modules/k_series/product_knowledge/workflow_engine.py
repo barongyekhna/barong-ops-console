@@ -67,6 +67,7 @@ from .faq_research import (
     build_faq_research,
     is_faq_question_candidate,
     is_specification_paraphrase_question,
+    sanitize_faq_research,
     structured_spec_number_tokens,
     validate_generated_faq,
 )
@@ -4657,6 +4658,11 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "sources": [],
                 "source_count": 0,
             }
+        # Persisted FAQ research predates the current candidate safety gate in
+        # some products.  Sanitize once here so provider input, canonical
+        # clusters, validation, audit input, and persistence all share the same
+        # source IDs and rebuilt quality metadata.
+        faq_research = sanitize_faq_research(faq_research)
         faq_question_clusters = (
             _faq_question_clusters(faq_research)
             if faq_research.get("quality_ready") is True

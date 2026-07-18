@@ -12,6 +12,53 @@ from backend.app.modules.k_series.product_knowledge.faq_research import (
 pytestmark = pytest.mark.unit
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Is stainless steel vs titanium better for camping cookware?",
+        "Is canister gas vs liquid fuel better for winter?",
+        "Is alcohol vs white gas better for backpacking?",
+        "Is isobutane vs propane better in cold weather?",
+        "Is nonstick vs stainless steel easier to clean?",
+        "Is gas vs electric cooking more convenient?",
+        "Which lasts longer, titanium vs aluminum?",
+        "What are pros and cons of propane vs butane?",
+    ],
+)
+def test_generic_comparisons_ignore_trailing_buyer_context(question: str) -> None:
+    assert is_faq_question_candidate(question) is True
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Is LPG suitable for a camping stove?",
+        "Are ABS and PVC durable for outdoor gear?",
+        "Is PTFE cookware easy to clean?",
+        "Is PFOA-free cookware safer?",
+        "Is BPA-free plastic suitable for food storage?",
+        "Can CO2 canisters be stored in cold weather?",
+        "Can a 5000mAh battery power a camping light?",
+        "Is LiFePO4 suitable for cold weather?",
+        "Is 40 dB quiet enough for camping?",
+    ],
+)
+def test_technical_notations_are_not_treated_as_brands(question: str) -> None:
+    assert is_faq_question_candidate(question) is True
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Are JetMaster stoves reliable?",
+        "Can TrailForge cookware be used in winter?",
+        "Which is easier to clean, TrailForge or CampNova?",
+    ],
+)
+def test_distinctive_camelcase_brands_are_rejected_anywhere(question: str) -> None:
+    assert is_faq_question_candidate(question) is False
+
+
 def test_brand_patterns_do_not_block_normal_material_or_fuel_questions() -> None:
     assert is_faq_question_candidate("Is stainless steel easy to clean?") is True
     assert is_faq_question_candidate("Is This Camping Cookware Safe?") is True
@@ -84,6 +131,36 @@ def test_paa_has_priority_over_duplicate_forum_and_organic_questions() -> None:
     assert len(research["sources"]) == 1
     assert research["sources"][0]["source_type"] == "people_also_ask"
     assert research["sources"][0]["query"] == "cookware storage"
+
+
+def test_unsafe_paa_duplicate_does_not_hide_safe_forum_fallback() -> None:
+    question = "How should camping cookware be stored between trips?"
+    research = build_faq_research(
+        [
+            {
+                "peopleAlsoAsk": [
+                    {
+                        "question": question,
+                        "snippet": "Odoland storage advice from a competitor article.",
+                    }
+                ],
+                "organic": [
+                    {
+                        "title": question,
+                        "link": "https://www.reddit.com/r/camping/safe-storage",
+                        "snippet": "Dry each piece before packing it away.",
+                    }
+                ],
+            }
+        ],
+        queries=["camping cookware storage"],
+    )
+
+    assert len(research["sources"]) == 1
+    assert research["sources"][0]["source_type"] == "forum_question"
+    assert research["sources"][0]["source_url"] == (
+        "https://www.reddit.com/r/camping/safe-storage"
+    )
 
 
 def test_non_question_review_title_is_rejected_but_normal_forum_question_remains() -> None:

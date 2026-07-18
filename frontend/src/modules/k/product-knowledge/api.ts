@@ -525,6 +525,25 @@ export async function retryRenderJobs(
   return readJson<RenderJobsResult>(response, path);
 }
 
+export type ProductFaqItem = { question: string; answer: string };
+
+export async function updateProductFaq(
+  productId: string,
+  items: ProductFaqItem[],
+): Promise<{
+  page_faq: ProductFaqItem[];
+  faq_schema_eligible: boolean;
+}> {
+  const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/faq`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ items }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "PUT",
+  });
+  return readJson(response, path);
+}
+
 export type RepublishStage = "auditing" | "exporting" | "dispatching";
 
 /** 一键重推：改完内容后重新上架同一产品（SKU upsert 原地更新，链接不变）。

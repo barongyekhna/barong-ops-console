@@ -161,7 +161,11 @@ from .workflow_engine import (
 )
 from ....services.module_execution_gate import ModuleExecutionGateError
 from .generation_jobs import enqueue_generation_jobs, jobs_status
-from .buyer_display import buyer_display_structured_specs, imperial_measurement
+from .buyer_display import (
+    buyer_display_structured_specs,
+    contains_cjk,
+    imperial_measurement,
+)
 from .evidence_guard import canonical_package_includes, package_claim_error
 from .faq_research import (
     evidence_number_tokens,
@@ -5657,4 +5661,97 @@ def download_media_asset(
         filename=filename,
         review_status=row.review_status,
         status=row.status,
+    )
+
+
+# ---------------------------------------------------------------------------
+# FAQ 人工编辑（上架前/后均可）：page_faq 是唯一数据源——可见 FAQ、_kp_faq meta、
+# FAQPage schema 全部由它派生，因此这里改完再「重推」，三处自动一致。
+# 人工即质量门：运营编辑过的 FAQ 直接标记 schema 合格（红线仍硬卡：英文、问句）。
+# ---------------------------------------------------------------------------
+
+
+class ProductFaqItemPayload(BaseModel):
+    question: str = Field(min_length=1, max_length=300)
+    answer: str = Field(min_length=1, max_length=1500)
+
+
+class ProductFaqUpdateRequest(BaseModel):
+    items: list[ProductFaqItemPayload] = Field(default_factory=list, max_length=8)
+
+
+class ProductFaqUpdateResponse(BaseModel):
+    page_faq: list[dict[str, Any]]
+    faq_quality: dict[str, Any]
+    faq_schema_eligible: bool
+
+
+@router.put(
+    "/products/{product_id}/faq",
+    response_model=ProductFaqUpdateResponse,
+)
+def product_knowledge_update_faq(
+    product_id: UUID,
+    payload: ProductFaqUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> ProductFaqUpdateResponse:
+    del user
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+
+    errors: list[dict[str, Any]] = []
+    cleaned: list[dict[str, Any]] = []
+    seen_questions: set[str] = set()
+    for index, item in enumerate(payload.items):
+        question = " ".join(item.question.split()).strip()
+        answer = " ".join(item.answer.split()).strip()
+        problems: list[str] = []
+        if contains_cjk(question) or contains_cjk(answer):
+            problems.append("买家可见内容不允许中文（英文红线）")
+        if question and not question.endswith("?"):
+            problems.append("问题必须是英文问句（以 ? 结尾）")
+        key = question.casefold()
+        if key and key in seen_questions:
+            problems.append("问题重复")
+        if problems:
+            errors.append({"index": index, "question": question, "errors": problems})
+            continue
+        seen_questions.add(key)
+        cleaned.append(
+            {"question": question, "answer": answer, "source": "manual_review"}
+        )
+    if errors:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "status": "failed",
+                "reason": "invalid_faq",
+                "code": "FAQ_MANUAL_VALIDATION_FAILED",
+                "items": errors,
+            },
+        )
+
+    mcj = dict(product.marketing_copy_json or {})
+    mcj["page_faq"] = cleaned
+    mcj["faq_quality"] = {
+        "eligible_for_schema": bool(cleaned),
+        "source": "manual_review",
+        "question_count": len(cleaned),
+        "reviewed_at": datetime.now(UTC).isoformat(),
+    }
+    product.marketing_copy_json = mcj
+    db.add(product)
+    db.commit()
+    return ProductFaqUpdateResponse(
+        page_faq=cleaned,
+        faq_quality=mcj["faq_quality"],
+        faq_schema_eligible=bool(cleaned),
     )

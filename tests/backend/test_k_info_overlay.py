@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from itertools import combinations
+from itertools import combinations, permutations
 from pathlib import Path
 
 import pytest
@@ -524,6 +524,159 @@ def test_full_dimension_overlay_places_labels_disjoint_and_in_bounds(
             or right[2] <= left[0]
             or left[3] <= right[1]
             or right[3] <= left[1]
+        )
+
+
+def test_compact_dimension_layout_is_disjoint_for_every_axis_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.modules.k_series.product_knowledge import info_overlay
+
+    source_buffer = BytesIO()
+    source_image = Image.new("RGB", (260, 160), "#f7f6f4")
+    ImageDraw.Draw(source_image).rounded_rectangle(
+        (60, 30, 200, 130),
+        radius=10,
+        fill="#355b48",
+    )
+    source_image.save(source_buffer, format="PNG")
+    source = source_buffer.getvalue()
+
+    specs = _verified_specs()
+    dimensions = specs["dimensions"]
+    assert isinstance(dimensions, dict)
+    for axis in ("length", "width", "height"):
+        dimensions[axis] = {
+            "value": 123.4,
+            "unit": "in",
+            "raw_value": f"{axis}=123.4in",
+            "source_label": axis,
+        }
+
+    rendered_boxes: list[tuple[int, int, int, int]] = []
+    original_draw_label = info_overlay._draw_label
+
+    def capture_label(*args, **kwargs):
+        box = original_draw_label(*args, **kwargs)
+        rendered_boxes.append(box)
+        return box
+
+    monkeypatch.setattr(info_overlay, "_draw_label", capture_label)
+
+    for axes in permutations(("length", "width", "height")):
+        rendered_boxes.clear()
+        overlay = {
+            "schema_version": OVERLAY_SCHEMA_VERSION,
+            "role": "dimension",
+            "items": [
+                {
+                    "type": "dimension",
+                    "source_field": f"dimensions.{axis}",
+                    "line": {
+                        "start": {"x": 0.23, "y": 0.81},
+                        "end": {"x": 0.77, "y": 0.81},
+                    },
+                    "text_anchor": {"x": 0.5, "y": 0.94},
+                }
+                for axis in axes
+            ],
+        }
+
+        rendered, report = compose_info_overlay(source, overlay, specs)
+
+        assert rendered != source
+        assert report == {
+            "status": "applied",
+            "applied_items": 3,
+            "warnings": [],
+        }
+        assert len(rendered_boxes) == 3
+        for left, top, right, bottom in rendered_boxes:
+            assert 0 <= left < right <= 260
+            assert 0 <= top < bottom <= 160
+        for first, second in combinations(rendered_boxes, 2):
+            assert (
+                first[2] <= second[0]
+                or second[2] <= first[0]
+                or first[3] <= second[1]
+                or second[3] <= first[1]
+            )
+
+
+def test_compact_mixed_overlay_jointly_places_callout_and_three_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.app.modules.k_series.product_knowledge import info_overlay
+
+    source_buffer = BytesIO()
+    source_image = Image.new("RGB", (260, 160), "#f7f6f4")
+    ImageDraw.Draw(source_image).rounded_rectangle(
+        (60, 30, 200, 130),
+        radius=10,
+        fill="#355b48",
+    )
+    source_image.save(source_buffer, format="PNG")
+    source = source_buffer.getvalue()
+
+    specs = _verified_specs()
+    dimensions = specs["dimensions"]
+    assert isinstance(dimensions, dict)
+    for axis in ("length", "width", "height"):
+        dimensions[axis] = {
+            "value": 123.4,
+            "unit": "in",
+            "raw_value": f"{axis}=123.4in",
+            "source_label": axis,
+        }
+    overlay = {
+        "schema_version": OVERLAY_SCHEMA_VERSION,
+        "role": "dimension",
+        "items": [
+            {
+                "type": "callout",
+                "source_field": "ip_rating",
+                "anchor": {"x": 0.42, "y": 0.5},
+                "text_anchor": {"x": 0.68, "y": 0.28},
+                "leader_direction": "right",
+            },
+            *[
+                {
+                    "type": "dimension",
+                    "source_field": f"dimensions.{axis}",
+                    "line": {
+                        "start": {"x": 0.23, "y": 0.81},
+                        "end": {"x": 0.77, "y": 0.81},
+                    },
+                    "text_anchor": {"x": 0.5, "y": 0.94},
+                }
+                for axis in ("width", "height", "length")
+            ],
+        ],
+    }
+    rendered_boxes: list[tuple[int, int, int, int]] = []
+    original_draw_label = info_overlay._draw_label
+
+    def capture_label(*args, **kwargs):
+        box = original_draw_label(*args, **kwargs)
+        rendered_boxes.append(box)
+        return box
+
+    monkeypatch.setattr(info_overlay, "_draw_label", capture_label)
+
+    rendered, report = compose_info_overlay(source, overlay, specs)
+
+    assert rendered != source
+    assert report == {"status": "applied", "applied_items": 4, "warnings": []}
+    assert len(rendered_boxes) == 4
+    for left, top, right, bottom in rendered_boxes:
+        assert 0 <= left < right <= 260
+        assert 0 <= top < bottom <= 160
+    for first, second in combinations(rendered_boxes, 2):
+        assert (
+            first[2] <= second[0]
+            or second[2] <= first[0]
+            or first[3] <= second[1]
+            or second[3] <= first[1]
         )
 
 

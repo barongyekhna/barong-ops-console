@@ -13,6 +13,7 @@ import {
 } from "./api";
 import styles from "./ProductKnowledge.module.css";
 import { BrandAuditPanel } from "./BrandAuditPanel";
+import { FaqEditorPanel } from "./FaqEditorPanel";
 import { RenderImagesPanel } from "./RenderImagesPanel";
 
 type CopyArtDirectionProps = {
@@ -315,6 +316,8 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
       </section>
 
       <RenderImagesPanel hasBrief={Boolean(brief)} productId={productId} />
+
+      <FaqEditorPanel productId={productId} />
 
       <BrandAuditPanel productId={productId} />
     </>

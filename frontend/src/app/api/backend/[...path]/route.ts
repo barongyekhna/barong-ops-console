@@ -1494,6 +1494,16 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "POST";
   }
 
+  // FAQ 人工编辑：page_faq 单一数据源，重推后可见 FAQ 与 schema 自动一致。
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "faq"
+  ) {
+    return method === "PUT";
+  }
+
   if (
     path.length === 5 &&
     path[1] === "products" &&

@@ -860,13 +860,25 @@ def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
     stored_research = {
         "status": "completed",
         "quality_ready": True,
-        "source_count": 2,
+        "source_count": 3,
+        "raw_provider_payload": {"unreviewed_brand": "TrailForge"},
         "sources": [
+            {
+                "id": "faq-competitor-brand",
+                "question": "Is Odoland a good brand?",
+                "snippet": "A competitor-brand article, not buyer evidence.",
+                "intent_cluster": "competitor_brand",
+            },
             {
                 "id": "faq-cold-weather",
                 "question": "How should this pump be prepared for cold weather?",
                 "snippet": "Follow the maker's cold-weather preparation guidance.",
-                "intent_cluster": "weather_use",
+                "source_type": "people_also_ask",
+                "source_url": "https://example.test/cold-weather",
+                "query": "pump cold weather questions",
+                "rank": 1,
+                "intent_cluster": "TrailForge_care",
+                "raw_provider_payload": {"brand": "TrailForge"},
             },
             {
                 "id": "faq-ignition-check",
@@ -876,6 +888,7 @@ def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
             },
         ],
         "clusters": {
+            "competitor_brand": ["faq-competitor-brand"],
             "weather_use": ["faq-cold-weather"],
             "pre_trip_check": ["faq-ignition-check"],
         },
@@ -928,12 +941,35 @@ def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
     )
 
     assert "faq_research" not in provider_steps
-    assert captured_copy_input["faq_research"] == stored_research
+    safe_research = captured_copy_input["faq_research"]
+    assert [source["id"] for source in safe_research["sources"]] == [
+        "faq-cold-weather",
+        "faq-ignition-check",
+    ]
+    assert safe_research["sources"][0] == {
+        "id": "faq-cold-weather",
+        "question": "How should this pump be prepared for cold weather?",
+        "snippet": "Follow the maker's cold-weather preparation guidance.",
+        "source_type": "people_also_ask",
+        "source_url": "https://example.test/cold-weather",
+        "query": "pump cold weather questions",
+        "rank": 1,
+        "intent_cluster": "cold_weather",
+    }
+    assert safe_research["clusters"] == {
+        "cold_weather": ["faq-cold-weather"],
+        "pre_trip_check": ["faq-ignition-check"],
+    }
+    assert "raw_provider_payload" not in safe_research
+    assert "TrailForge" not in json.dumps(safe_research)
+    assert safe_research["source_count"] == 2
+    assert safe_research["intent_cluster_count"] == 2
+    assert safe_research["quality_ready"] is True
     assert [
         item["intent_cluster"]
         for item in captured_copy_input["faq_question_clusters"]
-    ] == ["weather_use", "pre_trip_check"]
-    assert generated.faq_research_json == stored_research
+    ] == ["cold_weather", "pre_trip_check"]
+    assert generated.faq_research_json == safe_research
     assert generated.marketing_copy_json["faq_quality"]["eligible_for_schema"] is True
     # Generation canonicalizes exact server-projected questions and refs before
     # the reusable validator runs, so no advisory-ref autobind is needed.
@@ -943,7 +979,7 @@ def test_marketing_copy_regeneration_reuses_persisted_faq_research() -> None:
     ] == [["faq-cold-weather"], ["faq-ignition-check"]]
     assert [
         item["intent_cluster"] for item in generated.marketing_copy_json["page_faq"]
-    ] == ["weather_use", "pre_trip_check"]
+    ] == ["cold_weather", "pre_trip_check"]
     assert "How do I get this pump ready for winter?" not in {
         item["question"] for item in generated.marketing_copy_json["page_faq"]
     }

@@ -78,35 +78,55 @@ _IS_PROPER_NAME_QUESTION = re.compile(
     r"^[Ii]s\s+(?:[Tt]he\s+)?"
     r"(?P<brand>[A-Z][A-Za-z0-9&'’.-]{2,}(?:\s+[A-Z][A-Za-z0-9&'’.-]{2,}){0,2})\b"
 )
-_VS_COMPARISON = re.compile(
-    r"(?P<left>[a-z0-9][a-z0-9 &'’+./-]{0,45}?)\s+vs\.?\s+"
-    r"(?P<right>[a-z0-9][a-z0-9 &'’+./-]{0,45}?)(?=\s*(?:[,;:?]|\bis\b|\bwhich\b|$))",
+_VS_COMPARISON = re.compile(r"\bvs(?:\.|\b)", re.IGNORECASE)
+_COMPARISON_TRAILING_CONTEXT = re.compile(
+    r"(?:[?？,;:]|\s+\b(?:"
+    r"is|are|do|does|has|have|will|lasts|"
+    r"better|best|worse|safer|easier|harder|lighter|heavier|faster|slower|"
+    r"cheaper|stronger|weaker|longer|shorter|more|less|preferable|recommended|"
+    r"different|convenient|durable|compare|compared|pros|cons|"
+    r"for|in|during|when|with|on|at|under|to"
+    r")\b)",
     re.IGNORECASE,
 )
 _GENERIC_COMPARISON_TOKENS = {
+    "abs",
+    "alcohol",
     "aluminum",
     "aluminium",
     "anodized",
+    "bpa",
     "butane",
     "camp",
     "camping",
+    "canister",
     "carbon",
     "cast",
     "ceramic",
+    "co2",
+    "cooking",
     "cookware",
     "double",
     "electric",
+    "free",
     "fuel",
     "gas",
     "hard",
     "iron",
+    "isobutane",
     "liquid",
+    "lpg",
     "nonstick",
+    "outdoor",
     "pan",
     "pans",
+    "pfoa",
+    "plastic",
     "pot",
     "pots",
     "propane",
+    "ptfe",
+    "pvc",
     "set",
     "sets",
     "single",
@@ -116,22 +136,67 @@ _GENERIC_COMPARISON_TOKENS = {
     "stainless",
     "titanium",
     "wall",
+    "white",
     "wood",
 }
 _COMPARISON_SCAFFOLD_TOKENS = {
+    "a",
+    "an",
+    "and",
     "are",
     "best",
     "better",
+    "between",
+    "can",
+    "choose",
+    "compare",
+    "compared",
+    "comparing",
+    "cons",
+    "could",
+    "difference",
+    "differences",
+    "different",
     "does",
     "do",
+    "for",
+    "how",
+    "i",
+    "in",
     "is",
+    "last",
+    "lasts",
+    "longer",
+    "more",
     "or",
+    "of",
+    "pick",
+    "pros",
+    "safer",
+    "should",
     "the",
+    "than",
+    "use",
+    "using",
     "versus",
+    "we",
+    "when",
+    "with",
     "what",
     "which",
     "worse",
 }
+_MIXED_CASE_TECHNICAL_TERMS = {
+    "db",
+    "lifepo4",
+    "liion",
+    "nimh",
+    "wifi",
+}
+_MIXED_CASE_TECHNICAL_MEASUREMENT = re.compile(
+    r"^\d+(?:\.\d+)?(?:ah|mah|wh|kwh|db)$",
+    re.IGNORECASE,
+)
 _PROPER_NAME_REVIEW = re.compile(
     r"\b(?P<brand>[A-Z][A-Za-z0-9&'’.-]{2,}(?:\s+[A-Z][A-Za-z0-9&'’.-]{2,}){0,2})\s+"
     r"(?:(?:camping|outdoor|cookware|cookset|stove|gear|product)\s+){0,2}reviews?\b"
@@ -212,18 +277,47 @@ def _comparison_side_is_generic(value: str) -> bool:
 
 
 def _looks_distinctive_proper_name(value: str) -> bool:
-    """Recognize proprietary casing without treating Title Case as a brand."""
+    """Recognize CamelCase brands without treating technical caps as brands."""
 
-    words = re.findall(r"[A-Za-z][A-Za-z0-9&'’.-]*", value)
-    return any(
-        (word.isupper() and len(word) >= 2)
-        or any(character.isupper() for character in word[1:])
-        for word in words
+    words = re.findall(r"[A-Za-z0-9][A-Za-z0-9&'’./-]*", value)
+    for word in words:
+        if re.search(r"[a-z][A-Z]", word) is None:
+            continue
+        normalized = re.sub(r"[^a-z0-9]+", "", word.casefold())
+        if normalized in _MIXED_CASE_TECHNICAL_TERMS:
+            continue
+        if _MIXED_CASE_TECHNICAL_MEASUREMENT.fullmatch(word):
+            continue
+        return True
+    return False
+
+
+def _contains_unsafe_faq_context(*values: Any) -> bool:
+    context = " ".join(str(value or "") for value in values)
+    return _contains_third_party_brand(context) or _looks_distinctive_proper_name(
+        context
     )
+
+
+def _comparison_operands(value: str, match: re.Match[str]) -> tuple[str, str]:
+    # Comparison questions often put their interrogative predicate before a
+    # comma/colon ("Which lasts longer, X vs Y?").  The final clause before
+    # ``vs`` is the operand; earlier clauses are grammatical scaffolding.
+    left = re.split(r"[,;:]", value[: match.start()])[-1].strip(" -|:,;")
+    right = value[match.end() :].strip(" -|:,;")
+    trailing_context = _COMPARISON_TRAILING_CONTEXT.search(right)
+    if trailing_context is not None:
+        right = right[: trailing_context.start()]
+    return left, right.strip(" -|:,;.?!？")
 
 
 def _looks_like_third_party_brand_question(value: str) -> bool:
     if _contains_third_party_brand(value) or _BRAND_QUALITY_QUESTION.search(value):
+        return True
+    # Distinctive internal capitals are a useful low-cost brand signal anywhere
+    # in the question.  Plain Title Case and all-caps technical terms (PTFE,
+    # LPG, CO2, and similar) are intentionally not treated as entities.
+    if _looks_distinctive_proper_name(value):
         return True
     proper_name_match = _IS_PROPER_NAME_QUESTION.search(value)
     if proper_name_match is not None and _looks_distinctive_proper_name(
@@ -231,13 +325,14 @@ def _looks_like_third_party_brand_question(value: str) -> bool:
     ):
         return True
     for match in _VS_COMPARISON.finditer(value):
+        left, right = _comparison_operands(value, match)
         if not (
-            _comparison_side_is_generic(match.group("left"))
-            and _comparison_side_is_generic(match.group("right"))
+            _comparison_side_is_generic(left)
+            and _comparison_side_is_generic(right)
         ):
             return True
     review_match = _PROPER_NAME_REVIEW.search(value)
-    if review_match is not None and _looks_distinctive_proper_name(
+    if review_match is not None and not _comparison_side_is_generic(
         review_match.group("brand")
     ):
         return True
@@ -270,6 +365,140 @@ def is_specification_paraphrase_question(value: Any) -> bool:
     return bool(
         _SPEC_PARAPHRASE.match(question) or _SPEC_PARAPHRASE_ZH.match(question)
     )
+
+
+def sanitize_faq_research(research: Any) -> dict[str, Any]:
+    """Project untrusted/current FAQ research into a safe, consistent snapshot.
+
+    IDs and provenance of retained sources remain unchanged.  Derived clusters
+    and quality counters are rebuilt so legacy persisted research cannot carry
+    a removed competitor source into model input through stale metadata.
+    """
+
+    source_research = research if isinstance(research, dict) else {}
+    raw_sources = source_research.get("sources")
+    retained_sources: list[dict[str, Any]] = []
+    retained_ids: set[str] = set()
+    allowed_source_types = {
+        "people_also_ask",
+        "forum_question",
+        "review_pain_point",
+        "organic_question",
+    }
+    for raw_source in raw_sources if isinstance(raw_sources, list) else []:
+        if not isinstance(raw_source, dict):
+            continue
+        source_id = _clean_text(raw_source.get("id"), limit=200)
+        question = _clean_text(raw_source.get("question"), limit=512)
+        snippet = _clean_text(raw_source.get("snippet"))
+        source_url = _clean_text(
+            raw_source.get("source_url") or raw_source.get("url"),
+            limit=2048,
+        )
+        query = _clean_text(raw_source.get("query"), limit=512)
+        if (
+            not source_id
+            or source_id in retained_ids
+            or not is_faq_question_candidate(question)
+            or _contains_unsafe_faq_context(
+                source_id,
+                snippet,
+                source_url,
+                query,
+            )
+        ):
+            continue
+
+        raw_cluster = _clean_text(raw_source.get("intent_cluster"), limit=64)
+        cluster = raw_cluster
+        if (
+            not re.fullmatch(r"[a-z0-9_]{1,64}", cluster)
+            or _contains_unsafe_faq_context(cluster)
+        ):
+            cluster = _intent_cluster(f"{question} {snippet}")
+        safe_source: dict[str, Any] = {
+            "id": source_id,
+            "question": question,
+            "intent_cluster": cluster,
+        }
+        source_type = _clean_text(raw_source.get("source_type"), limit=64)
+        if source_type in allowed_source_types:
+            safe_source["source_type"] = source_type
+        if source_url:
+            safe_source["source_url"] = source_url
+        if snippet:
+            safe_source["snippet"] = snippet
+        if query:
+            safe_source["query"] = query
+        raw_rank = raw_source.get("rank")
+        if not isinstance(raw_rank, bool):
+            try:
+                rank = max(1, int(raw_rank))
+            except (TypeError, ValueError):
+                rank = None
+            if rank is not None:
+                safe_source["rank"] = rank
+        retained_ids.add(source_id)
+        retained_sources.append(safe_source)
+
+    # Raw cluster maps are derived, stale metadata.  Rebuild exclusively from
+    # each retained source's validated/fallback intent cluster.
+    clusters: dict[str, list[str]] = {}
+    for source in retained_sources:
+        clusters.setdefault(str(source["intent_cluster"]), []).append(
+            str(source["id"])
+        )
+
+    strong_ids = {
+        str(source["id"]).strip()
+        for source in retained_sources
+        if (
+            not str(source.get("source_type") or "").strip()
+            or str(source.get("source_type") or "").strip()
+            in allowed_source_types
+        )
+        and not is_specification_paraphrase_question(source.get("question"))
+    }
+    strong_clusters = {
+        cluster
+        for cluster, source_ids in clusters.items()
+        if any(source_id in strong_ids for source_id in source_ids)
+    }
+    quality_ready = len(strong_ids) >= 2 and len(strong_clusters) >= 2
+
+    # Closed top-level projection: do not forward arbitrary provider response
+    # objects that may contain unreviewed competitor entities.
+    output: dict[str, Any] = {}
+    raw_queries = source_research.get("queries")
+    if isinstance(raw_queries, list):
+        output["queries"] = [
+            clean_query
+            for query in raw_queries
+            if (clean_query := _clean_text(query, limit=512))
+            if not _contains_unsafe_faq_context(query)
+        ]
+    for field, limit in (("provider", 100), ("research_run_id", 100)):
+        value = _clean_text(source_research.get(field), limit=limit)
+        if value and not _contains_unsafe_faq_context(value):
+            output[field] = value
+    original_status = str(source_research.get("status") or "").strip()
+    output.update(
+        {
+            "status": (
+                "completed"
+                if quality_ready
+                else original_status
+                if original_status in {"failed", "not_applicable"}
+                else "insufficient"
+            ),
+            "sources": retained_sources,
+            "clusters": clusters,
+            "source_count": len(retained_sources),
+            "quality_ready": quality_ready,
+            "intent_cluster_count": len(strong_clusters),
+        }
+    )
+    return output
 
 
 def _question_id(source_type: str, question: str, url: str) -> str:
@@ -318,21 +547,26 @@ def _append_source(
 ) -> None:
     text = _clean_text(question, limit=512).strip(" -|:")
     key = _question_key(text)
+    clean_url = _clean_text(url, limit=2048)
+    clean_snippet = _clean_text(snippet)
     if (
         not is_faq_question_candidate(text)
+        or _contains_unsafe_faq_context(clean_snippet, clean_url, query)
         or len(key.split()) < 3
         or key in seen
     ):
         return
+    # Only a fully safe source may claim the dedupe key.  This lets a lower-
+    # priority forum/organic duplicate survive when a PAA item's context leaks
+    # a competitor even though its question text itself looks harmless.
     seen.add(key)
-    clean_url = _clean_text(url, limit=2048)
     sources.append(
         {
             "id": _question_id(source_type, text, clean_url),
             "question": text,
             "source_type": source_type,
             "source_url": clean_url or None,
-            "snippet": _clean_text(snippet),
+            "snippet": clean_snippet,
             "query": query,
             "rank": max(1, rank),
             "intent_cluster": _intent_cluster(f"{text} {snippet or ''}"),
@@ -449,15 +683,17 @@ def build_faq_research(
         for source in strong_sources
     }
     quality_ready = len(strong_sources) >= 2 and len(strong_clusters) >= 2
-    return {
-        "status": "completed" if quality_ready else "insufficient",
-        "queries": queries,
-        "sources": sources[:50],
-        "clusters": clusters,
-        "source_count": len(sources),
-        "quality_ready": quality_ready,
-        "intent_cluster_count": len(strong_clusters),
-    }
+    return sanitize_faq_research(
+        {
+            "status": "completed" if quality_ready else "insufficient",
+            "queries": queries,
+            "sources": sources[:50],
+            "clusters": clusters,
+            "source_count": len(sources),
+            "quality_ready": quality_ready,
+            "intent_cluster_count": len(strong_clusters),
+        }
+    )
 
 
 def _tokens(value: str) -> set[str]:

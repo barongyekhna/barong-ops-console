@@ -44,7 +44,7 @@ import re
 from io import BytesIO
 from pathlib import Path
 from statistics import median
-from typing import Any
+from typing import Any, NamedTuple
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -761,7 +761,15 @@ def _boxes_overlap(
     )
 
 
-def _collision_free_label_placement(
+class _LabelPlan(NamedTuple):
+    anchor: tuple[int, int]
+    direction: str
+    box: tuple[int, int, int, int]
+    line_start: tuple[int, int] | None
+    line_end: tuple[int, int] | None
+
+
+def _label_placement_candidates(
     draw: ImageDraw.ImageDraw,
     *,
     text: str,
@@ -770,10 +778,9 @@ def _collision_free_label_placement(
     font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
     image_size: tuple[int, int],
     padding: int,
-    line_width: int,
-    occupied_boxes: list[tuple[int, int, int, int]],
-) -> tuple[tuple[int, int], tuple[int, int, int, int]] | None:
-    """Move a panel along its edge until its measured box is collision-free."""
+    max_candidates: int = 12,
+) -> list[tuple[tuple[int, int], tuple[int, int, int, int]]]:
+    """Measure bounded panel positions while moving along one canvas edge."""
     preview = _text_box(
         draw,
         text=text,
@@ -798,6 +805,7 @@ def _collision_free_label_placement(
         offsets.extend((-step * multiplier, step * multiplier))
 
     seen_boxes: set[tuple[int, int, int, int]] = set()
+    candidates: list[tuple[tuple[int, int], tuple[int, int, int, int]]] = []
     for offset in offsets:
         if vertical_edge:
             adjusted_anchor = (
@@ -821,12 +829,229 @@ def _collision_free_label_placement(
         if candidate in seen_boxes:
             continue
         seen_boxes.add(candidate)
-        if all(
-            not _boxes_overlap(candidate, occupied, spacing=line_width)
-            for occupied in occupied_boxes
+        candidates.append((adjusted_anchor, candidate))
+        if len(candidates) >= max_candidates:
+            break
+    return candidates
+
+
+def _dimension_geometry_candidates(
+    *,
+    item: dict[str, Any],
+    source_field: str,
+    text_anchor: tuple[int, int],
+    foreground_bbox: tuple[int, int, int, int] | None,
+    image_size: tuple[int, int],
+) -> list[
+    tuple[tuple[int, int], tuple[int, int], tuple[int, int], str]
+]:
+    """Return bounded side/lane choices without drawing any annotation."""
+    if foreground_bbox is not None:
+        candidates = []
+        for side in _dimension_side_order(
+            source_field=source_field,
+            foreground_bbox=foreground_bbox,
+            text_anchor=text_anchor,
         ):
-            return adjusted_anchor, candidate
-    return None
+            for lane in range(2):
+                candidates.append(
+                    _snapped_dimension_geometry(
+                        source_field=source_field,
+                        foreground_bbox=foreground_bbox,
+                        text_anchor=text_anchor,
+                        image_size=image_size,
+                        lane=lane,
+                        side=side,
+                    )
+                )
+        return candidates
+
+    width, height = image_size
+    start = _pixels(item["line"]["start"], width, height)
+    end = _pixels(item["line"]["end"], width, height)
+    midpoint = ((start[0] + end[0]) // 2, (start[1] + end[1]) // 2)
+    direction = _auto_direction(midpoint, text_anchor, "auto")
+    candidates = [(start, end, text_anchor, direction)]
+    gap = max(10, round(min(image_size) * 0.025))
+    for candidate_direction, delta in (
+        ("up", (0, -gap)),
+        ("down", (0, gap)),
+        ("left", (-gap, 0)),
+        ("right", (gap, 0)),
+    ):
+        candidate = (
+            start,
+            end,
+            (midpoint[0] + delta[0], midpoint[1] + delta[1]),
+            candidate_direction,
+        )
+        if candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
+
+
+def _dimension_label_candidates(
+    draw: ImageDraw.ImageDraw,
+    *,
+    item: dict[str, Any],
+    text: str,
+    foreground_bbox: tuple[int, int, int, int] | None,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    image_size: tuple[int, int],
+    padding: int,
+) -> list[_LabelPlan]:
+    """Measure all useful side/lane choices for one dimension label."""
+    source_field = item["source_field"]
+    text_anchor = _pixels(item["text_anchor"], *image_size)
+    candidates: list[_LabelPlan] = []
+    seen_boxes: set[tuple[int, int, int, int]] = set()
+    for start, end, candidate_anchor, direction in _dimension_geometry_candidates(
+        item=item,
+        source_field=source_field,
+        text_anchor=text_anchor,
+        foreground_bbox=foreground_bbox,
+        image_size=image_size,
+    ):
+        placements = _label_placement_candidates(
+            draw,
+            text=text,
+            anchor=candidate_anchor,
+            direction=direction,
+            font=font,
+            image_size=image_size,
+            padding=padding,
+        )
+        for adjusted_anchor, box in placements:
+            if box in seen_boxes:
+                continue
+            seen_boxes.add(box)
+            candidates.append(
+                _LabelPlan(adjusted_anchor, direction, box, start, end)
+            )
+    return candidates
+
+
+def _callout_label_candidates(
+    draw: ImageDraw.ImageDraw,
+    *,
+    item: dict[str, Any],
+    text: str,
+    font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+    image_size: tuple[int, int],
+    padding: int,
+) -> list[_LabelPlan]:
+    """Measure configured and alternate callout directions without drawing."""
+    anchor = _pixels(item["anchor"], *image_size)
+    text_anchor = _pixels(item["text_anchor"], *image_size)
+    direction = _auto_direction(
+        anchor,
+        text_anchor,
+        item.get("leader_direction", "auto"),
+    )
+    direction_order = [direction]
+    direction_order.extend(
+        candidate
+        for candidate in ("right", "left", "up", "down")
+        if candidate != direction
+    )
+    candidates: list[_LabelPlan] = []
+    seen_boxes: set[tuple[int, int, int, int]] = set()
+    for candidate_direction in direction_order:
+        placements = _label_placement_candidates(
+            draw,
+            text=text,
+            anchor=text_anchor,
+            direction=candidate_direction,
+            font=font,
+            image_size=image_size,
+            padding=padding,
+        )
+        for adjusted_anchor, box in placements:
+            if box in seen_boxes:
+                continue
+            seen_boxes.add(box)
+            candidates.append(
+                _LabelPlan(
+                    adjusted_anchor,
+                    candidate_direction,
+                    box,
+                    None,
+                    None,
+                )
+            )
+    return candidates
+
+
+def _dimension_layout_priority(
+    item: dict[str, Any],
+) -> tuple[int, str]:
+    """Place the vertically constrained axis before wide horizontal panels."""
+    source_field = str(item.get("source_field") or "")
+    if source_field.endswith(".height"):
+        rank = 0
+    elif source_field.endswith(".width"):
+        rank = 1
+    elif source_field.endswith(".length"):
+        rank = 2
+    else:
+        rank = 3
+    return rank, source_field
+
+
+def _joint_label_layout(
+    *,
+    items: list[dict[str, Any]],
+    candidate_pools: dict[int, list[_LabelPlan]],
+    line_width: int,
+    max_nodes: int = 50_000,
+) -> dict[int, _LabelPlan]:
+    """Find a maximum non-overlapping label set with bounded backtracking."""
+    order = sorted(
+        candidate_pools,
+        key=lambda index: (
+            len(candidate_pools[index]),
+            *_dimension_layout_priority(items[index]),
+            index,
+        ),
+    )
+    best: dict[int, _LabelPlan] = {}
+    selected: dict[int, _LabelPlan] = {}
+    occupied: list[tuple[int, int, int, int]] = []
+    visited_nodes = 0
+
+    def search(position: int) -> bool:
+        nonlocal best, visited_nodes
+        if visited_nodes >= max_nodes:
+            return False
+        visited_nodes += 1
+        if len(selected) > len(best):
+            best = dict(selected)
+        if len(best) == len(order):
+            return True
+        remaining = len(order) - position
+        if position >= len(order) or len(selected) + remaining <= len(best):
+            return False
+
+        index = order[position]
+        for candidate in candidate_pools[index]:
+            if any(
+                _boxes_overlap(candidate.box, box, spacing=line_width)
+                for box in occupied
+            ):
+                continue
+            selected[index] = candidate
+            occupied.append(candidate.box)
+            if search(position + 1):
+                return True
+            occupied.pop()
+            selected.pop(index)
+
+        # A partial plan is still safer than overlapping panels.  Explore the
+        # skip branch only after every placement candidate for this label.
+        return search(position + 1)
+
+    search(0)
+    return best
 
 
 def _draw_arrow_line(
@@ -892,7 +1117,6 @@ def compose_info_overlay(
     arrow_size = max(8, round(base * 0.013))
     warnings: list[str] = []
     applied = 0
-    occupied_label_boxes: list[tuple[int, int, int, int]] = []
     foreground_bbox: tuple[int, int, int, int] | None = None
     if any(item["type"] == "dimension" for item in contract["items"]):
         foreground_bbox = _foreground_bbox(image)
@@ -901,7 +1125,8 @@ def compose_info_overlay(
                 "product foreground not detected; dimension lines used brief coordinates"
             )
 
-    for item in contract["items"]:
+    resolved_texts: dict[int, str] = {}
+    for index, item in enumerate(contract["items"]):
         source_field = item["source_field"]
         text = resolve_structured_spec_text(
             structured_specs,
@@ -918,51 +1143,59 @@ def compose_info_overlay(
             )
             warnings.append(f"{warning_prefix}: {source_field}")
             continue
-        text_anchor = _pixels(item["text_anchor"], width, height)
+        resolved_texts[index] = text
+
+    candidate_pools: dict[int, list[_LabelPlan]] = {}
+    for index in resolved_texts:
+        item = contract["items"][index]
+        if item["type"] == "callout":
+            candidate_pools[index] = _callout_label_candidates(
+                draw,
+                item=item,
+                text=resolved_texts[index],
+                font=font,
+                image_size=image.size,
+                padding=padding,
+            )
+        else:
+            candidate_pools[index] = _dimension_label_candidates(
+                draw,
+                item=item,
+                text=resolved_texts[index],
+                foreground_bbox=foreground_bbox,
+                font=font,
+                image_size=image.size,
+                padding=padding,
+            )
+    label_plans = _joint_label_layout(
+        items=contract["items"],
+        candidate_pools=candidate_pools,
+        line_width=line_width,
+    )
+
+    for index, item in enumerate(contract["items"]):
+        text = resolved_texts.get(index)
+        if text is None:
+            continue
+        source_field = item["source_field"]
+        plan = label_plans.get(index)
+        if plan is None:
+            warnings.append(
+                f"overlay label skipped because no collision-free position: {source_field}"
+            )
+            continue
         if item["type"] == "callout":
             anchor = _pixels(item["anchor"], width, height)
-            direction = _auto_direction(
-                anchor, text_anchor, item.get("leader_direction", "auto")
-            )
-            direction_order = [direction]
-            direction_order.extend(
-                candidate
-                for candidate in ("right", "left", "up", "down")
-                if candidate != direction
-            )
-            placement = None
-            for candidate_direction in direction_order:
-                placement = _collision_free_label_placement(
-                    draw,
-                    text=text,
-                    anchor=text_anchor,
-                    direction=candidate_direction,
-                    font=font,
-                    image_size=image.size,
-                    padding=padding,
-                    line_width=line_width,
-                    occupied_boxes=occupied_label_boxes,
-                )
-                if placement is not None:
-                    direction = candidate_direction
-                    text_anchor = placement[0]
-                    break
-            if placement is None:
-                warnings.append(
-                    f"overlay label skipped because no collision-free position: {source_field}"
-                )
-                continue
             box = _draw_label(
                 draw,
                 text=text,
-                anchor=text_anchor,
-                direction=direction,
+                anchor=plan.anchor,
+                direction=plan.direction,
                 font=font,
                 image_size=image.size,
                 padding=padding,
                 line_width=line_width,
             )
-            occupied_label_boxes.append(box)
             leader_end = (
                 min(max(anchor[0], box[0]), box[2]),
                 min(max(anchor[1], box[1]), box[3]),
@@ -979,115 +1212,28 @@ def compose_info_overlay(
                 fill=LINE_COLOR,
             )
         else:
-            if foreground_bbox is not None:
-                placement = None
-                chosen_geometry = None
-                for side in _dimension_side_order(
-                    source_field=source_field,
-                    foreground_bbox=foreground_bbox,
-                    text_anchor=text_anchor,
-                ):
-                    for lane in range(2):
-                        candidate_geometry = _snapped_dimension_geometry(
-                            source_field=source_field,
-                            foreground_bbox=foreground_bbox,
-                            text_anchor=text_anchor,
-                            image_size=image.size,
-                            lane=lane,
-                            side=side,
-                        )
-                        (
-                            candidate_start,
-                            candidate_end,
-                            candidate_anchor,
-                            candidate_direction,
-                        ) = candidate_geometry
-                        placement = _collision_free_label_placement(
-                            draw,
-                            text=text,
-                            anchor=candidate_anchor,
-                            direction=candidate_direction,
-                            font=font,
-                            image_size=image.size,
-                            padding=padding,
-                            line_width=line_width,
-                            occupied_boxes=occupied_label_boxes,
-                        )
-                        if placement is not None:
-                            chosen_geometry = (
-                                candidate_start,
-                                candidate_end,
-                                placement[0],
-                                candidate_direction,
-                            )
-                            break
-                    if chosen_geometry is not None:
-                        break
-                if chosen_geometry is None:
-                    warnings.append(
-                        f"overlay label skipped because no collision-free position: {source_field}"
-                    )
-                    continue
-                start, end, text_anchor, direction = chosen_geometry
-            else:
-                start = _pixels(item["line"]["start"], width, height)
-                end = _pixels(item["line"]["end"], width, height)
-                midpoint = ((start[0] + end[0]) // 2, (start[1] + end[1]) // 2)
-                direction = _auto_direction(midpoint, text_anchor, "auto")
-                gap = max(10, round(base * 0.025))
-                anchor_candidates = [(text_anchor, direction)]
-                for candidate_direction, delta in (
-                    ("up", (0, -gap)),
-                    ("down", (0, gap)),
-                    ("left", (-gap, 0)),
-                    ("right", (gap, 0)),
-                ):
-                    candidate = (
-                        (midpoint[0] + delta[0], midpoint[1] + delta[1]),
-                        candidate_direction,
-                    )
-                    if candidate not in anchor_candidates:
-                        anchor_candidates.append(candidate)
-                placement = None
-                for candidate_anchor, candidate_direction in anchor_candidates:
-                    placement = _collision_free_label_placement(
-                        draw,
-                        text=text,
-                        anchor=candidate_anchor,
-                        direction=candidate_direction,
-                        font=font,
-                        image_size=image.size,
-                        padding=padding,
-                        line_width=line_width,
-                        occupied_boxes=occupied_label_boxes,
-                    )
-                    if placement is not None:
-                        text_anchor = placement[0]
-                        direction = candidate_direction
-                        break
-                if placement is None:
-                    warnings.append(
-                        f"overlay label skipped because no collision-free position: {source_field}"
-                    )
-                    continue
+            if plan.line_start is None or plan.line_end is None:
+                warnings.append(
+                    f"overlay label skipped because no collision-free position: {source_field}"
+                )
+                continue
             _draw_arrow_line(
                 draw,
-                start,
-                end,
+                plan.line_start,
+                plan.line_end,
                 line_width=line_width,
                 arrow_size=arrow_size,
             )
-            box = _draw_label(
+            _draw_label(
                 draw,
                 text=text,
-                anchor=text_anchor,
-                direction=direction,
+                anchor=plan.anchor,
+                direction=plan.direction,
                 font=font,
                 image_size=image.size,
                 padding=padding,
                 line_width=line_width,
             )
-            occupied_label_boxes.append(box)
         applied += 1
 
     if not applied:
