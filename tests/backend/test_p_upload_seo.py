@@ -31,7 +31,7 @@ def test_upload_seo_prefers_k_marketing_copy_meta_description() -> None:
 
     seo = assemble._seo_for_upload(marketing_copy, product)
 
-    assert seo.title == "Authored K title"
+    assert seo.title == "Authored K title | Barong Yekhna"
     assert seo.description == "Sentences keep their intended spacing."
     assert seo.url_slug == "compact-camp-stove"
 
@@ -47,7 +47,7 @@ def test_upload_seo_falls_back_safely_without_valid_generated_copy() -> None:
         product,
     )
 
-    assert seo.title == "Legacy title"
+    assert seo.title == "Legacy title | Barong Yekhna"
     assert seo.description == "Legacy description"
     assert seo.url_slug is None
 
@@ -60,6 +60,23 @@ def test_upload_seo_falls_back_safely_without_valid_generated_copy() -> None:
         product,
     )
     assert shortened.url_slug == "portable-cassette-stove-very-long"
+
+
+def test_upload_seo_enforces_branded_short_title_for_legacy_copy() -> None:
+    product = SimpleNamespace(
+        seo_title_en=(
+            "Portable Camping Cookware Mess Kit Pot Kettle Pan Tableware "
+            "Backpacking Set"
+        ),
+        seo_description_en=None,
+    )
+
+    seo = assemble._seo_for_upload({}, product)
+
+    assert seo.title is not None
+    assert seo.title.endswith(" | Barong Yekhna")
+    assert len(seo.title) <= 60
+    assert seo.title.count("Barong Yekhna") == 1
 
 
 def test_n8n_writes_only_authored_seo_copy_to_yoast_product_meta() -> None:

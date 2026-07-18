@@ -867,11 +867,18 @@ class KProductKnowledgeWorkflowEngine:
         # DeepSeek may repeat a supplier-private model code from raw_input_text.
         # Normalize the buyer-visible name before diffing, persistence, audit
         # event capture, or any downstream title/schema generation consumes it.
-        provider_output = sanitize_product_naming_output(
-            provider_output,
-            structured_specs=product.structured_specs_json,
-            package_includes=product.package_includes_json,
-        )
+        try:
+            provider_output = sanitize_product_naming_output(
+                provider_output,
+                structured_specs=product.structured_specs_json,
+                package_includes=product.package_includes_json,
+            )
+        except TitleEvidenceConsistencyError as exc:
+            raise KWorkflowExecutionError(
+                "DEEPSEEK_PRODUCT_NAME_NUMERIC_UNSAFE",
+                str(exc),
+                status_code=409,
+            ) from exc
         diff: dict[str, dict[str, Any]] = {}
         category_hint_before = product.category_hint
         _capture_ai_category_hint(product, provider_output)
@@ -2662,7 +2669,7 @@ def _phrase_is_projected_from_safe_h1(phrase: str, safe_h1: str) -> bool:
         if key not in _SEO_MINOR_WORDS and key not in {"product", "products"}
     }
     return (
-        len(meaningful) >= 2
+        len(meaningful) >= 1
         and len(_seo_words(phrase)) <= 7
         and all(source_counts[key] >= count for key, count in phrase_counts.items())
     )
@@ -2701,41 +2708,143 @@ def _primary_phrase_from_safe_h1(
         return _heading_case(primary)
 
     first_clause = re.split(r"\s*(?:\||[–—,:;])\s*", safe_h1, maxsplit=1)[0]
-    words = _seo_words(first_clause)
-    if len(words) > 5:
-        words = words[:5]
+    words = [word for word in _seo_words(first_clause) if word != "&"]
+    while words and words[0].casefold() in {"a", "an", "the"}:
+        words.pop(0)
+    keys = [_seo_word_key(word) for word in words]
+    # The supplier-name fallback keeps a coherent product head and drops the
+    # tail. Publishing the first five arbitrary nouns merely reformats keyword
+    # salad without making it readable.
+    kit_index = next((index for index, key in enumerate(keys) if key == "kit"), None)
+    product_heads = {
+        "bag",
+        "bottle",
+        "burner",
+        "camera",
+        "chair",
+        "charger",
+        "cookware",
+        "cover",
+        "holder",
+        "kit",
+        "lamp",
+        "lantern",
+        "light",
+        "organizer",
+        "pump",
+        "rack",
+        "set",
+        "stove",
+        "table",
+        "tent",
+        "tool",
+    }
+    head_index = next(
+        (index for index, key in enumerate(keys) if key in product_heads),
+        None,
+    )
+    terminal = kit_index if kit_index is not None else head_index
+    if terminal is not None:
+        words = words[: max(terminal + 1, min(2, len(words)))]
+    elif len(words) > 4:
+        words = words[:4]
     while words and words[-1].casefold() in _SEO_MINOR_WORDS:
         words.pop()
-    if len(words) < 2:
-        words = _seo_words(safe_h1)[:5]
     return _heading_case(" ".join(words))
 
 
-def _remove_primary_words(safe_h1: str, primary_phrase: str) -> list[str]:
-    remaining = Counter(
-        key for word in _seo_words(primary_phrase) if (key := _seo_word_key(word))
-    )
-    output: list[str] = []
-    for word in _seo_words(safe_h1):
-        key = _seo_word_key(word)
-        if remaining[key]:
-            remaining[key] -= 1
-        elif word != "&":
-            output.append(word)
-    return output
+_SEO_COMPONENT_ALIASES: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    ("kettle", ("tea kettle", "teakettle", "kettle"), "Kettle"),
+    ("pot", ("cooking pot", "stockpot", "saucepan", "pot"), "Pot"),
+    ("pan", ("frying pan", "skillet", "pan"), "Pan"),
+    ("bowl", ("bowl",), "Bowl"),
+    ("plate", ("plate",), "Plate"),
+    ("cup", ("cup", "mug"), "Cup"),
+    ("lid", ("lid",), "Lid"),
+    ("spoon", ("spoon",), "Spoon"),
+    ("fork", ("fork",), "Fork"),
+    ("knife", ("knife", "knives"), "Knife"),
+)
 
 
-def _listify_supplier_tail(words: list[str]) -> str:
-    if not words:
+def _seo_alias_match(value: str, aliases: tuple[str, ...]) -> re.Match[str] | None:
+    for alias in aliases:
+        match = re.search(
+            rf"(?<![a-z0-9]){re.escape(alias)}(?:s)?(?![a-z0-9])",
+            value,
+            flags=re.IGNORECASE,
+        )
+        if match is not None:
+            return match
+    return None
+
+
+def _natural_component_detail(source: str, primary_phrase: str) -> str:
+    """Project at most three already-evidence-gated components as a real list."""
+
+    mentions: list[tuple[int, str]] = []
+    for _component, aliases, display in _SEO_COMPONENT_ALIASES:
+        match = _seo_alias_match(source, aliases)
+        if match is None or _seo_alias_match(primary_phrase, aliases) is not None:
+            continue
+        mentions.append((match.start(), display))
+    items = [display for _position, display in sorted(mentions)[:3]]
+    if not items:
         return ""
-    items = list(words)
-    if len(items) >= 2 and items[-1].casefold() in {"kit", "set", "system"}:
-        items[-2:] = [f"{items[-2]} {items[-1]}"]
     if len(items) == 1:
-        return items[0]
-    if len(items) == 2:
-        return " & ".join(items)
-    return f"{', '.join(items[:-1])} & {items[-1]}"
+        detail = items[0]
+    elif len(items) == 2:
+        detail = " & ".join(items)
+    else:
+        detail = f"{', '.join(items[:-1])} & {items[-1]}"
+    if re.search(r"\bset\b", source, re.IGNORECASE):
+        detail += " Set"
+    return detail
+
+
+def _contiguous_phrase_span(source: str, phrase: str) -> tuple[int, int] | None:
+    source_words = [
+        (match, _seo_word_key(match.group(0)))
+        for match in _SEO_WORD.finditer(source)
+        if _seo_word_key(match.group(0))
+    ]
+    phrase_keys = [
+        key for word in _seo_words(phrase) if (key := _seo_word_key(word))
+    ]
+    if not phrase_keys:
+        return None
+    for index in range(len(source_words) - len(phrase_keys) + 1):
+        candidate = [
+            key for _match, key in source_words[index : index + len(phrase_keys)]
+        ]
+        if candidate == phrase_keys:
+            return (
+                source_words[index][0].start(),
+                source_words[index + len(phrase_keys) - 1][0].end(),
+            )
+    return None
+
+
+def _detail_without_primary(source: str, span: tuple[int, int]) -> str:
+    left = source[: span[0]].strip(" ,;:–—|-&")
+    right = source[span[1] :].strip(" ,;:–—|-&")
+    left = re.sub(r"^(?:a|an|the)(?:\s+|$)", "", left, flags=re.IGNORECASE)
+    left = re.sub(
+        r"\s+(?:and|or|for|of|with|to|by|in|on|from)$",
+        "",
+        left,
+        flags=re.IGNORECASE,
+    )
+    detail = " ".join(part for part in (left, right) if part)
+    return re.sub(r"\s+", " ", detail).strip(" ,;:–—|-&")
+
+
+def _supplier_noun_tail(value: str) -> bool:
+    return len(_seo_words(value)) >= 4 and not re.search(
+        r"(?:&|\b(?:and|or|for|with|that|which|to)\b)",
+        value,
+        flags=re.IGNORECASE,
+    )
 
 
 def _readable_h1(
@@ -2749,23 +2858,22 @@ def _readable_h1(
     primary = _primary_phrase_from_safe_h1(source, final_keywords)
     if not primary:
         return source
-
-    prefix = re.match(re.escape(_clean_seo_text(primary)), source, re.IGNORECASE)
-    if prefix and (prefix.end() == len(source) or not source[prefix.end()].isalnum()):
-        tail = source[prefix.end() :].strip()
-        if not tail:
-            return primary
-        if tail.startswith("–"):
-            return f"{primary} – {tail.lstrip('– ').strip()}"
-        if re.match(r"^(?:for|with|in|on|by|from|to)\b", tail, re.IGNORECASE):
-            return f"{primary} {tail}"
-        if any(mark in tail for mark in (",", "&", ";")):
-            return f"{primary} – {tail}"
-        return f"{primary} – {_listify_supplier_tail(_seo_words(tail))}"
-
-    tail_words = _remove_primary_words(source, primary)
-    tail = _listify_supplier_tail(tail_words)
-    return f"{primary} – {tail}" if tail else primary
+    span = _contiguous_phrase_span(source, primary)
+    component_detail = _natural_component_detail(source, primary)
+    if span is None:
+        # A risk-reviewed keyword may reorder safe source words. Do not remove
+        # them as a bag and listify every leftover token: only the reviewed
+        # package components form a safe, grammatical detail in that case.
+        detail = component_detail
+    else:
+        detail = _detail_without_primary(source, span)
+        if _supplier_noun_tail(detail):
+            detail = component_detail
+    if not detail:
+        return primary
+    if detail[0].isalpha():
+        detail = detail[0].upper() + detail[1:]
+    return f"{primary} – {detail}"
 
 
 def _truncate_heading(value: str, limit: int) -> str:
@@ -2776,6 +2884,17 @@ def _truncate_heading(value: str, limit: int) -> str:
     if len(clipped) > limit and not clipped[-1].isspace():
         clipped = clipped.rsplit(" ", 1)[0]
     clipped = clipped[:limit].rstrip(" ,;:–—|-&")
+    # If a hard boundary cuts a comma/dash detail clause, keep the last
+    # complete clause instead of publishing fragments such as "with Nested".
+    clause_boundaries = [
+        clipped.rfind(separator)
+        for separator in (", ", " – ")
+        if separator in clipped
+    ]
+    if clause_boundaries:
+        boundary = max(clause_boundaries)
+        if boundary >= max(20, limit // 2):
+            clipped = clipped[:boundary].rstrip(" ,;:–—|-&")
     # A boundary cut must not turn a complete audience/capacity phrase into
     # an unsupported fragment such as "for 2-3", nor leave an orphaned
     # preposition at the end of a heading.
@@ -2871,7 +2990,9 @@ def _finalize_dtc_seo(
     if isinstance(json_ld, dict) and isinstance(json_ld.get("data"), dict):
         projected_json_ld = dict(json_ld)
         data = dict(projected_json_ld["data"])
-        data["name"] = h1
+        # Product schema follows the same clean short identity as Yoast's
+        # <title>, while Woo's visible product name continues to use the H1.
+        data["name"] = title
         projected_json_ld["data"] = data
         output["json_ld"] = projected_json_ld
 
@@ -2880,7 +3001,7 @@ def _finalize_dtc_seo(
         "h1_max_length": _DTC_H1_MAX_LENGTH,
         "title_max_length": _DTC_SEO_TITLE_MAX_LENGTH,
         "meta_description_max_length": _DTC_META_DESCRIPTION_MAX_LENGTH,
-        "schema_name_projected_from_h1": (
+        "schema_name_projected_from_short_title": (
             isinstance(output.get("json_ld"), dict)
             and isinstance(output["json_ld"].get("data"), dict)
         ),

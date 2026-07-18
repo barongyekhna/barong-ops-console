@@ -4,9 +4,12 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from backend.app.modules.k_series.product_knowledge import router as k_router
+from backend.app.modules.k_series.product_knowledge.evidence_guard import (
+    TitleEvidenceConsistencyError,
+)
 from backend.app.modules.k_series.product_knowledge.product_naming import (
     sanitize_product_naming_output,
     strip_supplier_model_codes,
@@ -60,6 +63,11 @@ def test_sanitize_product_naming_output_copies_and_limits_scope() -> None:
         "structured_specs": {"model": "DS308", "rating": "IP68"},
     }
     assert source["product_name_en"].startswith("DS308")
+
+
+def test_sanitize_product_naming_output_blocks_an_empty_numeric_only_identity() -> None:
+    with pytest.raises(TitleEvidenceConsistencyError, match="manual naming"):
+        sanitize_product_naming_output({"product_name_en": "DS-101 1-2 People"})
 
 
 def test_standalone_deepseek_route_sanitizes_stored_and_returned_name(
@@ -133,3 +141,48 @@ def test_standalone_deepseek_route_sanitizes_stored_and_returned_name(
     assert db.flushed is True
     event = db.added[1]
     assert event.output_payload_json["product_name_en"] == expected_name
+
+
+def test_standalone_deepseek_route_reports_ambiguous_numeric_name_as_conflict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    product = SimpleNamespace(
+        id=uuid4(),
+        product_key="route-numeric-conflict",
+        raw_input_text="Supplier title",
+        structured_specs_json={
+            "capacity_people": {"value": "1-2 people", "value_en": "2-3 people"}
+        },
+        package_includes_json=None,
+    )
+    request = Request({"type": "http", "method": "POST", "path": "/"})
+    request.state.org_id = "org_numeric_conflict"
+    monkeypatch.setattr(
+        k_router,
+        "_execution_context",
+        lambda *args, **kwargs: SimpleNamespace(
+            key_for_step=lambda _step: SimpleNamespace(name="deepseek")
+        ),
+    )
+    monkeypatch.setattr(k_router, "_product_by_ref", lambda *args, **kwargs: product)
+    monkeypatch.setattr(
+        k_router,
+        "_execute_provider_json",
+        lambda *args, **kwargs: {"product_name_en": "Cookware for 1-2 People"},
+    )
+    monkeypatch.setattr(
+        k_router.ProductKnowledgeRead,
+        "model_validate",
+        lambda _product: SimpleNamespace(model_dump=lambda **_kwargs: {}),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        k_router.deepseek_enrich_product(
+            product_id=product.product_key,
+            request=request,
+            db=SimpleNamespace(),  # type: ignore[arg-type]
+            user=SimpleNamespace(),  # type: ignore[arg-type]
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "malformed specification" in str(exc_info.value.detail)

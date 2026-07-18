@@ -73,10 +73,39 @@ def test_dtc_seo_normalizes_ai_h1_title_meta_and_schema_name() -> None:
     )
     assert len(seo["title"]) <= 60
     assert len(seo["meta_description"]) <= 160
-    assert result["json_ld"]["data"]["name"] == seo["h1"]
+    assert result["json_ld"]["data"]["name"] == seo["title"]
     assert result["json_ld"]["data"]["description"] == (
         "Evidence-safe description"
     )
+
+
+def test_numeric_guard_then_seo_finalizer_never_reintroduces_wrong_people_count() -> None:
+    specs = {"capacity_people": {"value": {"min": 2, "max": 3}}}
+    guarded = enforce_title_evidence_consistency(
+        {
+            "seo": {
+                "h1": "Portable Camping Cookware for 1-2 People",
+                "title": "Camping Cookware for 1-2 People",
+            },
+            "json_ld": {"data": {"@type": "Product", "name": "Wrong name"}},
+        },
+        product_name="Portable Camping Cookware Set",
+        product_type="cookware",
+        category_name="Camping Cookware",
+        site_brand="Barong Yekhna",
+        approved_selling_points={"bullets": []},
+        structured_specs=specs,
+    )
+    result = _finalize_dtc_seo(
+        guarded,
+        final_keywords=["portable camping cookware"],
+        site_brand="Barong Yekhna",
+        structured_specs=specs,
+    )
+
+    assert "for 2-3 people" in result["seo"]["h1"].casefold()
+    assert "1-2" not in str(result["seo"])
+    assert result["json_ld"]["data"]["name"] == result["seo"]["title"]
 
 
 def test_dtc_seo_product_name_fallback_is_rewritten_not_republished_verbatim() -> None:
@@ -91,8 +120,7 @@ def test_dtc_seo_product_name_fallback_is_rewritten_not_republished_verbatim() -
     )
 
     seo = result["seo"]
-    assert seo["h1"] != supplier_fallback
-    assert seo["h1"].startswith("Camping Cookware Mess Kit – ")
+    assert seo["h1"] == "Camping Cookware Mess Kit – Pot, Kettle & Pan Set"
     assert len(seo["h1"]) <= 70
     assert seo["title"] == "Camping Cookware Mess Kit | Barong Yekhna"
     assert len(seo["title"]) <= 60
@@ -110,8 +138,8 @@ def test_dtc_seo_fallback_without_keywords_still_breaks_up_supplier_noun_list() 
     )
 
     seo = result["seo"]
-    assert seo["h1"] != supplier_fallback
-    assert " – " in seo["h1"]
+    assert seo["h1"] == "Cookware Mess Kit – Pot, Kettle & Pan Set"
+    assert seo["title"] == "Cookware Mess Kit | Barong Yekhna"
     assert len(seo["h1"]) <= 70
     assert seo["title"].endswith(" | Barong Yekhna")
     assert len(seo["title"]) <= 60
@@ -133,8 +161,7 @@ def test_malformed_provider_seo_uses_the_same_safe_identity_fallback() -> None:
         structured_specs={},
     )
 
-    assert result["seo"]["h1"].startswith("Portable Camp Stove")
-    assert " – " in result["seo"]["h1"]
+    assert result["seo"]["h1"] == "Portable Camp Stove"
     assert result["seo"]["title"].endswith(" | Barong Yekhna")
 
 
@@ -154,6 +181,38 @@ def test_dtc_seo_promotes_legacy_description_to_bounded_meta_description() -> No
 
     assert result["seo"]["meta_description"]
     assert len(result["seo"]["meta_description"]) <= 160
+
+
+@pytest.mark.parametrize(
+    ("source", "keyword", "expected"),
+    [
+        (
+            "Compact Pot and Pan Set for Portable Camping Cookware",
+            "portable camping cookware",
+            "Portable Camping Cookware – Compact Pot and Pan Set",
+        ),
+        (
+            "A Camp Stove with Piezo Ignition for Fast Campsite Cooking",
+            "camp stove",
+            "Camp Stove – With Piezo Ignition for Fast Campsite Cooking",
+        ),
+    ],
+)
+def test_dtc_seo_moves_only_a_contiguous_keyword_and_preserves_grammar(
+    source: str,
+    keyword: str,
+    expected: str,
+) -> None:
+    result = _finalize_dtc_seo(
+        {"seo": {"h1": source, "title": source}},
+        final_keywords=[keyword],
+        site_brand="Barong Yekhna",
+        structured_specs={},
+    )
+
+    assert result["seo"]["h1"] == expected
+    assert ", and," not in result["seo"]["h1"]
+    assert ", for" not in result["seo"]["h1"]
 
 
 def test_meta_description_truncates_on_a_natural_boundary() -> None:
@@ -177,6 +236,27 @@ def test_h1_boundary_truncation_drops_incomplete_numeric_or_preposition_tail() -
     assert numeric == "Portable Camping Cookware Mess Kit"
     assert not numeric.endswith("2-3")
     assert not preposition.casefold().endswith(" for")
+
+    clause = _truncate_heading(
+        (
+            "Portable Camping Cookware – Designed for 2-3 People, "
+            "with Nested Storage"
+        ),
+        70,
+    )
+    assert clause == "Portable Camping Cookware – Designed for 2-3 People"
+
+
+def test_single_word_primary_keyword_is_front_loaded_when_evidence_safe() -> None:
+    result = _finalize_dtc_seo(
+        {"seo": {"h1": "Outdoor Portable Camping Cookware Set"}},
+        final_keywords=["cookware"],
+        site_brand="Barong Yekhna",
+        structured_specs={},
+    )
+
+    assert result["seo"]["h1"].startswith("Cookware")
+    assert result["seo"]["title"] == "Cookware | Barong Yekhna"
 
 
 def test_p_series_projects_the_normalized_h1_and_short_meta_title() -> None:
@@ -203,3 +283,26 @@ def test_p_series_projects_the_normalized_h1_and_short_meta_title() -> None:
     seo = assemble._seo_for_upload(copy, product)
     assert seo.title == "Portable Camp Stove | Barong Yekhna"
     assert seo.description == "A compact stove for campsite meals."
+
+
+def test_p_series_reapplies_title_and_meta_limits_after_unit_conversion() -> None:
+    product = SimpleNamespace(seo_title_en=None, seo_description_en=None)
+    seo = assemble._seo_for_upload(
+        {
+            "seo": {
+                "title": (
+                    "Portable 100 g Backpacking Cookware Mess Kit | Barong Yekhna"
+                ),
+                "meta_description": "100 g " + ("packing " * 30),
+            }
+        },
+        product,
+    )
+
+    assert seo.title is not None
+    assert seo.title.endswith(" | Barong Yekhna")
+    assert "3.5 oz" in seo.title
+    assert len(seo.title) <= 60
+    assert seo.description is not None
+    assert "3.5 oz" in seo.description
+    assert len(seo.description) <= 160

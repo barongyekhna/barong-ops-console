@@ -68,6 +68,8 @@ from .wc_categories import ensure_wc_category_path
 LAYOUT_SKILL_VERSION = "p-product-page-layout-v1"
 logger = logging.getLogger(__name__)
 _SLUG_STOPWORDS = {"a", "an", "and", "for", "of", "or", "the", "to", "with"}
+_SEO_TITLE_MAX_LENGTH = 60
+_SEO_META_DESCRIPTION_MAX_LENGTH = 160
 
 
 def _stable_hash(value: Any, *, compact: bool = False) -> str:
@@ -240,6 +242,40 @@ def _short_url_slug(value: Any) -> str | None:
     return "-".join(words[:5])
 
 
+def _truncate_upload_seo_text(value: str, *, limit: int, sentence: bool) -> str:
+    clean = " ".join(html.unescape(value).split())
+    if len(clean) <= limit:
+        return clean
+    window = clean[:limit]
+    if sentence:
+        ends = [match.end() for match in re.finditer(r"[.!?](?:\s|$)", window)]
+        if ends and ends[-1] >= 80:
+            return window[: ends[-1]].strip()
+    clipped = window.rsplit(" ", 1)[0].rstrip(" ,;:–—|-&")
+    if not clipped:
+        clipped = window.rstrip(" ,;:–—|-&")
+    if sentence and clipped and clipped[-1] not in ".!?":
+        clipped = f"{clipped[: limit - 1].rstrip()}."
+    return clipped
+
+
+def _bounded_upload_seo_title(value: str) -> str:
+    clean = " ".join(html.unescape(value).split())
+    suffix = f" | {SITE_BRAND}"
+    if clean.casefold().endswith(suffix.casefold()):
+        phrase = clean[: -len(suffix)].rstrip()
+    elif clean.casefold() == SITE_BRAND.casefold():
+        phrase = ""
+    else:
+        phrase = clean
+    phrase = _truncate_upload_seo_text(
+        phrase,
+        limit=_SEO_TITLE_MAX_LENGTH - len(suffix),
+        sentence=False,
+    )
+    return f"{phrase}{suffix}" if phrase else SITE_BRAND
+
+
 def _seo_for_upload(marketing_copy_json: Any, product: Any) -> Seo:
     """Project K's generated SEO copy into the P upload contract.
 
@@ -264,9 +300,23 @@ def _seo_for_upload(marketing_copy_json: Any, product: Any) -> Seo:
             or _optional_text(generated_seo.get("description"))
             or _optional_text(getattr(product, "seo_description_en", None))
         )
+    imperial_title = imperialize_text(title) if title else None
+    imperial_description = imperialize_text(description) if description else None
     return Seo(
-        title=imperialize_text(title) if title else None,
-        description=imperialize_text(description) if description else None,
+        title=(
+            _bounded_upload_seo_title(imperial_title)
+            if imperial_title
+            else None
+        ),
+        description=(
+            _truncate_upload_seo_text(
+                imperial_description,
+                limit=_SEO_META_DESCRIPTION_MAX_LENGTH,
+                sentence=True,
+            )
+            if imperial_description
+            else None
+        ),
         # Deliberately no product.slug / H1-derived fallback: a missing K slug
         # is safer than silently publishing the old 15-word permalink again.
         url_slug=_short_url_slug(generated_seo.get("url_slug")),

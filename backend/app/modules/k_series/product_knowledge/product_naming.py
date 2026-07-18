@@ -6,7 +6,10 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from .evidence_guard import reconcile_title_numeric_claims
+from .evidence_guard import (
+    TitleEvidenceConsistencyError,
+    reconcile_title_numeric_claims,
+)
 
 
 # Supplier titles frequently prefix a private model code such as ``DS-101`` or
@@ -63,9 +66,15 @@ def sanitize_product_naming_output(
     sanitized = dict(provider_output)
     generated_name = sanitized.get("product_name_en")
     if isinstance(generated_name, str):
-        sanitized["product_name_en"] = reconcile_title_numeric_claims(
+        clean_name = reconcile_title_numeric_claims(
             strip_supplier_model_codes(generated_name),
             structured_specs,
             package_includes=package_includes,
         )
+        if generated_name.strip() and not clean_name:
+            raise TitleEvidenceConsistencyError(
+                "Generated product_name_en contains no evidence-backed identity "
+                "after numeric claim reconciliation; manual naming is required."
+            )
+        sanitized["product_name_en"] = clean_name
     return sanitized

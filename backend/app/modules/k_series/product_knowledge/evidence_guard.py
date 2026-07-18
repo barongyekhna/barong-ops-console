@@ -126,37 +126,45 @@ _NUMBER_WORD_PATTERN = "|".join(
     )
 )
 _CLAIM_COUNT_PATTERN = rf"(?:\d+|{_NUMBER_WORD_PATTERN})"
+_NON_PIECE_SET_NOUN_PATTERN = (
+    r"(?:sizes?|colors?|colours?|styles?|options?|models?|variants?|settings?)"
+)
 _PIECE_CLAIM = re.compile(
     rf"""
-    \b(?:
+    (?<![A-Za-z0-9.+])(?:
         (?P<piece_count>{_CLAIM_COUNT_PATTERN})
         \s*(?:-|\s)?\s*(?:piece|pieces|pc|pcs)\b(?:\s+set\b)?
         |
         set\s+of\s+(?P<set_count>{_CLAIM_COUNT_PATTERN})\b
+        (?!\s+{_NON_PIECE_SET_NOUN_PATTERN}\b)
         (?:\s*(?:-|\s)?\s*(?:piece|pieces|pc|pcs)\b)?
     )
     """,
     re.IGNORECASE | re.VERBOSE,
 )
 
-_NUMERIC_ATOM_PATTERN = r"[0-9]+(?:\.[0-9]+)?"
+_NUMERIC_ATOM_PATTERN = r"(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)"
 _NUMERIC_RANGE_SEPARATOR_PATTERN = r"(?:-|\u2013|\u2014|~|\uff5e|\u81f3|\u5230|to)"
 _NUMERIC_RANGE_PATTERN = (
     rf"{_NUMERIC_ATOM_PATTERN}(?:\s*{_NUMERIC_RANGE_SEPARATOR_PATTERN}\s*"
     rf"{_NUMERIC_ATOM_PATTERN})?"
 )
 _PEOPLE_CLAIM = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<prefix>for\s+)?(?P<count>{_NUMERIC_RANGE_PATTERN})"
+    rf"(?<![A-Za-z0-9.+\-])"
+    rf"(?P<prefix>(?:(?:suitable|designed|ideal)\s+for|for)\s+)?"
+    rf"(?P<count>{_NUMERIC_RANGE_PATTERN})"
     rf"(?P<separator>\s*-\s*|\s+)(?P<noun>people|persons?)(?![A-Za-z])",
     re.IGNORECASE,
 )
 _CHINESE_PEOPLE_CLAIM = re.compile(
-    rf"(?<![A-Za-z0-9])(?P<prefix>\u9002\u7528|\u9002\u5408|\u53ef\u4f9b|\u4f9b)?"
+    rf"(?<![A-Za-z0-9.+\-])(?P<prefix>\u9002\u7528|\u9002\u5408|\u53ef\u4f9b|\u4f9b)?"
     rf"(?P<count>{_NUMERIC_RANGE_PATTERN})\s*\u4eba"
 )
 _CAPACITY_CLAIM = re.compile(
-    rf"(?<![A-Za-z0-9.])(?P<count>{_NUMERIC_RANGE_PATTERN})(?P<space>\s*)"
-    r"(?P<unit>qts?|quarts?|l(?:iters?|itres?)?|\u5347)(?![A-Za-z])",
+    rf"(?<![A-Za-z0-9.+\-])(?P<count>{_NUMERIC_RANGE_PATTERN})"
+    rf"(?P<space>\s*|-?)"
+    r"(?P<unit>qts?|quarts?|m(?:illi)?l(?:iters?|itres?)?|"
+    r"l(?:iters?|itres?)?|\u6beb\u5347|\u5347)(?![A-Za-z])",
     re.IGNORECASE,
 )
 _SPEC_NUMBER_RANGE = re.compile(
@@ -166,7 +174,58 @@ _SPEC_NUMBER_RANGE = re.compile(
     re.IGNORECASE,
 )
 _CAPACITY_UNIT = re.compile(
-    r"(?<![A-Za-z])(?P<unit>qts?|quarts?|l(?:iters?|itres?)?)(?![A-Za-z])",
+    r"(?<![A-Za-z])(?P<unit>qts?|quarts?|m(?:illi)?l(?:iters?|itres?)?|"
+    r"l(?:iters?|itres?)?|\u6beb\u5347|\u5347)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_COMPOSITE_NUMERIC_CLAIM = re.compile(
+    r"(?<![A-Za-z0-9])\d+(?:\.\d+)?\s*[/+]\s*\d+(?:\.\d+)?\s*-?\s*"
+    r"(?:people|persons?|pieces?|pcs?|qts?|quarts?|"
+    r"m(?:illi)?l(?:iters?|itres?)?|l(?:iters?|itres?)?|"
+    r"\u4eba|\u4ef6|\u6beb\u5347|\u5347)(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_NUMERIC_CLAIM_NOUN_OR_UNIT = (
+    r"(?:people|persons?|pieces?|pcs?|qts?|quarts?|"
+    r"m(?:illi)?l(?:iters?|itres?)?|l(?:iters?|itres?)?|"
+    r"\u4eba|\u4ef6|\u6beb\u5347|\u5347)"
+)
+_UNSUPPORTED_COMMA_NUMERIC_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9])\d+(?:,\d+)+\s*-?\s*"
+    rf"{_NUMERIC_CLAIM_NOUN_OR_UNIT}(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_FRACTIONAL_PIECE_CLAIM = re.compile(
+    r"(?<![A-Za-z0-9])(?:\d+\.\d+|\.\d+)\s*-?\s*(?:pieces?|pcs?)\b",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_NEGATIVE_NUMERIC_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9])-\d+(?:\.\d+)?\s*-?\s*"
+    rf"{_NUMERIC_CLAIM_NOUN_OR_UNIT}(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_POSITIVE_NUMERIC_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9])\+\d+(?:\.\d+)?\s*-?\s*"
+    rf"{_NUMERIC_CLAIM_NOUN_OR_UNIT}(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_QUANTIFIED_PEOPLE_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9])(?:"
+    rf"between\s+{_NUMERIC_ATOM_PATTERN}\s+and\s+{_NUMERIC_ATOM_PATTERN}"
+    rf"|{_NUMERIC_ATOM_PATTERN}\s*(?:and|or|&|,)\s*"
+    rf"{_NUMERIC_ATOM_PATTERN}"
+    rf"|(?:up\s+to|at\s+least|more\s+than|less\s+than|under|over|about|around)"
+    rf"\s+{_NUMERIC_ATOM_PATTERN})\s+(?:people|persons?)\b",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_POSTFIX_NUMERIC_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9]){_NUMERIC_ATOM_PATTERN}\s*(?:\+|plus)\s*"
+    rf"{_NUMERIC_CLAIM_NOUN_OR_UNIT}(?![A-Za-z])",
+    re.IGNORECASE,
+)
+_UNSUPPORTED_UNICODE_FRACTION_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9])(?:\d+)?[\u00bc\u00bd\u00be\u2150-\u215e]\s*-?\s*"
+    rf"{_NUMERIC_CLAIM_NOUN_OR_UNIT}(?![A-Za-z])",
     re.IGNORECASE,
 )
 
@@ -180,6 +239,7 @@ class _NumericSpecEvidence:
     source_path: str
     unit: str | None = None
     display_unit: str | None = None
+    subject: str | None = None
 
 
 def _decimal(value: Any) -> Decimal | None:
@@ -197,13 +257,20 @@ def _numeric_range(value: Any) -> tuple[Decimal, ...] | None:
 
     if isinstance(value, dict):
         minimum = _decimal(value.get("min"))
-        maximum = _decimal(value.get("max"))
         if minimum is None:
             return None
-        if maximum is None:
+        if "max" not in value:
             return (minimum,)
+        maximum = _decimal(value.get("max"))
+        # An explicitly supplied but unreadable upper bound is not a scalar.
+        # Treat it as malformed so the caller blocks instead of guessing that
+        # the lower bound was the entire fact.
+        if maximum is None:
+            return None
         if maximum < minimum:
             return None
+        if maximum == minimum:
+            return (minimum,)
         return (minimum, maximum)
     if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
         number = _decimal(value)
@@ -230,20 +297,32 @@ def _numeric_range(value: Any) -> tuple[Decimal, ...] | None:
         return (minimum,)
     if maximum < minimum:
         return None
+    if maximum == minimum:
+        return (minimum,)
     return (minimum, maximum)
 
 
 def _numeric_node_range(node: Any) -> tuple[Decimal, ...] | None:
     if not isinstance(node, dict):
         return _numeric_range(node)
+    parsed_values: list[tuple[Decimal, ...]] = []
+    unreadable_value = False
     for key in ("value", "value_en", "raw_value"):
         candidate = node.get(key)
         if candidate in (None, "", [], {}):
             continue
         parsed = _numeric_range(candidate)
-        if parsed is not None:
-            return parsed
-    return None
+        if parsed is None:
+            unreadable_value = True
+        else:
+            parsed_values.append(parsed)
+    # The normalized value, translated value, and raw supplier value are all
+    # evidence for the same fact.  A disagreement (or an unreadable populated
+    # representation) must not be hidden by taking whichever field came first.
+    unique_values = set(parsed_values)
+    if unreadable_value or len(unique_values) != 1:
+        return None
+    return next(iter(unique_values))
 
 
 def _format_decimal(value: Decimal) -> str:
@@ -309,7 +388,18 @@ def _numeric_spec_kind(descriptor: str) -> str | None:
     return None
 
 
+def _canonical_capacity_unit(value: str) -> str:
+    normalized = value.casefold()
+    if normalized.startswith(("q", "quart")):
+        return "qt"
+    if normalized.startswith("m") or "\u6beb\u5347" in normalized:
+        return "ml"
+    return "l"
+
+
 def _capacity_unit(node: Any, *, descriptor_text: str) -> tuple[str, str] | None:
+    """Return one unambiguous unit shared by every populated representation."""
+
     texts: list[str] = [descriptor_text]
     if isinstance(node, dict):
         texts.extend(
@@ -318,19 +408,79 @@ def _capacity_unit(node: Any, *, descriptor_text: str) -> tuple[str, str] | None
         )
     else:
         texts.append(str(node or ""))
-    combined = " ".join(texts)
-    if "\u5347" in combined:
-        return "l", "L"
-    match = _CAPACITY_UNIT.search(combined)
-    if match:
-        raw = match.group("unit").casefold()
-        return ("qt", "qt") if raw.startswith(("q", "quart")) else ("l", "L")
+    units = {
+        _canonical_capacity_unit(match.group("unit"))
+        for text in texts
+        for match in _CAPACITY_UNIT.finditer(text)
+    }
     normalized = re.sub(r"[^a-z0-9]+", "_", descriptor_text.casefold()).strip("_")
+    if re.search(r"(?:^|_)capacity_ml(?:$|_)", normalized):
+        units.add("ml")
     if re.search(r"(?:^|_)capacity_l(?:$|_)", normalized):
-        return "l", "L"
+        units.add("l")
     if re.search(r"(?:^|_)capacity_(?:qt|quart)(?:$|_)", normalized):
-        return "qt", "qt"
-    return None
+        units.add("qt")
+    if len(units) != 1:
+        return None
+    unit = next(iter(units))
+    return unit, {"l": "L", "ml": "mL", "qt": "qt"}[unit]
+
+
+_CAPACITY_SUBJECT_ALIASES: dict[str, tuple[str, ...]] = {
+    "kettle": (
+        "kettle",
+        "kettles",
+        "tea kettle",
+        "tea kettles",
+        "teakettle",
+        "\u6c34\u58f6",
+        "\u8336\u58f6",
+    ),
+    "pot": (
+        "pot",
+        "pots",
+        "cooking pot",
+        "cooking pots",
+        "main pot",
+        "stockpot",
+        "stockpots",
+        "saucepan",
+        "saucepans",
+        "\u4e3b\u9505",
+    ),
+    "pan": (
+        "pan",
+        "pans",
+        "frying pan",
+        "frying pans",
+        "skillet",
+        "skillets",
+        "\u714e\u76d8",
+        "\u714e\u9505",
+        "\u5e73\u5e95\u9505",
+    ),
+    "bottle": ("bottle", "bottles", "flask", "flasks", "\u74f6"),
+    "cup": ("cup", "cups", "mug", "mugs", "\u676f"),
+    "bowl": ("bowl", "bowls", "\u7897"),
+}
+
+
+def _capacity_subjects(value: Any) -> set[str]:
+    text = re.sub(r"[_-]+", " ", str(value or "")).casefold()
+    matches = {
+        subject
+        for subject, aliases in _CAPACITY_SUBJECT_ALIASES.items()
+        if any(
+            re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", text)
+            for alias in aliases
+        )
+    }
+    # A bare Chinese \u201c\u9505\u201d means pot only when a more specific pan/kettle
+    # label was not present.  This prevents \u714e\u9505 / \u5e73\u5e95\u9505 from being
+    # classified as both pot and pan.
+    if "\u9505" in text and not matches.intersection({"pan", "kettle"}):
+        matches.add("pot")
+    return matches
 
 
 def _iter_numeric_spec_nodes(
@@ -417,10 +567,13 @@ def _numeric_spec_evidence(
         display_unit: str | None = None
         if kind == "capacity":
             capacity_unit = _capacity_unit(node, descriptor_text=descriptor_text)
-            if capacity_unit is None:
+            subjects = _capacity_subjects(descriptor_text)
+            if capacity_unit is None or len(subjects) > 1:
                 malformed.append(path)
                 continue
             unit, display_unit = capacity_unit
+        else:
+            subjects = set()
         evidence.append(
             _NumericSpecEvidence(
                 kind=kind,
@@ -428,6 +581,7 @@ def _numeric_spec_evidence(
                 source_path=path,
                 unit=unit,
                 display_unit=display_unit,
+                subject=(next(iter(subjects)) if subjects else None),
             )
         )
     if kind == "piece":
@@ -448,6 +602,7 @@ def _select_numeric_spec_evidence(
     *,
     current_numbers: tuple[Decimal, ...],
     current_unit: str | None,
+    current_subject: str | None = None,
     structured_specs: dict[str, Any] | None,
     package_includes: Any,
 ) -> _NumericSpecEvidence | None:
@@ -456,10 +611,6 @@ def _select_numeric_spec_evidence(
         structured_specs,
         package_includes=package_includes,
     )
-    unique: dict[tuple[tuple[Decimal, ...], str | None], _NumericSpecEvidence] = {}
-    for candidate in candidates:
-        unique.setdefault((candidate.numbers, candidate.unit), candidate)
-    candidates = list(unique.values())
     if not candidates and not malformed:
         return None
     if malformed:
@@ -467,6 +618,22 @@ def _select_numeric_spec_evidence(
             f"Cannot safely reconcile {kind} title claim from malformed specification "
             f"field(s): {', '.join(sorted(malformed))}."
         )
+    if kind == "capacity" and current_subject:
+        matching = [
+            candidate for candidate in candidates if candidate.subject == current_subject
+        ]
+        if len(matching) == 1:
+            candidates = matching
+        elif not matching and any(candidate.subject for candidate in candidates):
+            raise TitleEvidenceConsistencyError(
+                "Cannot safely reconcile capacity title claim because its product "
+                f"subject ({current_subject}) does not match the available capacity_* "
+                "specification field."
+            )
+    unique: dict[tuple[tuple[Decimal, ...], str | None], _NumericSpecEvidence] = {}
+    for candidate in candidates:
+        unique.setdefault((candidate.numbers, candidate.unit), candidate)
+    candidates = list(unique.values())
     if len(candidates) == 1:
         return candidates[0]
     raise TitleEvidenceConsistencyError(
@@ -475,14 +642,17 @@ def _select_numeric_spec_evidence(
     )
 
 
-def _canonical_capacity_unit(value: str) -> str:
-    return "qt" if value.casefold().startswith(("q", "quart")) else "l"
-
-
 def _cleanup_numeric_claim_removal(value: str) -> str:
     clean = re.sub(r"\(\s*\)|\[\s*\]|\{\s*\}", " ", value)
+    clean = re.sub(
+        r"(?P<separator>[,;:/|\u00b7\-\u2013\u2014])"
+        r"(?:\s*[,;:/|\u00b7\-\u2013\u2014])+",
+        r"\g<separator> ",
+        clean,
+    )
     clean = re.sub(r"\s+([,;:.!?])", r"\1", clean)
     clean = re.sub(r"\s+", " ", clean)
+    clean = re.sub(r"^(?:and|or)\b|\b(?:and|or)$", "", clean, flags=re.IGNORECASE)
     return clean.strip(" \t\r\n,;:/|\u00b7-\u2013\u2014")
 
 
@@ -502,9 +672,64 @@ def reconcile_title_numeric_claims(
     """
 
     output = html.unescape(str(title or ""))
+    if _UNSUPPORTED_COMPOSITE_NUMERIC_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a composite or fractional numeric title claim."
+        )
+    if _UNSUPPORTED_COMMA_NUMERIC_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a comma-formatted numeric title claim."
+        )
+    if _UNSUPPORTED_FRACTIONAL_PIECE_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a fractional piece-count title claim."
+        )
+    if _UNSUPPORTED_NEGATIVE_NUMERIC_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a negative numeric title claim."
+        )
+    if _UNSUPPORTED_POSITIVE_NUMERIC_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a signed numeric title claim."
+        )
+    if _UNSUPPORTED_QUANTIFIED_PEOPLE_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a qualified or non-range people title claim."
+        )
+    if _UNSUPPORTED_POSTFIX_NUMERIC_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a postfix-qualified numeric title claim."
+        )
+    if _UNSUPPORTED_UNICODE_FRACTION_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely parse a Unicode fraction numeric title claim."
+        )
+    claim_matches = {
+        "people": [
+            *_PEOPLE_CLAIM.finditer(output),
+            *_CHINESE_PEOPLE_CLAIM.finditer(output),
+        ],
+        "piece": list(_PIECE_CLAIM.finditer(output)),
+        "capacity": list(_CAPACITY_CLAIM.finditer(output)),
+    }
+    for claim_kind, matches in claim_matches.items():
+        if len(matches) <= 1:
+            continue
+        candidates, malformed = _numeric_spec_evidence(
+            claim_kind,
+            structured_specs,
+            package_includes=package_includes,
+        )
+        # With no corresponding evidence, deleting every claim is deterministic
+        # and is required by the contract.  Once any fact exists, broadcasting
+        # it across multiple claims would be unsafe, so the title is blocked.
+        if candidates or malformed:
+            raise TitleEvidenceConsistencyError(
+                f"Cannot safely reconcile multiple {claim_kind} claims in one title."
+            )
 
     def replace_people(match: re.Match[str]) -> str:
-        current = _numeric_range(match.group("count"))
+        current = _integer_count(_numeric_range(match.group("count")))
         if current is None:
             raise TitleEvidenceConsistencyError(
                 "Cannot safely parse people count in title claim."
@@ -522,10 +747,12 @@ def reconcile_title_numeric_claims(
             return match.group(0)
         noun = match.group("noun")
         separator = match.group("separator")
-        if "-" not in separator and noun.casefold() == "person" and (
-            len(verified.numbers) > 1 or verified.numbers[0] != 1
-        ):
-            noun = "People" if noun[:1].isupper() else "people"
+        if "-" not in separator:
+            singular = len(verified.numbers) == 1 and verified.numbers[0] == 1
+            if singular and noun.casefold() in {"people", "persons"}:
+                noun = "Person" if noun[:1].isupper() else "person"
+            elif not singular and noun.casefold() == "person":
+                noun = "People" if noun[:1].isupper() else "people"
         return (
             (match.group("prefix") or "")
             + _numeric_range_text(verified.numbers)
@@ -536,7 +763,7 @@ def reconcile_title_numeric_claims(
     output = _PEOPLE_CLAIM.sub(replace_people, output)
 
     def replace_chinese_people(match: re.Match[str]) -> str:
-        current = _numeric_range(match.group("count"))
+        current = _integer_count(_numeric_range(match.group("count")))
         if current is None:
             raise TitleEvidenceConsistencyError(
                 "Cannot safely parse people count in supplier title claim."
@@ -585,6 +812,12 @@ def reconcile_title_numeric_claims(
         )
 
     output = _PIECE_CLAIM.sub(replace_piece, output)
+    capacity_source_title = output
+    capacity_candidates, capacity_malformed = _numeric_spec_evidence(
+        "capacity",
+        structured_specs,
+        package_includes=package_includes,
+    )
 
     def replace_capacity(match: re.Match[str]) -> str:
         current = _numeric_range(match.group("count"))
@@ -592,11 +825,25 @@ def reconcile_title_numeric_claims(
             raise TitleEvidenceConsistencyError(
                 "Cannot safely parse capacity in title claim."
             )
+        if not capacity_candidates and not capacity_malformed:
+            return ""
         current_unit = _canonical_capacity_unit(match.group("unit"))
+        subject_context = capacity_source_title[
+            max(0, match.start() - 48) : min(
+                len(capacity_source_title), match.end() + 48
+            )
+        ]
+        subjects = _capacity_subjects(subject_context)
+        if len(subjects) > 1:
+            raise TitleEvidenceConsistencyError(
+                "Cannot safely reconcile capacity title claim because its product "
+                "subject is ambiguous."
+            )
         verified = _select_numeric_spec_evidence(
             "capacity",
             current_numbers=current,
             current_unit=current_unit,
+            current_subject=(next(iter(subjects)) if subjects else None),
             structured_specs=structured_specs,
             package_includes=package_includes,
         )
@@ -768,6 +1015,16 @@ def _verified_piece_count(
             "Cannot safely reconcile piece claim from malformed specification "
             f"field(s): {', '.join(sorted(malformed))}."
         )
+    ranged = [
+        candidate.source_path
+        for candidate in candidates
+        if len(candidate.numbers) != 1
+    ]
+    if ranged:
+        return None, (
+            "Cannot safely reconcile piece claim because piece_count must be "
+            "a single verified integer, not a range."
+        )
     counts = {
         int(candidate.numbers[0])
         for candidate in candidates
@@ -918,11 +1175,17 @@ def title_evidence_corpus(
     includes = canonical_package_includes(package_includes, structured_specs)
     clean_product_name = _strip_supplier_model_tokens(product_name)
     clean_category_name = _strip_supplier_model_tokens(category_name or product_type)
-    identity = reconcile_title_numeric_claims(
-        f"{clean_product_name} {clean_category_name}",
+    clean_product_name = reconcile_title_numeric_claims(
+        clean_product_name,
         structured_specs,
         package_includes=includes,
     )
+    clean_category_name = reconcile_title_numeric_claims(
+        clean_category_name,
+        structured_specs,
+        package_includes=includes,
+    )
+    identity = f"{clean_product_name} {clean_category_name}"
     identity_tokens = _claim_tokens(identity)
     tokens = identity_tokens - _UNTRUSTED_IDENTITY_CLAIMS
     unsupported_identity_components = unsupported_component_terms(
@@ -942,6 +1205,39 @@ def title_evidence_corpus(
     texts.extend(includes)
     for text in texts:
         tokens.update(_claim_tokens(text))
+    # Numeric facts stored as normalized values (for example
+    # capacity_people.value={min: 2, max: 3}) do not repeat their semantic noun
+    # in a value.  Once the numeric parser has verified that fact, inject only
+    # the corresponding unit/noun vocabulary so the older word-level gate does
+    # not reject the already-verified claim.
+    semantic_tokens = {
+        "people": {"people", "person", "persons"},
+        "piece": {"piece", "pieces", "pc", "pcs", "set"},
+        "capacity": {
+            "l",
+            "liter",
+            "liters",
+            "litre",
+            "litres",
+            "ml",
+            "milliliter",
+            "milliliters",
+            "millilitre",
+            "millilitres",
+            "qt",
+            "qts",
+            "quart",
+            "quarts",
+        },
+    }
+    for kind, vocabulary in semantic_tokens.items():
+        evidence, malformed = _numeric_spec_evidence(
+            kind,
+            structured_specs,
+            package_includes=includes,
+        )
+        if evidence and not malformed:
+            tokens.update(vocabulary)
     return tokens
 
 
