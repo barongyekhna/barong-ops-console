@@ -170,6 +170,7 @@ from .evidence_guard import canonical_package_includes, package_claim_error
 from .faq_research import (
     evidence_number_tokens,
     imperial_equivalent_number_tokens,
+    is_faq_text_brand_safe,
 )
 from .image_render_jobs import (
     KImageRenderError,
@@ -5716,8 +5717,16 @@ def product_knowledge_update_faq(
         problems: list[str] = []
         if contains_cjk(question) or contains_cjk(answer):
             problems.append("买家可见内容不允许中文（英文红线）")
-        if question and not question.endswith("?"):
+        if not question:
+            problems.append("问题不能为空")
+        elif not question.endswith("?"):
             problems.append("问题必须是英文问句（以 ? 结尾）")
+        elif not is_faq_text_brand_safe(question):
+            problems.append("问题不得包含第三方品牌")
+        if not answer:
+            problems.append("答案不能为空")
+        elif not is_faq_text_brand_safe(answer):
+            problems.append("答案不得包含第三方品牌")
         key = question.casefold()
         if key and key in seen_questions:
             problems.append("问题重复")

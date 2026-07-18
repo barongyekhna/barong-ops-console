@@ -38,7 +38,8 @@ _REVIEW_TERMS = (
     "drawback",
 )
 _QUESTION_START = re.compile(
-    r"^(?:how|what|when|where|which|why|who|can|could|do|does|is|are|will|would|should)\b",
+    r"^(?:how|what|when|where|which|why|who|can|could|do|does|did|has|have|is|are|"
+    r"may|might|must|was|were|will|would|should)\b",
     re.IGNORECASE,
 )
 _QUESTION_END = re.compile(r"[?？]\s*$")
@@ -56,12 +57,16 @@ _THIRD_PARTY_BRAND_BLACKLIST = (
     "boundless voyage",
     "bulin",
     "coleman",
+    "decathlon",
     "fire-maple",
     "fire maple",
+    "gsi",
     "gsi outdoors",
     "jetboil",
+    "kelty",
     "mallo me",
     "msr",
+    "nemo",
     "odoland",
     "primus",
     "sea to summit",
@@ -69,6 +74,7 @@ _THIRD_PARTY_BRAND_BLACKLIST = (
     "stanley",
     "toaks",
     "widesea",
+    "yeti",
 )
 _BRAND_QUALITY_QUESTION = re.compile(
     r"^is\s+.{1,60}\s+(?:an?\s+)?(?:good|reliable|reputable|legit|quality|premium)\s+brand\b",
@@ -95,6 +101,8 @@ _GENERIC_COMPARISON_TOKENS = {
     "aluminum",
     "aluminium",
     "anodized",
+    "backpacking",
+    "barong",
     "bpa",
     "butane",
     "camp",
@@ -103,10 +111,13 @@ _GENERIC_COMPARISON_TOKENS = {
     "carbon",
     "cast",
     "ceramic",
+    "cold",
     "co2",
     "cooking",
     "cookware",
     "double",
+    "durable",
+    "easy",
     "electric",
     "free",
     "fuel",
@@ -117,16 +128,20 @@ _GENERIC_COMPARISON_TOKENS = {
     "liquid",
     "lpg",
     "nonstick",
+    "open",
     "outdoor",
     "pan",
     "pans",
     "pfoa",
     "plastic",
+    "portable",
     "pot",
     "pots",
     "propane",
     "ptfe",
     "pvc",
+    "reliable",
+    "safe",
     "set",
     "sets",
     "single",
@@ -135,9 +150,14 @@ _GENERIC_COMPARISON_TOKENS = {
     "stoves",
     "stainless",
     "titanium",
+    "this",
+    "suitable",
+    "travel",
     "wall",
+    "weather",
     "white",
     "wood",
+    "yekhna",
 }
 _COMPARISON_SCAFFOLD_TOKENS = {
     "a",
@@ -186,16 +206,76 @@ _COMPARISON_SCAFFOLD_TOKENS = {
     "which",
     "worse",
 }
-_MIXED_CASE_TECHNICAL_TERMS = {
+_TECHNICAL_ENTITY_ALLOWLIST = {
+    "abs",
+    "api",
+    "bpa",
+    "btu",
+    "cfm",
+    "co2",
     "db",
+    "dtc",
+    "eva",
+    "faq",
+    "fcc",
+    "fda",
+    "hdpe",
+    "led",
     "lifepo4",
     "liion",
+    "lpg",
+    "nbr",
     "nimh",
+    "paa",
+    "pdp",
+    "pet",
+    "pfoa",
+    "pp",
+    "pom",
+    "ptfe",
+    "pvc",
+    "psi",
+    "rpm",
+    "seo",
+    "sku",
+    "tpu",
+    "tpr",
+    "tsa",
+    "usa",
+    "usb",
+    "usbc",
+    "uv",
     "wifi",
 }
 _MIXED_CASE_TECHNICAL_MEASUREMENT = re.compile(
-    r"^\d+(?:\.\d+)?(?:ah|mah|wh|kwh|db)$",
+    r"^(?:\d+(?:\.\d+)?(?:ah|mah|wh|kwh|db|rpm|cfm|psi)|"
+    r"ipx\d+|sus\d+|upf\d+|usb-[a-z0-9]+)$",
     re.IGNORECASE,
+)
+_GENERIC_ENTITY_TOKENS = {
+    "borosilicate",
+    "charging",
+    "clean",
+    "dry",
+    "enough",
+    "fabric",
+    "flame",
+    "food",
+    "grade",
+    "glass",
+    "high",
+    "keep",
+    "pack",
+    "place",
+    "protection",
+    "silicone",
+    "store",
+}
+_TITLECASE_PRODUCT_ENTITY = re.compile(
+    r"\b(?P<brand>[A-Z][A-Za-z0-9&'’.-]{2,})\s+"
+    r"(?:(?i:camping|outdoor)\s+)?"
+    r"(?i:cookware|cooksets?|stoves?|tents?|gear|products?|kits?|pans?|pots?|"
+    r"backpacks?|sleeping\s+bags?|coolers?|lanterns?)\b"
 )
 _PROPER_NAME_REVIEW = re.compile(
     r"\b(?P<brand>[A-Z][A-Za-z0-9&'’.-]{2,}(?:\s+[A-Z][A-Za-z0-9&'’.-]{2,}){0,2})\s+"
@@ -276,19 +356,53 @@ def _comparison_side_is_generic(value: str) -> bool:
     return bool(tokens) and tokens <= _GENERIC_COMPARISON_TOKENS
 
 
+def _entity_word_stem(value: str) -> str:
+    return re.sub(r"(?:['’]s|-brand)$", "", value, flags=re.IGNORECASE)
+
+
+def _entity_token_is_technical(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "", value.casefold())
+    return normalized in _TECHNICAL_ENTITY_ALLOWLIST or bool(
+        _MIXED_CASE_TECHNICAL_MEASUREMENT.fullmatch(value)
+    )
+
+
+def _entity_phrase_is_generic(value: str) -> bool:
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9&'’./-]*", value)
+    if not tokens:
+        return False
+    for token in tokens:
+        stem = _entity_word_stem(token)
+        normalized = re.sub(r"[^a-z0-9]+", "", stem.casefold())
+        if _entity_token_is_technical(stem):
+            continue
+        if normalized in _GENERIC_COMPARISON_TOKENS:
+            continue
+        if normalized in _COMPARISON_SCAFFOLD_TOKENS:
+            continue
+        if normalized in _GENERIC_ENTITY_TOKENS:
+            continue
+        return False
+    return True
+
+
 def _looks_distinctive_proper_name(value: str) -> bool:
-    """Recognize CamelCase brands without treating technical caps as brands."""
+    """Recognize brand-like casing while exempting technical vocabulary."""
 
     words = re.findall(r"[A-Za-z0-9][A-Za-z0-9&'’./-]*", value)
     for word in words:
-        if re.search(r"[a-z][A-Z]", word) is None:
+        stem = _entity_word_stem(word)
+        if _entity_token_is_technical(stem):
             continue
-        normalized = re.sub(r"[^a-z0-9]+", "", word.casefold())
-        if normalized in _MIXED_CASE_TECHNICAL_TERMS:
-            continue
-        if _MIXED_CASE_TECHNICAL_MEASUREMENT.fullmatch(word):
-            continue
-        return True
+        letters = re.sub(r"[^A-Za-z]+", "", stem)
+        if len(letters) >= 3 and letters.isupper():
+            return True
+        if re.search(r"[a-z][A-Z]", stem) is not None:
+            return True
+    for match in _TITLECASE_PRODUCT_ENTITY.finditer(value):
+        brand = _entity_word_stem(match.group("brand"))
+        if not _entity_phrase_is_generic(brand):
+            return True
     return False
 
 
@@ -320,7 +434,7 @@ def _looks_like_third_party_brand_question(value: str) -> bool:
     if _looks_distinctive_proper_name(value):
         return True
     proper_name_match = _IS_PROPER_NAME_QUESTION.search(value)
-    if proper_name_match is not None and _looks_distinctive_proper_name(
+    if proper_name_match is not None and not _entity_phrase_is_generic(
         proper_name_match.group("brand")
     ):
         return True
@@ -332,7 +446,7 @@ def _looks_like_third_party_brand_question(value: str) -> bool:
         ):
             return True
     review_match = _PROPER_NAME_REVIEW.search(value)
-    if review_match is not None and not _comparison_side_is_generic(
+    if review_match is not None and not _entity_phrase_is_generic(
         review_match.group("brand")
     ):
         return True
@@ -356,6 +470,12 @@ def is_faq_question_candidate(value: Any) -> bool:
         and not _ARTICLE_OR_LISTICLE_TITLE.search(question)
         and not _looks_like_third_party_brand_question(question)
     )
+
+
+def is_faq_text_brand_safe(value: Any) -> bool:
+    """Return whether buyer-visible FAQ text contains no third-party entity."""
+
+    return not _contains_unsafe_faq_context(value)
 
 
 def is_specification_paraphrase_question(value: Any) -> bool:
@@ -408,6 +528,11 @@ def sanitize_faq_research(research: Any) -> dict[str, Any]:
             )
         ):
             continue
+        source_type = _clean_text(raw_source.get("source_type"), limit=64)
+        if source_type and source_type not in allowed_source_types:
+            # Missing source_type is tolerated for legacy research.  An
+            # explicit unknown type is untrusted provenance, not legacy data.
+            continue
 
         raw_cluster = _clean_text(raw_source.get("intent_cluster"), limit=64)
         cluster = raw_cluster
@@ -421,7 +546,6 @@ def sanitize_faq_research(research: Any) -> dict[str, Any]:
             "question": question,
             "intent_cluster": cluster,
         }
-        source_type = _clean_text(raw_source.get("source_type"), limit=64)
         if source_type in allowed_source_types:
             safe_source["source_type"] = source_type
         if source_url:
@@ -990,7 +1114,7 @@ def validate_generated_faq(
             reason = "empty_question_or_answer"
         elif not is_faq_question_candidate(question):
             reason = "invalid_question_shape_or_third_party_brand"
-        elif _contains_third_party_brand(answer):
+        elif not is_faq_text_brand_safe(answer):
             reason = "third_party_brand_reference"
         elif malformed_refs:
             reason = "malformed_evidence_refs"

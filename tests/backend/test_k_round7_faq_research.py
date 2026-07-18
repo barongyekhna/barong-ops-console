@@ -5,6 +5,7 @@ import pytest
 from backend.app.modules.k_series.product_knowledge.faq_research import (
     build_faq_research,
     is_faq_question_candidate,
+    sanitize_faq_research,
     validate_generated_faq,
 )
 
@@ -41,6 +42,16 @@ def test_generic_comparisons_ignore_trailing_buyer_context(question: str) -> Non
         "Can a 5000mAh battery power a camping light?",
         "Is LiFePO4 suitable for cold weather?",
         "Is 40 dB quiet enough for camping?",
+        "Is EVA foam suitable for a sleeping pad?",
+        "Can TPR and NBR parts handle cold weather?",
+        "Is POM suitable for an outdoor buckle?",
+        "Does a 3000 RPM fan provide enough airflow?",
+        "Is 50 CFM enough airflow for a tent?",
+        "Can a stove hose handle 30 PSI?",
+        "Is IPX7 suitable for wet weather?",
+        "Is SUS304 cookware easy to clean?",
+        "Is UPF50 enough for a camping canopy?",
+        "Can USB-C charge a camping light?",
     ],
 )
 def test_technical_notations_are_not_treated_as_brands(question: str) -> None:
@@ -59,11 +70,34 @@ def test_distinctive_camelcase_brands_are_rejected_anywhere(question: str) -> No
     assert is_faq_question_candidate(question) is False
 
 
+@pytest.mark.parametrize(
+    "question",
+    [
+        "Are NEMO tents reliable?",
+        "Can KELTY cookware be used in winter?",
+        "Does GSI make durable camping cookware?",
+        "Is Decathlon cookware suitable for backpacking?",
+        "Is Yeti cookware suitable for camping?",
+        "Are ALPICO tents reliable?",
+        "Are ALPICO's tents reliable?",
+        "Does ALPICO-brand cookware last?",
+        "Is Vango cookware reliable?",
+        "Can Vango cookware be used in winter?",
+    ],
+)
+def test_uppercase_and_titlecase_competitor_entities_are_rejected(
+    question: str,
+) -> None:
+    assert is_faq_question_candidate(question) is False
+
+
 def test_brand_patterns_do_not_block_normal_material_or_fuel_questions() -> None:
     assert is_faq_question_candidate("Is stainless steel easy to clean?") is True
     assert is_faq_question_candidate("Is This Camping Cookware Safe?") is True
     assert is_faq_question_candidate("Is Outdoor Cooking Safe?") is True
     assert is_faq_question_candidate("Is propane vs butane better?") is True
+    assert is_faq_question_candidate("Is Titanium cookware durable?") is True
+    assert is_faq_question_candidate("Is Barong Yekhna cookware reliable?") is True
     assert is_faq_question_candidate("Is TrailForge cookware safe?") is False
     assert (
         is_faq_question_candidate("Is Odoland vs Coleman better for camping?")
@@ -163,6 +197,86 @@ def test_unsafe_paa_duplicate_does_not_hide_safe_forum_fallback() -> None:
     )
 
 
+def test_competitor_entities_in_source_context_are_removed() -> None:
+    research = sanitize_faq_research(
+        {
+            "status": "completed",
+            "quality_ready": True,
+            "queries": ["Decathlon camping cookware questions"],
+            "sources": [
+                {
+                    "id": "unsafe-snippet",
+                    "question": "How should cookware be stored between trips?",
+                    "snippet": "NEMO recommends dry storage.",
+                    "source_type": "people_also_ask",
+                    "intent_cluster": "maintenance",
+                },
+                {
+                    "id": "unsafe-query",
+                    "question": "Can cookware be used in cold weather?",
+                    "query": "KELTY cookware questions",
+                    "source_type": "people_also_ask",
+                    "intent_cluster": "cold_weather",
+                },
+                {
+                    "id": "unsafe-url",
+                    "question": "Why does food stick while cooking?",
+                    "source_url": "https://gsi.example.test/cookware",
+                    "source_type": "organic_question",
+                    "intent_cluster": "operation",
+                },
+            ],
+        }
+    )
+
+    assert research["queries"] == []
+    assert research["sources"] == []
+    assert research["clusters"] == {}
+    assert research["quality_ready"] is False
+
+
+def test_invalid_explicit_source_type_is_dropped_but_legacy_missing_type_remains() -> None:
+    research = sanitize_faq_research(
+        {
+            "status": "completed",
+            "quality_ready": True,
+            "sources": [
+                {
+                    "id": "valid-paa",
+                    "question": "How should cookware be cleaned after a trip?",
+                    "snippet": "Let ABS and PVC pieces cool before cleaning.",
+                    "query": "LPG and PTFE cookware care",
+                    "source_type": "people_also_ask",
+                    "intent_cluster": "maintenance",
+                },
+                {
+                    "id": "legacy-missing-type",
+                    "question": "Can cookware be used in cold weather?",
+                    "snippet": "LiFePO4 and CO2 guidance uses technical terms.",
+                    "intent_cluster": "cold_weather",
+                },
+                {
+                    "id": "invalid-explicit-type",
+                    "question": "How can cookware stay stable in wind?",
+                    "source_type": "organic_title",
+                    "intent_cluster": "wind_weather",
+                },
+            ],
+        }
+    )
+
+    assert [source["id"] for source in research["sources"]] == [
+        "valid-paa",
+        "legacy-missing-type",
+    ]
+    assert research["source_count"] == 2
+    assert research["quality_ready"] is True
+    assert research["clusters"] == {
+        "maintenance": ["valid-paa"],
+        "cold_weather": ["legacy-missing-type"],
+    }
+
+
 def test_non_question_review_title_is_rejected_but_normal_forum_question_remains() -> None:
     research = build_faq_research(
         [
@@ -238,14 +352,18 @@ def test_persisted_competitor_research_cannot_reach_visible_faq_or_schema() -> N
     }
 
 
-def test_competitor_name_in_generated_answer_is_not_publishable() -> None:
+@pytest.mark.parametrize(
+    "brand",
+    ["Odoland", "TrailForge", "Vango", "ALPICO's", "ALPICO-brand"],
+)
+def test_competitor_name_in_generated_answer_is_not_publishable(brand: str) -> None:
     question = "How should camping cookware be stored after a trip?"
     validated = validate_generated_faq(
         {
             "page_faq": [
                 {
                     "question": question,
-                    "answer": "Store it the same way as Odoland cookware.",
+                    "answer": f"Store it the same way as {brand} cookware.",
                     "evidence_refs": ["storage"],
                 }
             ]
@@ -268,3 +386,4 @@ def test_competitor_name_in_generated_answer_is_not_publishable() -> None:
     assert validated["faq_quality"]["dropped"] == [
         {"question": question, "reason": "third_party_brand_reference"}
     ]
+    assert validated["faq_quality"]["eligible_for_schema"] is False
