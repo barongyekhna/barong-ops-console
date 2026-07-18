@@ -215,6 +215,23 @@ def test_dtc_seo_moves_only_a_contiguous_keyword_and_preserves_grammar(
     assert ", for" not in result["seo"]["h1"]
 
 
+def test_dtc_seo_preserves_natural_audience_phrase_before_detail_clause() -> None:
+    result = _finalize_dtc_seo(
+        {
+            "seo": {
+                "h1": "Camping Cookware for 2-3 People – Pot Set",
+                "title": "Camping Cookware for 2-3 People – Pot Set",
+            }
+        },
+        final_keywords=["camping cookware"],
+        site_brand="Barong Yekhna",
+        structured_specs={"capacity_people": {"value": {"min": 2, "max": 3}}},
+    )
+
+    assert result["seo"]["h1"] == "Camping Cookware for 2-3 People – Pot Set"
+    assert result["seo"]["h1"].count(" – ") == 1
+
+
 def test_meta_description_truncates_on_a_natural_boundary() -> None:
     meta = " ".join(["Backpacking cookware with nested storage"] * 8)
 

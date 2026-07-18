@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from .buyer_display import imperial_measurement
+
 
 _TITLE_SEPARATORS = re.compile(r"\s*(?:\||—|–|•|:)\s*")
 _TOKEN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
@@ -150,21 +152,29 @@ _NUMERIC_RANGE_PATTERN = (
     rf"{_NUMERIC_ATOM_PATTERN})?"
 )
 _PEOPLE_CLAIM = re.compile(
-    rf"(?<![A-Za-z0-9.+\-])"
+    rf"(?<![A-Za-z0-9.+])"
     rf"(?P<prefix>(?:(?:suitable|designed|ideal)\s+for|for)\s+)?"
     rf"(?P<count>{_NUMERIC_RANGE_PATTERN})"
     rf"(?P<separator>\s*-\s*|\s+)(?P<noun>people|persons?)(?![A-Za-z])",
     re.IGNORECASE,
 )
 _CHINESE_PEOPLE_CLAIM = re.compile(
-    rf"(?<![A-Za-z0-9.+\-])(?P<prefix>\u9002\u7528|\u9002\u5408|\u53ef\u4f9b|\u4f9b)?"
+    rf"(?<![A-Za-z0-9.+])"
+    rf"(?P<prefix>\u9002\u7528\u4e8e?|\u9002\u5408\u4e8e?|\u53ef\u4f9b|\u4f9b)?"
     rf"(?P<count>{_NUMERIC_RANGE_PATTERN})\s*\u4eba"
+    rf"(?P<suffix>\u4f7f\u7528(?:\u7684)?|\u7528|\u4efd)?"
+)
+_CHINESE_PIECE_CLAIM = re.compile(
+    r"(?<![A-Za-z0-9.+])(?P<count>\d+)\s*\u4ef6"
+    r"(?!(?:\u5957\u88c5?|\u88c5)?(?:\u4ee3\u53d1|\u8d77\u6279|\u8d77\u552e|\u6df7\u6279|\u53ef\u552e|\u5305\u90ae))"
+    r"(?P<suffix>\u5957\u88c5?|\u88c5)?"
 )
 _CAPACITY_CLAIM = re.compile(
-    rf"(?<![A-Za-z0-9.+\-])(?P<count>{_NUMERIC_RANGE_PATTERN})"
+    rf"(?<![A-Za-z0-9.+])(?P<count>{_NUMERIC_RANGE_PATTERN})"
     rf"(?P<space>\s*|-?)"
     r"(?P<unit>qts?|quarts?|m(?:illi)?l(?:iters?|itres?)?|"
-    r"l(?:iters?|itres?)?|\u6beb\u5347|\u5347)(?![A-Za-z])",
+    r"l(?:iters?|itres?)?|\u6beb\u5347|\u5347)(?![A-Za-z])"
+    r"(?P<suffix>\u88c5)?",
     re.IGNORECASE,
 )
 _SPEC_NUMBER_RANGE = re.compile(
@@ -196,7 +206,8 @@ _UNSUPPORTED_COMMA_NUMERIC_CLAIM = re.compile(
     re.IGNORECASE,
 )
 _UNSUPPORTED_FRACTIONAL_PIECE_CLAIM = re.compile(
-    r"(?<![A-Za-z0-9])(?:\d+\.\d+|\.\d+)\s*-?\s*(?:pieces?|pcs?)\b",
+    r"(?<![A-Za-z0-9])(?:\d+\.\d+|\.\d+)\s*-?\s*"
+    r"(?:(?:pieces?|pcs?)\b|\u4ef6(?:\u5957)?)",
     re.IGNORECASE,
 )
 _UNSUPPORTED_NEGATIVE_NUMERIC_CLAIM = re.compile(
@@ -209,14 +220,77 @@ _UNSUPPORTED_POSITIVE_NUMERIC_CLAIM = re.compile(
     rf"{_NUMERIC_CLAIM_NOUN_OR_UNIT}(?![A-Za-z])",
     re.IGNORECASE,
 )
-_UNSUPPORTED_QUANTIFIED_PEOPLE_CLAIM = re.compile(
-    rf"(?<![A-Za-z0-9])(?:"
-    rf"between\s+{_NUMERIC_ATOM_PATTERN}\s+and\s+{_NUMERIC_ATOM_PATTERN}"
-    rf"|{_NUMERIC_ATOM_PATTERN}\s*(?:and|or|&|,)\s*"
-    rf"{_NUMERIC_ATOM_PATTERN}"
-    rf"|(?:up\s+to|at\s+least|more\s+than|less\s+than|under|over|about|around)"
-    rf"\s+{_NUMERIC_ATOM_PATTERN})\s+(?:people|persons?)\b",
+_QUALIFIED_CLAIM_TARGET = (
+    r"(?:people|persons?|pieces?|pcs?|"
+    r"(?:qts?|quarts?|m(?:illi)?l(?:iters?|itres?)?|"
+    r"l(?:iters?|itres?)?|\u6beb\u5347|\u5347)(?:\u88c5)?|"
+    r"\u4eba(?:\u4f7f\u7528(?:\u7684)?|\u7528|\u4efd)?|"
+    r"\u4ef6(?:\u5957\u88c5?|\u88c5)?)(?![A-Za-z])"
+)
+_UNSUPPORTED_QUALIFIED_NUMERIC_CLAIM = re.compile(
+    rf"""
+    (?:
+        (?<![A-Za-z0-9])between\s+{_NUMERIC_ATOM_PATTERN}\s+and\s+
+            {_NUMERIC_ATOM_PATTERN}\s*-?\s*{_QUALIFIED_CLAIM_TARGET}
+        |
+        (?<![A-Za-z0-9])(?:up\s+to|at\s+least|at\s+most|no\s+more\s+than|
+            no\s+less\s+than|more\s+than|less\s+than|under|over|about|around|
+            approximately?|approx\.?|(?:\u7ea6|\u5927\u7ea6)(?:\u4e3a)?|\u6700\u591a|
+            \u81f3\u5c11|\u4e0d\u8d85\u8fc7|\u4e0d\u4f4e\u4e8e|\u8d85\u8fc7|
+            \u5c11\u4e8e)\s*{_NUMERIC_RANGE_PATTERN}\s*-?\s*
+            {_QUALIFIED_CLAIM_TARGET}
+        |
+        [<>\u2264\u2265\u2248\u2272\u2273]\s*{_NUMERIC_RANGE_PATTERN}
+            \s*-?\s*{_QUALIFIED_CLAIM_TARGET}
+        |
+        (?:^|[^0-9.\s])\s*~\s*{_NUMERIC_RANGE_PATTERN}\s*-?\s*
+            {_QUALIFIED_CLAIM_TARGET}
+        |
+        (?<![A-Za-z0-9.+]){_NUMERIC_ATOM_PATTERN}\s*
+            (?:and|or|&|,|\u6216|\u3001)\s*{_NUMERIC_ATOM_PATTERN}
+            \s*-?\s*{_QUALIFIED_CLAIM_TARGET}
+        |
+        (?<![A-Za-z0-9.+]){_NUMERIC_ATOM_PATTERN}\s*
+            (?:\+|plus|\u5de6\u53f3|\u7ea6)\s*-?\s*
+            {_QUALIFIED_CLAIM_TARGET}
+        |
+        (?<![A-Za-z0-9.+]){_NUMERIC_ATOM_PATTERN}\s*-?\s*
+            {_QUALIFIED_CLAIM_TARGET}\s*(?:or\s+more|or\s+less|and\s+up|
+            and\s+above|approximately?|approx\.?|\+|\u4ee5\u4e0a|
+            \u4ee5\u4e0b|\u4ee5\u5185|\u4ee5\u5916|\u5de6\u53f3|
+            \u53ca\u4ee5\u4e0a|\u53ca\u4ee5\u4e0b|\u6216\u66f4\u591a|
+            \u6216\u66f4\u5c11)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+_UNSUPPORTED_PIECE_RANGE_CLAIM = re.compile(
+    rf"(?<![A-Za-z0-9.+]){_NUMERIC_ATOM_PATTERN}\s*"
+    rf"{_NUMERIC_RANGE_SEPARATOR_PATTERN}\s*{_NUMERIC_ATOM_PATTERN}"
+    r"\s*(?:-\s*)?(?:(?:pieces?|pcs?)\b|\u4ef6(?:\u5957)?)",
     re.IGNORECASE,
+)
+_UNSUPPORTED_SPEC_NUMERIC_QUALIFIER = re.compile(
+    rf"""
+    (?:
+        \b(?:between|up\s+to|at\s+least|at\s+most|no\s+more\s+than|
+            no\s+less\s+than|more\s+than|less\s+than|under|over|about|around|
+            approximately?|approx\.?|or\s+more|or\s+less)\b
+        |[<>\u2264\u2265\u2248\u2272\u2273]
+        |(?:^|[^0-9.\s])\s*~\s*{_NUMERIC_ATOM_PATTERN}
+        |{_NUMERIC_ATOM_PATTERN}\s*~(?!\s*{_NUMERIC_ATOM_PATTERN})
+        |(?:^|[^0-9.\s])\s*[+\-\u2212]\s*{_NUMERIC_ATOM_PATTERN}
+        |{_NUMERIC_ATOM_PATTERN}\s*\+
+        |{_NUMERIC_ATOM_PATTERN}\s*(?:and|or|&|,|\u6216|\u3001)\s*
+            {_NUMERIC_ATOM_PATTERN}
+        |(?:\u7ea6|\u5927\u7ea6|\u6700\u591a|\u81f3\u5c11|\u4e0d\u8d85\u8fc7|
+            \u4e0d\u4f4e\u4e8e|\u8d85\u8fc7|\u5c11\u4e8e|\u4ee5\u4e0a|
+            \u4ee5\u4e0b|\u4ee5\u5185|\u4ee5\u5916|\u5de6\u53f3|
+            \u53ca\u4ee5\u4e0a|\u53ca\u4ee5\u4e0b|\u6216\u66f4\u591a|
+            \u6216\u66f4\u5c11)
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
 )
 _UNSUPPORTED_POSTFIX_NUMERIC_CLAIM = re.compile(
     rf"(?<![A-Za-z0-9]){_NUMERIC_ATOM_PATTERN}\s*(?:\+|plus)\s*"
@@ -276,6 +350,8 @@ def _numeric_range(value: Any) -> tuple[Decimal, ...] | None:
         number = _decimal(value)
         return (number,) if number is not None else None
     if not isinstance(value, str):
+        return None
+    if _UNSUPPORTED_SPEC_NUMERIC_QUALIFIER.search(value):
         return None
     matches = list(_SPEC_NUMBER_RANGE.finditer(value))
     if len(matches) != 1:
@@ -426,6 +502,32 @@ def _capacity_unit(node: Any, *, descriptor_text: str) -> tuple[str, str] | None
     return unit, {"l": "L", "ml": "mL", "qt": "qt"}[unit]
 
 
+def _buyer_capacity_projection(
+    numbers: tuple[Decimal, ...],
+    unit: str,
+) -> tuple[tuple[Decimal, ...], str, str] | None:
+    """Project verified capacity evidence into the US buyer-display unit."""
+
+    if unit == "qt":
+        return numbers, unit, "qt"
+    if unit not in {"l", "ml"}:
+        return None
+    source_value: Any = (
+        numbers[0]
+        if len(numbers) == 1
+        else {"min": numbers[0], "max": numbers[1]}
+    )
+    converted = imperial_measurement(source_value, unit)
+    if converted is None:
+        return None
+    display_value, display_unit = converted
+    display_numbers = _numeric_range(display_value)
+    canonical_display_unit = _canonical_capacity_unit(display_unit)
+    if display_numbers is None or canonical_display_unit != "qt":
+        return None
+    return display_numbers, canonical_display_unit, "qt"
+
+
 _CAPACITY_SUBJECT_ALIASES: dict[str, tuple[str, ...]] = {
     "kettle": (
         "kettle",
@@ -572,6 +674,11 @@ def _numeric_spec_evidence(
                 malformed.append(path)
                 continue
             unit, display_unit = capacity_unit
+            buyer_projection = _buyer_capacity_projection(numbers, unit)
+            if buyer_projection is None:
+                malformed.append(path)
+                continue
+            numbers, unit, display_unit = buyer_projection
         else:
             subjects = set()
         evidence.append(
@@ -692,9 +799,13 @@ def reconcile_title_numeric_claims(
         raise TitleEvidenceConsistencyError(
             "Cannot safely parse a signed numeric title claim."
         )
-    if _UNSUPPORTED_QUANTIFIED_PEOPLE_CLAIM.search(output):
+    if _UNSUPPORTED_QUALIFIED_NUMERIC_CLAIM.search(output):
         raise TitleEvidenceConsistencyError(
-            "Cannot safely parse a qualified or non-range people title claim."
+            "Cannot safely parse a qualified or alternative numeric title claim."
+        )
+    if _UNSUPPORTED_PIECE_RANGE_CLAIM.search(output):
+        raise TitleEvidenceConsistencyError(
+            "Cannot safely reconcile a ranged piece-count title claim."
         )
     if _UNSUPPORTED_POSTFIX_NUMERIC_CLAIM.search(output):
         raise TitleEvidenceConsistencyError(
@@ -709,7 +820,10 @@ def reconcile_title_numeric_claims(
             *_PEOPLE_CLAIM.finditer(output),
             *_CHINESE_PEOPLE_CLAIM.finditer(output),
         ],
-        "piece": list(_PIECE_CLAIM.finditer(output)),
+        "piece": [
+            *_PIECE_CLAIM.finditer(output),
+            *_CHINESE_PIECE_CLAIM.finditer(output),
+        ],
         "capacity": list(_CAPACITY_CLAIM.finditer(output)),
     }
     for claim_kind, matches in claim_matches.items():
@@ -743,8 +857,6 @@ def reconcile_title_numeric_claims(
         )
         if verified is None:
             return ""
-        if verified.numbers == current:
-            return match.group(0)
         noun = match.group("noun")
         separator = match.group("separator")
         if "-" not in separator:
@@ -753,9 +865,15 @@ def reconcile_title_numeric_claims(
                 noun = "Person" if noun[:1].isupper() else "person"
             elif not singular and noun.casefold() == "person":
                 noun = "People" if noun[:1].isupper() else "people"
+        if verified.numbers == current and noun == match.group("noun"):
+            return match.group(0)
         return (
             (match.group("prefix") or "")
-            + _numeric_range_text(verified.numbers)
+            + (
+                match.group("count")
+                if verified.numbers == current
+                else _numeric_range_text(verified.numbers)
+            )
             + separator
             + noun
         )
@@ -775,10 +893,13 @@ def reconcile_title_numeric_claims(
             structured_specs=structured_specs,
             package_includes=package_includes,
         )
+        if verified is None:
+            return ""
+        if verified.numbers == current:
+            return match.group(0)
         return (
             f"{match.group('prefix') or ''}{_numeric_range_text(verified.numbers)}\u4eba"
-            if verified is not None
-            else ""
+            f"{match.group('suffix') or ''}"
         )
 
     output = _CHINESE_PEOPLE_CLAIM.sub(replace_chinese_people, output)
@@ -812,6 +933,30 @@ def reconcile_title_numeric_claims(
         )
 
     output = _PIECE_CLAIM.sub(replace_piece, output)
+
+    def replace_chinese_piece(match: re.Match[str]) -> str:
+        current = (Decimal(match.group("count")),)
+        verified = _select_numeric_spec_evidence(
+            "piece",
+            current_numbers=current,
+            current_unit=None,
+            structured_specs=structured_specs,
+            package_includes=package_includes,
+        )
+        if verified is None:
+            return ""
+        if len(verified.numbers) != 1:
+            raise TitleEvidenceConsistencyError(
+                "A piece_count specification must be a single integer."
+            )
+        if verified.numbers == current:
+            return match.group(0)
+        return (
+            f"{_numeric_range_text(verified.numbers)}\u4ef6"
+            f"{match.group('suffix') or ''}"
+        )
+
+    output = _CHINESE_PIECE_CLAIM.sub(replace_chinese_piece, output)
     capacity_source_title = output
     capacity_candidates, capacity_malformed = _numeric_spec_evidence(
         "capacity",
@@ -855,7 +1000,10 @@ def reconcile_title_numeric_claims(
         spacing = match.group("space")
         if not spacing and display_unit and len(display_unit) > 2:
             spacing = " "
-        return f"{_numeric_range_text(verified.numbers)}{spacing}{display_unit or ''}"
+        return (
+            f"{_numeric_range_text(verified.numbers)}{spacing}{display_unit or ''}"
+            f"{match.group('suffix') or ''}"
+        )
 
     output = _CAPACITY_CLAIM.sub(replace_capacity, output)
     return _cleanup_numeric_claim_removal(output)
@@ -1238,6 +1386,9 @@ def title_evidence_corpus(
         )
         if evidence and not malformed:
             tokens.update(vocabulary)
+            for fact in evidence:
+                for number in fact.numbers:
+                    tokens.update(_claim_tokens(_format_decimal(number)))
     return tokens
 
 

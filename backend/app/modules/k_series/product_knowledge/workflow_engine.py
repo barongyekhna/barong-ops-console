@@ -2885,6 +2885,17 @@ def _readable_h1(
         # package components form a safe, grammatical detail in that case.
         detail = component_detail
     else:
+        left = source[: span[0]].strip(" ,;:\u2013\u2014|-&").casefold()
+        right = source[span[1] :].strip(" ,;:\u2013\u2014|-&")
+        if (
+            left in {"", "a", "an", "the"}
+            and re.match(r"^(?:for|with|in|on|of|to|from|by)\b", right, re.IGNORECASE)
+            and re.search(r"(?:\s\u2013\s|,\s*)", right)
+        ):
+            # The primary phrase already leads a grammatical audience/use
+            # phrase and an authored detail clause.  Preserve that sentence
+            # shape instead of producing "Primary – For ... – Detail".
+            return f"{primary} {right}"
         detail = _detail_without_primary(source, span)
         if _supplier_noun_tail(detail):
             detail = component_detail

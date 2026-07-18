@@ -78,6 +78,12 @@ def test_upload_seo_enforces_branded_short_title_for_legacy_copy() -> None:
     assert len(seo.title) <= 60
     assert seo.title.count("Barong Yekhna") == 1
 
+    duplicate_brand = assemble._seo_for_upload(
+        {"seo": {"title": "Barong Yekhna | Camping Pot | Barong Yekhna"}},
+        product,
+    )
+    assert duplicate_brand.title == "Camping Pot | Barong Yekhna"
+
 
 def test_n8n_writes_only_authored_seo_copy_to_yoast_product_meta() -> None:
     workflow_path = (

@@ -288,9 +288,12 @@ def _truncate_upload_seo_text(value: str, *, limit: int, sentence: bool) -> str:
 def _bounded_upload_seo_title(value: str) -> str:
     clean = " ".join(html.unescape(value).split())
     suffix = f" | {SITE_BRAND}"
-    if clean.casefold().endswith(suffix.casefold()):
-        phrase = clean[: -len(suffix)].rstrip()
-    elif clean.casefold() == SITE_BRAND.casefold():
+    while clean.casefold().endswith(suffix.casefold()):
+        clean = clean[: -len(suffix)].rstrip()
+    brand_prefix = f"{SITE_BRAND} | "
+    while clean.casefold().startswith(brand_prefix.casefold()):
+        clean = clean[len(brand_prefix) :].lstrip()
+    if clean.casefold() == SITE_BRAND.casefold():
         phrase = ""
     else:
         phrase = clean
