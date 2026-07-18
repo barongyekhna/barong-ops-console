@@ -284,9 +284,23 @@ def normalize_template_fields(
                     f"Standard spec key '{key}' must use target=standard"
                 )
         if target == "standard" and key not in STANDARD_SPEC_KEYS:
-            raise SpecTemplateValidationError(
-                f"target=standard requires a canonical standard key: {key}"
-            )
+            if ai_draft:
+                # Drafts may invent variants of canonical keys (weight_g...).
+                # Rename via label inference when possible, else demote.
+                inferred_from_labels = {
+                    inferred
+                    for label in (raw.get("label_zh"), raw.get("label_en"))
+                    if isinstance(label, str)
+                    and (inferred := standard_spec_key_for_label(label)) is not None
+                }
+                if len(inferred_from_labels) == 1:
+                    key = next(iter(inferred_from_labels))
+                else:
+                    target = "additional"
+            else:
+                raise SpecTemplateValidationError(
+                    f"target=standard requires a canonical standard key: {key}"
+                )
 
         label_zh = _required_text(
             raw.get("label_zh"), field_name="label_zh", limit=255
@@ -305,10 +319,14 @@ def normalize_template_fields(
         }
         if inferred_standard_keys and inferred_standard_keys != {key}:
             inferred = sorted(inferred_standard_keys)[0]
-            raise SpecTemplateValidationError(
-                f"Template label for '{key}' belongs to standard key "
-                f"'{inferred}'; use that key with target=standard"
-            )
+            if ai_draft:
+                key = inferred
+                target = "standard"
+            else:
+                raise SpecTemplateValidationError(
+                    f"Template label for '{key}' belongs to standard key "
+                    f"'{inferred}'; use that key with target=standard"
+                )
 
         value_type = str(raw.get("value_type") or "").strip().lower()
         if value_type not in CATEGORY_SPEC_VALUE_TYPES:
