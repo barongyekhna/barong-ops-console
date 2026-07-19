@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from backend.app.core.security import hash_password
 from backend.app.db.session import SessionLocal
@@ -28,6 +28,7 @@ PNG_1X1 = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c020000000b4944415478da63fcff1f0003030200efbfa7db0000000049454e44ae426082"
 )
 E2E_CONTAINER_LATENCY_SLACK_MS = 500
+E2E_GOOGLE_CATEGORY_ID = "ik-e2e-pumps"
 
 
 def _assert_fast(
@@ -91,6 +92,19 @@ def _seed_target_owner() -> tuple[str, str]:
                 status="active",
             )
         )
+        db.execute(
+            text(
+                "INSERT INTO k_category_google "
+                "(id, name, full_path, parent_id, level, is_leaf) "
+                "VALUES (:id, :name, :path, NULL, 1, true) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": E2E_GOOGLE_CATEGORY_ID,
+                "name": "Industrial Pumps",
+                "path": "Business & Industrial > Industrial Pumps",
+            },
+        )
         db.commit()
     return username, password
 
@@ -150,6 +164,7 @@ def test_i_k_series_image_e2e_audit(
         "target_market": "US",
         "product_name_en": "IK E2E Stainless Pump",
         "product_type": "variable_product",
+        "category_id": E2E_GOOGLE_CATEGORY_ID,
         "parent_sku": f"IK-E2E-{uuid4().hex[:8]}",
         "variants": [
             {"color": "silver", "size": "M", "function": "standard", "quantity": 10},

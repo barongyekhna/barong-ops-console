@@ -129,15 +129,22 @@ def _honeypot_filled(raw: Any) -> bool:
 
 def _target_organization(db: Session) -> OrganizationRecord | None:
     with without_org_data_isolation():
-        return db.scalar(
-            select(OrganizationRecord)
-            .where(
-                OrganizationRecord.org_name == TARGET_ORGANIZATION_NAME,
-                OrganizationRecord.status == "active",
+        organizations = list(
+            db.scalars(
+                select(OrganizationRecord)
+                .where(
+                    OrganizationRecord.org_name == TARGET_ORGANIZATION_NAME,
+                    OrganizationRecord.status == "active",
+                )
+                .order_by(OrganizationRecord.org_id)
+                .limit(2)
             )
-            .order_by(OrganizationRecord.org_id)
-            .limit(1)
         )
+    if len(organizations) != 1:
+        if len(organizations) > 1:
+            logger.error("CS inbound target organization name is ambiguous")
+        return None
+    return organizations[0]
 
 
 def _notification_route(message: CSMessage) -> str:

@@ -308,6 +308,30 @@ def test_fast_submission_is_persisted_as_spam(cs_client: TestClient) -> None:
     assert _single_message().status == "spam"
 
 
+def test_inbound_fails_closed_when_target_organization_name_is_ambiguous(
+    cs_client: TestClient,
+) -> None:
+    with without_org_data_isolation(), SessionLocal() as db:
+        owner = db.scalar(select(User).where(User.role == "owner"))
+        assert owner is not None
+        db.add(
+            OrganizationRecord(
+                org_id=OTHER_ORG_ID,
+                org_name=TARGET_ORGANIZATION_NAME,
+                org_type="store",
+                owner_user_id=str(owner.id),
+                status="active",
+                metadata_json={},
+            )
+        )
+        db.commit()
+
+    response = _post_inbound(cs_client)
+    assert response.status_code == 503
+    assert response.json() == {"ok": False}
+    assert _message_count() == 0
+
+
 def test_forwarded_origin_ip_takes_precedence_over_socket_peer(
     cs_client: TestClient,
 ) -> None:
