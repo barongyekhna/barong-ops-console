@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Barong Email Verify
  * Description: 注册邮箱验证(瘦插件)。新注册用户必须点击邮件里的验证链接才能登录——不存在的邮箱收不到信,自然无法激活。旧用户与 Google 登录用户不受影响。
- * Version: 1.6.0
+ * Version: 1.7.0
  * Author: Barong Yekhna Console
  */
 
@@ -10,7 +10,7 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
 
 const BY_EV_META_TOKEN    = '_by_verify_token';
 const BY_EV_META_VERIFIED = '_by_email_verified';
-const BY_EV_VERSION       = '1.6.0';
+const BY_EV_VERSION       = '1.7.0';
 
 
 /** 修复:间歇性 "Not enough data to create this user" —— 上游偶发生成空用户名,
@@ -99,6 +99,21 @@ add_filter( 'wp_mail', function ( $atts ) {
 	update_option( 'by_ev_maillog', array_slice( $log, -10 ), false );
 	return $atts;
 }, PHP_INT_MAX );
+
+/** 发送失败捕获:SMTP 层真实报错进窃听日志。 */
+add_action( 'wp_mail_failed', function ( $error ) {
+	$log   = get_option( 'by_ev_maillog', array() );
+	$data  = is_wp_error( $error ) ? $error->get_error_data() : null;
+	$log[] = array(
+		'time'    => gmdate( 'c' ),
+		'to'      => 'FAILED',
+		'subject' => is_wp_error( $error ) ? mb_substr( $error->get_error_message(), 0, 200 ) : 'unknown',
+		'len'     => 0,
+		'has_logo'=> false,
+		'head120' => mb_substr( wp_json_encode( $data ), 0, 300 ),
+	);
+	update_option( 'by_ev_maillog', array_slice( $log, -10 ), false );
+} );
 
 /** 验证链接处理 + 重发。 */
 add_action( 'template_redirect', function () {
