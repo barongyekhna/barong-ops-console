@@ -34,6 +34,7 @@ const MODULE_DISPLAY_LABELS: Record<string, string> = {
   "business.reviews": "审批审计",
   "core.dashboard": "控制台",
   "core.vpn": "VPN",
+  "cs.customer_service": "客服中心",
   "experimental.foundation_demo": "内部演示",
   "i.image_system": "I系列图片系统",
   "integration.n8n_test_bridge": "外部流程测试桥",

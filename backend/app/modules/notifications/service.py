@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from ...services.data_isolation import without_org_data_isolation
@@ -46,14 +46,28 @@ def create_notification(
     return row
 
 
-def _visible_to_user(user_id: str):
-    return or_(
+def _visible_to_user(user_id: str, *, org_id: str | None = None):
+    recipient_filter = or_(
         PNotification.recipient_user_id.is_(None),
         PNotification.recipient_user_id == user_id,
     )
+    if not org_id:
+        # Preserve the service's historical behavior for internal callers that
+        # do not carry an organization context. HTTP routes always pass one.
+        return recipient_filter
+    organization_filter = or_(
+        PNotification.org_id.is_(None),
+        PNotification.org_id == org_id,
+    )
+    return and_(recipient_filter, organization_filter)
 
 
-def unread_count(db: Session, *, user_id: str) -> int:
+def unread_count(
+    db: Session,
+    *,
+    user_id: str,
+    org_id: str | None = None,
+) -> int:
     with without_org_data_isolation():
         return int(
             db.scalar(
@@ -61,7 +75,7 @@ def unread_count(db: Session, *, user_id: str) -> int:
                 .select_from(PNotification)
                 .where(
                     PNotification.status == "unread",
-                    _visible_to_user(user_id),
+                    _visible_to_user(user_id, org_id=org_id),
                 )
             )
             or 0
@@ -76,8 +90,11 @@ def list_notifications(
     limit: int = 50,
     offset: int = 0,
     user_id: str,
+    org_id: str | None = None,
 ) -> tuple[list[PNotification], int, int]:
-    stmt = select(PNotification).where(_visible_to_user(user_id))
+    stmt = select(PNotification).where(
+        _visible_to_user(user_id, org_id=org_id)
+    )
     if status:
         stmt = stmt.where(PNotification.status == status)
     if level:
@@ -90,30 +107,41 @@ def list_notifications(
             PNotification.created_at.desc(), PNotification.id.desc()
         )
         rows = list(db.scalars(ordered.limit(limit).offset(offset)))
-    return rows, total, unread_count(db, user_id=user_id)
+    return rows, total, unread_count(db, user_id=user_id, org_id=org_id)
 
 
-def mark_read(db: Session, notification_id: int, *, user_id: str) -> int:
+def mark_read(
+    db: Session,
+    notification_id: int,
+    *,
+    user_id: str,
+    org_id: str | None = None,
+) -> int:
     with without_org_data_isolation():
         result = db.execute(
             update(PNotification)
             .where(
                 PNotification.id == notification_id,
                 PNotification.status == "unread",
-                _visible_to_user(user_id),
+                _visible_to_user(user_id, org_id=org_id),
             )
             .values(status="read", read_at=datetime.now(UTC))
         )
     return int(result.rowcount or 0)
 
 
-def mark_all_read(db: Session, *, user_id: str) -> int:
+def mark_all_read(
+    db: Session,
+    *,
+    user_id: str,
+    org_id: str | None = None,
+) -> int:
     with without_org_data_isolation():
         result = db.execute(
             update(PNotification)
             .where(
                 PNotification.status == "unread",
-                _visible_to_user(user_id),
+                _visible_to_user(user_id, org_id=org_id),
             )
             .values(status="read", read_at=datetime.now(UTC))
         )

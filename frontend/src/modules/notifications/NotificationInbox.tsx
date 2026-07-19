@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { DashboardScene } from "@/components/dashboard-scene";
 
@@ -23,6 +24,7 @@ import {
   type NotificationItem,
 } from "./api";
 import styles from "./NotificationInbox.module.css";
+import { getCsNotificationTarget, type CsNotificationTarget } from "./routing";
 
 type Filter = "all" | "unread";
 type NotificationInboxProps = {
@@ -87,6 +89,7 @@ export function NotificationInbox({
   onUnreadChange,
   variant = "page",
 }: NotificationInboxProps = {}) {
+  const router = useRouter();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [filter, setFilter] = useState<Filter>("all");
@@ -142,6 +145,23 @@ export function NotificationInbox({
     } finally {
       setBusyId(null);
     }
+  }
+
+  async function handleOpenCsMessage(
+    item: NotificationItem,
+    target: CsNotificationTarget,
+  ) {
+    setBusyId(item.id);
+    if (item.status === "unread") {
+      try {
+        await markNotificationRead(item.id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "标记已读失败。");
+      }
+    }
+    onClose?.();
+    router.push(target.href);
+    setBusyId(null);
   }
 
   async function handleMarkAll() {
@@ -291,6 +311,7 @@ export function NotificationInbox({
         {items.map((item) => {
           const links = externalLinks(item.external_refs);
           const isUnread = item.status === "unread";
+          const csTarget = getCsNotificationTarget(item);
           return (
             <li
               className={`${styles.item} ${isUnread ? styles.itemUnread : ""}`}
@@ -334,22 +355,35 @@ export function NotificationInbox({
                   </div>
                 ) : null}
               </div>
-              {isUnread ? (
-                <button
-                  className={styles.markButton}
-                  disabled={busyId === item.id}
-                  onClick={() => void handleMarkRead(item.id)}
-                  type="button"
-                >
-                  {busyId === item.id ? (
-                    <LoaderCircle aria-hidden="true" className="spin" size={14} />
-                  ) : (
-                    "标记已读"
-                  )}
-                </button>
-              ) : (
-                <span className={styles.readTag}>已读</span>
-              )}
+              <div className={styles.itemActions}>
+                {csTarget ? (
+                  <button
+                    className={styles.openButton}
+                    disabled={busyId === item.id}
+                    onClick={() => void handleOpenCsMessage(item, csTarget)}
+                    type="button"
+                  >
+                    <ExternalLink aria-hidden="true" size={13} />
+                    打开消息
+                  </button>
+                ) : null}
+                {isUnread ? (
+                  <button
+                    className={styles.markButton}
+                    disabled={busyId === item.id}
+                    onClick={() => void handleMarkRead(item.id)}
+                    type="button"
+                  >
+                    {busyId === item.id ? (
+                      <LoaderCircle aria-hidden="true" className="spin" size={14} />
+                    ) : (
+                      "标记已读"
+                    )}
+                  </button>
+                ) : (
+                  <span className={styles.readTag}>已读</span>
+                )}
+              </div>
             </li>
           );
         })}

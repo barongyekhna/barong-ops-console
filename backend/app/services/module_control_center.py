@@ -38,6 +38,7 @@ R_WAREHOUSE_MODULE_ID = "r.warehouse"
 R_ANALYSIS_MODULE_ID = "r.analysis"
 R_SERIES_MODULE_IDS = frozenset({R_WAREHOUSE_MODULE_ID, R_ANALYSIS_MODULE_ID})
 R_SERIES_ORGANIZATION_NAME = TARGET_PRODUCT_ORGANIZATION_NAME
+CS_CUSTOMER_SERVICE_MODULE_ID = "cs.customer_service"
 
 
 def _is_r_series_module(module_id: str) -> bool:
@@ -53,6 +54,8 @@ def _module_allowed_for_organization(
         return organization_name == I_IMAGE_SYSTEM_ORGANIZATION_NAME
     if _is_r_series_module(manifest.module_key):
         return organization_name == R_SERIES_ORGANIZATION_NAME
+    if manifest.module_key == CS_CUSTOMER_SERVICE_MODULE_ID:
+        return organization_name == TARGET_PRODUCT_ORGANIZATION_NAME
     return True
 
 

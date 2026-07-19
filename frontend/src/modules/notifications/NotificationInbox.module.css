@@ -77,6 +77,7 @@
 .primaryAction:focus-visible,
 .filter:focus-visible,
 .filterActive:focus-visible,
+.openButton:focus-visible,
 .markButton:focus-visible {
   outline: 2px solid var(--cc-cyan);
   outline-offset: 2px;
@@ -460,7 +461,15 @@
   overflow-wrap: anywhere;
 }
 
-.markButton {
+.itemActions {
+  display: grid;
+  align-self: center;
+  justify-items: stretch;
+  gap: 6px;
+}
+
+.markButton,
+.openButton {
   align-self: center;
   min-width: 76px;
   min-height: 30px;
@@ -474,11 +483,27 @@
   white-space: nowrap;
 }
 
-.markButton:hover:not(:disabled) {
+.openButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-color: rgb(255 177 59 / 42%);
+  background: rgb(255 177 59 / 9%);
+  color: #ffd28a;
+}
+
+.markButton:hover:not(:disabled),
+.openButton:hover:not(:disabled) {
   background: rgb(57 212 255 / 17%);
 }
 
-.markButton:disabled {
+.openButton:hover:not(:disabled) {
+  background: rgb(255 177 59 / 17%);
+}
+
+.markButton:disabled,
+.openButton:disabled {
   cursor: default;
   opacity: 0.55;
 }
@@ -552,7 +577,7 @@
     white-space: normal;
   }
 
-  .markButton,
+  .itemActions,
   .readTag {
     grid-column: 2;
     justify-self: start;

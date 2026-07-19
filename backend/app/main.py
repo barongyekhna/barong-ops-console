@@ -36,6 +36,8 @@ from .api.routes.health import (
     router as health_router,
 )
 from .modules.c19.router import router as c19_router
+from .modules.cs_series.router import public_router as cs_public_router
+from .modules.cs_series.router import router as cs_customer_service_router
 from .modules.f_series.router import router as f_enrichment_router
 from .modules.h_series.router import router as h_site_health_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
@@ -968,6 +970,7 @@ def lightweight_health() -> HealthResponse:
 app.include_router(health_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(security_firewall_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(auth_router, prefix=PUBLIC_API_PREFIX)
+app.include_router(cs_public_router, prefix=PUBLIC_API_PREFIX)
 
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)
@@ -983,6 +986,7 @@ app.include_router(organizations_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(c19_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(cs_customer_service_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)

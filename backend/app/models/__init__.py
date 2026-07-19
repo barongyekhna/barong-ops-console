@@ -75,6 +75,7 @@ from ..modules.k_series.product_knowledge.models import (
     KProductKnowledgeWorkflowExecution,
 )
 from ..modules.p_series.upload.models import KCategoryWCMap, PUploadJob
+from ..modules.cs_series.models import CSMessage
 
 __all__ = [
     "AgentMemoryAccessLog",
@@ -101,6 +102,7 @@ __all__ = [
     "C19RelationshipRecord",
     "C19UserBlockRecord",
     "ContactIdentityRecord",
+    "CSMessage",
     "ContextPacket",
     "DLQStateRecord",
     "ExecutionCallbackRecord",

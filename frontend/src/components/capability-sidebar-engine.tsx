@@ -24,6 +24,7 @@ import type {
 import type { ModuleAccessState } from "@/lib/module-registry";
 import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
 import { useC19UnreadCount } from "@/modules/c19/C19UnreadStatus";
+import { useCsNewCount } from "@/modules/cs/customer-service/useCsNewCount";
 
 const C_SYSTEM_MODULE_ORDER = [
   {
@@ -64,6 +65,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "f.",
   "h.",
   "w.",
+  "cs.",
   "seo.",
   "gmc.",
 ] as const;
@@ -72,6 +74,7 @@ const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公�
 const R_SERIES_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
 const R_WAREHOUSE_MODULE_KEY = "r.warehouse";
 const R_ANALYSIS_MODULE_KEY = "r.analysis";
+const CS_CUSTOMER_SERVICE_MODULE_KEY = "cs.customer_service";
 
 const CAPABILITY_BADGE_LABELS: Record<
   Exclude<ProductCapabilityBadge, null>,
@@ -164,6 +167,7 @@ function isRestrictedProductModule(moduleId: string) {
     normalized.startsWith("f.") ||
     normalized.startsWith("h.") ||
     normalized.startsWith("w.") ||
+    normalized.startsWith("cs.") ||
     normalized === "business.products" ||
     normalized.includes("product")
   );
@@ -358,10 +362,12 @@ function SidebarLink({
   label,
   onNavigate,
   pathname,
+  notificationCount = 0,
   tree,
 }: {
   item: ProductCapabilityItem;
   label?: string;
+  notificationCount?: number;
   onNavigate: () => void;
   pathname: string;
   tree?: boolean;
@@ -381,7 +387,9 @@ function SidebarLink({
     <Link
       aria-current={active ? "page" : undefined}
       aria-label={
-        visibleBadge
+        notificationCount > 0
+          ? `${displayLabel}，${notificationCount} 条新消息`
+          : visibleBadge
           ? `${displayLabel} ${CAPABILITY_BADGE_LABELS[visibleBadge]}`
           : displayLabel
       }
@@ -406,6 +414,15 @@ function SidebarLink({
           {CAPABILITY_BADGE_LABELS[visibleBadge]}
         </span>
       ) : null}
+      {!locked && notificationCount > 0 ? (
+        <span
+          aria-hidden="true"
+          className="navigation-status-badge cs-new-badge"
+          title={`${notificationCount} 条新消息`}
+        >
+          {notificationCount > 99 ? "99+" : notificationCount}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -413,11 +430,13 @@ function SidebarLink({
 function OrganizationModuleRow({
   module,
   item,
+  notificationCount,
   onNavigate,
   pathname,
 }: {
   module: ModuleControlState;
   item: ProductCapabilityItem | null;
+  notificationCount?: number;
   onNavigate: () => void;
   pathname: string;
 }) {
@@ -431,6 +450,7 @@ function OrganizationModuleRow({
       <SidebarLink
         item={displayItem}
         label={label}
+        notificationCount={notificationCount}
         onNavigate={onNavigate}
         pathname={pathname}
         tree
@@ -463,6 +483,7 @@ export function CapabilitySidebarEngine({
   } = useFrontendCapabilityState();
   const role = normalizeRole(user?.role);
   const c19UnreadCount = useC19UnreadCount(status === "authenticated");
+  const csNewCount = useCsNewCount(status === "authenticated");
   const [expandedOrgIds, setExpandedOrgIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -641,6 +662,12 @@ export function CapabilitySidebarEngine({
                             )}
                             key={`${key}:${module.module_id}`}
                             module={module}
+                            notificationCount={
+                              module.module_id.trim().toLowerCase() ===
+                              CS_CUSTOMER_SERVICE_MODULE_KEY
+                                ? csNewCount
+                                : 0
+                            }
                             onNavigate={onNavigate}
                             pathname={pathname}
                           />

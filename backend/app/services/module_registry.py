@@ -63,11 +63,13 @@ DYNAMIC_STATUS_TO_MODULE_STATUS = {
 }
 R_SERIES_TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 R_SERIES_MODULE_KEYS = frozenset({"r.warehouse", "r.analysis"})
+CS_CUSTOMER_SERVICE_MODULE_KEYS = frozenset({"cs.customer_service"})
 # 死命令（2026-07-12）：独立站系列模块（F/W/H，后续视觉同规）只属于国际贸易
 # 一个组织——非该组织成员（owner 除外）在模块清单里直接看不到。
 INTL_TRADE_ONLY_MODULE_KEYS = R_SERIES_MODULE_KEYS | frozenset(
     {"f.enrichment", "w.site_ops", "h.site_health"}
 )
+INTL_TRADE_ONLY_MODULE_KEYS |= CS_CUSTOMER_SERVICE_MODULE_KEYS
 
 
 def _manifest_from_raw(

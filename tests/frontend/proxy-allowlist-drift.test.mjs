@@ -31,6 +31,8 @@ const repoRoot = path.resolve(
 const KNOWN_UNPROXIED = new Set([
   // -- server-to-server callbacks and ingest (must never be browser-reachable)
   "POST /api/app/notifications/ingest",
+  // CS inbound is authenticated server-to-server form ingest and must bypass Next.
+  "POST /api/public/cs/inbound",
   // H health ingest is a machine endpoint routed directly by Nginx,
   // never through Next.
   "POST /api/app/h/ingest",

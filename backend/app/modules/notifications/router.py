@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
@@ -29,8 +29,15 @@ def _ingest_token() -> str | None:
     return value or None
 
 
+def _request_org_id(request: Request, user: User) -> str | None:
+    org_id = getattr(request.state, "org_id", None) or user.organization_id
+    normalized = str(org_id or "").strip()
+    return normalized or None
+
+
 @router.get("", response_model=NotificationListResponse)
 def list_notifications_endpoint(
+    request: Request,
     status: str | None = Query(default=None),
     level: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
@@ -45,6 +52,7 @@ def list_notifications_endpoint(
         limit=limit,
         offset=offset,
         user_id=str(user.id),
+        org_id=_request_org_id(request, user),
     )
     return NotificationListResponse(
         items=[NotificationRead.model_validate(row) for row in rows],
@@ -57,31 +65,47 @@ def list_notifications_endpoint(
 
 @router.get("/unread-count", response_model=UnreadCountResponse)
 def unread_count_endpoint(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> UnreadCountResponse:
     return UnreadCountResponse(
-        unread=service.unread_count(db, user_id=str(user.id))
+        unread=service.unread_count(
+            db,
+            user_id=str(user.id),
+            org_id=_request_org_id(request, user),
+        )
     )
 
 
 @router.post("/{notification_id}/read", response_model=MarkReadResponse)
 def mark_read_endpoint(
     notification_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MarkReadResponse:
-    updated = service.mark_read(db, notification_id, user_id=str(user.id))
+    updated = service.mark_read(
+        db,
+        notification_id,
+        user_id=str(user.id),
+        org_id=_request_org_id(request, user),
+    )
     db.commit()
     return MarkReadResponse(updated=updated)
 
 
 @router.post("/read-all", response_model=MarkReadResponse)
 def mark_all_read_endpoint(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MarkReadResponse:
-    updated = service.mark_all_read(db, user_id=str(user.id))
+    updated = service.mark_all_read(
+        db,
+        user_id=str(user.id),
+        org_id=_request_org_id(request, user),
+    )
     db.commit()
     return MarkReadResponse(updated=updated)
 

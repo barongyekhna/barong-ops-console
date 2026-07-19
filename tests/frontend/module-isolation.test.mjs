@@ -298,6 +298,15 @@ const registryItems = [
     status: "active",
   }),
   manifest({
+    category: "business",
+    denied_behavior: "show_locked",
+    external_dependencies: [],
+    module_key: "cs.customer_service",
+    required_permissions: ["cs.customer_service.read"],
+    route_namespace: "/cs/customer-service",
+    status: "active",
+  }),
+  manifest({
     category: "core",
     denied_behavior: "hide_when_denied",
     module_key: "core.dashboard",
@@ -596,13 +605,14 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
   assert.match(
     sidebarSource,
-    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
+    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"cs\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
   );
   assert.match(sidebarSource, /normalized\.startsWith\("i\."\)/);
   // F/H/W 系列与产品系列同规：进组织树，且只在国际贸易组织下展示（死命令）。
   assert.match(sidebarSource, /normalized\.startsWith\("w\."\)/);
   assert.match(sidebarSource, /normalized\.startsWith\("f\."\)/);
   assert.match(sidebarSource, /normalized\.startsWith\("h\."\)/);
+  assert.match(sidebarSource, /normalized\.startsWith\("cs\."\)/);
   assert.match(sidebarSource, /function capabilitySidebarVisible/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(fallbackItem\);/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(item\);/);
@@ -1289,6 +1299,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "f.enrichment",
     "h.site_health",
     "w.site_ops",
+    "cs.customer_service",
     "business.approvals",
     "business.reviews",
     "core.dashboard",
@@ -1329,6 +1340,14 @@ test("sidebar navigation exposes the full productized capability structure", () 
   assert.equal(logisticsHub.href, "/w-s");
   assert.equal(logisticsHub.route_namespace, "/w-s");
   assert.equal(logisticsHub.required_permission, "w.site_ops.read");
+  const customerService = item("cs.customer_service");
+  assert.equal(customerService.label, "客服中心");
+  assert.equal(customerService.href, "/cs/customer-service");
+  assert.equal(customerService.route_namespace, "/cs/customer-service");
+  assert.equal(
+    customerService.required_permission,
+    "cs.customer_service.read",
+  );
   const moduleControl = item("admin.modules");
   assert.equal(moduleControl.label, "模块控制");
   assert.equal(moduleControl.href, "/module-control");

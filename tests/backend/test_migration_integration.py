@@ -23,6 +23,7 @@ REQUIRED_ALEMBIC_TABLES = {
     "execution_callbacks",
     "callback_state",
     "callback_state_transitions",
+    "cs_messages",
     "c19_affiliations",
     "c19_conversation_members",
     "c19_conversation_user_settings",

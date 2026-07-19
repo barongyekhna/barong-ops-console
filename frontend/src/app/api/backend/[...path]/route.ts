@@ -1156,6 +1156,26 @@ function isAllowedHPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedCsPath(method: string, path: string[]) {
+  if (path[0] !== "cs") {
+    return false;
+  }
+  if (path.length === 2 && path[1] === "messages") {
+    return method === "GET";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "messages" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "GET" || method === "PATCH";
+  }
+  if (path.length === 2 && path[1] === "summary") {
+    return method === "GET";
+  }
+  return false;
+}
+
 function isAllowedWPath(method: string, path: string[]) {
   if (path[0] !== "w") {
     return false;
@@ -1851,6 +1871,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedIPath(method, path) ||
     isAllowedFPath(method, path) ||
     isAllowedHPath(method, path) ||
+    isAllowedCsPath(method, path) ||
     isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||
     isAllowedRwPath(method, path) ||

@@ -92,6 +92,7 @@ from backend.app.modules.i_series.image_system.models import (
     IImageGenerationEvent,
 )
 from backend.app.modules.notifications.models import PNotification
+from backend.app.modules.cs_series.models import CSMessage
 from backend.app.services.session_seen_buffer import clear_session_seen_buffer
 from backend.app.services.module_control_cache_service import (
     reset_module_control_center_cache_for_tests,
@@ -313,6 +314,7 @@ def clear_auth_tables() -> None:
         db.execute(delete(KeyHealthState))
         db.execute(delete(KeyHealthRun))
         db.execute(delete(PNotification))
+        db.execute(delete(CSMessage))
         db.execute(delete(ApiKeyModuleBindingRecord))
         db.execute(delete(ApiKeyRecord))
         db.execute(delete(ModuleControlStateRecord))
