@@ -24,6 +24,7 @@ class CSInboundPayload(BaseModel):
     source_url: str = Field(default="", max_length=500)
     honeypot: str = Field(default="", max_length=500)
     form_ms: int | None = None
+    user_agent: str = Field(default="", max_length=300)
 
 
 class CSMessageRead(BaseModel):
