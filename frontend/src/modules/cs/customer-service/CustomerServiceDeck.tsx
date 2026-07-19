@@ -7,9 +7,9 @@ import {
   ExternalLink,
   Headphones,
   LoaderCircle,
-  Mail,
   RefreshCcw,
   Save,
+  Send,
   X,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -29,6 +29,7 @@ import {
   getCSMessage,
   getCSMessages,
   getCSSummary,
+  sendCSReply,
   updateCSMessage,
   type CSChannel,
   type CSMessage,
@@ -122,18 +123,6 @@ function safeSourceUrl(value: string | null) {
   }
 }
 
-function mailtoHref(message: CSMessage) {
-  const topic =
-    message.channel === "retail"
-      ? message.order_number
-        ? `订单 ${message.order_number} 咨询`
-        : "零售咨询"
-      : message.company
-        ? `${message.company} 批发询盘`
-        : "批发询盘";
-  return `mailto:${message.email}?subject=${encodeURIComponent(`Re: ${topic}`)}`;
-}
-
 function channelHref(channel: CSChannel, messageId?: string | null) {
   const params = new URLSearchParams({ channel });
   if (messageId) {
@@ -169,6 +158,9 @@ export function CustomerServiceDeck() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [replyBody, setReplyBody] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
+  const [replyError, setReplyError] = useState("");
   const drawerRef = useRef<HTMLElement>(null);
 
   const activeList = lists[activeChannel];
@@ -297,6 +289,8 @@ export function CustomerServiceDeck() {
     setDraftNote(detail.internal_note ?? "");
     setSaveError("");
     setSaved(false);
+    setReplyBody("");
+    setReplyError("");
   }, [detail?.id]);
 
   useEffect(() => {
@@ -387,7 +381,13 @@ export function CustomerServiceDeck() {
         internal_note: draftNote.trim() || null,
         status: draftStatus,
       });
-      setDetail(updated);
+      // PATCH intentionally returns the light message shape. Keep the detail
+      // thread already loaded in the drawer while applying status/note edits.
+      setDetail((current) =>
+        current?.id === updated.id
+          ? { ...updated, replies: current.replies ?? [] }
+          : current,
+      );
       setLists((current) => ({
         ...current,
         [updated.channel]: {
@@ -410,6 +410,76 @@ export function CustomerServiceDeck() {
       setSaveError(errorMessage(error));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleReply() {
+    const body = replyBody.trim();
+    if (!detail || sendingReply || !body) return;
+
+    const messageId = detail.id;
+    const previousStatus = detail.status;
+    setSendingReply(true);
+    setReplyError("");
+
+    try {
+      const reply = await sendCSReply(messageId, body);
+      setReplyBody("");
+      setDetail((current) => {
+        if (!current || current.id !== messageId) return current;
+        const replies = current.replies ?? [];
+        return {
+          ...current,
+          replies: replies.some((item) => item.id === reply.id)
+            ? replies
+            : [...replies, reply],
+          status:
+            current.status === "new" ? "in_progress" : current.status,
+        };
+      });
+      setLists((current) => ({
+        ...current,
+        [detail.channel]: {
+          ...current[detail.channel],
+          items: current[detail.channel].items.map((item) =>
+            item.id === messageId && item.status === "new"
+              ? { ...item, status: "in_progress" }
+              : item,
+          ),
+        },
+      }));
+      if (previousStatus === "new") {
+        setDraftStatus("in_progress");
+      }
+
+      // Reconcile server-owned timestamps/status without holding the composer
+      // in a loading state. A refresh failure must not misreport a sent email.
+      void getCSMessage(messageId)
+        .then((message) => {
+          setDetail((current) =>
+            current?.id === messageId ? message : current,
+          );
+        })
+        .catch(() => undefined);
+      void refreshSummary();
+      void loadList({
+        channel: activeChannel,
+        page: activeList.page,
+        status: activeFilter,
+      });
+    } catch (error) {
+      setReplyError(errorMessage(error));
+      // The backend persists failed delivery attempts before returning 502.
+      // Pull that audit row back so the red failed bubble stays in the thread.
+      void getCSMessage(messageId)
+        .then((message) => {
+          setDetail((current) =>
+            current?.id === messageId ? message : current,
+          );
+        })
+        .catch(() => undefined);
+    } finally {
+      setSendingReply(false);
     }
   }
 
@@ -634,6 +704,20 @@ export function CustomerServiceDeck() {
               </button>
             </header>
 
+            {replyError ? (
+              <div className="cs-reply-toast" role="alert">
+                <AlertTriangle aria-hidden="true" size={17} />
+                <span>{replyError}</span>
+                <button
+                  aria-label="关闭发送失败提示"
+                  onClick={() => setReplyError("")}
+                  type="button"
+                >
+                  <X aria-hidden="true" size={15} />
+                </button>
+              </div>
+            ) : null}
+
             {detailLoading && !detail ? (
               <div className="cs-drawer-state" role="status">
                 <LoaderCircle aria-hidden="true" className="spin" size={20} />
@@ -697,13 +781,93 @@ export function CustomerServiceDeck() {
                   </dl>
                 </section>
 
-                <section className="cs-detail-section">
-                  <h3>消息全文</h3>
-                  <p className="cs-full-message">{detail.message}</p>
-                  <a className="primary-button cs-mailto-button" href={mailtoHref(detail)}>
-                    <Mail aria-hidden="true" size={16} />
-                    快捷回信
-                  </a>
+                <section className="cs-detail-section cs-conversation-section">
+                  <h3>会话</h3>
+                  <div className="cs-conversation-line" aria-label="客服会话记录">
+                    <article className="cs-message-bubble cs-message-bubble-buyer">
+                      <header>
+                        <strong>{detail.name}</strong>
+                        <time dateTime={detail.created_at}>
+                          {formatTime(detail.created_at)}
+                        </time>
+                      </header>
+                      <p>{detail.message}</p>
+                    </article>
+
+                    {(detail.replies ?? []).map((reply) => (
+                      <article
+                        className="cs-message-bubble cs-message-bubble-agent"
+                        data-delivery={reply.delivery_status}
+                        key={reply.id}
+                      >
+                        <header>
+                          <strong>客服回复</strong>
+                          <span
+                            className="cs-delivery-badge"
+                            data-delivery={reply.delivery_status}
+                          >
+                            {reply.delivery_status === "sent"
+                              ? "已发送"
+                              : "发送失败"}
+                          </span>
+                          <time dateTime={reply.created_at}>
+                            {formatTime(reply.created_at)}
+                          </time>
+                        </header>
+                        <p>{reply.body}</p>
+                        {reply.delivery_status === "failed" &&
+                        reply.provider_note ? (
+                          <small className="cs-provider-note">
+                            {reply.provider_note}
+                          </small>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+
+                  <form
+                    className="cs-reply-composer"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleReply();
+                    }}
+                  >
+                    <label htmlFor="cs-reply-body">写回信</label>
+                    <textarea
+                      disabled={sendingReply}
+                      id="cs-reply-body"
+                      maxLength={10000}
+                      onChange={(event) => {
+                        setReplyBody(event.target.value);
+                        setReplyError("");
+                      }}
+                      placeholder="输入将通过 service@barongyekhna.com 发给买家的内容"
+                      rows={5}
+                      value={replyBody}
+                    />
+                    <div className="cs-reply-actions">
+                      <span>{replyBody.length} / 10000</span>
+                      <button
+                        className="primary-button cs-send-reply-button"
+                        disabled={sendingReply || !replyBody.trim()}
+                        type="submit"
+                      >
+                        {sendingReply ? (
+                          <LoaderCircle
+                            aria-hidden="true"
+                            className="spin"
+                            size={16}
+                          />
+                        ) : (
+                          <Send aria-hidden="true" size={16} />
+                        )}
+                        {sendingReply ? "发送中" : "发送回复"}
+                      </button>
+                    </div>
+                    <small className="cs-reply-boundary-note">
+                      买家的回信会送达 service@ 邮箱(Titan),暂不回流控制台
+                    </small>
+                  </form>
                 </section>
 
                 <section className="cs-detail-section cs-workbench">

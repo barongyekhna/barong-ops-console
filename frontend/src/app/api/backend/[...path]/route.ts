@@ -1170,6 +1170,14 @@ function isAllowedCsPath(method: string, path: string[]) {
   ) {
     return method === "GET" || method === "PATCH";
   }
+  if (
+    path.length === 4 &&
+    path[1] === "messages" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "reply"
+  ) {
+    return method === "POST";
+  }
   if (path.length === 2 && path[1] === "summary") {
     return method === "GET";
   }

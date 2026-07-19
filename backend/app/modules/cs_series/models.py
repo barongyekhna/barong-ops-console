@@ -5,7 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.schema import conv
 from sqlalchemy.types import Uuid
@@ -100,8 +108,45 @@ class CSMessage(Base):
     )
 
 
+class CSReply(Base):
+    """One outbound console reply and its durable delivery outcome."""
+
+    __tablename__ = "cs_replies"
+    __table_args__ = (
+        CheckConstraint(
+            "length(body) BETWEEN 1 AND 10000",
+            name=conv("ck_cs_replies_body_length"),
+        ),
+        CheckConstraint(
+            "delivery_status IN ('sent', 'failed')",
+            name=conv("ck_cs_replies_valid_delivery_status"),
+        ),
+        Index("ix_cs_replies_message_id", "message_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    message_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey("cs_messages.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    sent_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+    delivery_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    provider_note: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
 __all__ = [
     "CSMessage",
+    "CSReply",
     "DEFAULT_BUSINESS_CONTEXT",
     "DEFAULT_SCOPE_MODE",
     "TARGET_ORGANIZATION_NAME",

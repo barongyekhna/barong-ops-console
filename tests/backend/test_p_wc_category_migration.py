@@ -27,7 +27,7 @@ def test_wc_category_map_migration_is_the_only_head() -> None:
     config = Config(str(repo_root / "backend" / "alembic.ini"))
     scripts = ScriptDirectory.from_config(config)
 
-    assert scripts.get_heads() == ["20260719_01_cs_customer_service"]
+    assert scripts.get_heads() == ["20260719_02_cs_replies"]
     revision = scripts.get_revision("20260716_01_p_wc_category_map")
     assert revision is not None
     assert revision.down_revision == "20260715_01_h_site_health"

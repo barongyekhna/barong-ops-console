@@ -20,6 +20,7 @@ from backend.app.models.permission import UserPermissionAssignment
 from backend.app.models.user import User
 from backend.app.modules.cs_series.models import (
     CSMessage,
+    CSReply,
     DEFAULT_BUSINESS_CONTEXT,
     DEFAULT_SCOPE_MODE,
     TARGET_ORGANIZATION_NAME,
@@ -89,6 +90,14 @@ def _single_message() -> CSMessage:
         assert len(rows) == 1
         db.expunge(rows[0])
         return rows[0]
+
+
+def _all_replies() -> list[CSReply]:
+    with without_org_data_isolation(), SessionLocal() as db:
+        rows = list(db.scalars(select(CSReply).order_by(CSReply.created_at)))
+        for row in rows:
+            db.expunge(row)
+        return rows
 
 
 def _seed_message(
@@ -582,3 +591,223 @@ def test_cs_notification_is_not_visible_to_another_organization(
     assert notification_id not in {
         item["id"] for item in other_org_notifications.json()["items"]
     }
+
+
+def test_reply_success_persists_plain_text_and_moves_new_message_to_in_progress(
+    cs_client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    message_id = _seed_message(channel="retail", status="new", name="Alice")
+    test_settings.cs_wp_send_url = (
+        "https://barongyekhna.com/wp-json/barong-cs/v1/send"
+    )
+    captured: dict[str, Any] = {}
+
+    def send_successfully(*args: object, **kwargs: object) -> None:
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(cs_router, "send_cs_reply_to_wp", send_successfully)
+
+    response = cs_client.post(
+        f"/api/app/cs/messages/{message_id}/reply",
+        json={
+            "body": (
+                "<p>Hello <b>Alice</b></p>"
+                "<script>doBadThing()</script>"
+                "<div>Your order is ready.</div>"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["body"] == "Hello Alice\nYour order is ready."
+    assert response.json()["delivery_status"] == "sent"
+
+    replies = _all_replies()
+    assert len(replies) == 1
+    assert replies[0].message_id == message_id
+    assert replies[0].body == "Hello Alice\nYour order is ready."
+    assert replies[0].delivery_status == "sent"
+    assert replies[0].provider_note is None
+    assert replies[0].sent_by > 0
+    assert _single_message().status == "in_progress"
+
+    assert captured["args"] == ()
+    delivery_kwargs = captured["kwargs"]
+    assert delivery_kwargs["settings"] is test_settings
+    assert delivery_kwargs["body"] == "Hello Alice\nYour order is ready."
+    assert delivery_kwargs["message"].email == "retail.new@example.com"
+    assert delivery_kwargs["message"].name == "Alice"
+    assert delivery_kwargs["message"].channel == "retail"
+
+
+@pytest.mark.parametrize(
+    "provider_failure",
+    [
+        "WP returned HTTP 500",
+        "WP request timed out after 15 seconds",
+    ],
+    ids=["wp-500", "wp-timeout"],
+)
+def test_reply_delivery_failure_is_durable_and_does_not_mutate_message(
+    cs_client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    provider_failure: str,
+) -> None:
+    message_id = _seed_message(channel="wholesale", status="new", name="Buyer")
+    test_settings.cs_wp_send_url = (
+        "https://barongyekhna.com/wp-json/barong-cs/v1/send"
+    )
+
+    def fail_delivery(*_args: object, **_kwargs: object) -> None:
+        raise cs_router.CSReplyDeliveryError(provider_failure)
+
+    monkeypatch.setattr(cs_router, "send_cs_reply_to_wp", fail_delivery)
+
+    response = cs_client.post(
+        f"/api/app/cs/messages/{message_id}/reply",
+        json={"body": "<p>Please review the attached quote.</p>"},
+    )
+
+    assert response.status_code == 502
+    detail = str(response.json().get("detail", ""))
+    assert detail
+    assert "failed" in detail.lower() or "发送" in detail
+
+    replies = _all_replies()
+    assert len(replies) == 1
+    assert replies[0].message_id == message_id
+    assert replies[0].body == "Please review the attached quote."
+    assert replies[0].delivery_status == "failed"
+    assert replies[0].provider_note == provider_failure
+    assert len(replies[0].provider_note or "") <= 300
+
+    message = _single_message()
+    assert message.status == "new"
+    assert message.name == "Buyer"
+    assert message.email == "wholesale.new@example.com"
+    assert message.message == "seeded wholesale new message"
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["", "   \n\t", "<script>ignored()</script>", "x" * 10001],
+    ids=["empty", "whitespace", "html-without-text", "too-long"],
+)
+def test_reply_body_validation_rejects_empty_or_oversized_plain_text(
+    cs_client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    body: str,
+) -> None:
+    message_id = _seed_message(channel="retail")
+    test_settings.cs_wp_send_url = (
+        "https://barongyekhna.com/wp-json/barong-cs/v1/send"
+    )
+    delivery_calls = 0
+
+    def should_not_send(*_args: object, **_kwargs: object) -> None:
+        nonlocal delivery_calls
+        delivery_calls += 1
+
+    monkeypatch.setattr(cs_router, "send_cs_reply_to_wp", should_not_send)
+
+    response = cs_client.post(
+        f"/api/app/cs/messages/{message_id}/reply",
+        json={"body": body},
+    )
+
+    assert response.status_code == 422
+    assert delivery_calls == 0
+    assert _all_replies() == []
+    assert _single_message().status == "new"
+
+
+def test_read_only_cs_permission_cannot_send_reply(
+    cs_client: TestClient,
+    test_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    message_id = _seed_message(channel="retail")
+    test_settings.cs_wp_send_url = (
+        "https://barongyekhna.com/wp-json/barong-cs/v1/send"
+    )
+    username, password = _create_target_member_with_permission(
+        permission_key="cs.customer_service.read",
+        scope_key=DEFAULT_TEST_ORG_DB_ID,
+    )
+    delivery_calls = 0
+
+    def should_not_send(*_args: object, **_kwargs: object) -> None:
+        nonlocal delivery_calls
+        delivery_calls += 1
+
+    monkeypatch.setattr(cs_router, "send_cs_reply_to_wp", should_not_send)
+    cs_client.cookies.clear()
+    login = cs_client.post(
+        "/api/public/auth/login",
+        json={"username": username, "password": password},
+    )
+    assert login.status_code == 200
+
+    response = cs_client.post(
+        f"/api/app/cs/messages/{message_id}/reply",
+        json={"body": "This must not be sent."},
+    )
+
+    assert response.status_code == 403
+    assert delivery_calls == 0
+    assert _all_replies() == []
+    assert _single_message().status == "new"
+
+
+def test_message_detail_orders_replies_oldest_first_and_list_stays_light(
+    cs_client: TestClient,
+) -> None:
+    message_id = _seed_message(channel="wholesale")
+    with without_org_data_isolation(), SessionLocal() as db:
+        owner = db.scalar(select(User).where(User.role == "owner"))
+        assert owner is not None
+        later = CSReply(
+            message_id=message_id,
+            body="Second reply",
+            sent_by=owner.id,
+            delivery_status="failed",
+            provider_note="WP returned HTTP 500",
+            created_at=datetime(2026, 7, 19, 12, 2, tzinfo=UTC),
+        )
+        earlier = CSReply(
+            message_id=message_id,
+            body="First reply",
+            sent_by=owner.id,
+            delivery_status="sent",
+            provider_note=None,
+            created_at=datetime(2026, 7, 19, 12, 1, tzinfo=UTC),
+        )
+        db.add_all([later, earlier])
+        db.flush()
+        later_id = later.id
+        earlier_id = earlier.id
+        db.commit()
+
+    detail = cs_client.get(f"/api/app/cs/messages/{message_id}")
+    listing = cs_client.get("/api/app/cs/messages?channel=wholesale")
+
+    assert detail.status_code == 200
+    assert [item["id"] for item in detail.json()["replies"]] == [
+        str(earlier_id),
+        str(later_id),
+    ]
+    assert [item["delivery_status"] for item in detail.json()["replies"]] == [
+        "sent",
+        "failed",
+    ]
+    assert detail.json()["replies"][1]["provider_note"] == (
+        "WP returned HTTP 500"
+    )
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+    assert "replies" not in listing.json()["items"][0]

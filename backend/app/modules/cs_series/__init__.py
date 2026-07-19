@@ -1,5 +1,5 @@
 """CS-series customer-service inbox."""
 
-from .models import CSMessage
+from .models import CSMessage, CSReply
 
-__all__ = ["CSMessage"]
+__all__ = ["CSMessage", "CSReply"]

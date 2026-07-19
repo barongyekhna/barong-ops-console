@@ -1428,8 +1428,8 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         feature_flag_key="modules.cs.customer_service",
         allowed_scope_types=("global", "organization"),
         data_boundary=_data_boundary(
-            reads=("cs_messages", "p_notifications"),
-            writes=("cs_messages", "p_notifications"),
+            reads=("cs_messages", "cs_replies", "p_notifications"),
+            writes=("cs_messages", "cs_replies", "p_notifications"),
             blocked_objects=("cross_module_writes",),
         ),
         docs_path="docs/CS_SERIES_CODEX_SPEC.md",

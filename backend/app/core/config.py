@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     wp_app_user: str | None = Field(default=None, max_length=255)
     wp_app_password: SecretStr | None = None
     cs_inbound_key: SecretStr | None = None
+    cs_wp_send_url: str | None = Field(default=None, max_length=2048)
     wp_request_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
     wp_request_max_attempts: int = Field(default=3, ge=1, le=5)
     webhook_gateway_signing_secret: SecretStr | None = None
@@ -178,6 +179,7 @@ class Settings(BaseSettings):
         "wp_app_user",
         "wp_app_password",
         "cs_inbound_key",
+        "cs_wp_send_url",
         mode="before",
     )
     @classmethod

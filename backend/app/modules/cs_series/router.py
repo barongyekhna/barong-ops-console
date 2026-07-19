@@ -30,15 +30,24 @@ from ...services.unified_permission_engine import UnifiedPermissionRequest
 from ..notifications.service import create_notification
 from .models import (
     CSMessage,
+    CSReply,
     DEFAULT_BUSINESS_CONTEXT,
     DEFAULT_SCOPE_MODE,
     TARGET_ORGANIZATION_NAME,
 )
+from .reply_service import (
+    CSReplyDeliveryError,
+    CSReplyTarget,
+    send_cs_reply_to_wp,
+)
 from .schemas import (
     CSChannel,
+    CSMessageDetail,
     CSMessageListResponse,
     CSMessageRead,
     CSMessageUpdate,
+    CSReplyCreate,
+    CSReplyRead,
     CSStatus,
     CSSummaryResponse,
 )
@@ -353,17 +362,34 @@ def _scoped_message(
     *,
     message_id: UUID,
     workspace_key: str,
+    for_update: bool = False,
 ) -> CSMessage:
-    row = db.scalar(
-        select(CSMessage).where(
-            CSMessage.id == message_id,
-            CSMessage.org_id == workspace_key,
-            CSMessage.workspace_key == workspace_key,
-        )
+    statement = select(CSMessage).where(
+        CSMessage.id == message_id,
+        CSMessage.org_id == workspace_key,
+        CSMessage.workspace_key == workspace_key,
     )
+    if for_update:
+        statement = statement.with_for_update()
+    row = db.scalar(statement)
     if row is None:
         raise HTTPException(status_code=404, detail="Message not found.")
     return row
+
+
+def _message_detail(db: Session, message: CSMessage) -> CSMessageDetail:
+    replies = list(
+        db.scalars(
+            select(CSReply)
+            .where(CSReply.message_id == message.id)
+            .order_by(CSReply.created_at.asc(), CSReply.id.asc())
+        )
+    )
+    base = CSMessageRead.model_validate(message)
+    return CSMessageDetail(
+        **base.model_dump(),
+        replies=[CSReplyRead.model_validate(reply) for reply in replies],
+    )
 
 
 @router.get("/messages", response_model=CSMessageListResponse)
@@ -427,19 +453,103 @@ def cs_summary(
     )
 
 
-@router.get("/messages/{message_id}", response_model=CSMessageRead)
+@router.get("/messages/{message_id}", response_model=CSMessageDetail)
 def cs_message_get(
     message_id: UUID,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_cs_permission(PERMISSION_READ)),
-) -> CSMessageRead:
+) -> CSMessageDetail:
     row = _scoped_message(
         db,
         message_id=message_id,
         workspace_key=_workspace_key(request, user),
     )
-    return CSMessageRead.model_validate(row)
+    return _message_detail(db, row)
+
+
+@router.post("/messages/{message_id}/reply", response_model=CSReplyRead)
+def cs_message_reply(
+    message_id: UUID,
+    payload: CSReplyCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_cs_permission(PERMISSION_UPDATE)),
+    settings: Settings = Depends(get_settings),
+) -> CSReplyRead:
+    workspace_key = _workspace_key(request, user)
+    message = _scoped_message(
+        db,
+        message_id=message_id,
+        workspace_key=workspace_key,
+    )
+    body = plain_text(payload.body, multiline=True)
+    if not body or len(body) > 10000:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Reply body must contain between 1 and 10000 characters.",
+        )
+
+    # Snapshot everything needed by the relay, then end the read transaction;
+    # the network call may take 15 seconds and must not hold a DB connection.
+    target = CSReplyTarget(
+        email=message.email,
+        name=message.name,
+        channel=message.channel,
+    )
+    sent_by = int(user.id)
+    db.rollback()
+
+    provider_note: str | None = None
+    try:
+        send_cs_reply_to_wp(
+            settings=settings,
+            message=target,
+            body=body,
+        )
+    except CSReplyDeliveryError as exc:
+        provider_note = exc.provider_note
+    except Exception:
+        logger.exception("Unexpected CS reply relay failure message_id=%s", message_id)
+        provider_note = "WordPress reply relay request failed."
+
+    if provider_note is not None:
+        failed = CSReply(
+            message_id=message_id,
+            body=body,
+            sent_by=sent_by,
+            delivery_status="failed",
+            provider_note=provider_note[:300],
+        )
+        db.add(failed)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "code": "cs_reply_delivery_failed",
+                "message": provider_note,
+            },
+        )
+
+    # Re-scope after the external call; sent reply persistence and the automatic
+    # new -> in_progress transition form one atomic local transaction.
+    current = _scoped_message(
+        db,
+        message_id=message_id,
+        workspace_key=workspace_key,
+        for_update=True,
+    )
+    reply = CSReply(
+        message_id=message_id,
+        body=body,
+        sent_by=sent_by,
+        delivery_status="sent",
+    )
+    db.add(reply)
+    if current.status == "new":
+        current.status = "in_progress"
+    db.commit()
+    return CSReplyRead.model_validate(reply)
 
 
 @router.patch("/messages/{message_id}", response_model=CSMessageRead)

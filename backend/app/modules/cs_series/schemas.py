@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 CSChannel = Literal["retail", "wholesale"]
 CSStatus = Literal["new", "in_progress", "resolved", "spam"]
+CSReplyDeliveryStatus = Literal["sent", "failed"]
 
 
 class CSInboundPayload(BaseModel):
@@ -46,6 +47,22 @@ class CSMessageRead(BaseModel):
     updated_at: datetime
 
 
+class CSReplyRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    message_id: UUID
+    body: str
+    sent_by: int
+    delivery_status: CSReplyDeliveryStatus
+    provider_note: str | None = None
+    created_at: datetime
+
+
+class CSMessageDetail(CSMessageRead):
+    replies: list[CSReplyRead] = Field(default_factory=list)
+
+
 class CSMessageListResponse(BaseModel):
     items: list[CSMessageRead]
     total: int
@@ -59,6 +76,12 @@ class CSMessageUpdate(BaseModel):
 
     status: CSStatus | None = None
     internal_note: str | None = Field(default=None, max_length=5000)
+
+
+class CSReplyCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    body: str = Field(min_length=1, max_length=10000)
 
 
 class CSChannelSummary(BaseModel):
@@ -75,8 +98,12 @@ __all__ = [
     "CSChannelSummary",
     "CSInboundPayload",
     "CSMessageListResponse",
+    "CSMessageDetail",
     "CSMessageRead",
     "CSMessageUpdate",
+    "CSReplyCreate",
+    "CSReplyDeliveryStatus",
+    "CSReplyRead",
     "CSStatus",
     "CSSummaryResponse",
 ]

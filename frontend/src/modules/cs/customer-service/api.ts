@@ -4,6 +4,17 @@ import { apiRequest } from "@/lib/api";
 
 export type CSChannel = "retail" | "wholesale";
 export type CSMessageStatus = "new" | "in_progress" | "resolved" | "spam";
+export type CSReplyDeliveryStatus = "sent" | "failed";
+
+export type CSReply = {
+  id: string;
+  message_id: string;
+  body: string;
+  sent_by: number;
+  delivery_status: CSReplyDeliveryStatus;
+  provider_note: string | null;
+  created_at: string;
+};
 
 export type CSMessage = {
   id: string;
@@ -20,6 +31,8 @@ export type CSMessage = {
   internal_note: string | null;
   created_at: string;
   updated_at: string;
+  /** Present on the detail endpoint only; list responses intentionally stay light. */
+  replies?: CSReply[];
 };
 
 export type CSMessageList = {
@@ -94,6 +107,24 @@ export async function updateCSMessage(
       body: patch,
       bypassCache: true,
       method: "PATCH",
+    },
+  );
+}
+
+export async function sendCSReply(
+  messageId: string,
+  body: string,
+): Promise<CSReply> {
+  return apiRequest<CSReply>(
+    `/cs/messages/${encodeURIComponent(messageId)}/reply`,
+    {
+      body: { body },
+      bypassCache: true,
+      method: "POST",
+      // The backend owns the 15-second provider timeout. Leave enough time for
+      // it to persist the sent/failed audit row and never replay a mail send.
+      retryLimit: 0,
+      timeoutMs: 20_000,
     },
   );
 }

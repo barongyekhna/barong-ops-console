@@ -15,6 +15,7 @@ test("CS management endpoints use the authenticated app proxy only", () => {
     ["GET", ["cs", "messages"]],
     ["GET", ["cs", "messages", uuid]],
     ["PATCH", ["cs", "messages", uuid]],
+    ["POST", ["cs", "messages", uuid, "reply"]],
     ["GET", ["cs", "summary"]],
   ];
   for (const [method, path] of allowed) {
@@ -29,6 +30,9 @@ test("CS management endpoints use the authenticated app proxy only", () => {
     ["POST", ["cs", "inbound"]],
     ["POST", ["cs", "messages"]],
     ["GET", ["cs", "messages", "not-a-uuid"]],
+    ["POST", ["cs", "messages", "not-a-uuid", "reply"]],
+    ["GET", ["cs", "messages", uuid, "reply"]],
+    ["POST", ["cs", "messages", uuid, "reply", "extra"]],
     ["DELETE", ["cs", "messages", uuid]],
     ["PATCH", ["cs", "summary"]],
     ["GET", ["cs", "secrets"]],
@@ -50,6 +54,12 @@ test("CS API client always scopes lists to exactly one team", () => {
   assert.match(apiSource, /new URLSearchParams\(\{[\s\S]*channel,[\s\S]*page:/);
   assert.match(apiSource, /`\/cs\/messages\?\$\{params\.toString\(\)\}`/);
   assert.match(apiSource, /`\/cs\/messages\/\$\{encodeURIComponent\(messageId\)\}`/);
+  assert.match(
+    apiSource,
+    /`\/cs\/messages\/\$\{encodeURIComponent\(messageId\)\}\/reply`/,
+  );
+  assert.match(apiSource, /retryLimit: 0/);
+  assert.match(apiSource, /timeoutMs: 20_000/);
   assert.match(apiSource, /apiRequest<CSSummary>\("\/cs\/summary"/);
   assert.doesNotMatch(apiSource, /\/public\/cs\/inbound/);
 });
@@ -80,14 +90,30 @@ test("CS page has two physical team tabs and the required service workflow", () 
   assert.match(source, /detail\.company/);
   assert.match(source, /detail\.client_ip/);
   assert.match(source, /detail\.user_agent/);
-  assert.match(source, /mailto:/);
-  assert.match(source, /Re: \$\{topic\}/);
+  assert.match(source, /className="cs-conversation-line"/);
+  assert.match(source, /cs-message-bubble-buyer/);
+  assert.match(source, /cs-message-bubble-agent/);
+  assert.match(source, /reply\.delivery_status === "sent"/);
+  assert.match(source, /reply\.provider_note/);
+  assert.match(source, /sendCSReply\(messageId, body\)/);
+  assert.match(source, /setReplyBody\(""\)/);
+  assert.match(source, /发送中/);
+  assert.match(source, /发送回复/);
+  assert.match(
+    source,
+    /买家的回信会送达 service@ 邮箱\(Titan\),暂不回流控制台/,
+  );
+  assert.match(source, /getCSMessage\(messageId\)/);
   assert.match(source, /updateCSMessage\(detail\.id/);
+  assert.match(source, /\{ \.\.\.updated, replies: current\.replies \?\? \[\] \}/);
   assert.match(source, /internal_note: draftNote\.trim\(\) \|\| null/);
   assert.match(pageSource, /<h1>客服中心<\/h1>/);
   assert.match(layoutSource, /className="ra-command cs-command"/);
   assert.match(globals, /CS 客服中心 · 双分队收件箱/);
   assert.match(globals, /\.cs-status-badge\[data-status="spam"\]/);
+  assert.match(globals, /\.cs-message-bubble-agent\[data-delivery="failed"\]/);
+  assert.match(globals, /\.cs-delivery-badge\[data-delivery="failed"\]/);
+  assert.match(globals, /\.cs-reply-toast/);
 });
 
 test("CS notifications resolve channel and message into a safe team deep link", () => {
