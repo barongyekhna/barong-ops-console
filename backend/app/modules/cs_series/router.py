@@ -279,7 +279,11 @@ async def cs_inbound(
         _process_inbound,
         raw,
         _client_ip(request),
-        (request.headers.get("user-agent") or "")[:300] or None,
+        (
+            (request.headers.get("user-agent") or "").strip()
+            or str((raw.get("user_agent") if isinstance(raw, dict) else "") or "").strip()
+        )[:300]
+        or None,
     )
     return _public_response(
         response_status,
