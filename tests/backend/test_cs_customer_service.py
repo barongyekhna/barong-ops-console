@@ -622,13 +622,14 @@ def test_reply_success_persists_plain_text_and_moves_new_message_to_in_progress(
     )
 
     assert response.status_code == 200
-    assert response.json()["body"] == "Hello Alice\nYour order is ready."
+    expected_body = "Hello Alice\n\nYour order is ready."
+    assert response.json()["body"] == expected_body
     assert response.json()["delivery_status"] == "sent"
 
     replies = _all_replies()
     assert len(replies) == 1
     assert replies[0].message_id == message_id
-    assert replies[0].body == "Hello Alice\nYour order is ready."
+    assert replies[0].body == expected_body
     assert replies[0].delivery_status == "sent"
     assert replies[0].provider_note is None
     assert replies[0].sent_by > 0
@@ -637,7 +638,7 @@ def test_reply_success_persists_plain_text_and_moves_new_message_to_in_progress(
     assert captured["args"] == ()
     delivery_kwargs = captured["kwargs"]
     assert delivery_kwargs["settings"] is test_settings
-    assert delivery_kwargs["body"] == "Hello Alice\nYour order is ready."
+    assert delivery_kwargs["body"] == expected_body
     assert delivery_kwargs["message"].email == "retail.new@example.com"
     assert delivery_kwargs["message"].name == "Alice"
     assert delivery_kwargs["message"].channel == "retail"
