@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Barong CS Contact
  * Description: 直连控制台 CS 客服中心的联系表单(瘦插件)。短代码 [barong_contact_form channel="retail|wholesale"];提交经本站 REST 中转转发到控制台,渠道分流 B/C。端点与密钥经 REST 可配(barong_cs_endpoint / barong_cs_key)。
- * Version: 1.0.0
+ * Version: 1.1.0
  * Author: Barong Yekhna Console
  */
 
@@ -108,6 +108,54 @@ add_action( 'rest_api_init', function () {
 		'callback'            => 'by_cs_relay_submit',
 	) );
 } );
+
+/** 出站:控制台回信 → 经站点邮件管道发给买家(与入站共用一把钥匙)。 */
+add_action( 'rest_api_init', function () {
+	register_rest_route( 'barong-cs/v1', '/send', array(
+		'methods'             => 'POST',
+		'permission_callback' => '__return_true',
+		'callback'            => 'by_cs_relay_send',
+	) );
+} );
+
+function by_cs_relay_send( WP_REST_Request $req ) {
+	$secret   = (string) get_option( 'barong_cs_key', '' );
+	$supplied = (string) $req->get_header( 'X-BY-CS-KEY' );
+	if ( '' === $secret || ! hash_equals( $secret, $supplied ) ) {
+		return new WP_REST_Response( array( 'ok' => false ), 401 );
+	}
+	$n = (int) get_transient( 'by_cs_send_rl' );
+	if ( $n >= 30 ) {
+		return new WP_REST_Response( array( 'ok' => false ), 429 );
+	}
+	set_transient( 'by_cs_send_rl', $n + 1, MINUTE_IN_SECONDS );
+
+	$to      = sanitize_email( (string) $req->get_param( 'to_email' ) );
+	$name    = mb_substr( sanitize_text_field( (string) $req->get_param( 'to_name' ) ), 0, 120 );
+	$subject = mb_substr( sanitize_text_field( (string) $req->get_param( 'subject' ) ), 0, 200 );
+	$text    = mb_substr( sanitize_textarea_field( (string) $req->get_param( 'body_text' ) ), 0, 10000 );
+	if ( ! is_email( $to ) || '' === $subject || '' === $text ) {
+		return new WP_REST_Response( array( 'ok' => false ), 422 );
+	}
+	$paras = '';
+	foreach ( preg_split( '/\r?\n\r?\n/', $text ) as $para ) {
+		$paras .= '<p style="margin:0 0 14px;line-height:1.7;color:#1b1a18">' . nl2br( esc_html( trim( $para ) ) ) . '</p>';
+	}
+	$hello = $name ? 'Hi ' . esc_html( $name ) . ',' : 'Hi,';
+	$body  = '<div style="font-family:-apple-system,system-ui,Segoe UI,sans-serif;max-width:560px;width:100%;box-sizing:border-box;margin:0 auto;padding:26px 22px;color:#1b1a18">'
+		. '<p style="margin:0 0 14px;line-height:1.7">' . $hello . '</p>'
+		. $paras
+		. '<p style="margin:22px 0 0;color:#6f6b66;font-size:13px">Barong Yekhna Support · <a href="' . esc_url( home_url( '/' ) ) . '" style="color:#6f6b66">barongyekhna.com</a><br>Reply to this email to continue the conversation.</p>'
+		. '</div>';
+	$from    = get_option( 'woocommerce_email_from_address', 'service@' . wp_parse_url( home_url(), PHP_URL_HOST ) );
+	$headers = array(
+		'Content-Type: text/html; charset=UTF-8',
+		'From: Barong Yekhna Support <' . $from . '>',
+		'Reply-To: ' . $from,
+	);
+	$sent = wp_mail( $to, $subject, $body, $headers );
+	return new WP_REST_Response( array( 'ok' => (bool) $sent ), $sent ? 200 : 502 );
+}
 
 function by_cs_relay_submit( WP_REST_Request $req ) {
 	$ip  = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
