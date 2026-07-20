@@ -123,7 +123,7 @@ parts.append(rule(BP,[".by-page .by-toc a:hover"],"color:#1b1a18!important;text-
 # 锚点跳转时标题不被吸顶头部盖住
 parts.append(rule(BP,[".by-page .by-block[id]"],"scroll-margin-top:100px"))
 
-parts.append("body.page-id-1 .page-title,body.page-id-1792 .page-title,body.page-id-33 .page-title,body.page-id-1436 .page-title,body.page-id-1162 .page-title{display:none!important}")
+parts.append("body.page-id-1 .page-title,body.page-id-1792 .page-title,body.page-id-33 .page-title,body.page-id-1436 .page-title,body.page-id-1162 .page-title,body.page-id-1251 .page-title{display:none!important}")
 parts.append(".widget li:has(> a[href*=\"/uncategorized\"]),li.cat-item:has(> a[href*=\"/uncategorized\"]){display:none!important}")
 
 # ============ 页脚贴底(治所有短页面"页脚下灰条")============
