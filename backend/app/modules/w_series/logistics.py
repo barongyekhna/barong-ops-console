@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 
 from ...models.organization import OrganizationRecord
+from ...repositories.security import register_rate_limit_attempt
 from ...services.data_isolation import without_org_data_isolation
 from .shipping.models import WOrder, WShippingClass, WSyncJob
 
@@ -32,6 +33,11 @@ TRACK17_DEFAULT_BASE_URL = "https://api.17track.net"
 TRACK17_SIGN_MODE_ENV = "W_17TRACK_WEBHOOK_SIGN_MODE"
 TRACK17_TIMEOUT_SECONDS = 15
 N8N_TIMEOUT_SECONDS = 15
+TRACK_PUBLIC_MINUTE_LIMIT = 600
+TRACK_PUBLIC_WINDOW_SECONDS = 60
+TRACK_PUBLIC_RATE_LIMIT_SCOPE = "track_global_minute"
+TRACK_PUBLIC_RATE_LIMIT_IDENTIFIER = "global"
+TRACK_PUBLIC_RATE_LIMIT_ENDPOINT = "track.lookup"
 
 SYNC_IN_FLIGHT_STATUSES = ("pending", "dispatched")
 SHIPPING_STATUSES = (
@@ -60,6 +66,25 @@ _TRACK17_STATUS_MAP = {
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def register_track_public_rate_limit(
+    db: Session,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Consume the process-shared global bucket for public tracking lookups."""
+
+    result = register_rate_limit_attempt(
+        db,
+        scope=TRACK_PUBLIC_RATE_LIMIT_SCOPE,
+        identifier=TRACK_PUBLIC_RATE_LIMIT_IDENTIFIER,
+        endpoint_key=TRACK_PUBLIC_RATE_LIMIT_ENDPOINT,
+        limit=TRACK_PUBLIC_MINUTE_LIMIT,
+        window_seconds=TRACK_PUBLIC_WINDOW_SECONDS,
+        now=now or _now(),
+    )
+    return result.allowed
 
 
 def _public_base() -> str:

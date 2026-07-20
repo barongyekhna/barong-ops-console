@@ -41,6 +41,7 @@ from .modules.cs_series.router import router as cs_customer_service_router
 from .modules.f_series.router import router as f_enrichment_router
 from .modules.h_series.router import router as h_site_health_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
+from .modules.w_series.router import public_router as w_siteops_public_router
 from .modules.w_series.router import router as w_siteops_router
 from .modules.i_series.image_system.router import (
     router as i_image_system_router,
@@ -971,6 +972,7 @@ app.include_router(health_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(security_firewall_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(auth_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(cs_public_router, prefix=PUBLIC_API_PREFIX)
+app.include_router(w_siteops_public_router, prefix=PUBLIC_API_PREFIX)
 
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)

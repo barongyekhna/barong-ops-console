@@ -7,12 +7,16 @@ entered tracking numbers.  Machine endpoints receive n8n/17TRACK callbacks.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
+from datetime import UTC, datetime
 from decimal import Decimal
+from hashlib import sha256
 from typing import Any, Literal
 from uuid import UUID
 
+from anyio import to_thread
 from fastapi import (
     APIRouter,
     Depends,
@@ -23,18 +27,22 @@ from fastapi import (
     Response,
     status,
 )
+from fastapi.responses import JSONResponse
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    ValidationError,
     field_validator,
 )
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
+from ...core.config import Settings, get_settings
 from ...core.roles import is_super_admin_role
-from ...db.session import get_db
+from ...db.session import SessionLocal, get_db
 from ...models.user import User
 from ...services.permission_service import resolve_current_user_permission_info
 from ..k_series.product_knowledge.models import KProductKnowledgeProduct
@@ -44,6 +52,10 @@ from .logistics_schemas import (
     OrderListResponse,
     OrdersIngestRequest,
     OrdersIngestResponse,
+    PublicTrackLookupRequest,
+    PublicTrackLookupResponse,
+    PublicTrackResult,
+    PublicTrackingEvent,
     ShippingSyncJobResponse,
     SyncResultRequest,
     SyncResultResponse,
@@ -58,10 +70,25 @@ from .shipping.models import WOrder, WShippingClass, WShippingRule, WSyncJob
 router = APIRouter(prefix="/w", tags=["w-site-ops"])
 # Server-to-server endpoints are also mounted at bare /w paths in main.py.
 machine_router = APIRouter(prefix="/w", tags=["w-site-ops-machine"])
+public_router = APIRouter(prefix="/track", tags=["w-site-ops-public"])
 
 MODULE_KEY = "w.site_ops"
 PERMISSION_READ = "w.site_ops.read"
 PERMISSION_MANAGE = "w.site_ops.manage"
+MAX_PUBLIC_TRACK_BODY_BYTES = 32 * 1024
+PUBLIC_TRACKING_STATUSES = frozenset(
+    {
+        "not_found",
+        "info_received",
+        "in_transit",
+        "out_for_delivery",
+        "delivered",
+        "exception",
+        "expired",
+    }
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _require_w_permission(permission_key: str):
@@ -346,6 +373,249 @@ def _order_item(row: WOrder) -> OrderItem:
         writeback_status=row.writeback_status,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _track_public_error(status_code: int) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"ok": False})
+
+
+def _expected_track_public_key(settings: Settings) -> str:
+    secret = settings.track_public_key
+    return secret.get_secret_value() if secret is not None else ""
+
+
+def _track_public_key_is_valid(
+    supplied_key: str | None,
+    settings: Settings,
+) -> bool:
+    expected = _expected_track_public_key(settings)
+    supplied = supplied_key or ""
+    compared = secrets.compare_digest(
+        sha256(expected.encode("utf-8")).digest(),
+        sha256(supplied.encode("utf-8")).digest(),
+    )
+    return bool(expected and supplied and compared)
+
+
+class _PublicTrackPayloadError(ValueError):
+    pass
+
+
+async def _read_public_track_body(request: Request) -> bytes:
+    content_type = request.headers.get("content-type", "").split(";", 1)[0]
+    if content_type.strip().lower() != "application/json":
+        raise _PublicTrackPayloadError("content type must be JSON")
+
+    declared = request.headers.get("content-length")
+    if declared:
+        try:
+            declared_size = int(declared)
+        except ValueError as exc:
+            raise _PublicTrackPayloadError("invalid content length") from exc
+        if declared_size > MAX_PUBLIC_TRACK_BODY_BYTES:
+            raise _PublicTrackPayloadError("payload too large")
+
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_PUBLIC_TRACK_BODY_BYTES:
+            raise _PublicTrackPayloadError("payload too large")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _unknown_public_track_result(order_number: str) -> PublicTrackResult:
+    return PublicTrackResult(
+        order_number=order_number,
+        state="unknown",
+        tracking_number=None,
+        carrier_code=None,
+        tracking_status=None,
+        last_update=None,
+        events=[],
+    )
+
+
+def _public_tracking_timestamp(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    normalized = value.replace(tzinfo=UTC) if value.tzinfo is None else value
+    return normalized.astimezone(UTC)
+
+
+def _public_tracking_status(value: object) -> str:
+    tracking_status = str(value or "").strip()
+    if tracking_status in PUBLIC_TRACKING_STATUSES:
+        return tracking_status
+    if tracking_status == "registered":
+        # Existing W registration writes this internal pre-event marker. The
+        # public contract has no equivalent beyond not_found until 17TRACK
+        # supplies its first normalized status.
+        return "not_found"
+    raise ValueError("invalid persisted tracking status")
+
+
+def _public_tracking_events(value: object) -> list[PublicTrackingEvent]:
+    if not isinstance(value, list):
+        return []
+    events: list[PublicTrackingEvent] = []
+    for raw_event in value:
+        if not isinstance(raw_event, dict):
+            raise ValueError("invalid persisted tracking event")
+        # Construct a strict allowlist instead of validating the whole stored
+        # object, so future internal metadata can never leak through this API.
+        events.append(
+            PublicTrackingEvent(
+                time=raw_event.get("time"),
+                location=raw_event.get("location"),
+                description=raw_event.get("description"),
+            )
+        )
+    return events
+
+
+def _lookup_public_track_result(
+    db: Session,
+    order_number: str,
+) -> PublicTrackResult:
+    # order_number predates this endpoint and is not unique. Prefer the latest
+    # Woo order deterministically if historical duplicates exist.
+    row = db.scalar(
+        select(WOrder)
+        .where(WOrder.order_number == order_number)
+        .order_by(WOrder.updated_at.desc(), WOrder.woo_order_id.desc())
+        .limit(1)
+    )
+    if row is None:
+        return _unknown_public_track_result(order_number)
+
+    tracking_number = (row.tracking_number or "").strip()
+    if not tracking_number:
+        return PublicTrackResult(
+            order_number=order_number,
+            state="not_shipped",
+            tracking_number=None,
+            carrier_code=None,
+            tracking_status=None,
+            last_update=None,
+            events=[],
+        )
+
+    return PublicTrackResult(
+        order_number=order_number,
+        state="tracked",
+        tracking_number=tracking_number,
+        carrier_code=row.carrier_code,
+        tracking_status=_public_tracking_status(row.tracking_status),
+        last_update=_public_tracking_timestamp(row.last_tracking_update),
+        events=_public_tracking_events(row.tracking_events_json),
+    )
+
+
+def _process_public_track_lookup(
+    raw_body: bytes,
+) -> tuple[int, PublicTrackLookupResponse | None]:
+    try:
+        with SessionLocal() as db:
+            try:
+                allowed = logistics.register_track_public_rate_limit(db)
+                # The shared bucket must survive the read-only order session and
+                # must count requests that later fail payload validation.
+                db.commit()
+            except IntegrityError:
+                db.rollback()
+                logger.warning("Public tracking rate-limit contention")
+                return status.HTTP_429_TOO_MANY_REQUESTS, None
+            except SQLAlchemyError:
+                db.rollback()
+                logger.exception("Public tracking rate limiter unavailable")
+                return status.HTTP_503_SERVICE_UNAVAILABLE, None
+
+            if not allowed:
+                return status.HTTP_429_TOO_MANY_REQUESTS, None
+
+            try:
+                raw_payload = json.loads(raw_body)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return status.HTTP_422_UNPROCESSABLE_ENTITY, None
+
+            try:
+                payload = PublicTrackLookupRequest.model_validate(raw_payload)
+            except ValidationError:
+                return status.HTTP_422_UNPROCESSABLE_ENTITY, None
+
+            results: list[PublicTrackResult] = []
+            for order_number in payload.order_numbers:
+                try:
+                    # A savepoint prevents one failed statement from poisoning
+                    # the PostgreSQL transaction used by subsequent lookups.
+                    with db.begin_nested():
+                        result = _lookup_public_track_result(db, order_number)
+                except Exception:  # noqa: BLE001 - contract requires per-item fallback
+                    logger.exception(
+                        "Public tracking lookup failed order_number=%r",
+                        order_number,
+                    )
+                    result = _unknown_public_track_result(order_number)
+                results.append(result)
+
+            return (
+                status.HTTP_200_OK,
+                PublicTrackLookupResponse(results=results),
+            )
+    except Exception:  # noqa: BLE001 - public endpoint fails closed
+        logger.exception("Public tracking database session unavailable")
+        return status.HTTP_503_SERVICE_UNAVAILABLE, None
+
+
+@public_router.post(
+    "/lookup",
+    response_model=PublicTrackLookupResponse,
+    openapi_extra={
+        "parameters": [
+            {
+                "name": "X-BY-TRACK-KEY",
+                "in": "header",
+                "required": True,
+                "schema": {"type": "string"},
+            }
+        ],
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": PublicTrackLookupRequest.model_json_schema(),
+                }
+            },
+        }
+    },
+)
+async def public_track_lookup(
+    request: Request,
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    if not _track_public_key_is_valid(
+        request.headers.get("X-BY-TRACK-KEY"),
+        settings,
+    ):
+        return _track_public_error(status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        raw_body = await _read_public_track_body(request)
+    except _PublicTrackPayloadError:
+        return _track_public_error(status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+    response_status, response = await to_thread.run_sync(
+        _process_public_track_lookup,
+        raw_body,
+    )
+    if response is None:
+        return _track_public_error(response_status)
+    return JSONResponse(
+        status_code=response_status,
+        content=response.model_dump(mode="json"),
     )
 
 

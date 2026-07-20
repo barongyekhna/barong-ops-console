@@ -4,14 +4,27 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+)
 from pydantic_core import PydanticCustomError
 
 
 class LogisticsStrictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+PublicOrderNumber = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, max_length=64),
+]
 
 
 class ZoneRate(LogisticsStrictRequest):
@@ -94,6 +107,44 @@ class TrackingEvent(BaseModel):
     time: str | None = None
     location: str | None = None
     description: str | None = None
+
+
+class PublicTrackLookupRequest(LogisticsStrictRequest):
+    order_numbers: list[PublicOrderNumber] = Field(min_length=1, max_length=20)
+
+
+class PublicTrackingEvent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    time: str | None = None
+    location: str | None = None
+    description: str | None = None
+
+
+class PublicTrackResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    order_number: str
+    state: Literal["tracked", "not_shipped", "unknown"]
+    tracking_number: str | None
+    carrier_code: int | None
+    tracking_status: Literal[
+        "not_found",
+        "info_received",
+        "in_transit",
+        "out_for_delivery",
+        "delivered",
+        "exception",
+        "expired",
+    ] | None
+    last_update: datetime | None
+    events: list[PublicTrackingEvent]
+
+
+class PublicTrackLookupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    results: list[PublicTrackResult]
 
 
 class OrderItem(BaseModel):
