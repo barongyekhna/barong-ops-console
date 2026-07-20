@@ -100,7 +100,30 @@ parts.append(rule(BP,[".by-page .by-steps li:before"],"content:counter(bstep);po
 parts.append(rule(BP,[".by-page .by-cta-block"],"text-align:center"))
 parts.append(rule(BP,[".by-page .by-btn"],"display:inline-block;background:#1b1a18!important;color:#faf9f6!important;border-radius:999px;padding:13px 30px;font-weight:600;letter-spacing:.02em"))
 parts.append(rule(BP,[".by-page a:not(.by-btn)"],"color:#1b1a18;text-decoration:underline"))
-parts.append("body.page-id-1 .page-title,body.page-id-1792 .page-title,body.page-id-33 .page-title,body.page-id-1436 .page-title{display:none!important}")
+
+# ---- 法务长文页(隐私/条款)专用:中性列表、目录、要点强调 ----
+# 勾选号列表不适合法律条文,这里用克制的短横中性符号。
+parts.append(rule(BP,[".by-page .by-list-plain"],"margin:10px 0 0;padding-left:0;list-style:none"))
+parts.append(rule(BP,[".by-page .by-list-plain li"],"padding:9px 0 9px 20px;position:relative;color:#3d3a36;line-height:1.7"))
+parts.append(rule(BP,[".by-page .by-list-plain li:before"],"content:'—';position:absolute;left:0;color:#c3bfb9;font-weight:400"))
+parts.append(rule(BP,[".by-page .by-list-plain strong"],"color:#1b1a18;font-weight:600"))
+# 正文行距放宽一档:法律条文密度大,读起来才不累
+parts.append(rule(BP,[".by-page .by-legal p"],"color:#3d3a36;line-height:1.78;margin:0 0 14px;font-size:15.5px"))
+parts.append(rule(BP,[".by-page .by-legal p:last-child"],"margin-bottom:0"))
+# "最后更新"元信息
+parts.append(rule(BP,[".by-page .by-meta"],"font-size:13px;color:#8b867f;letter-spacing:.02em;margin:14px 0 0"))
+# 关键承诺高亮(如"我们不出售你的个人信息")
+parts.append(rule(BP,[".by-page .by-highlight"],"background:#f4f4f6;border-left:3px solid #1b1a18;border-radius:8px;padding:16px 20px;margin:16px 0;color:#1b1a18;font-size:15.5px;line-height:1.7;font-weight:500"))
+# 目录:长法务页的导航
+parts.append(rule(BP,[".by-page .by-toc"],"display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:2px 18px;margin:6px 0 0;padding-left:0;list-style:none;counter-reset:btoc"))
+parts.append(rule(BP,[".by-page .by-toc li"],"counter-increment:btoc;padding:7px 0 7px 26px;position:relative"))
+parts.append(rule(BP,[".by-page .by-toc li:before"],"content:counter(btoc);position:absolute;left:0;top:7px;font-size:11.5px;color:#a49f98;font-weight:700;letter-spacing:.06em"))
+parts.append(rule(BP,[".by-page .by-toc a"],"color:#3d3a36!important;text-decoration:none!important;font-size:14.5px"))
+parts.append(rule(BP,[".by-page .by-toc a:hover"],"color:#1b1a18!important;text-decoration:underline!important"))
+# 锚点跳转时标题不被吸顶头部盖住
+parts.append(rule(BP,[".by-page .by-block[id]"],"scroll-margin-top:100px"))
+
+parts.append("body.page-id-1 .page-title,body.page-id-1792 .page-title,body.page-id-33 .page-title,body.page-id-1436 .page-title,body.page-id-1162 .page-title{display:none!important}")
 parts.append(".widget li:has(> a[href*=\"/uncategorized\"]),li.cat-item:has(> a[href*=\"/uncategorized\"]){display:none!important}")
 
 # ============ 页脚贴底(治所有短页面"页脚下灰条")============
