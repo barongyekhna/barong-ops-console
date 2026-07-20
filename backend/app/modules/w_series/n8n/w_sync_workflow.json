@@ -398,7 +398,7 @@
         "genericAuthType": "httpBasicAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ note: '物流单号：' + $json.p.tracking_number + ($json.p.carrier_label ? '（承运商代码 ' + $json.p.carrier_label + '）' : '') + '，可在 17TRACK 查询轨迹。', customer_note: true }) }}",
+        "jsonBody": "={{ JSON.stringify({ note: 'Your order has shipped. Tracking number: ' + $json.p.tracking_number + '. Follow its progress at https://barongyekhna.com/track-order/', customer_note: true }) }}",
         "options": {}
       },
       "id": "bc111111-1111-4111-8111-11111111111c",
