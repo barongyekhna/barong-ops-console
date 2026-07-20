@@ -308,6 +308,56 @@ parts.append(f"{D} .kp-faq details{{border-bottom:1px solid #ececea!important;ba
 parts.append(f"{D} .kp-faq summary{{padding:16px 0!important;font-size:15.5px!important;font-weight:500!important;color:#1b1a18!important;cursor:pointer!important;list-style:none!important}}")
 parts.append(f"{D} .kp-faq .kp-faq-a{{color:#6f6b66!important;padding:0 0 16px!important;font-size:14.5px!important}}")
 
+# ============ 物流查询页(barong-track 瘦插件)============
+TR = ["body:not(.home)"]
+parts.append(rule(TR,[".by-track",".by-track-guest"],"max-width:760px;margin:0 auto;padding:clamp(24px,4vw,48px) 18px"))
+# 登录提示条
+parts.append(rule(TR,[".by-track-signin"],"background:#fff;border-radius:16px;padding:16px 20px;margin:0 0 20px;box-shadow:0 1px 2px rgba(20,20,30,.04),0 12px 30px -18px rgba(20,20,30,.14)"))
+parts.append(rule(TR,[".by-track-signin p"],"margin:0;color:#3d3a36;font-size:14.5px;line-height:1.7"))
+# 订单卡
+parts.append(rule(TR,[".by-track-card"],"background:#fff;border-radius:18px;padding:clamp(18px,2.6vw,26px);margin:0 0 16px;box-shadow:0 1px 2px rgba(20,20,30,.04),0 16px 40px -24px rgba(20,20,30,.16)"))
+parts.append(rule(TR,[".by-track-card-head"],"display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap"))
+parts.append(rule(TR,[".by-track-num"],"margin:0!important;font-size:16.5px!important;font-weight:600!important;color:#1b1a18!important;letter-spacing:-.01em"))
+parts.append(rule(TR,[".by-track-sub"],"margin:4px 0 0!important;font-size:13px!important;color:#8b867f!important"))
+parts.append(rule(TR,[".by-track-items"],"margin:12px 0 0!important;font-size:14px!important;color:#55524e!important;line-height:1.6"))
+# 状态徽章
+parts.append(rule(TR,[".by-track-badge"],"font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:6px 12px;border-radius:999px;white-space:nowrap"))
+parts.append(rule(TR,[".by-track-badge.live"],"background:#eef1f6;color:#2f4a7a"))
+parts.append(rule(TR,[".by-track-badge.ok"],"background:#e8f3ec;color:#1f7a4d"))
+parts.append(rule(TR,[".by-track-badge.warn"],"background:#fbeceb;color:#b3261e"))
+parts.append(rule(TR,[".by-track-badge.prep"],"background:#f4f4f6;color:#6f6b66"))
+# 展开区
+parts.append(rule(TR,[".by-track-details"],"margin:16px 0 0;border-top:1px solid #f0efed;padding-top:14px"))
+parts.append(rule(TR,[".by-track-details summary"],"cursor:pointer;font-size:14px;font-weight:600;color:#1b1a18;list-style:none;padding:4px 0"))
+parts.append(rule(TR,[".by-track-details summary::-webkit-details-marker"],"display:none"))
+parts.append(rule(TR,[".by-track-details summary:before"],"content:'▸ ';color:#a49f98"))
+parts.append(rule(TR,[".by-track-details[open] summary:before"],"content:'▾ '"))
+parts.append(rule(TR,[".by-track-number"],"margin:12px 0 4px!important;font-size:13.5px!important;color:#6f6b66!important"))
+parts.append(rule(TR,[".by-track-number strong"],"color:#1b1a18;font-weight:600;letter-spacing:.03em"))
+# 时间线:竖线 + 节点,最新一条实心加重
+parts.append(rule(TR,[".by-track-trail"],"list-style:none;margin:14px 0 0;padding:0 0 0 22px;position:relative"))
+parts.append(rule(TR,[".by-track-trail:before"],"content:'';position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:#e7e6e3"))
+parts.append(rule(TR,[".by-track-event"],"position:relative;padding:0 0 18px"))
+parts.append(rule(TR,[".by-track-event:last-child"],"padding-bottom:0"))
+parts.append(rule(TR,[".by-track-dot"],"position:absolute;left:-22px;top:5px;width:11px;height:11px;border-radius:999px;background:#fff;border:2px solid #d9d7d3;box-sizing:border-box"))
+parts.append(rule(TR,[".by-track-event.is-latest .by-track-dot"],"background:#1b1a18;border-color:#1b1a18"))
+parts.append(rule(TR,[".by-track-desc"],"display:block;font-size:14.5px;color:#3d3a36;line-height:1.6"))
+parts.append(rule(TR,[".by-track-event.is-latest .by-track-desc"],"color:#1b1a18;font-weight:600"))
+parts.append(rule(TR,[".by-track-meta"],"display:block;font-size:12.5px;color:#8b867f;margin-top:3px"))
+# 空态与提示
+parts.append(rule(TR,[".by-track-empty"],"margin:12px 0 0!important;font-size:14px!important;color:#8b867f!important;line-height:1.7"))
+parts.append(rule(TR,[".by-track-note"],"border-radius:12px;padding:14px 18px;margin:0 0 18px;font-size:14.5px"))
+parts.append(rule(TR,[".by-track-note.err"],"background:#fbeceb;color:#b3261e"))
+# 游客查询表单
+parts.append(rule(TR,[".by-track-form"],"background:#fff;border-radius:18px;padding:clamp(18px,2.6vw,26px);box-shadow:0 1px 2px rgba(20,20,30,.04),0 16px 40px -24px rgba(20,20,30,.16)"))
+parts.append(rule(TR,[".by-track-grid"],"display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px"))
+parts.append(rule(TR,[".by-track-field"],"display:block"))
+parts.append(rule(TR,[".by-track-field span"],"display:block;font-size:13px;color:#6f6b66;margin:0 0 6px;font-weight:600"))
+parts.append(rule(TR,[".by-track-field input"],"width:100%;border:1px solid #d9d7d3!important;border-radius:12px!important;background:#fff!important;padding:12px 14px!important;font-size:15px!important;box-shadow:none!important"))
+parts.append(rule(TR,[".by-track-field input:focus"],"border-color:#1b1a18!important;outline:none!important"))
+parts.append(rule(TR,[".by-track-submit"],"margin-top:16px;background:#1b1a18!important;color:#faf9f6!important;border:0!important;border-radius:999px!important;padding:13px 30px!important;font-weight:600!important;letter-spacing:.02em!important;cursor:pointer"))
+parts.append("body.page-id-1423 .page-title{display:none!important}")
+
 # ============ 404 品牌页(文案与按钮由 barong-redirects 插件注入)============
 E4 = "body.error404"
 parts.append(f"{E4} .error-404 .row{{display:block!important;max-width:660px!important;margin:0 auto!important;text-align:center!important;padding:clamp(28px,6vw,72px) 18px!important}}")
