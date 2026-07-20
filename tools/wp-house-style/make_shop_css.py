@@ -48,6 +48,8 @@ parts.append(".absolute-footer,.absolute-footer.dark{background-color:#141312!im
 parts.append(".absolute-footer a,.absolute-footer .menu-item a{color:#a49f98!important}")
 parts.append(".absolute-footer a:hover{color:#faf9f6!important}")
 parts.append(".footer-wrapper .footer,.footer-widgets{background-color:#141312!important}")
+# 5b) 主题演示遗留的社交图标全部指向占位符 http://url(死链)——开真号前全站隐藏
+parts.append('a.icon[href="http://url"],a[href="http://url"]{display:none!important}')
 # 6) 表单控件全站统一圆角浅边
 parts.append(rule(NH, ["#main input[type=text]", "#main input[type=email]", "#main textarea"],
     "border:1px solid #d9d7d3!important;border-radius:10px!important;background:#fff!important"))
@@ -75,6 +77,22 @@ parts.append(rule(BP,[".by-page .by-list"],"margin:8px 0 0;padding-left:0;list-s
 parts.append(rule(BP,[".by-page .by-list li"],"padding:10px 0 10px 26px;position:relative;border-bottom:1px solid #f0efed"))
 parts.append(rule(BP,[".by-page .by-list li:last-child"],"border-bottom:0"))
 parts.append(rule(BP,[".by-page .by-list li:before"],"content:'✓';position:absolute;left:2px;color:#1b1a18;font-weight:700"))
+parts.append(rule(BP,[".by-page .by-list-x li:before"],"content:'✕';color:#a49f98!important"))
+
+# ---- CS 联系表单(直连控制台)----
+parts.append(rule(BP,[".by-cs-form"],"margin-top:6px"))
+parts.append(rule(BP,[".by-cs-grid"],"display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px"))
+parts.append(rule(BP,[".by-cs-field"],"display:block;margin:0 0 14px"))
+parts.append(rule(BP,[".by-cs-field span"],"display:block;font-size:13px;color:#6f6b66;margin:0 0 6px;font-weight:600"))
+parts.append(rule(BP,[".by-cs-field input", ".by-cs-field textarea"],"width:100%;border:1px solid #d9d7d3!important;border-radius:12px!important;background:#fff!important;padding:12px 14px!important;font-size:15px!important;box-shadow:none!important"))
+parts.append(rule(BP,[".by-cs-field textarea"],"resize:vertical;min-height:130px"))
+parts.append(rule(BP,[".by-cs-field input:focus", ".by-cs-field textarea:focus"],"border-color:#1b1a18!important;outline:none!important"))
+parts.append(rule(BP,[".by-cs-actions"],"display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:4px"))
+parts.append(rule(BP,[".by-cs-submit"],"background:#1b1a18!important;color:#faf9f6!important;border:0!important;border-radius:999px!important;padding:13px 30px!important;font-weight:600!important;letter-spacing:.02em!important;cursor:pointer"))
+parts.append(rule(BP,[".by-cs-submit:disabled"],"opacity:.55"))
+parts.append(rule(BP,[".by-cs-note"],"font-size:13.5px;color:#6f6b66"))
+parts.append(rule(BP,[".by-cs-note.ok"],"color:#1f7a4d"))
+parts.append(rule(BP,[".by-cs-note.err"],"color:#b3261e"))
 parts.append(rule(BP,[".by-page .by-steps"],"margin:8px 0 0;padding-left:0;list-style:none;counter-reset:bstep"))
 parts.append(rule(BP,[".by-page .by-steps li"],"counter-increment:bstep;padding:12px 0 12px 44px;position:relative;border-bottom:1px solid #f0efed"))
 parts.append(rule(BP,[".by-page .by-steps li:last-child"],"border-bottom:0"))
@@ -82,7 +100,7 @@ parts.append(rule(BP,[".by-page .by-steps li:before"],"content:counter(bstep);po
 parts.append(rule(BP,[".by-page .by-cta-block"],"text-align:center"))
 parts.append(rule(BP,[".by-page .by-btn"],"display:inline-block;background:#1b1a18!important;color:#faf9f6!important;border-radius:999px;padding:13px 30px;font-weight:600;letter-spacing:.02em"))
 parts.append(rule(BP,[".by-page a:not(.by-btn)"],"color:#1b1a18;text-decoration:underline"))
-parts.append("body.page-id-1 .page-title,body.page-id-1792 .page-title{display:none!important}")
+parts.append("body.page-id-1 .page-title,body.page-id-1792 .page-title,body.page-id-33 .page-title,body.page-id-1436 .page-title{display:none!important}")
 parts.append(".widget li:has(> a[href*=\"/uncategorized\"]),li.cat-item:has(> a[href*=\"/uncategorized\"]){display:none!important}")
 
 # ============ 页脚贴底(治所有短页面"页脚下灰条")============
@@ -143,8 +161,6 @@ parts.append(rule(ARCH, [".woocommerce-result-count", ".woocommerce-ordering"], 
 parts.append(rule(ARCH, [".category-page-row > .col.large-3"], "display:none!important"))
 parts.append(rule(ARCH, [".category-page-row > .col.large-9"],
                   "flex:0 0 100%!important;max-width:100%!important;width:100%!important"))
-# 配送日期插件的灰框：暂时全隐(后期做直连控制台的家规版替换)
-parts.append(rule(WOO, [".wpced"], "display:none!important"))
 # —— 卡片：干净、无重边框、家规排版 ——
 parts.append(rule(WOO, [".product-small.box"], "background:transparent!important;border:0!important;box-shadow:none!important"))
 parts.append(rule(WOO, [".product-small .box-image"],
@@ -215,7 +231,7 @@ parts.append(rule(SP, [".single_add_to_cart_button"],
 parts.append(rule(SP, [".single_add_to_cart_button:hover"], "background:#000!important;transform:translateY(-1px)!important"))
 # 信任条(纯 CSS ::after 注入,全站单品页;先用绝对成立的安全项,W-S 真实政策定了再换具体承诺)
 parts.append("body.single-product form.cart{flex-wrap:wrap!important}")
-parts.append('body.single-product form.cart::after{content:"\\2713 Secure checkout\\00a0\\00a0\\00b7\\00a0\\00a0 \\2713 Easy 30-day returns\\00a0\\00a0\\00b7\\00a0\\00a0 \\2713 Worldwide tracked shipping";flex-basis:100%!important;order:9!important;margin-top:18px!important;padding-top:16px!important;border-top:1px solid #e7e6e3!important;font-size:12.5px!important;color:#6f6b66!important;line-height:1.7!important}')
+parts.append('body.single-product form.cart::after{content:"\\2713 Secure checkout\\00a0\\00a0\\00b7\\00a0\\00a0 \\2713 30-day quality guarantee\\00a0\\00a0\\00b7\\00a0\\00a0 \\2713 Worldwide tracked shipping";flex-basis:100%!important;order:9!important;margin-top:18px!important;padding-top:16px!important;border-top:1px solid #e7e6e3!important;font-size:12.5px!important;color:#6f6b66!important;line-height:1.7!important}')
 # 杀掉丑社交分享图标
 parts.append(rule(SP, [".share-icons", ".social-icons.share-row", ".product_meta .sku_wrapper"], "display:none!important"))
 # 类目 meta 行:低调分隔
@@ -268,6 +284,21 @@ parts.append(f"{D} .kp-trust{{background:#faf9f6!important;border-left:3px solid
 parts.append(f"{D} .kp-faq details{{border-bottom:1px solid #ececea!important;background:transparent!important;padding:0!important}}")
 parts.append(f"{D} .kp-faq summary{{padding:16px 0!important;font-size:15.5px!important;font-weight:500!important;color:#1b1a18!important;cursor:pointer!important;list-style:none!important}}")
 parts.append(f"{D} .kp-faq .kp-faq-a{{color:#6f6b66!important;padding:0 0 16px!important;font-size:14.5px!important}}")
+
+# ============ 404 品牌页(文案与按钮由 barong-redirects 插件注入)============
+E4 = "body.error404"
+parts.append(f"{E4} .error-404 .row{{display:block!important;max-width:660px!important;margin:0 auto!important;text-align:center!important;padding:clamp(28px,6vw,72px) 18px!important}}")
+parts.append(f"{E4} .error-404 .col{{max-width:100%!important;flex-basis:100%!important;padding:0!important}}")
+# 主题那个巨大的半透明 "404" → 收成克制的小眉标
+parts.append(f"{E4} .error-404 .col.medium-3 span.header-font{{font-size:11.5px!important;font-weight:700!important;letter-spacing:.22em!important;opacity:1!important;color:#a49f98!important;display:block!important;margin:0 0 16px!important}}")
+parts.append(f"{E4} .error-404 h1.page-title{{font-size:clamp(28px,4.4vw,42px)!important;letter-spacing:-.02em!important;color:#1b1a18!important;margin:0 0 14px!important}}")
+parts.append(f"{E4} .error-404 header.page-title{{border:0!important;padding:0!important;background:transparent!important}}")
+parts.append(f"{E4} .error-404 .page-content p{{font-size:16.5px!important;line-height:1.7!important;color:#3d3a36!important;max-width:520px!important;margin:0 auto 26px!important}}")
+parts.append(f"{E4} .error-404 .searchform{{max-width:420px!important;margin:0 auto!important}}")
+parts.append(f"{E4} .by-404-cta{{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px}}")
+parts.append(f"{E4} .by-404-btn{{background:#1b1a18!important;color:#faf9f6!important;border:1px solid #1b1a18!important;border-radius:999px!important;padding:13px 28px!important;font-weight:600!important;font-size:14.5px!important;text-decoration:none!important;display:inline-block!important;transition:opacity .2s ease}}")
+parts.append(f"{E4} .by-404-btn.ghost{{background:transparent!important;color:#1b1a18!important;border:1px solid #d9d7d3!important}}")
+parts.append(f"{E4} .by-404-btn:hover{{opacity:.86!important}}")
 
 CSS = "".join(parts)
 open("shop_house.css", "w").write(CSS)
