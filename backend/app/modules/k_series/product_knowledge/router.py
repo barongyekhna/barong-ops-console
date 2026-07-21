@@ -2879,6 +2879,24 @@ def product_knowledge_create(
     finally:
         if record is not None:
             record.lock.release()
+    # 可选的手贴货源:SKU 已由发号器签发,顺手灌入 W-S 货源库(只填空,
+    # fail-safe:货源联动失败绝不影响建品本身)。
+    if (payload.source_url or "").strip():
+        try:
+            from ...w_series.product_sources import fill_source_if_absent
+
+            fill_source_if_absent(
+                db,
+                sku=getattr(product, "sku", None),
+                source_url=payload.source_url,
+                notes="K 手动建品时贴入",
+            )
+            db.commit()
+        except Exception:  # noqa: BLE001 - sources are an optional sidecar
+            logger.exception(
+                "manual-create source autofill failed product=%s",
+                getattr(product, "id", None),
+            )
     return _product_read(db, product)
 
 

@@ -373,6 +373,7 @@ const PRODUCT_FORM_LABELS = {
 
 const initialValues: ProductFormValues = {
   brand_name: "",
+  source_url: "",
   dimensions_input: {
     height: "",
     length: "",
@@ -1056,6 +1057,11 @@ export function ProductForm({
       setValidationError(labels.fieldRequired);
       return;
     }
+    const sourceUrl = values.source_url.trim();
+    if (sourceUrl && !/^https?:\/\//i.test(sourceUrl)) {
+      setValidationError("货源链接必须以 http:// 或 https:// 开头（可留空）。");
+      return;
+    }
     if (values.product_type === "variable_product" && values.variants.length === 0) {
       setValidationError(labels.variantRequired);
       return;
@@ -1204,6 +1210,7 @@ export function ProductForm({
       await onCreate({
         attributes,
         brand_name: optionalText(values.brand_name),
+        source_url: optionalText(values.source_url),
         dimensions_json: dimensions.value,
         long_description_en: rawInputText,
         main_keyword: mainKeyword,
@@ -1303,6 +1310,19 @@ export function ProductForm({
               }
               placeholder="品牌"
               value={values.brand_name}
+            />
+          </label>
+
+          <label className={styles.field}>
+            <span>1688 货源链接（可选）</span>
+            <input
+              autoComplete="off"
+              inputMode="url"
+              onChange={(event) =>
+                updateValue("source_url", event.target.value)
+              }
+              placeholder="粘贴 1688 商品页链接，出单后一键直达货源；可留空后补"
+              value={values.source_url}
             />
           </label>
 

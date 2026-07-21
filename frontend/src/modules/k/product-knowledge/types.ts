@@ -142,6 +142,7 @@ export type ProductKnowledgeCreatePayload = {
   raw_input_text: string;
   main_keyword: string;
   target_market: string;
+  source_url?: string | null;
   target_market_label?: string;
   target_locale?: string;
   parent_sku?: string | null;
@@ -258,6 +259,7 @@ export type ProductFormValues = {
   product_name_en: string;
   main_keyword: string;
   brand_name: string;
+  source_url: string;
   product_type: "simple_product" | "variable_product";
   price_value: string;
   price_currency: string;

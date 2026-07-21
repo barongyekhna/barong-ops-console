@@ -161,10 +161,23 @@ class ProductKnowledgeCreate(BaseModel):
     primary_use_case_en: str | None = None
     target_customer_en: str | None = None
     manual_notes: str | None = None
+    # 可选:1688 货源链接 —— 建品时顺手贴上,SKU 签发后自动灌入 W-S 货源库,
+    # 出单即有「1688 下单」直达按钮;留空则以后去 W-S 货源库补。
+    source_url: str | None = Field(default=None, max_length=1000)
     variants: list[ProductKnowledgeVariantItem] = Field(default_factory=list)
     attributes: list[ProductKnowledgeAttributeItem] = Field(default_factory=list)
     keywords: list[ProductKnowledgeKeywordItem] = Field(default_factory=list)
     risk_terms: list[ProductKnowledgeRiskTermItem] = Field(default_factory=list)
+
+    @field_validator("source_url")
+    @classmethod
+    def _validate_source_url(cls, value: str | None) -> str | None:
+        cleaned = (value or "").strip()
+        if not cleaned:
+            return None
+        if not cleaned.lower().startswith(("http://", "https://")):
+            raise ValueError("货源链接必须以 http:// 或 https:// 开头")
+        return cleaned
 
     @field_validator("dimensions_json", "weight_json")
     @classmethod
