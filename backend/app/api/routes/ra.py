@@ -645,6 +645,7 @@ def ra_groups(
                            'dtc_seo', payload->'channel_routes'->'routes'->'dtc_seo'->>'verdict'
                          ),
                          'has_deep_enrichment', (payload ? 'deep_enrichment'),
+                         'rereviewed', (payload ? 'rereview_20260721'),
                          'route_recommendations', (
                            SELECT l->'model_output'->'route_recommendations'
                            FROM jsonb_array_elements(payload->'layers') l
@@ -686,7 +687,10 @@ def ra_groups(
             # 昙花就昙花，开一单赚一单；卡片带「仅自发货·勿备货」标记。
             # 门槛：必须带深挖证据（Keepa 12月+Rainforest 全量）的淘汰品才放行，
             # 早期浅证据时代的淘汰品不翻案。
-            if not payload.get("has_deep_enrichment"):
+            # 2026-07-21 谷歌数据复核章 = 与深挖证据同等的还魂资格:
+            # 复核是在完整谷歌信号下重新判的,不属于"浅证据翻案"。
+            rereviewed = bool(payload.get("rereviewed"))
+            if not payload.get("has_deep_enrichment") and not rereviewed:
                 continue
             route_verdicts = (
                 payload.get("route_verdicts")
@@ -703,10 +707,18 @@ def ra_groups(
                             **item,
                             "group": group_name,
                             "fulfillment_only": True,
+                            "rereviewed": rereviewed,
                             "ai_route_note": _ai_route_note(payload, group_name),
                         }
                     )
                     seen_asins[group_name].add(asin)
+            # 复核后路由 review 的:终审否决只管备货层,人工滑一把再定生死。
+            if rereviewed and asin not in seen_asins["review"] and any(
+                str(route_verdicts.get(name) or "") == "review"
+                for name in ("dtc_ad", "dtc_seo")
+            ):
+                groups["review"].append({**item, "rereviewed": True})
+                seen_asins["review"].add(asin)
             continue
         if verdict == "review" and report_status != "approved":
             # 待滑堆：GPT 拿不准的产品等你亲手左右滑。

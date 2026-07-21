@@ -40,3 +40,16 @@ def test_mutations_bust_the_cache() -> None:
     for fn in (ra.ra_report_approve, ra.ra_report_reject):
         assert "_groups_cache_bust" in inspect.getsource(fn)
     assert "_groups_cache_put" in inspect.getsource(ra.ra_groups)
+
+
+def test_rereviewed_rejects_can_resurface() -> None:
+    """复核章产品:路由 review 进待滑堆;无深挖证据也不被 continue 吞掉。"""
+    import inspect
+
+    from backend.app.api.routes import ra
+
+    source = inspect.getsource(ra.ra_groups)
+    assert "rereviewed" in source
+    assert 'payload.get("has_deep_enrichment") and not rereviewed' in source
+    # review 路由 → 待滑堆通道存在
+    assert 'groups["review"].append({**item, "rereviewed": True})' in source
