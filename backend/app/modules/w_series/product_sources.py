@@ -85,3 +85,46 @@ def enrich_items(
 
 
 __all__ = ["enrich_items", "load_sources_for_items", "normalize_sku"]
+
+
+def fill_source_if_absent(
+    db: Session,
+    *,
+    sku: object,
+    source_url: object,
+    supplier_name: object = None,
+    unit_cost: object = None,
+    currency: str = "CNY",
+    moq: object = None,
+    notes: str | None = None,
+) -> bool:
+    """自动灌入(F 系列等):只填空,绝不覆盖人工维护的货源记录。
+
+    Returns True 当且仅当新建了一条记录。sku/source_url 缺失时静默跳过——
+    调用方都是 fail-safe 场景(导入/上架主流程不能被货源联动打断)。
+    """
+
+    normalized = normalize_sku(sku)
+    url = str(source_url or "").strip()
+    if not normalized or not url.lower().startswith(("http://", "https://")):
+        return False
+    existing = db.scalar(
+        select(WProductSource.id).where(WProductSource.sku == normalized)
+    )
+    if existing is not None:
+        return False
+    db.add(
+        WProductSource(
+            sku=normalized,
+            source_url=url[:1000],
+            supplier_name=(str(supplier_name).strip()[:200] or None)
+            if supplier_name is not None and str(supplier_name).strip()
+            else None,
+            unit_cost=unit_cost,
+            currency=(currency or "CNY")[:8],
+            moq=int(moq) if isinstance(moq, int) or (isinstance(moq, str) and moq.isdigit()) else moq,
+            notes=(notes or None),
+        )
+    )
+    db.flush()
+    return True

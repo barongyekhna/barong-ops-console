@@ -514,4 +514,26 @@ def import_candidate_to_k(
     candidate.reviewed_by_user_id = user.id if user is not None else None
     db.flush()
     import_savepoint.commit()
+    # 1688 货源自动灌入 W-S 货源库(只填空,不覆盖人工记录;fail-safe:
+    # 货源联动失败绝不打断搬 K 主流程)。
+    try:
+        from ...w_series.product_sources import fill_source_if_absent
+
+        fill_source_if_absent(
+            db,
+            sku=getattr(product, "sku", None),
+            source_url=candidate.source_url,
+            supplier_name=candidate.supplier_name,
+            unit_cost=candidate.price_cny,
+            currency="CNY",
+            moq=candidate.moq,
+            notes="F 系列搬 K 时自动灌入",
+        )
+    except Exception as exc:  # noqa: BLE001 - sources are an optional sidecar
+        _LOGGER.warning(
+            "F->K source autofill failed candidate=%s product=%s: %s",
+            candidate.id,
+            product.id,
+            exc,
+        )
     return {"product_id": str(product.id), "deduped": False}
