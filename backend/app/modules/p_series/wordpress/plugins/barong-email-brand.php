@@ -2,13 +2,13 @@
 /**
  * Plugin Name: Barong Email Brand
  * Description: WooCommerce 邮件品牌接管(瘦插件)。① 品牌值存在我们自己的 barong_email_brand 里(REST 可配),在 WooCommerce 读取邮件配色与页眉图时接管返回值,不与它争抢自己的选项;② 经 woocommerce_email_styles 追加家规皮肤,把默认邮件排版换成与站点一致的深色头部+金凤凰、细分隔线表格、柔和地址卡。不改动任何邮件模板结构。
- * Version: 2.0.0
+ * Version: 2.1.0
  * Author: Barong Yekhna Console
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
 
-const BY_EB_VERSION = '2.0.0';
+const BY_EB_VERSION = '2.1.0';
 const BY_EB_STORE   = 'barong_email_brand';
 
 /**
@@ -45,6 +45,10 @@ add_action( 'init', function () {
 			// 皮肤开关不是颜色,单独放行;缺省视为开启。
 			if ( isset( $raw['skin'] ) && 'off' === $raw['skin'] ) {
 				$clean['skin'] = 'off';
+			}
+			if ( isset( $raw['footer_html'] ) ) {
+				$footer = wp_kses_post( (string) $raw['footer_html'] );
+				if ( '' !== $footer ) { $clean['footer_html'] = $footer; }
 			}
 			foreach ( array_keys( by_eb_map() ) as $key ) {
 				if ( ! isset( $raw[ $key ] ) ) { continue; }
@@ -195,6 +199,35 @@ add_filter( 'woocommerce_email_styles', function ( $css ) {
 	return $css . "\n" . by_eb_skin_css();
 }, 99 );
 
+/**
+ * 页脚锁:以极高优先级最后一个发言,任何插件(或 WooCommerce 自身)想在页脚
+ * 塞回品牌字样都会被盖掉。文案取自品牌值 footer_html,未设则用站点既有设置。
+ */
+add_filter( 'woocommerce_email_footer_text', function ( $text ) {
+	$brand = by_eb_brand();
+	if ( isset( $brand['footer_html'] ) && '' !== $brand['footer_html'] ) {
+		return $brand['footer_html'];
+	}
+	return $text;
+}, 999 );
+
+/**
+ * 出站邮件留底:把最近一封邮件的完整 HTML 存下来,供控制台远程核对
+ * 买家实际收到的样子。只留一封,不autoload,对站点无负担。
+ */
+add_filter( 'wp_mail', function ( $atts ) {
+	$body = isset( $atts['message'] ) ? (string) $atts['message'] : '';
+	if ( '' !== $body && strlen( $body ) < 400000 ) {
+		update_option( 'barong_email_last', wp_json_encode( array(
+			'time'    => gmdate( 'c' ),
+			'to'      => isset( $atts['to'] ) ? ( is_array( $atts['to'] ) ? implode( ',', $atts['to'] ) : (string) $atts['to'] ) : '',
+			'subject' => isset( $atts['subject'] ) ? (string) $atts['subject'] : '',
+			'html'    => $body,
+		) ), false );
+	}
+	return $atts;
+}, PHP_INT_MAX );
+
 /** 诊断:品牌值与 WooCommerce 实际读到的值(密钥保护,与 CS 共用 barong_cs_key)。 */
 add_action( 'template_redirect', function () {
 	if ( ! isset( $_GET['by-eb-ping'] ) ) { return; }
@@ -208,6 +241,10 @@ add_action( 'template_redirect', function () {
 	$effective = array();
 	foreach ( by_eb_map() as $key => $option ) {
 		$effective[ $key ] = (string) get_option( $option, '' );
+	}
+	if ( isset( $_GET['full'] ) ) {
+		echo (string) get_option( 'barong_email_last', '{}' );
+		exit;
 	}
 	echo wp_json_encode( array(
 		'ok'          => true,
