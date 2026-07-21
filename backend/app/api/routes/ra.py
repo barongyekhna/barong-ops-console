@@ -42,33 +42,59 @@ router = APIRouter(prefix="/r/analysis", tags=["r-analysis"])
 
 # 分组池短缓存:查询要解压上百份大 payload(~6s),看板刷新频繁但数据分钟级新鲜
 # 足够。写操作(approve/reject/opus复核)会主动清空,避免滑掉的卡片回魂。
-_GROUPS_CACHE: dict[str, tuple[float, dict[str, object]]] = {}
+# 文件级实现:gunicorn 多 worker 共享同一容器文件系统,进程内 dict 会各自为政。
 _GROUPS_CACHE_TTL_SECONDS = 60.0
+_GROUPS_CACHE_DIR = "/tmp/ra_groups_cache"
+
+
+def _groups_cache_path(key: str) -> str:
+    import hashlib
+    import os
+
+    os.makedirs(_GROUPS_CACHE_DIR, exist_ok=True)
+    return os.path.join(
+        _GROUPS_CACHE_DIR, hashlib.sha256(key.encode()).hexdigest()[:24] + ".json"
+    )
 
 
 def _groups_cache_get(key: str) -> dict[str, object] | None:
+    import json as _json
+    import os
     import time as _time
 
-    hit = _GROUPS_CACHE.get(key)
-    if hit is None:
+    path = _groups_cache_path(key)
+    try:
+        if _time.time() - os.path.getmtime(path) > _GROUPS_CACHE_TTL_SECONDS:
+            return None
+        with open(path, encoding="utf-8") as fh:
+            return _json.load(fh)
+    except (OSError, ValueError):
         return None
-    stamp, value = hit
-    if _time.monotonic() - stamp > _GROUPS_CACHE_TTL_SECONDS:
-        _GROUPS_CACHE.pop(key, None)
-        return None
-    return value
 
 
 def _groups_cache_put(key: str, value: dict[str, object]) -> None:
-    import time as _time
+    import json as _json
+    import os
 
-    if len(_GROUPS_CACHE) > 32:
-        _GROUPS_CACHE.clear()
-    _GROUPS_CACHE[key] = (_time.monotonic(), value)
+    path = _groups_cache_path(key)
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            _json.dump(value, fh, ensure_ascii=False, default=str)
+        os.replace(tmp, path)
+    except OSError:
+        pass
 
 
 def _groups_cache_bust() -> None:
-    _GROUPS_CACHE.clear()
+    import glob
+    import os
+
+    for path in glob.glob(os.path.join(_GROUPS_CACHE_DIR, "*.json")):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 

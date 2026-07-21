@@ -1,4 +1,4 @@
-"""分组池短缓存:TTL 命中/过期 + 写操作清空。"""
+"""分组池短缓存(文件级共享):读写命中 + 写操作清空。"""
 
 from __future__ import annotations
 
@@ -7,23 +7,28 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-def test_groups_cache_roundtrip_and_bust(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_groups_cache_roundtrip_and_bust() -> None:
     from backend.app.api.routes import ra
 
-    ra._GROUPS_CACHE.clear()
+    ra._groups_cache_bust()
+    assert ra._groups_cache_get("k1") is None
     ra._groups_cache_put("k1", {"groups": {}, "counts": {"n": 1}})
     assert ra._groups_cache_get("k1") == {"groups": {}, "counts": {"n": 1}}
-
-    # TTL 过期
-    import time
-
-    real = time.monotonic
-    monkeypatch.setattr(time, "monotonic", lambda: real() + ra._GROUPS_CACHE_TTL_SECONDS + 1)
-    assert ra._groups_cache_get("k1") is None
-    monkeypatch.undo()
-
-    ra._groups_cache_put("k2", {"groups": {}, "counts": {}})
     ra._groups_cache_bust()
+    assert ra._groups_cache_get("k1") is None
+
+
+def test_groups_cache_expires(monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+
+    from backend.app.api.routes import ra
+
+    ra._groups_cache_bust()
+    ra._groups_cache_put("k2", {"groups": {}, "counts": {}})
+    stale = ra._GROUPS_CACHE_TTL_SECONDS + 5
+    path = ra._groups_cache_path("k2")
+    old = os.path.getmtime(path) - stale
+    os.utime(path, (old, old))
     assert ra._groups_cache_get("k2") is None
 
 
