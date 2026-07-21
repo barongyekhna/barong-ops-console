@@ -113,6 +113,7 @@ def test_dispatch_api_succeeds_when_canonical_gate_is_clear_and_workflow_exporte
     monkeypatch.setattr(assemble, "_evidence_gate_blockers", lambda product: [])
     monkeypatch.setattr(assemble, "category_is_bound", lambda product: True)
     monkeypatch.setattr(assemble, "audit_gate_blockers", lambda db, product: [])
+    monkeypatch.setattr(assemble, "_non_webp_image_blockers", lambda db, product: [])
 
     dispatch_calls: list[dict[str, object]] = []
 
