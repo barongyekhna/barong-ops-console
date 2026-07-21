@@ -654,7 +654,7 @@ def ra_groups(
                        ) AS payload
                 FROM ra_reports
                 WHERE org_id = :org_id
-                ORDER BY created_at DESC
+                ORDER BY updated_at DESC
                 LIMIT :limit
                 """
             ),
