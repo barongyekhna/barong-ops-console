@@ -10,6 +10,9 @@ import {
 const uuid = "01234567-89ab-4def-8123-456789abcdef";
 
 const allowed = [
+  ["GET", ["w", "sources"]],
+  ["PUT", ["w", "sources", "IGL-001"]],
+  ["DELETE", ["w", "sources", "IGL-001"]],
   ["GET", ["w", "shipping", "classes"]],
   ["POST", ["w", "shipping", "classes"]],
   ["PATCH", ["w", "shipping", "classes", uuid]],
@@ -30,6 +33,13 @@ const allowed = [
 ];
 
 const denied = [
+  ["POST", ["w", "sources"]],
+  ["PUT", ["w", "sources"]],
+  ["GET", ["w", "sources", "IGL-001"]],
+  ["PATCH", ["w", "sources", "IGL-001"]],
+  ["DELETE", ["w", "sources", " "]],
+  ["PUT", ["w", "sources", "A".repeat(65)]],
+  ["DELETE", ["w", "sources", "BAD/SKU"]],
   ["PATCH", ["w", "shipping", "classes"]],
   ["GET", ["w", "shipping", "simulate"]],
   ["GET", ["w", "shipping", "assign", uuid]],

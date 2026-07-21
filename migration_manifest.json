@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260719_02_cs_replies",
+  "alembic_head": "20260721_01_w_product_sources",
   "environment": "staging",
-  "expected_alembic_head": "20260719_02_cs_replies",
+  "expected_alembic_head": "20260721_01_w_product_sources",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 66,
-  "migration_hash": "d375475191a4915240b428e17bd7289f85661d59d836b1ca35262e4260d9a81a",
+  "migration_count": 67,
+  "migration_hash": "5bf8bb721913a777073b8505d9fb22668fc79aaa18f0ad9f012b7437c4b47330",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -73,9 +73,10 @@
     "20260717_01_pdp_evidence",
     "20260718_01_k_category_spec_templates",
     "20260719_01_cs_customer_service",
-    "20260719_02_cs_replies"
+    "20260719_02_cs_replies",
+    "20260721_01_w_product_sources"
   ],
-  "migration_order_checksum": "36adbb62248886cafac4b42c2bdb636eb41ff4ab80c86a129dba423e31fde845",
+  "migration_order_checksum": "38d44bb37ab9a8172528f3b9e6f34a2c8ebedf4d6fc653a9fbb2a43b62f17567",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -538,6 +539,13 @@
       "down_revision": "20260719_01_cs_customer_service",
       "path": "backend/alembic/versions/20260719_02_cs_replies.py",
       "version": "20260719_02_cs_replies"
+    },
+    {
+      "applied_at": "2026-07-21T00:00:00Z",
+      "checksum": "dcbb516ae254b3eff675cec905637aa31983855d3c1b223653188e6e83702a0c",
+      "down_revision": "20260719_02_cs_replies",
+      "path": "backend/alembic/versions/20260721_01_w_product_sources.py",
+      "version": "20260721_01_w_product_sources"
     }
   ]
 }

@@ -13,6 +13,8 @@ import {
   getShippingBoard,
   getShippingClasses,
   getShippingRules,
+  isHttpProductSourceUrl,
+  normalizeProductSourceSku,
   patchOrderTracking,
   deleteShippingClass,
   patchShippingClass,
@@ -26,6 +28,7 @@ import {
   type ShippingBoardResponse,
   type ShippingClass,
   type ShippingOrigin,
+  type ProductSource,
   type ShippingRule,
   type ShippingRuleType,
   type ShippingSimulationResult,
@@ -34,12 +37,23 @@ import {
   type TrackingStatus,
   type WOrder,
   type WOrderFilter,
+  type WOrderItem,
   type WOrdersResponse,
   type WritebackStatus,
 } from "./api";
+import {
+  ProductSourceEditor,
+  ProductSourcesPanel,
+} from "./ProductSourcesPanel";
 import styles from "./ShippingDeck.module.css";
 
-type ActiveTab = "orders" | "board" | "rules" | "classes" | "simulate";
+type ActiveTab =
+  | "orders"
+  | "sources"
+  | "board"
+  | "rules"
+  | "classes"
+  | "simulate";
 
 type RuleDraft = {
   key: string;
@@ -195,10 +209,21 @@ function formatDateTime(value: string | null) {
   }).format(date);
 }
 
-function orderItemsTitle(order: WOrder) {
-  return (order.items_json ?? [])
-    .map((item) => `${item.name} × ${item.qty}`)
-    .join("\n");
+function productSourceDetails(item: WOrderItem) {
+  const details: string[] = [];
+  if (item.supplier_name) details.push(item.supplier_name);
+  if (item.unit_cost !== null && item.unit_cost !== undefined) {
+    const currency = item.currency || "CNY";
+    details.push(
+      currency === "CNY"
+        ? `¥${item.unit_cost}`
+        : `${currency} ${item.unit_cost}`,
+    );
+  }
+  if (item.moq !== null && item.moq !== undefined) {
+    details.push(`起订 ${item.moq}`);
+  }
+  return details.join(" · ");
 }
 
 export function ShippingDeck() {
@@ -214,6 +239,10 @@ export function ShippingDeck() {
     new Set(),
   );
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [inlineSourceEditor, setInlineSourceEditor] = useState<string | null>(
+    null,
+  );
+  const [sourceTotal, setSourceTotal] = useState<number | null>(null);
   const [filter, setFilter] = useState<ShippingBoardFilter>("all");
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [items, setItems] = useState<ShippingBoardItem[]>([]);
@@ -259,6 +288,61 @@ export function ShippingDeck() {
       applyOrders(await getOrders(nextFilter));
     },
     [applyOrders],
+  );
+
+  const applyProductSourceToOrders = useCallback((source: ProductSource) => {
+    const sourceSku = normalizeProductSourceSku(source.sku);
+    setOrders((current) =>
+      current.map((order) => ({
+        ...order,
+        items_json:
+          order.items_json?.map((item) =>
+            normalizeProductSourceSku(item.sku ?? "") === sourceSku
+              ? {
+                  ...item,
+                  source_url: source.source_url,
+                  supplier_name: source.supplier_name,
+                  unit_cost: source.unit_cost,
+                  currency: source.currency,
+                  moq: source.moq,
+                  source_state: "linked" as const,
+                }
+              : item,
+          ) ?? null,
+      })),
+    );
+  }, []);
+
+  const removeProductSourceFromOrders = useCallback((sku: string) => {
+    const sourceSku = normalizeProductSourceSku(sku);
+    setOrders((current) =>
+      current.map((order) => ({
+        ...order,
+        items_json:
+          order.items_json?.map((item) =>
+            normalizeProductSourceSku(item.sku ?? "") === sourceSku
+              ? {
+                  ...item,
+                  source_url: null,
+                  supplier_name: null,
+                  unit_cost: null,
+                  currency: null,
+                  moq: null,
+                  source_state: "missing" as const,
+                }
+              : item,
+          ) ?? null,
+      })),
+    );
+  }, []);
+
+  const handleInlineSourceSaved = useCallback(
+    (source: ProductSource) => {
+      applyProductSourceToOrders(source);
+      setInlineSourceEditor(null);
+      setNotice(`${source.sku} 已补入货源，可直接打开 1688 下单页。`);
+    },
+    [applyProductSourceToOrders],
   );
 
   const refreshClasses = useCallback(async () => {
@@ -785,6 +869,15 @@ export function ShippingDeck() {
           </span>
         </button>
         <button
+          className={`${styles.tab} ${activeTab === "sources" ? styles.tabOn : ""}`}
+          onClick={() => setActiveTab("sources")}
+          role="tab"
+          type="button"
+        >
+          货源库
+          <span className={styles.tabCount}>{sourceTotal ?? "—"}</span>
+        </button>
+        <button
           className={`${styles.tab} ${activeTab === "board" ? styles.tabOn : ""}`}
           onClick={() => setActiveTab("board")}
           role="tab"
@@ -865,11 +958,7 @@ export function ShippingDeck() {
                     const isEditing =
                       !order.tracking_number || editingTracking.has(order.id);
                     const isExpanded = expandedOrders.has(order.id);
-                    const itemCount = (order.items_json ?? []).reduce(
-                      (total, item) => total + item.qty,
-                      0,
-                    );
-                    const firstItem = order.items_json?.[0];
+                    const orderItems = order.items_json ?? [];
                     return (
                       <Fragment key={order.id}>
                         <tr>
@@ -883,12 +972,100 @@ export function ShippingDeck() {
                               ? "—"
                               : `${order.currency ?? ""} ${order.total}`.trim()}
                           </td>
-                          <td
-                            className={styles.productCell}
-                            title={orderItemsTitle(order) || undefined}
-                          >
-                            <strong>{firstItem?.name ?? "—"}</strong>
-                            {itemCount > 1 ? <span>等 {itemCount} 件</span> : null}
+                          <td className={styles.orderItemsCell}>
+                            {orderItems.length === 0 ? (
+                              "—"
+                            ) : (
+                              orderItems.map((item, index) => {
+                                const itemSku = normalizeProductSourceSku(
+                                  item.sku ?? "",
+                                );
+                                const sourceEditorKey = `${order.id}:${index}`;
+                                const sourceLinked =
+                                  item.source_state === "linked" &&
+                                  Boolean(item.source_url) &&
+                                  isHttpProductSourceUrl(item.source_url ?? "");
+                                const sourceDetails = productSourceDetails(item);
+                                return (
+                                  <div
+                                    className={styles.orderItemSource}
+                                    key={`${itemSku || item.name}-${index}`}
+                                  >
+                                    <div className={styles.orderItemSourceLine}>
+                                      <span className={styles.orderItemIdentity}>
+                                        <strong title={item.name}>{item.name}</strong>
+                                        <small>
+                                          {itemSku || "无 SKU"} · × {item.qty}
+                                        </small>
+                                      </span>
+                                      {sourceLinked ? (
+                                        <span className={styles.orderSourceControl}>
+                                          <a
+                                            className={styles.sourceLinkButton}
+                                            href={item.source_url as string}
+                                            rel="noopener noreferrer"
+                                            target="_blank"
+                                            title={sourceDetails || undefined}
+                                          >
+                                            1688 下单 ↗
+                                          </a>
+                                          {sourceDetails ? (
+                                            <small className={styles.sourceMeta}>
+                                              {sourceDetails}
+                                            </small>
+                                          ) : null}
+                                        </span>
+                                      ) : (
+                                        <span className={styles.orderSourceControl}>
+                                          <button
+                                            aria-expanded={
+                                              inlineSourceEditor === sourceEditorKey
+                                            }
+                                            className={styles.missingSourceButton}
+                                            disabled={!itemSku || busy !== null}
+                                            onClick={() =>
+                                              setInlineSourceEditor((current) =>
+                                                current === sourceEditorKey
+                                                  ? null
+                                                  : sourceEditorKey,
+                                              )
+                                            }
+                                            title={
+                                              itemSku
+                                                ? "补录该 SKU 的 1688 主货源"
+                                                : "历史商品缺少 SKU，需先补 SKU"
+                                            }
+                                            type="button"
+                                          >
+                                            补货源
+                                          </button>
+                                          {!itemSku ? (
+                                            <small className={styles.sourceMeta}>
+                                              历史商品缺 SKU
+                                            </small>
+                                          ) : null}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {!sourceLinked &&
+                                    itemSku &&
+                                    inlineSourceEditor === sourceEditorKey ? (
+                                      <ProductSourceEditor
+                                        compact
+                                        disabled={busy !== null}
+                                        initialSku={itemSku}
+                                        onCancel={() =>
+                                          setInlineSourceEditor(null)
+                                        }
+                                        onSaved={handleInlineSourceSaved}
+                                        skuReadOnly
+                                        submitLabel="补入货源"
+                                      />
+                                    ) : null}
+                                  </div>
+                                );
+                              })
+                            )}
                           </td>
                           <td className={styles.timeCell}>
                             {formatDateTime(order.placed_at)}
@@ -1023,6 +1200,14 @@ export function ShippingDeck() {
             </div>
           )}
         </section>
+      ) : null}
+
+      {activeTab === "sources" ? (
+        <ProductSourcesPanel
+          onSourceDeleted={removeProductSourceFromOrders}
+          onSourceSaved={applyProductSourceToOrders}
+          onTotalChange={setSourceTotal}
+        />
       ) : null}
 
       {activeTab === "board" ? (

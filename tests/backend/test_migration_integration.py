@@ -18,6 +18,7 @@ REQUIRED_ALEMBIC_TABLES = {
     "org_memberships",
     "module_bindings",
     "module_control_states",
+    "w_product_sources",
     "api_key_records",
     "api_key_module_bindings",
     "execution_callbacks",

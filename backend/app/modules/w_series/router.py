@@ -13,6 +13,7 @@ import secrets
 from datetime import UTC, datetime
 from decimal import Decimal
 from hashlib import sha256
+from math import ceil
 from typing import Any, Literal
 from uuid import UUID
 
@@ -35,7 +36,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -46,7 +47,7 @@ from ...db.session import SessionLocal, get_db
 from ...models.user import User
 from ...services.permission_service import resolve_current_user_permission_info
 from ..k_series.product_knowledge.models import KProductKnowledgeProduct
-from . import logistics
+from . import logistics, product_sources
 from .logistics_schemas import (
     OrderItem,
     OrderListResponse,
@@ -65,7 +66,18 @@ from .logistics_schemas import (
     ZoneRate,
 )
 from .shipping import engine, service
-from .shipping.models import WOrder, WShippingClass, WShippingRule, WSyncJob
+from .shipping.models import (
+    WOrder,
+    WProductSource,
+    WShippingClass,
+    WShippingRule,
+    WSyncJob,
+)
+from .source_schemas import (
+    ProductSourceListResponse,
+    ProductSourceRead,
+    ProductSourceUpsertRequest,
+)
 
 router = APIRouter(prefix="/w", tags=["w-site-ops"])
 # Server-to-server endpoints are also mounted at bare /w paths in main.py.
@@ -75,6 +87,7 @@ public_router = APIRouter(prefix="/track", tags=["w-site-ops-public"])
 MODULE_KEY = "w.site_ops"
 PERMISSION_READ = "w.site_ops.read"
 PERMISSION_MANAGE = "w.site_ops.manage"
+SOURCE_PAGE_SIZE = 50
 MAX_PUBLIC_TRACK_BODY_BYTES = 32 * 1024
 PUBLIC_TRACKING_STATUSES = frozenset(
     {
@@ -374,6 +387,65 @@ def _order_item(row: WOrder) -> OrderItem:
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _required_source_sku(raw_sku: str) -> str:
+    normalized = product_sources.normalize_sku(raw_sku)
+    if not normalized:
+        raise HTTPException(status_code=422, detail="SKU 不能为空。")
+    if len(normalized) > 64:
+        raise HTTPException(status_code=422, detail="SKU 最长 64 个字符。")
+    return normalized
+
+
+def _apply_product_source_payload(
+    row: WProductSource,
+    payload: ProductSourceUpsertRequest,
+) -> None:
+    for field, value in payload.model_dump(exclude={"sku"}).items():
+        setattr(row, field, value)
+
+
+def _order_items_with_sources(
+    db: Session,
+    rows: list[WOrder],
+) -> list[OrderItem]:
+    """Serialize first so a failed source query cannot poison order output."""
+
+    order_items = [_order_item(row) for row in rows]
+    try:
+        sources_by_sku = product_sources.load_sources_for_items(
+            db,
+            (order.items_json for order in order_items),
+        )
+        return [
+            order.model_copy(
+                update={
+                    "items_json": product_sources.enrich_items(
+                        order.items_json,
+                        sources_by_sku,
+                    )
+                }
+            )
+            for order in order_items
+        ]
+    except Exception:  # noqa: BLE001 - source lookup must never hide orders
+        logger.exception("W-S product source enrichment failed; using missing state")
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001 - response is already detached from ORM
+            logger.exception("W-S product source fail-safe rollback failed")
+        return [
+            order.model_copy(
+                update={
+                    "items_json": product_sources.enrich_items(
+                        order.items_json,
+                        {},
+                    )
+                }
+            )
+            for order in order_items
+        ]
 
 
 def _track_public_error(status_code: int) -> JSONResponse:
@@ -968,6 +1040,127 @@ def shipping_product_patch(
     )
 
 
+@router.get("/sources", response_model=ProductSourceListResponse)
+def product_sources_list(
+    query: str | None = Query(default=None, max_length=200),
+    page: int = Query(default=1, ge=1),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_READ)),
+) -> ProductSourceListResponse:
+    del user
+    filters: list[Any] = []
+    search_term = (query or "").strip()
+    if search_term:
+        pattern = f"%{search_term}%"
+        filters.append(
+            or_(
+                WProductSource.sku.ilike(pattern),
+                WProductSource.supplier_name.ilike(pattern),
+            )
+        )
+
+    total = int(
+        db.scalar(
+            select(func.count())
+            .select_from(WProductSource)
+            .where(*filters)
+        )
+        or 0
+    )
+    rows = list(
+        db.scalars(
+            select(WProductSource)
+            .where(*filters)
+            .order_by(
+                WProductSource.updated_at.desc(),
+                WProductSource.created_at.desc(),
+                WProductSource.id.desc(),
+            )
+            .offset((page - 1) * SOURCE_PAGE_SIZE)
+            .limit(SOURCE_PAGE_SIZE)
+        ).all()
+    )
+    return ProductSourceListResponse(
+        items=[ProductSourceRead.model_validate(row) for row in rows],
+        page=page,
+        page_size=SOURCE_PAGE_SIZE,
+        total=total,
+        pages=max(1, ceil(total / SOURCE_PAGE_SIZE)),
+    )
+
+
+@router.put("/sources/{sku}", response_model=ProductSourceRead)
+def product_source_upsert(
+    sku: str,
+    payload: ProductSourceUpsertRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_MANAGE)),
+) -> ProductSourceRead:
+    del user
+    normalized_sku = _required_source_sku(sku)
+    if payload.sku is not None and payload.sku != normalized_sku:
+        raise HTTPException(status_code=422, detail="body SKU 与路径 SKU 不一致。")
+
+    row = db.scalar(
+        select(WProductSource)
+        .where(WProductSource.sku == normalized_sku)
+        .with_for_update()
+    )
+    if row is None:
+        row = WProductSource(sku=normalized_sku, source_url=payload.source_url)
+        db.add(row)
+    _apply_product_source_payload(row, payload)
+
+    try:
+        db.commit()
+    except IntegrityError as first_error:
+        # A concurrent creator can win between SELECT and INSERT.  Retrying as
+        # an update preserves PUT upsert semantics instead of returning 409.
+        db.rollback()
+        row = db.scalar(
+            select(WProductSource)
+            .where(WProductSource.sku == normalized_sku)
+            .with_for_update()
+        )
+        if row is None:
+            raise HTTPException(
+                status_code=409,
+                detail="货源保存冲突，请重试。",
+            ) from first_error
+        _apply_product_source_payload(row, payload)
+        try:
+            db.commit()
+        except IntegrityError as retry_error:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="货源保存冲突，请重试。",
+            ) from retry_error
+
+    db.refresh(row)
+    return ProductSourceRead.model_validate(row)
+
+
+@router.delete("/sources/{sku}", status_code=status.HTTP_204_NO_CONTENT)
+def product_source_delete(
+    sku: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_MANAGE)),
+) -> Response:
+    del user
+    normalized_sku = _required_source_sku(sku)
+    row = db.scalar(
+        select(WProductSource)
+        .where(WProductSource.sku == normalized_sku)
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="货源不存在。")
+    db.delete(row)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/orders", response_model=OrderListResponse)
 def orders_list(
     filter_name: Literal["pending", "tracked", "all"] = Query(
@@ -988,7 +1181,7 @@ def orders_list(
     )
     return OrderListResponse(
         summary=summary,
-        orders=[_order_item(row) for row in rows],
+        orders=_order_items_with_sources(db, rows),
     )
 
 

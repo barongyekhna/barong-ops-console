@@ -1184,9 +1184,31 @@ function isAllowedCsPath(method: string, path: string[]) {
   return false;
 }
 
+function isWSourceSkuPathSegment(segment: string) {
+  const decoded = decodePathSegment(segment);
+  return (
+    decoded.length > 0 &&
+    decoded.length <= 64 &&
+    decoded === decoded.trim() &&
+    decoded !== "." &&
+    decoded !== ".." &&
+    !/[\u0000-\u001f\u007f/\\]/.test(decoded)
+  );
+}
+
 function isAllowedWPath(method: string, path: string[]) {
   if (path[0] !== "w") {
     return false;
+  }
+  if (path.length === 2 && path[1] === "sources") {
+    return method === "GET";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "sources" &&
+    isWSourceSkuPathSegment(path[2])
+  ) {
+    return method === "PUT" || method === "DELETE";
   }
   if (
     path.length === 3 &&

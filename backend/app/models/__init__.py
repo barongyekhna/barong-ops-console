@@ -76,6 +76,7 @@ from ..modules.k_series.product_knowledge.models import (
 )
 from ..modules.p_series.upload.models import KCategoryWCMap, PUploadJob
 from ..modules.cs_series.models import CSMessage, CSReply
+from ..modules.w_series.shipping.models import WProductSource
 
 __all__ = [
     "AgentMemoryAccessLog",
@@ -153,4 +154,5 @@ __all__ = [
     "User",
     "UserPermissionAssignment",
     "WorkflowRegistry",
+    "WProductSource",
 ]

@@ -33,6 +33,9 @@ const KNOWN_UNPROXIED = new Set([
   "POST /api/app/notifications/ingest",
   // CS inbound is authenticated server-to-server form ingest and must bypass Next.
   "POST /api/public/cs/inbound",
+  // Public order tracking is called server-to-server by the WordPress plugin
+  // and is reserved for direct Nginx routing instead of the Next proxy.
+  "POST /api/public/track/lookup",
   // H health ingest is a machine endpoint routed directly by Nginx,
   // never through Next.
   "POST /api/app/h/ingest",

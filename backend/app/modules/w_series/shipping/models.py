@@ -22,7 +22,7 @@ from sqlalchemy import (
     func,
     true,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 from sqlalchemy.schema import conv
 from sqlalchemy.types import Uuid
 
@@ -189,6 +189,42 @@ class WOrder(WUUIDPrimaryKeyMixin, WTimestampMixin, Base):
         nullable=False,
         server_default="none",
     )
+
+
+class WProductSource(WUUIDPrimaryKeyMixin, WTimestampMixin, Base):
+    """The single, normalized purchasing source assigned to a product SKU."""
+
+    __tablename__ = "w_product_sources"
+    __table_args__ = (
+        UniqueConstraint("sku", name="uq_w_product_sources_sku"),
+        Index("ix_w_product_sources_sku", "sku"),
+    )
+
+    sku: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    supplier_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    unit_cost: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+    currency: Mapped[str] = mapped_column(
+        String(8),
+        nullable=False,
+        server_default="CNY",
+    )
+    moq: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    @validates("sku")
+    def _normalize_sku(self, _key: str, value: object) -> str:
+        if value is None:
+            raise ValueError("sku must not be blank")
+        normalized = str(value).strip().upper()
+        if not normalized:
+            raise ValueError("sku must not be blank")
+        if len(normalized) > 64:
+            raise ValueError("sku must contain at most 64 characters")
+        return normalized
 
 
 class WShippingRule(WUUIDPrimaryKeyMixin, WTimestampMixin, Base):

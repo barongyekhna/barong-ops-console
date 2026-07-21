@@ -125,11 +125,48 @@ export type TrackingStatus =
   | "expired"
   | "not_found";
 export type WritebackStatus = "none" | "pending" | "success" | "failed";
+export type ProductSourceState = "linked" | "missing";
+
+export type ProductSource = {
+  id: string;
+  sku: string;
+  source_url: string;
+  supplier_name: string | null;
+  unit_cost: string | number | null;
+  currency: string;
+  moq: number | null;
+  notes: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type ProductSourcePayload = {
+  source_url: string;
+  supplier_name: string | null;
+  unit_cost: number | null;
+  currency: string;
+  moq: number | null;
+  notes: string | null;
+};
+
+export type ProductSourcesResponse = {
+  items: ProductSource[];
+  page: number;
+  page_size: number;
+  total: number;
+  pages?: number;
+};
 
 export type WOrderItem = {
   name: string;
   qty: number;
   sku?: string | null;
+  source_url?: string | null;
+  supplier_name?: string | null;
+  unit_cost?: string | number | null;
+  currency?: string | null;
+  moq?: number | null;
+  source_state?: ProductSourceState;
 };
 
 export type TrackingEvent = {
@@ -343,6 +380,63 @@ export async function getOrders(
     { cache: "no-store", headers: buildHeaders(), method: "GET" },
   );
   return readJson<WOrdersResponse>(response, "订单与物流");
+}
+
+export function normalizeProductSourceSku(sku: string) {
+  return sku.trim().toUpperCase();
+}
+
+export function isHttpProductSourceUrl(value: string) {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+export async function getProductSources(
+  query = "",
+  page = 1,
+): Promise<ProductSourcesResponse> {
+  const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
+  const search = new URLSearchParams({
+    query: query.trim(),
+    page: String(normalizedPage),
+  });
+  const response = await fetch(
+    `${API_PROXY_BASE}/w/sources?${search.toString()}`,
+    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  );
+  return readJson<ProductSourcesResponse>(response, "货源库");
+}
+
+export async function upsertProductSource(
+  sku: string,
+  payload: ProductSourcePayload,
+): Promise<ProductSource> {
+  const normalizedSku = normalizeProductSourceSku(sku);
+  if (!normalizedSku) throw new Error("SKU 不能为空");
+  const response = await fetch(
+    `${API_PROXY_BASE}/w/sources/${encodeURIComponent(normalizedSku)}`,
+    {
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "PUT",
+    },
+  );
+  return readJson<ProductSource>(response, "保存货源");
+}
+
+export async function deleteProductSource(sku: string): Promise<void> {
+  const normalizedSku = normalizeProductSourceSku(sku);
+  if (!normalizedSku) throw new Error("SKU 不能为空");
+  const response = await fetch(
+    `${API_PROXY_BASE}/w/sources/${encodeURIComponent(normalizedSku)}`,
+    { cache: "no-store", headers: buildHeaders(), method: "DELETE" },
+  );
+  if (response.status === 204) return;
+  await readJson<unknown>(response, "删除货源");
 }
 
 export async function patchOrderTracking(
