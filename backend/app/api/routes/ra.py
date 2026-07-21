@@ -40,6 +40,37 @@ from r_system_v2.ra.supplier_discovery import (
 
 router = APIRouter(prefix="/r/analysis", tags=["r-analysis"])
 
+# 分组池短缓存:查询要解压上百份大 payload(~6s),看板刷新频繁但数据分钟级新鲜
+# 足够。写操作(approve/reject/opus复核)会主动清空,避免滑掉的卡片回魂。
+_GROUPS_CACHE: dict[str, tuple[float, dict[str, object]]] = {}
+_GROUPS_CACHE_TTL_SECONDS = 60.0
+
+
+def _groups_cache_get(key: str) -> dict[str, object] | None:
+    import time as _time
+
+    hit = _GROUPS_CACHE.get(key)
+    if hit is None:
+        return None
+    stamp, value = hit
+    if _time.monotonic() - stamp > _GROUPS_CACHE_TTL_SECONDS:
+        _GROUPS_CACHE.pop(key, None)
+        return None
+    return value
+
+
+def _groups_cache_put(key: str, value: dict[str, object]) -> None:
+    import time as _time
+
+    if len(_GROUPS_CACHE) > 32:
+        _GROUPS_CACHE.clear()
+    _GROUPS_CACHE[key] = (_time.monotonic(), value)
+
+
+def _groups_cache_bust() -> None:
+    _GROUPS_CACHE.clear()
+
+
 
 class RAProfitManualRequest(BaseModel):
     asin: str = Field(min_length=10, max_length=20)
@@ -565,6 +596,10 @@ def ra_groups(
 ) -> dict[str, object]:
     """三分组池：GPT 终审 pass 的产品按渠道路由分组；review 进待滑堆。"""
     target_org = _required_target_org(db, user)
+    cache_key = f"{target_org.org_id}|{channel or ''}|{include_rejected}|{limit}"
+    cached = _groups_cache_get(cache_key)
+    if cached is not None:
+        return cached
     with without_org_data_isolation():
         # 只取分组卡需要的字段，不拉整份报告（报告里含全部 AI 层审计，很重）。
         rows = db.execute(
@@ -672,7 +707,9 @@ def ra_groups(
             "items": groups[requested],
             "counts": counts,
         }
-    return {"groups": groups, "counts": counts}
+    response = {"groups": groups, "counts": counts}
+    _groups_cache_put(cache_key, response)
+    return response
 
 
 def _ai_route_note(payload: dict[str, object], group_name: str) -> str | None:
@@ -960,6 +997,7 @@ def ra_report_opus_review(
     db: Session = Depends(get_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
+    _groups_cache_bust()
     """手动触发 Opus 建议：打包全部上下文，返回系统性建议。"""
     from r_system_v2.ra.ai_selection import RAAISelectionError, run_opus_review_for_report
 
@@ -1016,6 +1054,7 @@ def ra_report_approve(
     db: Session = Depends(get_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
+    _groups_cache_bust()
     return _update_report_status(db, user=user, report_id=report_id, report_status="approved")
 
 
@@ -1025,6 +1064,7 @@ def ra_report_reject(
     db: Session = Depends(get_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
+    _groups_cache_bust()
     return _update_report_status(db, user=user, report_id=report_id, report_status="rejected")
 
 
