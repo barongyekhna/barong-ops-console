@@ -1051,16 +1051,22 @@ def _first_variant(
     ).first()
 
 
-# 主副图硬规格：1800×1800；所有成品图硬规格：webp。
-GALLERY_TARGET_SIDE = 1800
-_WEBP_QUALITY = 92
+# 图片体积铁律(2026-07-21 速度整治,用户拍板):
+# ① 所有成品图必须 webp(无例外,fail-closed 在保存路径上强制转换);
+# ② 主副图 1500×1500、其余图最长边 ≤1500 —— 商品页实测 1800/q92 时
+#    单图 300-580KB、整页图片 3.2MB,是全站最大性能负担;
+# ③ 质量 82(method=6):肉眼与 92 无可辨差异,体积约减半。
+# I 系列渲染端不改,瘦身只发生在 K 管线入库这一道闸(用户指令)。
+GALLERY_TARGET_SIDE = 1500
+MAX_RENDER_SIDE = 1500
+_WEBP_QUALITY = 82
 
 
 def _postprocess_rendered_image(
     contents: bytes,
     placement: str,
 ) -> tuple[bytes, str, int, int]:
-    """渲染成品统一后处理：gallery 放大到 1800×1800，全部转 webp。"""
+    """渲染成品统一后处理：gallery 定尺 1500×1500,其余图最长边压到 1500,全部转 webp。"""
     from io import BytesIO
 
     from PIL import Image
@@ -1070,6 +1076,12 @@ def _postprocess_rendered_image(
         if placement == PLACEMENT_GALLERY:
             img = img.resize(
                 (GALLERY_TARGET_SIDE, GALLERY_TARGET_SIDE),
+                Image.LANCZOS,
+            )
+        elif max(img.size) > MAX_RENDER_SIDE:
+            ratio = MAX_RENDER_SIDE / max(img.size)
+            img = img.resize(
+                (max(1, round(img.width * ratio)), max(1, round(img.height * ratio))),
                 Image.LANCZOS,
             )
         buffer = BytesIO()

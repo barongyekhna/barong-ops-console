@@ -195,7 +195,40 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
         blockers.append("运费模板未分配（去 W-S 物流网络中枢处理）")
     # 品牌硬门（fail-closed）：审查必须存在、通过、且内容未变
     blockers.extend(audit_gate_blockers(db, product))
+    # 图片格式铁律（2026-07-21 用户拍板）：出站成品图必须 webp,无例外
+    blockers.extend(_non_webp_image_blockers(db, product))
     return blockers
+
+
+def _non_webp_image_blockers(db: Session, product: Any) -> list[str]:
+    """铁律:凡是会被上架带走的图(渲染成品或老产品 bound 媒资)必须是 webp。
+
+    渲染管线在入库时已强制转 webp,这里是最后一道 fail-closed 防线,
+    拦截手动上传/历史遗留的 png/jpg 混进上架载荷。
+    """
+    try:
+        rows = db.execute(
+            text(
+                "SELECT mime_type, COUNT(*) AS n "
+                "FROM k_product_knowledge_media_assets "
+                "WHERE product_id = :p AND asset_type = 'image' "
+                "  AND ( (status = 'available' "
+                "         AND metadata_json->>'render_pipeline' = 'k_auto_render') "
+                "     OR status = 'bound' ) "
+                "  AND mime_type != 'image/webp' "
+                "GROUP BY mime_type"
+            ),
+            {"p": str(product.id)},
+        ).mappings().all()
+    except Exception:  # noqa: BLE001 - gate must convert infrastructure errors
+        logger.exception(
+            "webp gate check failed product_id=%s", getattr(product, "id", None)
+        )
+        return ["图片格式铁律校验暂不可用"]
+    if not rows:
+        return []
+    detail = "、".join(f"{r['mime_type']}×{r['n']}" for r in rows)
+    return [f"图片非 webp（铁律:成品图必须 webp）：{detail}"]
 
 
 def _required_spec_template_blockers(db: Session, product: Any) -> list[str]:
