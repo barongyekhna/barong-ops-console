@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import socket
+from base64 import b64encode
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from time import perf_counter
@@ -24,6 +25,8 @@ FOUR_S_API_HOSTS = frozenset(("4sapi.com", "www.4sapi.com"))
 DEEPSEEK_HOSTS = frozenset(("api.deepseek.com",))
 SERPER_HOSTS = frozenset(("google.serper.dev",))
 KEEPA_HOSTS = frozenset(("api.keepa.com",))
+# 独立站 WP 桥凭据(H 站点健康):单站点系统,站点域名与全后端其它硬编码一致
+WORDPRESS_HOSTS = frozenset(("barongyekhna.com", "www.barongyekhna.com"))
 RAINFOREST_HOSTS = frozenset(("api.rainforestapi.com",))
 ALIBABA_HOSTS = frozenset(("gw.open.1688.com",))
 GOOGLE_OAUTH_URL = "https://oauth2.googleapis.com/token"
@@ -105,6 +108,8 @@ def adapter_for_target(target: ProbeTarget) -> str:
         return "blocked_proxy_route"
     if key_type == "n8n" or "n8n" in aliases:
         return "n8n"
+    if key_type == "wordpress" or "wordpress" in aliases:
+        return "wordpress"
     return "unsupported"
 
 
@@ -313,6 +318,18 @@ def _probe_serper(
             reason_code="search_response_invalid",
             http_status=200,
         )
+    if response.status_code == 400:
+        # Serper 额度耗尽走 400 {"message": "Not enough credits"}——
+        # 给出可行动的 reason(充值),别混进笼统的 unexpected_provider_response
+        payload = _json_dict(response) or {}
+        if "not enough credits" in str(payload.get("message", "")).lower():
+            return _finish(
+                adapter="serper",
+                started=started,
+                status="provider_error",
+                reason_code="provider_credits_exhausted",
+                http_status=400,
+            )
     return _status_from_http(
         adapter="serper",
         started=started,
@@ -647,6 +664,57 @@ def _probe_n8n(
     )
 
 
+def _probe_wordpress(
+    target: ProbeTarget,
+    *,
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> ProbeResult:
+    """WP 桥凭据最小检测:Basic Auth 打 /wp-json/wp/v2/users/me(只读)。
+
+    密钥值是 JSON {"base_url","user","app_password"}(H 站点健康 WP 桥口径)。
+    """
+
+    adapter = "wordpress"
+    started = perf_counter()
+    try:
+        payload = json.loads(str(target.secret_value))
+    except (TypeError, ValueError):
+        payload = None
+    if not isinstance(payload, dict):
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="malformed",
+            reason_code="wordpress_secret_not_json",
+        )
+    base_url = str(payload.get("base_url") or "").strip().rstrip("/")
+    user = str(payload.get("user") or "").strip()
+    app_password = str(payload.get("app_password") or "").strip()
+    if not base_url or not user or not app_password:
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="malformed",
+            reason_code="wordpress_secret_fields_missing",
+        )
+    token = b64encode(f"{user}:{app_password}".encode("utf-8")).decode("ascii")
+    response = _request(
+        "GET",
+        f"{base_url}/wp-json/wp/v2/users/me",
+        allowed_hosts=WORDPRESS_HOSTS,
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        headers={"Authorization": f"Basic {token}"},
+    )
+    return _status_from_http(
+        adapter=adapter,
+        started=started,
+        response=response,
+        success_reason="wp_auth_ok",
+    )
+
+
 def probe_target(
     target: ProbeTarget,
     *,
@@ -719,6 +787,12 @@ def probe_target(
         )
     if adapter == "n8n":
         return _probe_n8n(
+            target,
+            enforce_public_network=enforce_public_network,
+            transport=transport,
+        )
+    if adapter == "wordpress":
+        return _probe_wordpress(
             target,
             enforce_public_network=enforce_public_network,
             transport=transport,

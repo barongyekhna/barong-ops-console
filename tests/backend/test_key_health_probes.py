@@ -151,3 +151,75 @@ def test_provider_alias_cannot_redirect_secret_to_another_host() -> None:
     result = safe_probe_target(target)
     assert result.status == "malformed"
     assert result.reason_code == "provider_host_mismatch"
+
+
+def test_wordpress_probe_authenticates_via_users_me() -> None:
+    secret = json.dumps(
+        {
+            "base_url": "https://barongyekhna.com",
+            "user": "barongyekhna",
+            "app_password": "abcd efgh ijkl mnop qrst uvwx",
+        }
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "barongyekhna.com"
+        assert request.url.path == "/wp-json/wp/v2/users/me"
+        assert request.headers["authorization"].startswith("Basic ")
+        return httpx.Response(200, json={"id": 1, "name": "barongyekhna"})
+
+    target = _target(
+        url="https://barongyekhna.com",
+        aliases=("wordpress",),
+        secret=secret,
+    )
+    assert adapter_for_target(target) == "wordpress"
+    result = probe_target(
+        target,
+        enforce_public_network=False,
+        transport=httpx.MockTransport(handler),
+    )
+    assert result.status == "healthy"
+    assert result.reason_code == "wp_auth_ok"
+
+
+def test_wordpress_probe_flags_bad_secret_and_bad_auth() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"code": "invalid_username"})
+
+    # 非 JSON 密钥值 → malformed,不出网
+    target = _target(url="https://barongyekhna.com", aliases=("wordpress",), secret="not-json")
+    result = probe_target(target, enforce_public_network=False, transport=None)
+    assert result.status == "malformed"
+    assert result.reason_code == "wordpress_secret_not_json"
+
+    # 认证被拒 → invalid
+    secret = json.dumps(
+        {
+            "base_url": "https://barongyekhna.com",
+            "user": "barongyekhna",
+            "app_password": "wrong",
+        }
+    )
+    target = _target(url="https://barongyekhna.com", aliases=("wordpress",), secret=secret)
+    result = probe_target(
+        target,
+        enforce_public_network=False,
+        transport=httpx.MockTransport(handler),
+    )
+    assert result.status == "invalid"
+    assert result.reason_code == "authentication_rejected"
+
+
+def test_serper_credits_exhausted_maps_to_actionable_reason() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"message": "Not enough credits", "statusCode": 400})
+
+    target = _target(url="https://google.serper.dev", aliases=("serper",))
+    result = probe_target(
+        target,
+        enforce_public_network=False,
+        transport=httpx.MockTransport(handler),
+    )
+    assert result.status == "provider_error"
+    assert result.reason_code == "provider_credits_exhausted"
