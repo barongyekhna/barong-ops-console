@@ -1371,6 +1371,26 @@ def _product_full_ai_payload(
         ProductKnowledgeVariantRead.model_validate(variant).model_dump(mode="json")
         for variant in _product_variants(db, product)
     ]
+    # 多变体产品的物理规格藏在 attributes_json.physical(2026-07-22 变体改造):
+    # 提到每个变体第一层,文案/卖点 AI 才看得见;否则自检误报"缺尺寸重量"。
+    for entry in variants:
+        raw_attrs = entry.get("attributes_json")
+        physical = raw_attrs.get("physical") if isinstance(raw_attrs, dict) else None
+        if isinstance(physical, dict):
+            if entry.get("dimensions") is None:
+                entry["dimensions"] = physical.get("dimensions")
+            if entry.get("weight") is None:
+                entry["weight"] = physical.get("weight")
+    variant_dimensions = [
+        {"variant_sku": entry.get("variant_sku"), **entry["dimensions"]}
+        for entry in variants
+        if isinstance(entry.get("dimensions"), dict)
+    ]
+    variant_weights = [
+        {"variant_sku": entry.get("variant_sku"), **entry["weight"]}
+        for entry in variants
+        if isinstance(entry.get("weight"), dict)
+    ]
     attributes = [
         {
             "id": str(row.id),
@@ -1442,13 +1462,32 @@ def _product_full_ai_payload(
         "variants": variants,
         "keywords": keywords,
         "risk_terms": risk_terms,
-        "dimensions": product.dimensions_json,
-        "weight": product.weight_json,
+        "dimensions": (
+            product.dimensions_json
+            if product.dimensions_json is not None
+            else (
+                {"per_variant": variant_dimensions} if variant_dimensions else None
+            )
+        ),
+        "weight": (
+            product.weight_json
+            if product.weight_json is not None
+            else ({"per_variant": variant_weights} if variant_weights else None)
+        ),
         "price": {
             "regular_price": str(product.regular_price)
             if product.regular_price is not None
             else None,
             "currency": product.price_currency,
+            # 多变体产品价格在变体上;逐变体给出,AI 不再报"价格缺失"
+            "variant_prices": [
+                {
+                    "variant_sku": entry.get("variant_sku"),
+                    "price": entry.get("price_override"),
+                }
+                for entry in variants
+                if entry.get("price_override") is not None
+            ],
         },
     }
 

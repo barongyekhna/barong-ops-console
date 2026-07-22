@@ -3198,6 +3198,9 @@ def _approved_selling_points_snapshot(
         if not text_value:
             continue
         normalized = dict(item)
+        # text_zh 是给运营者看的中文对照,纯展示字段;混进英文作图提示词
+        # 会带偏模型输出格式(2026-07-22 实测连续三次 brief 校验失败)。
+        normalized.pop("text_zh", None)
         normalized["id"] = str(item.get("id") or f"sp-{index}")
         normalized["text"] = text_value
         evidence = str(normalized.get("evidence") or "").strip()
@@ -5390,10 +5393,25 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         # A reviewed multi-item package needs a dedicated gallery contents shot.
         # Empty/one-item packages are the explicit single-product exemption.
         accessory_required = len(package_includes) > 1
-        result = _normalize_evidence_driven_image_brief(
-            provider_result,
-            approved_points,
-        )
+        try:
+            result = _normalize_evidence_driven_image_brief(
+                provider_result,
+                approved_points,
+            )
+        except KWorkflowExecutionError:
+            # 采样波动会导致一次性的格式滑坡(漏 overlay/漏 images 数组)。
+            # 重采样一次再判死,省得用户手动反复点(2026-07-22)。
+            provider_result = self._execute_provider(
+                provider="chatgpt",
+                task_type="generate",
+                key=key,
+                gate_context=gate_context,
+                payload=ai_input,
+            )
+            result = _normalize_evidence_driven_image_brief(
+                provider_result,
+                approved_points,
+            )
         try:
             _validate_image_brief_gallery_composition(
                 result,

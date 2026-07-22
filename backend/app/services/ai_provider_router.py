@@ -59,6 +59,9 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
 DEFAULT_FALLBACK_PROVIDERS = {
     "deepseek": "chatgpt",
     "claude": "chatgpt",
+    # 2026-07-22 用户拍板:GPT 全系(含降级序列)都打不通时,试 Opus 4.8。
+    # 4sapi 上同一把钥匙可请求任意模型,通不通取决于钥匙分组的通道。
+    "chatgpt": "claude",
 }
 # 2026-07-22 实况:4sapi 的「OpenAI优质」分组会整组掉线(5.5/5.6 全家 503
 # "No available channel"),低档通道仍活着。同 provider 内按序降级,
@@ -66,7 +69,9 @@ DEFAULT_FALLBACK_PROVIDERS = {
 MODEL_FALLBACKS: dict[str, list[str]] = {
     "chatgpt": ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.2-high"],
 }
-DEFAULT_PROVIDER_TIMEOUT_SECONDS = 150.0
+# 240s:降级到低档模型(如 5.2-high)生成整页文案实测会超过 150s;
+# 生成类任务全部走异步 job,放宽超时不影响交互体验(2026-07-22)。
+DEFAULT_PROVIDER_TIMEOUT_SECONDS = 240.0
 DEFAULT_PROVIDER_MAX_ATTEMPTS = 1
 
 
