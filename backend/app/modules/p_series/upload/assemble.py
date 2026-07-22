@@ -99,6 +99,9 @@ def _approved_evidence_points(product: Any) -> list[dict[str, Any]]:
         if not isinstance(raw, dict):
             return []
         point = dict(raw)
+        # 与 K 生成侧同口径:text_zh 是给运营者看的中文对照,不参与证据指纹
+        # (2026-07-23 修复:两侧口径不一致导致「文案证据快照过期」误拦)。
+        point.pop("text_zh", None)
         point_id = str(point.get("id") or f"sp-{index}").strip()
         evidence = str(point.get("evidence") or "").strip()
         snapshot = point.get("evidence_snapshot")

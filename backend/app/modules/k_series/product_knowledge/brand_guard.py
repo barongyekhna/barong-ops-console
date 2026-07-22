@@ -276,9 +276,10 @@ def _chat_completion(key, messages: list[dict[str, Any]]) -> str:
                 },
                 json={"model": model, "messages": messages},
             )
-            if response.status_code == 503:
+            if response.status_code >= 500:
+                # 503=通道下线、504=上游超时——都是代理侧故障,换模型再试
                 last_error = httpx.HTTPStatusError(
-                    f"channel down for {model}",
+                    f"upstream {response.status_code} for {model}",
                     request=response.request,
                     response=response,
                 )
