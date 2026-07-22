@@ -530,8 +530,8 @@ def _variants(db: Session, product: Any) -> list[Variant]:
     # 双格式绑定:Postgres uuid 两种写法都认;SQLite 测试库存的是无横杠 hex
     rows = db.execute(
         text(
-            "SELECT variant_sku, color, size, function, price_override, "
-            "attributes_json "
+            "SELECT variant_sku, color, size, function, quantity, "
+            "price_override, attributes_json "
             "FROM k_product_knowledge_variants WHERE product_id IN (:p, :p_hex) "
             "ORDER BY created_at ASC"
         ),
@@ -557,6 +557,7 @@ def _variants(db: Session, product: Any) -> list[Variant]:
                 function=(
                     imperialize_text(r["function"]) if r["function"] else None
                 ),
+                quantity=r["quantity"],
                 price=price,
                 dimensions=physical.get("dimensions"),
                 weight=physical.get("weight"),

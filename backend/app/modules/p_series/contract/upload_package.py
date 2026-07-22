@@ -82,6 +82,9 @@ class Variant(BaseModel):
     color: str | None = None
     size: str | None = None
     function: str | None = None
+    # Pack quantity (1-pack / 2-pack …): the only distinguishing dimension for
+    # quantity-differentiated variants; the uploader renders it as "Pack Size".
+    quantity: int | None = None
     price: Price | None = None
     image: str | None = None  # absolute URL
     gtin: str | None = None
