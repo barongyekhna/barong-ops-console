@@ -2897,6 +2897,31 @@ def product_knowledge_create(
                 "manual-create source autofill failed product=%s",
                 getattr(product, "id", None),
             )
+    # 可选参考图:贴图链直下,或从 1688 货源链接自动取主图(ACL 未开通时
+    # 安静跳过)。同样 fail-safe:参考图失败绝不阻塞建品。
+    if (payload.reference_image_url or "").strip() or (payload.source_url or "").strip():
+        try:
+            from .manual_reference import attach_manual_reference_image
+
+            outcome = attach_manual_reference_image(
+                db,
+                product=product,
+                reference_image_url=payload.reference_image_url,
+                source_url=payload.source_url,
+                user=user,
+            )
+            if outcome.get("status") == "stored":
+                db.commit()
+            logger.info(
+                "manual-create reference image product=%s outcome=%s",
+                product.id,
+                outcome,
+            )
+        except Exception:  # noqa: BLE001 - reference image is optional garnish
+            logger.exception(
+                "manual-create reference image failed product=%s",
+                getattr(product, "id", None),
+            )
     return _product_read(db, product)
 
 

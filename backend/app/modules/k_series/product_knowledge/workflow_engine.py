@@ -1385,6 +1385,32 @@ class KProductKnowledgeWorkflowEngine:
             ),
             "source": "claude_opus_filtered_keywords",
         }
+        # 谷歌指标富化(2026-07-22 上品前接入):终筛词批量拿真实
+        # 月搜索量/竞争/CPC,写进终筛快照与关键词行 reason。fail-safe:
+        # 富化失败只记 trace,关键词管线照常走。
+        try:
+            from .google_keyword_metrics import (
+                fetch_keyword_metrics,
+                metrics_reason_text,
+            )
+
+            google_metrics = fetch_keyword_metrics(
+                self.db, [*primary, *secondary, *longtail]
+            )
+            if google_metrics:
+                keyword_set["google_metrics"] = google_metrics
+                self._append_trace(
+                    execution,
+                    "keyword_google_metrics",
+                    f"enriched:{len(google_metrics)}",
+                )
+        except Exception as exc:  # noqa: BLE001 - metrics are optional garnish
+            google_metrics = {}
+            self._append_trace(
+                execution,
+                "keyword_google_metrics",
+                f"failed_open:{str(exc)[:120]}",
+            )
         execution.final_keyword_set_json = keyword_set
         product.secondary_keywords_json = secondary
         product.long_tail_keywords_json = longtail
@@ -1395,6 +1421,7 @@ class KProductKnowledgeWorkflowEngine:
             source="AI_KEYWORD_OPTIMIZATION",
             status="approved",
             market=execution.target_market,
+            metrics=google_metrics,
         )
         self._upsert_keywords(
             product,
@@ -1403,6 +1430,7 @@ class KProductKnowledgeWorkflowEngine:
             source="AI_KEYWORD_OPTIMIZATION",
             status="approved",
             market=execution.target_market,
+            metrics=google_metrics,
         )
         self._upsert_keywords(
             product,
@@ -1411,6 +1439,7 @@ class KProductKnowledgeWorkflowEngine:
             source="AI_KEYWORD_OPTIMIZATION",
             status="approved",
             market=execution.target_market,
+            metrics=google_metrics,
         )
         self.db.add(
             KProductKnowledgeAIEvent(
@@ -1942,9 +1971,11 @@ class KProductKnowledgeWorkflowEngine:
         source: str,
         status: str,
         market: str | None,
+        metrics: dict[str, dict] | None = None,
     ) -> None:
         if not keywords:
             return
+        from .google_keyword_metrics import metrics_reason_text
         existing = {
             (
                 _normalize_key(row.keyword_text),
@@ -1965,6 +1996,8 @@ class KProductKnowledgeWorkflowEngine:
                 product.canonical_language,
                 market or "",
             )
+            metric = (metrics or {}).get(keyword.lower())
+            reason = metrics_reason_text(metric) if metric else None
             row = existing.get(key)
             if row is None:
                 self.db.add(
@@ -1977,11 +2010,14 @@ class KProductKnowledgeWorkflowEngine:
                         market=market,
                         source=source,
                         status=status,
+                        reason=reason,
                     )
                 )
                 continue
             row.source = source
             row.status = status
+            if reason:
+                row.reason = reason
 
     def _add_ai_event(
         self,

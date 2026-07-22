@@ -374,6 +374,7 @@ const PRODUCT_FORM_LABELS = {
 const initialValues: ProductFormValues = {
   brand_name: "",
   source_url: "",
+  reference_image_url: "",
   dimensions_input: {
     height: "",
     length: "",
@@ -1062,6 +1063,11 @@ export function ProductForm({
       setValidationError("货源链接必须以 http:// 或 https:// 开头（可留空）。");
       return;
     }
+    const refImageUrl = values.reference_image_url.trim();
+    if (refImageUrl && !/^https?:\/\//i.test(refImageUrl)) {
+      setValidationError("参考图链接必须以 http:// 或 https:// 开头（可留空）。");
+      return;
+    }
     if (values.product_type === "variable_product" && values.variants.length === 0) {
       setValidationError(labels.variantRequired);
       return;
@@ -1211,6 +1217,7 @@ export function ProductForm({
         attributes,
         brand_name: optionalText(values.brand_name),
         source_url: optionalText(values.source_url),
+        reference_image_url: optionalText(values.reference_image_url),
         dimensions_json: dimensions.value,
         long_description_en: rawInputText,
         main_keyword: mainKeyword,
@@ -1323,6 +1330,19 @@ export function ProductForm({
               }
               placeholder="粘贴 1688 商品页链接，出单后一键直达货源；可留空后补"
               value={values.source_url}
+            />
+          </label>
+
+          <label className={styles.field}>
+            <span>参考图链接（可选）</span>
+            <input
+              autoComplete="off"
+              inputMode="url"
+              onChange={(event) =>
+                updateValue("reference_image_url", event.target.value)
+              }
+              placeholder="1688 主图右键「复制图片地址」贴这里，直接喂渲染管线"
+              value={values.reference_image_url}
             />
           </label>
 

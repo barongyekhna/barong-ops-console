@@ -164,12 +164,15 @@ class ProductKnowledgeCreate(BaseModel):
     # 可选:1688 货源链接 —— 建品时顺手贴上,SKU 签发后自动灌入 W-S 货源库,
     # 出单即有「1688 下单」直达按钮;留空则以后去 W-S 货源库补。
     source_url: str | None = Field(default=None, max_length=1000)
+    # 可选:参考图链接(1688 商品主图右键复制地址即可)——直接进 K 参考图
+    # 管线喂渲染。域名白名单 alicdn/amazon,防 SSRF。
+    reference_image_url: str | None = Field(default=None, max_length=2000)
     variants: list[ProductKnowledgeVariantItem] = Field(default_factory=list)
     attributes: list[ProductKnowledgeAttributeItem] = Field(default_factory=list)
     keywords: list[ProductKnowledgeKeywordItem] = Field(default_factory=list)
     risk_terms: list[ProductKnowledgeRiskTermItem] = Field(default_factory=list)
 
-    @field_validator("source_url")
+    @field_validator("source_url", "reference_image_url")
     @classmethod
     def _validate_source_url(cls, value: str | None) -> str | None:
         cleaned = (value or "").strip()
