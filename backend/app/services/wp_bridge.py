@@ -130,7 +130,13 @@ def _read_json_response(response: Any) -> Any:
         raise ValueError("wordpress_response_too_large")
     if not raw:
         return {}
-    return json.loads(raw.decode("utf-8"))
+    text = raw.decode("utf-8")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # 诊断口不全是 JSON:email-verify 的 by-ev-ping 回纯文本版本行。
+        # HTTP 已成功就不该记 unreachable,原文交给 _ping_summary 的文本兜底。
+        return text.strip()
 
 
 def _request_json(
