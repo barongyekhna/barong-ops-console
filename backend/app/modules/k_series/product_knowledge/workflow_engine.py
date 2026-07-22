@@ -3534,6 +3534,19 @@ def _normalize_evidence_driven_image_brief(
             )
         image["position"] = position
         image["role"] = role
+        # 降级修复(2026-07-22 五连败教训):结构化标注层是按家规模型调教的
+        # 精密契约,代理通道换模型后 feature_callout 常缺 overlay。能绑上
+        # 卖点的降级为 proof_scene(场景证据图),绑不上的丢弃,由后续构图
+        # 校验决定整套方案是否仍达标——不再因单图缺标注一票否决。
+        if role == "feature_callout" and not isinstance(image.get("overlay"), dict):
+            fallback_point = _bind_image_to_selling_point(image, approved_points)
+            if fallback_point is None:
+                continue
+            role = "proof_scene"
+            image["role"] = role
+            image["overlay"] = None
+            if not str(image.get("proof_intent") or "").strip():
+                image["proof_intent"] = str(fallback_point.get("text") or "")
         if role == "main":
             main_count += 1
             if position != 1:
