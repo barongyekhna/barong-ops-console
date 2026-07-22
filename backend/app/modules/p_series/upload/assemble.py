@@ -186,7 +186,24 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
         blockers.append("未绑定图片")
     if not category_is_bound(product):
         blockers.append("未绑定类目")
-    if getattr(product, "regular_price", None) is None:
+    if (getattr(product, "product_type", "") or "") == "variable_product":
+        # 多变体产品父体不设价(2026-07-22 用户拍板):价格必须逐变体齐全。
+        # 双格式绑定:Postgres uuid 两种写法都认;SQLite 测试库存的是无横杠 hex
+        variant_prices = db.execute(
+            text(
+                "SELECT price_override FROM k_product_knowledge_variants "
+                "WHERE product_id IN (:p, :p_hex)"
+            ),
+            {
+                "p": str(product.id),
+                "p_hex": str(product.id).replace("-", ""),
+            },
+        ).scalars().all()
+        if not variant_prices:
+            blockers.append("变体缺失(多变体产品至少需要一个变体)")
+        elif any(value is None for value in variant_prices):
+            blockers.append("变体价格缺失(每个变体都必须有价格)")
+    elif getattr(product, "regular_price", None) is None:
         blockers.append("价格缺失")
     blockers.extend(_required_spec_template_blockers(db, product))
     if (getattr(product, "channel", "") or "").strip().lower() == "dtc" and not (
@@ -510,13 +527,18 @@ def _image_assets(
 
 
 def _variants(db: Session, product: Any) -> list[Variant]:
+    # 双格式绑定:Postgres uuid 两种写法都认;SQLite 测试库存的是无横杠 hex
     rows = db.execute(
         text(
-            "SELECT variant_sku, color, size, function, price_override "
-            "FROM k_product_knowledge_variants WHERE product_id = :p "
+            "SELECT variant_sku, color, size, function, price_override, "
+            "attributes_json "
+            "FROM k_product_knowledge_variants WHERE product_id IN (:p, :p_hex) "
             "ORDER BY created_at ASC"
         ),
-        {"p": str(product.id)},
+        {
+            "p": str(product.id),
+            "p_hex": str(product.id).replace("-", ""),
+        },
     ).mappings().all()
     out: list[Variant] = []
     for r in rows:
@@ -526,6 +548,7 @@ def _variants(db: Session, product: Any) -> list[Variant]:
                 regular=Decimal(str(r["price_override"])),
                 currency=(product.price_currency or "USD"),
             )
+        physical = _variant_physical(r["attributes_json"])
         out.append(
             Variant(
                 sku=r["variant_sku"],
@@ -535,9 +558,23 @@ def _variants(db: Session, product: Any) -> list[Variant]:
                     imperialize_text(r["function"]) if r["function"] else None
                 ),
                 price=price,
+                dimensions=physical.get("dimensions"),
+                weight=physical.get("weight"),
             )
         )
     return out
+
+
+def _variant_physical(attributes_json: Any) -> dict[str, Any]:
+    """变体级尺寸/重量挂在 attributes_json.physical(SQLite 测试库回来是字符串)。"""
+    raw = attributes_json
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+    physical = raw.get("physical") if isinstance(raw, dict) else None
+    return physical if isinstance(physical, dict) else {}
 
 
 def _resolve_wc_category(
@@ -758,6 +795,14 @@ def assemble_upload_package(
     # SKU migration rekeys legacy variants atomically; read them only after the
     # product identifier is final so the package cannot leak ASIN-derived SKUs.
     variants = _variants(db, product)
+    # 多变体产品父体不设价:契约父价取变体最低价(Woo 的 "from" 展示价口径),
+    # 真实售价由每个变体自己的 price 决定;门禁已保证变体价齐全。
+    regular_price = getattr(product, "regular_price", None)
+    if regular_price is None:
+        variant_regulars = [v.price.regular for v in variants if v.price is not None]
+        if not variant_regulars:
+            raise ValueError("价格缺失:父体无价且变体也无价(应先被门禁拦下)")
+        regular_price = min(variant_regulars)
     return UploadPackage(
         schema_version=UPLOAD_PACKAGE_SCHEMA_VERSION,
         job_id=job_id,
@@ -796,7 +841,7 @@ def assemble_upload_package(
                 else None,
             ),
             price=Price(
-                regular=Decimal(str(product.regular_price)),
+                regular=Decimal(str(regular_price)),
                 sale=(
                     Decimal(str(product.sale_price))
                     if product.sale_price is not None

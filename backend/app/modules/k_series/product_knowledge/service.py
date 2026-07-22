@@ -775,6 +775,19 @@ def _variant_rows_for_payload(
             used_variant_hashes=used_variant_hashes,
             used_variant_skus=used_variant_skus,
         )
+        # 变体级物理规格(1 个装/2 个装尺寸重量不同)挂在 attributes_json.physical,
+        # 结构与父体 dimensions_json/weight_json 同构;P 装配按变体读取。
+        attributes_json = dict(data.get("attributes") or {})
+        physical = {
+            key: value
+            for key, value in (
+                ("dimensions", data.get("dimensions_json")),
+                ("weight", data.get("weight_json")),
+            )
+            if value
+        }
+        if physical:
+            attributes_json["physical"] = physical
         rows.append(
             KProductKnowledgeVariant(
                 id=uuid4(),
@@ -787,7 +800,7 @@ def _variant_rows_for_payload(
                 function=data.get("function"),
                 quantity=data.get("quantity"),
                 price_override=data.get("price_override"),
-                attributes_json=data.get("attributes") or {},
+                attributes_json=attributes_json,
                 image_folder=_variant_image_folder(product.product_key, variant_sku),
             )
         )

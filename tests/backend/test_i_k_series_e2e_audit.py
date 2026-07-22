@@ -167,7 +167,13 @@ def test_i_k_series_image_e2e_audit(
         "category_id": E2E_GOOGLE_CATEGORY_ID,
         "parent_sku": f"IK-E2E-{uuid4().hex[:8]}",
         "variants": [
-            {"color": "silver", "size": "M", "function": "standard", "quantity": 10},
+            {
+                "color": "silver",
+                "size": "M",
+                "function": "standard",
+                "quantity": 10,
+                "price_override": "19.99",
+            },
         ],
     }
     product, product_ms = _request_json(

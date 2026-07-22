@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     app_docs_enabled: bool | None = None
     app_version: str = SYSTEM_RELEASE_VERSION
     database_url: str = EXAMPLE_DATABASE_URL
-    auth_session_expire_minutes: int = Field(default=60, gt=0, le=1440)
+    # 2026-07-22 用户拍板:控制台不允许闲置自动掉线(未保存的表单会丢),
+    # 只有主动退出/关闭浏览器才结束会话。生产环境设 43200(30 天),上限 90 天。
+    auth_session_expire_minutes: int = Field(default=60, gt=0, le=129600)
     auth_session_cookie_name: str = Field(
         default="barong_ops_session",
         min_length=1,

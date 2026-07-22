@@ -85,6 +85,10 @@ class Variant(BaseModel):
     price: Price | None = None
     image: str | None = None  # absolute URL
     gtin: str | None = None
+    # Per-variant physical specs (a 1-pack and a 2-pack differ). Same shape as
+    # the K parent-level dimensions_json / weight_json operator inputs.
+    dimensions: dict[str, Any] | None = None
+    weight: dict[str, Any] | None = None
 
 
 class ImageAsset(BaseModel):

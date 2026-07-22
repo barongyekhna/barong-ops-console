@@ -108,11 +108,20 @@ class ProductKnowledgeVariantItem(BaseModel):
     function: str | None = Field(default=None, max_length=128)
     quantity: int | None = Field(default=None, ge=0)
     price_override: Decimal | None = Field(default=None, ge=0)
+    # 每个变体独立的物理规格(1 个装和 2 个装的尺寸重量不一样),
+    # 结构与父体 dimensions_json / weight_json 同构,落库进 attributes_json.physical。
+    dimensions_json: dict[str, Any] | list[Any] | None = None
+    weight_json: dict[str, Any] | list[Any] | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("attributes")
     @classmethod
     def validate_variant_attributes(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return reject_sensitive_data(value)
+
+    @field_validator("dimensions_json", "weight_json")
+    @classmethod
+    def validate_variant_physical_json(cls, value: Any) -> Any:
         return reject_sensitive_data(value)
 
     @model_validator(mode="after")
@@ -167,6 +176,9 @@ class ProductKnowledgeCreate(BaseModel):
     # 可选:参考图链接(1688 商品主图右键复制地址即可)——直接进 K 参考图
     # 管线喂渲染。域名白名单 alicdn/amazon,防 SSRF。
     reference_image_url: str | None = Field(default=None, max_length=2000)
+    # 可选:多条参考图链接(多角度/多颜色)。第一张成功入库的作为主参考图,
+    # 其余全部落 K 媒体库备渲染;单条失败跳过不阻塞建品。
+    reference_image_urls: list[str] | None = Field(default=None, max_length=8)
     variants: list[ProductKnowledgeVariantItem] = Field(default_factory=list)
     attributes: list[ProductKnowledgeAttributeItem] = Field(default_factory=list)
     keywords: list[ProductKnowledgeKeywordItem] = Field(default_factory=list)
@@ -181,6 +193,38 @@ class ProductKnowledgeCreate(BaseModel):
         if not cleaned.lower().startswith(("http://", "https://")):
             raise ValueError("货源链接必须以 http:// 或 https:// 开头")
         return cleaned
+
+    @field_validator("reference_image_urls")
+    @classmethod
+    def _validate_reference_image_urls(
+        cls, value: list[str] | None
+    ) -> list[str] | None:
+        if not value:
+            return None
+        cleaned: list[str] = []
+        for item in value:
+            entry = (item or "").strip()
+            if not entry:
+                continue
+            if not entry.lower().startswith(("http://", "https://")):
+                raise ValueError("参考图链接必须以 http:// 或 https:// 开头")
+            if len(entry) > 2000:
+                raise ValueError("单条参考图链接不能超过 2000 字符")
+            if entry not in cleaned:
+                cleaned.append(entry)
+        return cleaned or None
+
+    @model_validator(mode="after")
+    def _variable_product_price_rules(self) -> "ProductKnowledgeCreate":
+        # 多变体产品价格只存在于变体上(2026-07-22 用户拍板):
+        # 父体价一律置空(Woo 父体展示价由变体推导),且每个变体必须有价。
+        if self.product_type == "variable_product":
+            self.regular_price = None
+            if self.variants and any(
+                item.price_override is None for item in self.variants
+            ):
+                raise ValueError("多变体产品的每个变体都必须填写价格")
+        return self
 
     @field_validator("dimensions_json", "weight_json")
     @classmethod

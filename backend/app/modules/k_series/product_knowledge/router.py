@@ -2901,21 +2901,29 @@ def product_knowledge_create(
     # 安静跳过)。同样 fail-safe:参考图失败绝不阻塞建品。
     if (payload.reference_image_url or "").strip() or (payload.source_url or "").strip():
         try:
-            from .manual_reference import attach_manual_reference_image
+            from .manual_reference import attach_manual_reference_images
 
-            outcome = attach_manual_reference_image(
+            combined_urls = [
+                url
+                for url in [
+                    payload.reference_image_url,
+                    *(payload.reference_image_urls or []),
+                ]
+                if url
+            ]
+            outcomes = attach_manual_reference_images(
                 db,
                 product=product,
-                reference_image_url=payload.reference_image_url,
+                reference_image_urls=combined_urls,
                 source_url=payload.source_url,
                 user=user,
             )
-            if outcome.get("status") == "stored":
+            if any(item.get("status") == "stored" for item in outcomes):
                 db.commit()
             logger.info(
-                "manual-create reference image product=%s outcome=%s",
+                "manual-create reference images product=%s outcomes=%s",
                 product.id,
-                outcome,
+                outcomes,
             )
         except Exception:  # noqa: BLE001 - reference image is optional garnish
             logger.exception(

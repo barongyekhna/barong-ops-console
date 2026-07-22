@@ -304,7 +304,7 @@ const PRODUCT_FORM_LABELS = {
     variantAttributesRequired: "每个变体至少需要一个属性。",
     variantDisplay: "变体名称",
     variantDuplicateAttributeTypes: "同一个变体内同一种属性只能填写一次；需要多个颜色、尺码或功能时，请点击“添加变体”分别录入。",
-    variantEditorHint: "每个变体卡片会保存为一条独立后端变体。需要多个图片绑定目标时，请点击“添加变体”分别录入，不要把多个变体写进同一张卡片。",
+    variantEditorHint: "每个变体卡片会保存为一条独立后端变体。价格必填；尺寸重量按变体分别填写（如 1 个装 / 2 个装不同）。需要多个图片绑定目标时，请点击“添加变体”分别录入。",
     variantNameEmpty: "点击添加属性生成变体名称",
     variantRowLabel: "变体",
     variantRequired: "多变体产品至少需要一个变体。",
@@ -359,7 +359,7 @@ const PRODUCT_FORM_LABELS = {
     variantAttributesRequired: "每个变体至少需要一个属性。",
     variantDisplay: "变体名称",
     variantDuplicateAttributeTypes: "同一个变体内同一种属性只能填写一次；需要多个颜色、尺码或功能时，请点击“添加变体”分别录入。",
-    variantEditorHint: "每个变体卡片会保存为一条独立后端变体。需要多个图片绑定目标时，请点击“添加变体”分别录入，不要把多个变体写进同一张卡片。",
+    variantEditorHint: "每个变体卡片会保存为一条独立后端变体。价格必填；尺寸重量按变体分别填写（如 1 个装 / 2 个装不同）。需要多个图片绑定目标时，请点击“添加变体”分别录入。",
     variantNameEmpty: "点击添加属性生成变体名称",
     variantRowLabel: "变体",
     variantRequired: "多变体产品至少需要一个变体。",
@@ -371,39 +371,54 @@ const PRODUCT_FORM_LABELS = {
   },
 } satisfies Record<UiLocale, Record<string, string>>;
 
-const initialValues: ProductFormValues = {
-  brand_name: "",
-  source_url: "",
-  reference_image_url: "",
-  dimensions_input: {
-    height: "",
-    length: "",
-    unit: "cm",
-    width: "",
-  },
-  price_currency: "USD",
-  price_value: "",
-  product_name_en: "",
-  main_keyword: "",
-  product_type: "simple_product",
-  raw_input_text: "",
-  target_market: "US",
-  channel: "dtc",
-  category_id: "",
-  category_label: "",
-  variants: [
-    {
-      price_override: "",
-      attributes: [],
+function emptyVariantInput(): ProductVariantFormInput {
+  return {
+    price_override: "",
+    attributes: [],
+    dimensions_input: {
+      height: "",
+      length: "",
+      unit: "cm",
+      width: "",
     },
-  ],
-  weight_input: {
-    unit: "kg",
-    value: "",
-  },
-  package_includes: [""],
-  manual_specs: [{ label: "", value: "", unit: "" }],
-};
+    weight_input: {
+      unit: "kg",
+      value: "",
+    },
+  };
+}
+
+function makeInitialValues(): ProductFormValues {
+  return {
+    brand_name: "",
+    source_url: "",
+    reference_image_urls: [""],
+    dimensions_input: {
+      height: "",
+      length: "",
+      unit: "cm",
+      width: "",
+    },
+    price_currency: "USD",
+    price_value: "",
+    product_name_en: "",
+    main_keyword: "",
+    extra_keywords: [""],
+    product_type: "simple_product",
+    raw_input_text: "",
+    target_market: "US",
+    channel: "dtc",
+    category_id: "",
+    category_label: "",
+    variants: [emptyVariantInput()],
+    weight_input: {
+      unit: "kg",
+      value: "",
+    },
+    package_includes: [""],
+    manual_specs: [{ label: "", value: "", unit: "" }],
+  };
+}
 
 type ProductFormProps = {
   error: string;
@@ -649,13 +664,41 @@ function variantAttributeTypeLabel(type: ProductVariantAttributeType) {
 
 function buildVariantPayloads(
   variants: ProductVariantFormInput[],
-): ProductVariantInput[] {
-  return variants.map((variant) => {
+  market: TargetMarketOption,
+  labels: (typeof PRODUCT_FORM_LABELS)[UiLocale],
+):
+  | { ok: true; value: ProductVariantInput[] }
+  | { ok: false; message: string } {
+  const out: ProductVariantInput[] = [];
+
+  for (const [index, variant] of variants.entries()) {
     const attributes = normalizeVariantAttributes(variant.attributes);
     const firstValueFor = (type: ProductVariantAttributeType) =>
       attributes.find((attribute) => attribute.type === type)?.value ?? "";
 
-    return {
+    const price = parseOptionalPrice(variant.price_override);
+    if (price === null || price <= 0) {
+      return {
+        ok: false,
+        message: `变体 ${index + 1}：每个变体都必须填写自己的价格（正数）。`,
+      };
+    }
+
+    const dimensions = normalizeDimensionsInput(
+      variant.dimensions_input,
+      market,
+      labels,
+    );
+    if (!dimensions.ok) {
+      return { ok: false, message: `变体 ${index + 1}：${dimensions.message}` };
+    }
+
+    const weight = normalizeWeightInput(variant.weight_input, market, labels);
+    if (!weight.ok) {
+      return { ok: false, message: `变体 ${index + 1}：${weight.message}` };
+    }
+
+    out.push({
       attributes: {
         attribute_schema: "attribute_builder_v1",
         display_name: formatVariantAttributes(attributes),
@@ -663,11 +706,15 @@ function buildVariantPayloads(
       },
       color: optionalText(firstValueFor("color")),
       function: optionalText(firstValueFor("function")),
-      price_override: parseOptionalPrice(variant.price_override),
+      price_override: price,
       quantity: parseOptionalInteger(firstValueFor("quantity")),
       size: optionalText(firstValueFor("size")),
-    };
-  });
+      dimensions_json: dimensions.value,
+      weight_json: weight.value,
+    });
+  }
+
+  return { ok: true, value: out };
 }
 
 function buildMultilingualFields(
@@ -768,7 +815,7 @@ export function ProductForm({
   onDismissError,
 }: ProductFormProps) {
   const labels = PRODUCT_FORM_LABELS[ACTIVE_FORM_LOCALE];
-  const [values, setValues] = useState<ProductFormValues>(initialValues);
+  const [values, setValues] = useState<ProductFormValues>(makeInitialValues);
   const [catQuery, setCatQuery] = useState("");
   const [catResults, setCatResults] = useState<CategoryTreeItem[]>([]);
 
@@ -943,6 +990,100 @@ export function ProductForm({
     clearFormErrors();
   }
 
+  function updateVariantDimension(
+    index: number,
+    key: keyof ProductDimensionsInput,
+    value: ProductDimensionsInput[keyof ProductDimensionsInput],
+  ) {
+    setValues((current) => ({
+      ...current,
+      variants: current.variants.map((variant, variantIndex) =>
+        variantIndex === index
+          ? {
+              ...variant,
+              dimensions_input: { ...variant.dimensions_input, [key]: value },
+            }
+          : variant,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function updateVariantWeight(
+    index: number,
+    key: keyof ProductWeightInput,
+    value: ProductWeightInput[keyof ProductWeightInput],
+  ) {
+    setValues((current) => ({
+      ...current,
+      variants: current.variants.map((variant, variantIndex) =>
+        variantIndex === index
+          ? {
+              ...variant,
+              weight_input: { ...variant.weight_input, [key]: value },
+            }
+          : variant,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function updateReferenceImageUrl(index: number, value: string) {
+    setValues((current) => ({
+      ...current,
+      reference_image_urls: current.reference_image_urls.map(
+        (item, itemIndex) => (itemIndex === index ? value : item),
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function addReferenceImageUrl() {
+    setValues((current) => ({
+      ...current,
+      reference_image_urls: [...current.reference_image_urls, ""],
+    }));
+    clearFormErrors();
+  }
+
+  function removeReferenceImageUrl(index: number) {
+    setValues((current) => ({
+      ...current,
+      reference_image_urls: current.reference_image_urls.filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function updateExtraKeyword(index: number, value: string) {
+    setValues((current) => ({
+      ...current,
+      extra_keywords: current.extra_keywords.map((item, itemIndex) =>
+        itemIndex === index ? value : item,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function addExtraKeyword() {
+    setValues((current) => ({
+      ...current,
+      extra_keywords: [...current.extra_keywords, ""],
+    }));
+    clearFormErrors();
+  }
+
+  function removeExtraKeyword(index: number) {
+    setValues((current) => ({
+      ...current,
+      extra_keywords: current.extra_keywords.filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
+    clearFormErrors();
+  }
+
   function updateVariantAttribute(
     variantIndex: number,
     attributeIndex: number,
@@ -1015,13 +1156,7 @@ export function ProductForm({
     setValues((current) => ({
       ...current,
       product_type: "variable_product",
-      variants: [
-        ...current.variants,
-        {
-          price_override: "",
-          attributes: [],
-        },
-      ],
+      variants: [...current.variants, emptyVariantInput()],
     }));
     clearFormErrors();
   }
@@ -1063,8 +1198,11 @@ export function ProductForm({
       setValidationError("货源链接必须以 http:// 或 https:// 开头（可留空）。");
       return;
     }
-    const refImageUrl = values.reference_image_url.trim();
-    if (refImageUrl && !/^https?:\/\//i.test(refImageUrl)) {
+    const referenceImageUrls = values.reference_image_urls
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item, index, list) => list.indexOf(item) === index);
+    if (referenceImageUrls.some((item) => !/^https?:\/\//i.test(item))) {
       setValidationError("参考图链接必须以 http:// 或 https:// 开头（可留空）。");
       return;
     }
@@ -1089,37 +1227,53 @@ export function ProductForm({
       return;
     }
 
-    const dimensions = normalizeDimensionsInput(
-      values.dimensions_input,
-      market,
-      labels,
-    );
+    const isVariable = values.product_type === "variable_product";
+
+    // 多变体产品(2026-07-22 用户拍板):价格/尺寸/重量全部按变体填写,
+    // 父体这三项一律不收——1 个装和 2 个装的物理规格与价格本来就不同。
+    const dimensions = isVariable
+      ? { ok: true as const, value: null }
+      : normalizeDimensionsInput(values.dimensions_input, market, labels);
     if (!dimensions.ok) {
       setValidationError(dimensions.message);
       return;
     }
 
-    const weight = normalizeWeightInput(values.weight_input, market, labels);
+    const weight = isVariable
+      ? { ok: true as const, value: null }
+      : normalizeWeightInput(values.weight_input, market, labels);
     if (!weight.ok) {
       setValidationError(weight.message);
       return;
     }
 
-    const price = normalizePriceInput(
-      values.price_value,
-      values.price_currency,
-      market,
-      labels,
-    );
+    const price = isVariable
+      ? { ok: true as const, value: null }
+      : normalizePriceInput(
+          values.price_value,
+          values.price_currency,
+          market,
+          labels,
+        );
     if (!price.ok) {
       setValidationError(price.message);
       return;
     }
 
-    const variants =
-      values.product_type === "variable_product"
-        ? buildVariantPayloads(values.variants)
-        : [];
+    const variantsResult = isVariable
+      ? buildVariantPayloads(values.variants, market, labels)
+      : { ok: true as const, value: [] as ProductVariantInput[] };
+    if (!variantsResult.ok) {
+      setValidationError(variantsResult.message);
+      return;
+    }
+    const variants = variantsResult.value;
+
+    const extraKeywords = values.extra_keywords
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .filter((item, index, list) => list.indexOf(item) === index)
+      .filter((item) => item.toLowerCase() !== mainKeyword.toLowerCase());
 
     const populatedManualSpecs = values.manual_specs.filter(
       (spec) => spec.label.trim() || spec.value.trim() || spec.unit.trim(),
@@ -1188,6 +1342,8 @@ export function ProductForm({
       dimensions_input: dimensions.value,
       multilingual_fields: multilingualFields,
       main_keyword: mainKeyword,
+      extra_keywords: extraKeywords,
+      reference_image_urls: referenceImageUrls,
       parent_sku: "backend_allocated_from_leaf_category",
       price_input: price.value,
       auto_key: "backend_generated_immutable",
@@ -1217,7 +1373,21 @@ export function ProductForm({
         attributes,
         brand_name: optionalText(values.brand_name),
         source_url: optionalText(values.source_url),
-        reference_image_url: optionalText(values.reference_image_url),
+        reference_image_url: referenceImageUrls[0] ?? null,
+        reference_image_urls:
+          referenceImageUrls.length > 0 ? referenceImageUrls : null,
+        keywords:
+          extraKeywords.length > 0
+            ? extraKeywords.map((keyword) => ({
+                keyword_text: keyword,
+                keyword_type: "secondary" as const,
+                language_code: market.contentLocale,
+                market: market.code,
+                source: "operator_manual",
+                status: "candidate" as const,
+                reason: "建品表单手动录入",
+              }))
+            : undefined,
         dimensions_json: dimensions.value,
         long_description_en: rawInputText,
         main_keyword: mainKeyword,
@@ -1241,7 +1411,7 @@ export function ProductForm({
         package_includes_json: packageIncludes.length > 0 ? packageIncludes : null,
         structured_specs_json: structuredSpecs,
       });
-      setValues(initialValues);
+      setValues(makeInitialValues());
     } catch {
       // The parent renders the API error; keep the entered values for retry.
     } finally {
@@ -1299,6 +1469,42 @@ export function ProductForm({
             />
           </label>
 
+          {values.extra_keywords.map((keyword, index) => (
+            <label className={styles.field} key={`extra-keyword-${index}`}>
+              <span>更多关键词 {index + 1}（可选）</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  autoComplete="off"
+                  onChange={(event) =>
+                    updateExtraKeyword(index, event.target.value)
+                  }
+                  placeholder="一格一条，随产品进入关键词库"
+                  style={{ flex: 1 }}
+                  value={keyword}
+                />
+                <button
+                  className="secondary-button"
+                  disabled={values.extra_keywords.length <= 1}
+                  onClick={() => removeExtraKeyword(index)}
+                  type="button"
+                >
+                  删除
+                </button>
+              </div>
+            </label>
+          ))}
+          <div className={styles.field}>
+            <span aria-hidden="true">&nbsp;</span>
+            <button
+              className="secondary-button"
+              onClick={addExtraKeyword}
+              type="button"
+            >
+              <Plus aria-hidden="true" size={15} />
+              添加关键词
+            </button>
+          </div>
+
           <label className={styles.field}>
             <span>SKU（自动分配）</span>
             <input
@@ -1333,18 +1539,42 @@ export function ProductForm({
             />
           </label>
 
-          <label className={styles.field}>
-            <span>参考图链接（可选）</span>
-            <input
-              autoComplete="off"
-              inputMode="url"
-              onChange={(event) =>
-                updateValue("reference_image_url", event.target.value)
-              }
-              placeholder="1688 主图右键「复制图片地址」贴这里，直接喂渲染管线"
-              value={values.reference_image_url}
-            />
-          </label>
+          {values.reference_image_urls.map((url, index) => (
+            <label className={styles.field} key={`reference-image-${index}`}>
+              <span>参考图链接 {index + 1}（可选）</span>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  autoComplete="off"
+                  inputMode="url"
+                  onChange={(event) =>
+                    updateReferenceImageUrl(index, event.target.value)
+                  }
+                  placeholder="1688 图片右键「复制图片地址」贴这里；第一条为主参考图"
+                  style={{ flex: 1 }}
+                  value={url}
+                />
+                <button
+                  className="secondary-button"
+                  disabled={values.reference_image_urls.length <= 1}
+                  onClick={() => removeReferenceImageUrl(index)}
+                  type="button"
+                >
+                  删除
+                </button>
+              </div>
+            </label>
+          ))}
+          <div className={styles.field}>
+            <span aria-hidden="true">&nbsp;</span>
+            <button
+              className="secondary-button"
+              onClick={addReferenceImageUrl}
+              type="button"
+            >
+              <Plus aria-hidden="true" size={15} />
+              添加参考图链接
+            </button>
+          </div>
 
           <label className={styles.field}>
             <span>{labels.productType}</span>
@@ -1363,17 +1593,26 @@ export function ProductForm({
           </label>
 
           <div className={styles.inlineFields}>
-            <label className={styles.field}>
-              <span>{labels.price}</span>
-              <input
-                inputMode="decimal"
-                onChange={(event) =>
-                  updateValue("price_value", event.target.value)
-                }
-                placeholder="99.00"
-                value={values.price_value}
-              />
-            </label>
+            {values.product_type === "variable_product" ? (
+              <div className={styles.field}>
+                <span>{labels.price}</span>
+                <span style={{ fontSize: "0.8rem", opacity: 0.75 }}>
+                  多变体产品不设父体价格——请在下方每个变体卡片里分别填写价格。
+                </span>
+              </div>
+            ) : (
+              <label className={styles.field}>
+                <span>{labels.price}</span>
+                <input
+                  inputMode="decimal"
+                  onChange={(event) =>
+                    updateValue("price_value", event.target.value)
+                  }
+                  placeholder="99.00"
+                  value={values.price_value}
+                />
+              </label>
+            )}
             <label className={styles.field}>
               <span>{labels.currency}</span>
               <select
@@ -1540,6 +1779,8 @@ export function ProductForm({
         </div>
       </section>
 
+      {values.product_type !== "variable_product" ? (
+      <>
       <section className={styles.formSection} aria-labelledby="k-dimensions">
         <div className={styles.formSectionHeading}>
           <Ruler aria-hidden="true" size={18} />
@@ -1641,6 +1882,8 @@ export function ProductForm({
           </label>
         </div>
       </section>
+      </>
+      ) : null}
 
       <section className={styles.formSection} aria-labelledby="k-manual-specs">
         <div className={styles.formSectionHeading}>
@@ -1830,14 +2073,114 @@ export function ProductForm({
 
                   <div className={styles.variantGrid}>
                     <label className={styles.field}>
-                      <span>{labels.priceOverride}</span>
+                      <span>
+                        {labels.priceOverride}（必填，{values.price_currency}）
+                      </span>
                       <input
                         inputMode="decimal"
                         onChange={(event) =>
                           updateVariantPrice(index, event.target.value)
                         }
+                        placeholder="19.99"
+                        required
                         value={variant.price_override}
                       />
+                    </label>
+                  </div>
+
+                  <div className={styles.measurementGrid}>
+                    <label className={styles.field}>
+                      <span>{labels.length}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updateVariantDimension(
+                            index,
+                            "length",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="10"
+                        value={variant.dimensions_input.length}
+                      />
+                    </label>
+                    <label className={styles.field}>
+                      <span>{labels.width}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updateVariantDimension(
+                            index,
+                            "width",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="8"
+                        value={variant.dimensions_input.width}
+                      />
+                    </label>
+                    <label className={styles.field}>
+                      <span>{labels.height}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updateVariantDimension(
+                            index,
+                            "height",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="6"
+                        value={variant.dimensions_input.height}
+                      />
+                    </label>
+                    <label className={styles.field}>
+                      <span>{labels.unit}</span>
+                      <select
+                        onChange={(event) =>
+                          updateVariantDimension(
+                            index,
+                            "unit",
+                            event.target.value as ProductDimensionsInput["unit"],
+                          )
+                        }
+                        value={variant.dimensions_input.unit}
+                      >
+                        <option value="cm">cm</option>
+                        <option value="inch">inch</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className={styles.measurementGrid}>
+                    <label className={styles.field}>
+                      <span>{labels.weightValue}</span>
+                      <input
+                        inputMode="decimal"
+                        onChange={(event) =>
+                          updateVariantWeight(index, "value", event.target.value)
+                        }
+                        placeholder="2.5"
+                        value={variant.weight_input.value}
+                      />
+                    </label>
+                    <label className={styles.field}>
+                      <span>{labels.unit}</span>
+                      <select
+                        onChange={(event) =>
+                          updateVariantWeight(
+                            index,
+                            "unit",
+                            event.target.value as ProductWeightInput["unit"],
+                          )
+                        }
+                        value={variant.weight_input.unit}
+                      >
+                        <option value="kg">kg</option>
+                        <option value="lb">lb</option>
+                        <option value="g">g</option>
+                        <option value="oz">oz</option>
+                      </select>
                     </label>
                   </div>
                 </section>

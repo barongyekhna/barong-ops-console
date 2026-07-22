@@ -138,12 +138,24 @@ export type ProductReadinessState = {
   selling_points: ProductSectionState;
 };
 
+export type ProductKeywordInput = {
+  keyword_text: string;
+  keyword_type: "primary" | "secondary" | "long_tail" | "b2b" | "negative" | "risk";
+  language_code: string;
+  market?: string | null;
+  source?: string;
+  status?: "candidate" | "approved" | "rejected" | "removed";
+  reason?: string | null;
+};
+
 export type ProductKnowledgeCreatePayload = {
   raw_input_text: string;
   main_keyword: string;
   target_market: string;
   source_url?: string | null;
   reference_image_url?: string | null;
+  reference_image_urls?: string[] | null;
+  keywords?: ProductKeywordInput[];
   target_market_label?: string;
   target_locale?: string;
   parent_sku?: string | null;
@@ -217,6 +229,8 @@ export type ProductVariantInput = {
   function?: string | null;
   quantity?: number | null;
   price_override?: number | null;
+  dimensions_json?: Record<string, unknown> | null;
+  weight_json?: Record<string, unknown> | null;
   attributes?: Record<string, unknown>;
 };
 
@@ -230,6 +244,8 @@ export type ProductVariantAttributeInput = {
 export type ProductVariantFormInput = {
   attributes: ProductVariantAttributeInput[];
   price_override: string;
+  dimensions_input: ProductDimensionsInput;
+  weight_input: ProductWeightInput;
 };
 
 export type ProductManualSpecInput = {
@@ -259,9 +275,10 @@ export type ProductKnowledgeVariant = {
 export type ProductFormValues = {
   product_name_en: string;
   main_keyword: string;
+  extra_keywords: string[];
   brand_name: string;
   source_url: string;
-  reference_image_url: string;
+  reference_image_urls: string[];
   product_type: "simple_product" | "variable_product";
   price_value: string;
   price_currency: string;

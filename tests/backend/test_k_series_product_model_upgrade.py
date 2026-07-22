@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from base64 import b64decode
+from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -109,6 +110,7 @@ def test_variable_product_creates_parent_sku_and_variant_skus() -> None:
                 size="M",
                 function="standard",
                 quantity=10,
+                price_override=Decimal("19.99"),
                 attributes={"material": "steel"},
             ),
             ProductKnowledgeVariantItem(
@@ -116,6 +118,7 @@ def test_variable_product_creates_parent_sku_and_variant_skus() -> None:
                 size="L",
                 function="heavy",
                 quantity=5,
+                price_override=Decimal("24.99"),
                 attributes={"material": "alloy"},
             ),
         ],
@@ -325,6 +328,7 @@ def test_delete_product_requires_key_and_cascades_product_records() -> None:
             ProductKnowledgeVariantItem(
                 color="black",
                 size="M",
+                price_override=Decimal("9.99"),
                 attributes={"delete_check": True},
             ),
         ],
