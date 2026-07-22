@@ -2937,3 +2937,27 @@
     justify-content: flex-start;
   }
 }
+
+/* 卖点双语展示(2026-07-22):英文 7 / 中文 3 */
+.spBilingualRow {
+  display: grid;
+  grid-template-columns: 7fr 3fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.spBilingualRow > p {
+  margin: 0;
+}
+
+.spZhText {
+  color: rgb(157 199 219 / 80%);
+  font-size: 0.86em;
+  line-height: 1.55;
+}
+
+.spSaveNotice {
+  color: #52e5a3;
+  font-size: 0.82rem;
+  margin: 6px 0 0;
+}

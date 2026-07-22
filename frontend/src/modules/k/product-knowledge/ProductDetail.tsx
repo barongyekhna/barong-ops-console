@@ -544,6 +544,8 @@ export function ProductDetail({
   >(null);
   const [packageIncludes, setPackageIncludes] = useState<string[]>([""]);
   const [packageError, setPackageError] = useState("");
+  const [packageNotice, setPackageNotice] = useState("");
+  const [shippingNotice, setShippingNotice] = useState("");
   const [isSavingPackage, setIsSavingPackage] = useState(false);
   const activeProductIdRef = useRef<string | null>(product?.id ?? null);
   activeProductIdRef.current = product?.id ?? null;
@@ -870,6 +872,7 @@ export function ProductDetail({
       current.map((item, itemIndex) => (itemIndex === index ? value : item)),
     );
     setPackageError("");
+    setPackageNotice("");
   }
 
   async function savePackageIncludes() {
@@ -885,6 +888,7 @@ export function ProductDetail({
         package_includes_json: populated.length > 0 ? populated : null,
       });
       await refreshProductDetail(currentProduct.id);
+      setPackageNotice("包装清单已保存 ✓");
     } catch (error) {
       setPackageError(
         error instanceof Error ? error.message : "包装清单保存失败。",
@@ -918,9 +922,11 @@ export function ProductDetail({
       await refreshProductDetail(productId);
       if (activeProductIdRef.current === productId) {
         setShippingSelection(SHIPPING_SELECTION_UNSET);
+        setShippingNotice("运费模板已保存 ✓");
       }
     } catch (error) {
       if (activeProductIdRef.current === productId) {
+        setShippingNotice("");
         setShippingError(shippingOperationError(error));
       }
     } finally {
@@ -1582,6 +1588,9 @@ export function ProductDetail({
           {shippingError ? (
             <p className={styles.sellingPointsError}>{shippingError}</p>
           ) : null}
+          {shippingNotice ? (
+            <p className={styles.spSaveNotice} role="status">{shippingNotice}</p>
+          ) : null}
         </section>
       ) : null}
 
@@ -1630,6 +1639,9 @@ export function ProductDetail({
         ))}
         {packageError ? (
           <p className={styles.sellingPointsError}>{packageError}</p>
+        ) : null}
+        {packageNotice ? (
+          <p className={styles.spSaveNotice} role="status">{packageNotice}</p>
         ) : null}
         <div className={styles.sectionFooter}>
           <span>留空表示未知，不会自动补齐或猜测组件。</span>
@@ -2356,7 +2368,12 @@ export function ProductDetail({
                       ★ {Number(bullet.importance_score ?? 0).toFixed(1)}
                     </span>
                   </div>
-                  <p>{bullet.text}</p>
+                  <div className={styles.spBilingualRow}>
+                    <p>{bullet.text}</p>
+                    {bullet.text_zh ? (
+                      <p className={styles.spZhText}>{bullet.text_zh}</p>
+                    ) : null}
+                  </div>
                   <small>
                     证据：{bullet.evidence || "未提供"} · {bullet.verification_status === "verified" ? "已核验" : "待核验"}
                   </small>
@@ -2451,6 +2468,11 @@ export function ProductDetail({
                     rows={3}
                     value={bullet.text}
                   />
+                  {bullet.text_zh ? (
+                    <small className={styles.spZhText}>
+                      中文对照：{bullet.text_zh}
+                    </small>
+                  ) : null}
                   <input
                     aria-label="重要度"
                     min={0}

@@ -10,6 +10,8 @@ export type SellingPointSource =
 export type BulletPoint = {
   id?: string | null;
   text: string;
+  // 逐条中文对照(生成后由 DeepSeek 翻译填充,双语展示用)
+  text_zh?: string | null;
   category: BulletCategory;
   importance_score: number;
   evidence?: string | null;

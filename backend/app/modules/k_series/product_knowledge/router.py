@@ -347,6 +347,8 @@ class SellingPointBullet(BaseModel):
     id: str | None = None
     category: str
     text: str
+    # 逐条中文对照(生成后由 DeepSeek 翻译填充,双语展示用,纯展示不参与证据)
+    text_zh: str | None = Field(default=None, max_length=1000)
     importance_score: int | float
     evidence: str | None = Field(default=None, max_length=512)
     evidence_excerpt: str | None = Field(default=None, max_length=1000)
@@ -1973,7 +1975,9 @@ def _supported_measurement_pairs(snapshot: dict[str, Any]) -> set[tuple[str, str
 
 
 def _normalized_evidence_text(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+    # 保留中文:运营者证据摘录常直接摘自中文原始描述(2026-07-22 修复:
+    # 原来只留 ASCII,中文摘录被洗成空串,operator_fact 全军覆没)。
+    return re.sub(r"[^a-z0-9一-鿿]+", " ", str(value or "").casefold()).strip()
 
 
 def _contains_evidence_phrase(haystack: str, phrase: str) -> bool:
@@ -1981,6 +1985,75 @@ def _contains_evidence_phrase(haystack: str, phrase: str) -> bool:
     return bool(
         needle
         and re.search(rf"(?:^|\s){re.escape(needle)}(?:$|\s)", haystack)
+    )
+
+
+def _enrich_selling_points_chinese(
+    db: Session,
+    *,
+    context: Any,
+    response: "SellingPointsResponse",
+) -> "SellingPointsResponse":
+    """生成后的中文兜底翻译:逐条卖点 text_zh + 整体 chinese_translation。
+
+    已经带中文的字段不重翻;全部齐整则零调用直接返回。
+    """
+
+    needs_bullets = any(
+        not str(bullet.text_zh or "").strip() for bullet in response.bullets
+    )
+    needs_blob = not str(response.chinese_translation or "").strip()
+    if not response.bullets or (not needs_bullets and not needs_blob):
+        return response
+
+    payload: dict[str, Any] = {
+        "task": "selling_points_translation",
+        "bullets": [bullet.text for bullet in response.bullets],
+        "marketing_copy": response.marketing_copy
+        or response.translated_version
+        or "",
+    }
+    payload["messages"] = _strict_json_messages(
+        instruction=(
+            "You are a bilingual ecommerce copywriter. Translate the given "
+            "English selling-point bullets into Simplified Chinese one by one, "
+            "faithful and natural for a Chinese seller reviewing them. Return "
+            'STRICT JSON: {"bullets_zh": ["...", ...], "chinese_translation": '
+            '"..."}. bullets_zh must contain exactly one Chinese line per input '
+            "bullet, in order. chinese_translation is a Chinese version of the "
+            "marketing copy (or a concise Chinese summary of the bullets when "
+            "no copy is given)."
+        ),
+        payload=payload,
+    )
+    # 出网前结束事务,避免 idle-in-transaction 超时(与主生成调用同款姿势)
+    db.rollback()
+    out = _execute_provider_json(
+        db,
+        context=context,
+        provider="deepseek",
+        task_type="selling_points_translation",
+        payload=payload,
+    )
+    raw_zh = out.get("bullets_zh")
+    bullets_zh = raw_zh if isinstance(raw_zh, list) else []
+    new_bullets = []
+    for index, bullet in enumerate(response.bullets):
+        zh = (
+            str(bullets_zh[index]).strip()
+            if index < len(bullets_zh) and isinstance(bullets_zh[index], str)
+            else ""
+        )
+        if zh and not str(bullet.text_zh or "").strip():
+            new_bullets.append(bullet.model_copy(update={"text_zh": zh}))
+        else:
+            new_bullets.append(bullet)
+    blob = out.get("chinese_translation")
+    chinese_translation = response.chinese_translation
+    if not str(chinese_translation or "").strip() and isinstance(blob, str):
+        chinese_translation = blob.strip() or chinese_translation
+    return response.model_copy(
+        update={"bullets": new_bullets, "chinese_translation": chinese_translation}
     )
 
 
@@ -2045,14 +2118,18 @@ def _selling_point_support_error(
             + rendered
         )
 
-    for topic, terms in _EVIDENCE_TOPIC_TERMS:
-        claim_has_topic = any(
-            _contains_evidence_phrase(claim, term) for term in terms
-        )
-        if claim_has_topic and not any(
-            _contains_evidence_phrase(support, term) for term in terms
-        ):
-            return f"Evidence does not support the claim topic '{topic}'."
+    # 英文主题词匹配只适用于结构化证据(spec/verified_feature)。
+    # operator_fact 的摘录多为中文原文,人工逐条批准本身即是背书,
+    # 强行用英文词表比对必然误杀(2026-07-22 修复)。
+    if snapshot.get("kind") != "operator_fact":
+        for topic, terms in _EVIDENCE_TOPIC_TERMS:
+            claim_has_topic = any(
+                _contains_evidence_phrase(claim, term) for term in terms
+            )
+            if claim_has_topic and not any(
+                _contains_evidence_phrase(support, term) for term in terms
+            ):
+                return f"Evidence does not support the claim topic '{topic}'."
 
     if snapshot.get("kind") == "operator_fact" and not operator_bridge:
         return "operator_fact requires a concrete evidence_excerpt."
@@ -4313,6 +4390,14 @@ def generate_product_selling_points(
                 extra={"provider": source_name},
             ),
         ) from exc
+    # 双语展示(2026-07-22 用户拍板恢复):主生成偶尔漏 chinese_translation,
+    # 这里用专门的 DeepSeek 翻译调用兜底,并给每条卖点配逐条中文对照。
+    try:
+        response = _enrich_selling_points_chinese(db, context=context, response=response)
+    except Exception:  # noqa: BLE001 - 翻译失败绝不阻塞卖点生成
+        logger.exception(
+            "selling points zh enrichment failed product=%s", product.id
+        )
     output_payload = response.model_dump(mode="json")
     event = KProductKnowledgeAIEvent(
         id=uuid4(),
@@ -4452,6 +4537,13 @@ def approve_product_selling_points(
             continue
         seen_ids.add(bullet_id)
         bullet = bullet.model_copy(update={"id": bullet_id})
+        # operator_fact 未填摘录时以卖点文本自证:人工逐条批准即背书
+        # (前端同样兜底,这里双保险防旧客户端/API 直调)。
+        if (
+            str(bullet.evidence or "").strip() == "operator_fact"
+            and not str(bullet.evidence_excerpt or "").strip()
+        ):
+            bullet = bullet.model_copy(update={"evidence_excerpt": bullet.text})
         if bullet.review_decision == "candidate":
             review_errors.append(
                 {
@@ -4503,14 +4595,15 @@ def approve_product_selling_points(
             )
         )
     if review_errors:
+        first = review_errors[0]
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=_structured_execution_error_detail(
                 reason="invalid_state",
                 code="SELLING_POINT_EVIDENCE_REQUIRED",
                 message=(
-                    "Every retained selling point must have valid evidence and an "
-                    "explicit per-item review decision."
+                    f"卖点证据审批未通过(共 {len(review_errors)} 条问题)。"
+                    f"第 {first['index'] + 1} 条:{first['error']}"
                 ),
                 module_id=MODULE_KEY,
                 extra={"items": review_errors},
@@ -4522,7 +4615,7 @@ def approve_product_selling_points(
             detail=_structured_execution_error_detail(
                 reason="invalid_state",
                 code="SELLING_POINTS_EMPTY_AFTER_REVIEW",
-                message="At least one evidence-backed selling point must be approved.",
+                message="至少要有一条通过证据审批的卖点。",
                 module_id=MODULE_KEY,
             ),
         )
