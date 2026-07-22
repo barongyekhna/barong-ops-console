@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Barong K Product Structured Data
  * Description: Projects publishable K data into the active Woo/Yoast Product graph.
- * Version: 1.1.0
+ * Version: 1.2.0
  *
  * Deploy as a WordPress must-use plugin. Yoast WooCommerce SEO owns the live
  * Product graph on the production site, while WooCommerce core remains a
@@ -326,6 +326,67 @@ function barong_k_yoast_offer_schema( $offer, $variation, $product ) {
 		? barong_k_schema_offer( $offer, $offer_product )
 		: $offer;
 }
+
+/**
+ * v1.2.0 — FAQPage JSON-LD from K's quality-gated FAQ meta (``_kp_faq``).
+ *
+ * The uploader only writes a non-empty ``_kp_faq`` when K's FAQ quality gate
+ * marked the set schema-eligible, and the exact same Q&As are visible in the
+ * product description (same-source rule, no cloaking). This renderer is the
+ * missing last mile: without it the meta was authored but never emitted.
+ */
+function barong_k_faq_schema_render() {
+	if ( ! is_singular( 'product' ) ) {
+		return;
+	}
+	$product_id = get_queried_object_id();
+	if ( ! $product_id ) {
+		return;
+	}
+	$raw = get_post_meta( $product_id, '_kp_faq', true );
+	if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+		return;
+	}
+	$faq = json_decode( $raw, true );
+	if ( ! is_array( $faq ) || empty( $faq ) ) {
+		return;
+	}
+	$entities = array();
+	foreach ( $faq as $item ) {
+		if ( ! is_array( $item ) ) {
+			continue;
+		}
+		$question = isset( $item['question'] )
+			? trim( wp_strip_all_tags( (string) $item['question'] ) )
+			: '';
+		$answer = isset( $item['answer'] )
+			? trim( wp_strip_all_tags( (string) $item['answer'] ) )
+			: '';
+		if ( '' === $question || '' === $answer ) {
+			continue;
+		}
+		$entities[] = array(
+			'@type'          => 'Question',
+			'name'           => $question,
+			'acceptedAnswer' => array(
+				'@type' => 'Answer',
+				'text'  => $answer,
+			),
+		);
+	}
+	if ( empty( $entities ) ) {
+		return;
+	}
+	$schema = array(
+		'@context'   => 'https://schema.org',
+		'@type'      => 'FAQPage',
+		'mainEntity' => $entities,
+	);
+	echo '<script type="application/ld+json">'
+		. wp_json_encode( $schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )
+		. '</script>';
+}
+add_action( 'wp_footer', 'barong_k_faq_schema_render', 20 );
 
 // Run after producer defaults so the site-owned brand, authored SEO copy,
 // supplier-backed properties, and canonical offer cannot be overwritten.
