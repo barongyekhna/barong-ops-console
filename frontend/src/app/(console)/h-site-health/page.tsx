@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { HealthDeck } from "@/modules/h/sitehealth/HealthDeck";
+import { SiteHealthWorkspace } from "@/modules/h/sitehealth/SiteHealthWorkspace";
 
 export const metadata: Metadata = {
   title: "H 站点健康",
@@ -17,7 +17,7 @@ export default function HSiteHealthPage() {
           <h1>H 站点健康</h1>
         </div>
       </section>
-      <HealthDeck />
+      <SiteHealthWorkspace />
     </div>
   );
 }

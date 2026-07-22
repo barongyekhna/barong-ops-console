@@ -395,3 +395,367 @@
 @media (max-width: 860px) {
   .calculatorRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.workspace,
+.wpPanelStack {
+  display: grid;
+  gap: 18px;
+}
+
+.workspaceTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid rgb(57 212 255 / 28%);
+  border-radius: 14px;
+  background: rgb(5 14 24 / 72%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 20%);
+}
+
+.workspaceTab {
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: rgb(157 199 219 / 82%);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.workspaceTab:hover {
+  color: #eafaff;
+  background: rgb(57 212 255 / 6%);
+}
+
+.workspaceTabOn {
+  color: #03121a;
+  background: linear-gradient(180deg, #6ae7ff, #24a9d8);
+  box-shadow: 0 7px 20px -10px rgb(57 212 255 / 80%);
+}
+
+.workspaceTabOn:hover {
+  color: #03121a;
+  background: linear-gradient(180deg, #78eaff, #2fb1df);
+}
+
+.wpToolbar,
+.smtpPanel,
+.mailHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wpToolbar h2,
+.smtpPanel h3 {
+  margin: 0;
+  color: #eafaff;
+}
+
+.wpToolbar p,
+.smtpPanel p {
+  margin: 5px 0 0;
+  color: rgb(157 199 219 / 76%);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.wpToolbar button,
+.smtpPanel button,
+.actionRow button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.bridgeDisconnected {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgb(255 107 107 / 38%);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgb(255 107 107 / 10%), rgb(8 20 30 / 72%));
+  color: rgb(255 142 142);
+}
+
+.bridgeDisconnected strong,
+.bridgeDisconnected span {
+  display: block;
+}
+
+.bridgeDisconnected strong {
+  margin-bottom: 4px;
+  color: #ffd2d2;
+}
+
+.bridgeDisconnected span {
+  color: rgb(224 183 188 / 84%);
+  font-size: 0.82rem;
+}
+
+.parseWarning,
+.inlineError,
+.saveToast {
+  padding: 12px 15px;
+  border-radius: 11px;
+  font-size: 0.84rem;
+}
+
+.parseWarning {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgb(255 184 76 / 42%);
+  background: rgb(255 184 76 / 9%);
+  color: rgb(255 211 136);
+}
+
+.inlineError {
+  border: 1px solid rgb(255 107 107 / 42%);
+  background: rgb(255 107 107 / 8%);
+  color: rgb(255 150 150);
+}
+
+.saveToast {
+  border: 1px solid rgb(61 220 151 / 42%);
+  background: rgb(61 220 151 / 9%);
+  color: rgb(147 240 197);
+}
+
+.ruleInput {
+  width: min(360px, 32vw);
+  min-width: 220px;
+  padding: 9px 11px;
+  border: 1px solid rgb(57 212 255 / 30%);
+  border-radius: 9px;
+  background: rgb(5 14 24 / 72%);
+  color: #eafaff;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+}
+
+.ruleInput:focus {
+  outline: none;
+  border-color: rgb(95 227 255 / 70%);
+  box-shadow: 0 0 0 3px rgb(57 212 255 / 12%);
+}
+
+.verifyResult {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.verifyResult[data-ok="true"] {
+  color: rgb(97 240 175);
+}
+
+.verifyResult[data-ok="false"] {
+  color: rgb(255 138 138);
+}
+
+.mutedResult {
+  color: rgb(157 199 219 / 52%);
+}
+
+.wpSectionTitle {
+  margin: 0 0 10px;
+  color: #d9f3ff;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pluginGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.pluginCard,
+.pingItem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgb(57 212 255 / 22%);
+  background: rgb(8 20 30 / 55%);
+}
+
+.pluginCard {
+  min-height: 70px;
+  padding: 13px 15px;
+  border-radius: 13px;
+}
+
+.pluginCard strong,
+.pluginCard span,
+.pingItem strong,
+.pingItem span {
+  display: block;
+}
+
+.pluginCard strong {
+  color: #eafaff;
+  font-size: 0.86rem;
+}
+
+.pluginCard div > span,
+.pingItem > span:last-child {
+  margin-top: 3px;
+  color: rgb(157 199 219 / 72%);
+  font-size: 0.74rem;
+}
+
+.healthDot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgb(130 148 158);
+  box-shadow: 0 0 0 4px rgb(130 148 158 / 10%);
+}
+
+.healthDot[data-ok="true"] {
+  background: rgb(61 220 151);
+  box-shadow: 0 0 0 4px rgb(61 220 151 / 12%), 0 0 12px rgb(61 220 151 / 50%);
+}
+
+.pingGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.pingItem {
+  padding: 11px 13px;
+  border-radius: 11px;
+}
+
+.pingItem strong {
+  flex: 1;
+  color: #d9f3ff;
+  font-size: 0.79rem;
+}
+
+.mailPanel,
+.smtpPanel,
+.smtpResult {
+  border: 1px solid rgb(57 212 255 / 24%);
+  border-radius: 15px;
+  background: rgb(8 20 30 / 55%);
+}
+
+.mailPanel {
+  overflow: hidden;
+}
+
+.mailHead {
+  padding: 14px 17px 4px;
+}
+
+.mailHead .wpSectionTitle {
+  margin: 0;
+}
+
+.failureCount {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgb(130 148 158 / 12%);
+  color: rgb(178 199 210);
+  font-size: 0.73rem;
+  font-weight: 750;
+}
+
+.failureCount[data-alert="true"] {
+  background: rgb(255 107 107 / 12%);
+  color: rgb(255 138 138);
+}
+
+.smtpPanel {
+  padding: 16px 18px;
+}
+
+.smtpResult {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 15px;
+  gap: 10px;
+}
+
+.smtpResult div {
+  min-width: 0;
+}
+
+.smtpResult dt {
+  color: rgb(157 199 219 / 68%);
+  font-size: 0.7rem;
+  letter-spacing: 0.09em;
+}
+
+.smtpResult dd {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: #d9f3ff;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.79rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.confirmBackdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(1 7 13 / 78%);
+  backdrop-filter: blur(5px);
+}
+
+.confirmDialog {
+  width: min(440px, 100%);
+  padding: 22px;
+  border: 1px solid rgb(255 184 76 / 45%);
+  border-radius: 16px;
+  background: #0b1722;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 55%);
+}
+
+.confirmDialog h3 {
+  margin: 0;
+  color: #f5fbff;
+}
+
+.confirmDialog p {
+  margin: 10px 0 18px;
+  color: rgb(203 220 229 / 82%);
+  font-size: 0.86rem;
+  line-height: 1.7;
+}
+
+@media (max-width: 760px) {
+  .workspaceTabs,
+  .pingGrid,
+  .smtpResult {
+    grid-template-columns: 1fr;
+  }
+
+  .wpToolbar,
+  .smtpPanel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ruleInput {
+    width: 260px;
+  }
+}

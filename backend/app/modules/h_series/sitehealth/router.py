@@ -5,12 +5,14 @@ from __future__ import annotations
 import os
 import secrets
 from datetime import datetime
+import json
 from typing import Any
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,7 @@ from ....core.roles import is_super_admin_role
 from ....db.session import get_db
 from ....models.user import User
 from ....services.permission_service import resolve_current_user_permission_info
+from ....services import wp_bridge
 from . import service
 from .models import HHealthFinding, HHealthRun
 
@@ -136,6 +139,109 @@ class IngestRequest(BaseModel):
 class IngestResponse(BaseModel):
     run_id: UUID
     deduped: bool
+
+
+class RedirectRule(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    from_path: str = Field(alias="from")
+    to: str
+
+    @field_validator("from_path")
+    @classmethod
+    def validate_from_path(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized.startswith("/"):
+            raise ValueError("旧路径必须以 / 开头。")
+        if len(normalized) > 500:
+            raise ValueError("旧路径不能超过 500 个字符。")
+        if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+            raise ValueError("旧路径不能包含控制字符。")
+        return normalized
+
+    @field_validator("to")
+    @classmethod
+    def validate_to(cls, value: str) -> str:
+        normalized = value.strip()
+        if normalized.startswith("/"):
+            if normalized.startswith("//") or "\\" in normalized:
+                raise ValueError("新目标不能是站外跳转。")
+            if any(
+                ord(character) < 32 or ord(character) == 127
+                for character in normalized
+            ):
+                raise ValueError("新目标不能包含控制字符。")
+            return normalized
+
+        parsed = urlsplit(normalized)
+        if (
+            parsed.scheme != "https"
+            or parsed.netloc.lower() != "barongyekhna.com"
+            or parsed.hostname != "barongyekhna.com"
+            or parsed.username is not None
+            or parsed.password is not None
+            or not parsed.path.startswith("/")
+        ):
+            raise ValueError("新目标只能是站内路径或 barongyekhna.com HTTPS 地址。")
+        return normalized
+
+
+class RedirectRulesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rules: list[RedirectRule] = Field(max_length=200)
+
+
+class RedirectVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized.startswith("/"):
+            raise ValueError("验证路径必须以 / 开头。")
+        if len(normalized) > 2048:
+            raise ValueError("验证路径过长。")
+        if any(ord(character) < 32 or ord(character) == 127 for character in normalized):
+            raise ValueError("验证路径不能包含控制字符。")
+        return normalized
+
+
+def _normalized_redirect_rules(rules: list[RedirectRule]) -> list[dict[str, str]]:
+    """Trim and dedupe redirect rows, retaining the last duplicate."""
+
+    by_source: dict[str, str] = {}
+    for rule in rules:
+        # Moving a duplicate to the end makes response/UI order match the
+        # documented "last row wins" behavior as well as its stored value.
+        by_source.pop(rule.from_path, None)
+        by_source[rule.from_path] = rule.to
+    return [
+        {"from": source, "to": target}
+        for source, target in by_source.items()
+    ]
+
+
+def _redirect_rules_from_option(value: Any) -> tuple[list[dict[str, str]], str | None]:
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+        if parsed in (None, ""):
+            parsed = {}
+        if not isinstance(parsed, dict):
+            raise ValueError("redirect map is not an object")
+        candidates = [
+            RedirectRule.model_validate({"from": source, "to": target})
+            for source, target in parsed.items()
+            if isinstance(source, str) and isinstance(target, str)
+        ]
+        if len(candidates) != len(parsed):
+            raise ValueError("redirect map contains non-string rows")
+        return _normalized_redirect_rules(candidates), None
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return [], "WordPress 跳转表 JSON 已损坏，当前以空表显示；保存前请确认。"
 
 
 def _run_item(run: HHealthRun) -> RunItem:
@@ -282,6 +388,77 @@ def h_finding_update(
     db.commit()
     db.refresh(finding)
     return _finding_item(finding)
+
+
+@router.get("/wp/redirects")
+def h_wp_redirects_get(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_h_permission(PERMISSION_READ)),
+) -> dict[str, Any]:
+    result = wp_bridge.get_option(
+        "barong_redirect_map",
+        db=db,
+        org_id=user.organization_id,
+    )
+    if not result.get("reachable"):
+        return {**result, "rules": []}
+    rules, parse_error = _redirect_rules_from_option(result.get("value"))
+    response: dict[str, Any] = {"reachable": True, "rules": rules}
+    if parse_error:
+        response["parse_error"] = parse_error
+    return response
+
+
+@router.put("/wp/redirects")
+def h_wp_redirects_put(
+    payload: RedirectRulesRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_h_permission(PERMISSION_MANAGE)),
+) -> dict[str, Any]:
+    rules = _normalized_redirect_rules(payload.rules)
+    serialized = json.dumps(
+        {rule["from"]: rule["to"] for rule in rules},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    result = wp_bridge.set_option(
+        "barong_redirect_map",
+        serialized,
+        db=db,
+        org_id=user.organization_id,
+    )
+    if not result.get("reachable"):
+        return {**result, "rules": rules}
+    return {"reachable": True, "rules": rules}
+
+
+@router.post("/wp/redirects/verify")
+def h_wp_redirects_verify(
+    payload: RedirectVerifyRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_h_permission(PERMISSION_READ)),
+) -> dict[str, Any]:
+    return wp_bridge.verify_redirect(
+        payload.path,
+        db=db,
+        org_id=user.organization_id,
+    )
+
+
+@router.get("/wp/sentinel")
+def h_wp_sentinel(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_h_permission(PERMISSION_READ)),
+) -> dict[str, Any]:
+    return wp_bridge.sentinel_snapshot(db=db, org_id=user.organization_id)
+
+
+@router.post("/wp/smtp-check")
+def h_wp_smtp_check(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_h_permission(PERMISSION_MANAGE)),
+) -> dict[str, Any]:
+    return wp_bridge.smtp_check(db=db, org_id=user.organization_id)
 
 
 @router.post("/ingest", response_model=IngestResponse)

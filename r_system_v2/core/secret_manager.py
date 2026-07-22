@@ -26,6 +26,7 @@ SUPPORTED_SERVICES = frozenset(
         "rainforest",
         "google_ads",
         "track17",
+        "wordpress",
     }
 )
 TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
@@ -35,6 +36,7 @@ K_PRODUCT_KNOWLEDGE_MODULE_ID = "k.product_knowledge"
 I_IMAGE_SYSTEM_MODULE_ID = "i.image_system"
 R_ANALYSIS_MODULE_ID = "r.analysis"
 W_SITE_OPS_MODULE_ID = "w.site_ops"
+H_SITE_HEALTH_MODULE_ID = "h.site_health"
 
 SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
     "keepa": (
@@ -79,6 +81,9 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
     "track17": (
         (W_SITE_OPS_MODULE_ID, "track17"),
         (W_SITE_OPS_MODULE_ID, "17track"),
+    ),
+    "wordpress": (
+        (H_SITE_HEALTH_MODULE_ID, "wordpress"),
     ),
 }
 

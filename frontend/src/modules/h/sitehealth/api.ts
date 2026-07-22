@@ -51,6 +51,64 @@ export type HealthRunDetail = HealthRun & {
   findings: HealthFinding[];
 };
 
+export type RedirectRule = {
+  from: string;
+  to: string;
+};
+
+export type RedirectsResponse = {
+  reachable: boolean;
+  rules: RedirectRule[];
+  parse_error?: string;
+  error?: string;
+};
+
+export type RedirectVerification = {
+  reachable?: boolean;
+  status: number | null;
+  location: string | null;
+  error?: string;
+};
+
+export type WpPlugin = {
+  plugin: string;
+  name: string;
+  status: string;
+  version: string;
+};
+
+export type WpPing = {
+  slug: string;
+  ok: boolean;
+  version: string;
+};
+
+export type WpMailItem = {
+  time: string;
+  to: string;
+  subject: string;
+};
+
+export type WpSentinel = {
+  reachable: boolean;
+  plugins: WpPlugin[];
+  pings: WpPing[];
+  mail: {
+    items: WpMailItem[];
+    recent_failures: number;
+  };
+  error?: string;
+};
+
+export type SmtpDiagnostic = {
+  reachable: boolean;
+  probe?: string | null;
+  verdict_line?: string | null;
+  host?: string | null;
+  username?: string | null;
+  error?: string;
+};
+
 function buildHeaders(json = false) {
   const headers = new Headers({ Accept: "application/json" });
   if (json) {
@@ -154,4 +212,58 @@ export async function updateHealthFinding(
     },
   );
   return readJson<HealthFinding>(response, "H 站点健康");
+}
+
+export async function getWpRedirects(): Promise<RedirectsResponse> {
+  const response = await fetch(`${API_PROXY_BASE}/h/wp/redirects`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson<RedirectsResponse>(response, "跳转管理");
+}
+
+export async function saveWpRedirects(
+  rules: RedirectRule[],
+): Promise<RedirectsResponse> {
+  const response = await fetch(`${API_PROXY_BASE}/h/wp/redirects`, {
+    body: JSON.stringify({ rules }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "PUT",
+  });
+  return readJson<RedirectsResponse>(response, "保存跳转规则");
+}
+
+export async function verifyWpRedirect(
+  path: string,
+): Promise<RedirectVerification> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/h/wp/redirects/verify`,
+    {
+      body: JSON.stringify({ path }),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+  return readJson<RedirectVerification>(response, "验证跳转规则");
+}
+
+export async function getWpSentinel(): Promise<WpSentinel> {
+  const response = await fetch(`${API_PROXY_BASE}/h/wp/sentinel`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson<WpSentinel>(response, "插件哨兵");
+}
+
+export async function runWpSmtpCheck(): Promise<SmtpDiagnostic> {
+  const response = await fetch(`${API_PROXY_BASE}/h/wp/smtp-check`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "POST",
+  });
+  return readJson<SmtpDiagnostic>(response, "SMTP 体检");
 }

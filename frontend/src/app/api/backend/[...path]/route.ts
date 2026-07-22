@@ -1153,6 +1153,35 @@ function isAllowedHPath(method: string, path: string[]) {
   ) {
     return method === "PATCH";
   }
+  if (
+    path.length === 3 &&
+    path[1] === "wp" &&
+    path[2] === "redirects"
+  ) {
+    return method === "GET" || method === "PUT";
+  }
+  if (
+    path.length === 4 &&
+    path[1] === "wp" &&
+    path[2] === "redirects" &&
+    path[3] === "verify"
+  ) {
+    return method === "POST";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "wp" &&
+    path[2] === "sentinel"
+  ) {
+    return method === "GET";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "wp" &&
+    path[2] === "smtp-check"
+  ) {
+    return method === "POST";
+  }
   return false;
 }
 
