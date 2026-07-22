@@ -122,6 +122,14 @@ def kick_queue(db: Session, *, public_base: str) -> PUploadJob | None:
     if job is None:
         return None
 
+    # 4) 先落库再发货(2026-07-23 竞态实锤):n8n 收到 webhook 后毫秒级回来
+    #    取数,任务行若还没提交,取数按「token 无效」401 打回。所以必须先把
+    #    dispatched 状态提交成既成事实,再发 webhook;发送失败由下面的
+    #    except 收尸(兜底还有失联超时收尸)。
+    job.status = "dispatched"
+    job.dispatched_at = _now()
+    db.add(job)
+    db.commit()
     try:
         _send_to_n8n(job, public_base=public_base)
     except Exception as exc:  # noqa: BLE001 - 单发失败不阻塞队列
@@ -129,14 +137,9 @@ def kick_queue(db: Session, *, public_base: str) -> PUploadJob | None:
         job.error = f"dispatch failed: {exc}"[:500]
         job.finished_at = _now()
         db.add(job)
-        db.flush()
+        db.commit()
         # 继续踢下一单（递归深度 = 连续失败单数，有限）
         return kick_queue(db, public_base=public_base)
-
-    job.status = "dispatched"
-    job.dispatched_at = _now()
-    db.add(job)
-    db.flush()
     return job
 
 
