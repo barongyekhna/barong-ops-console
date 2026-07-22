@@ -60,6 +60,12 @@ DEFAULT_FALLBACK_PROVIDERS = {
     "deepseek": "chatgpt",
     "claude": "chatgpt",
 }
+# 2026-07-22 实况:4sapi 的「OpenAI优质」分组会整组掉线(5.5/5.6 全家 503
+# "No available channel"),低档通道仍活着。同 provider 内按序降级,
+# 通道恢复后首选模型自动回归——不用人工切配置。
+MODEL_FALLBACKS: dict[str, list[str]] = {
+    "chatgpt": ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.2-high"],
+}
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 150.0
 DEFAULT_PROVIDER_MAX_ATTEMPTS = 1
 
@@ -482,83 +488,99 @@ class AIExecutionRouter:
             header_name=key.header_name,
             key_alias=key.key_alias,
         )
-        provider_request = adapter.build_request(
-            task_type=task_type,
-            payload=payload,
-            model=model,
-        )
         base_url = config.base_url
         endpoint_called = adapter.endpoint_for(task_type)
         self._release_db_transaction()
+        # 首选模型 + 同 provider 内的降级序列;仅通道级 503 才向下换模型
+        model_candidates = [model] + [
+            candidate
+            for candidate in MODEL_FALLBACKS.get(provider, [])
+            if candidate and candidate != model
+        ]
         last_error: AIProviderExecutionError | None = None
-        for attempt in range(1, self.max_attempts + 1):
-            started = perf_counter()
-            try:
-                raw_response = _post_json(
-                    request=provider_request,
-                    timeout_seconds=self.timeout_seconds,
-                )
-                parsed = adapter.response_parser(raw_response)
+        for active_model in model_candidates:
+            provider_request = adapter.build_request(
+                task_type=task_type,
+                payload=payload,
+                model=active_model,
+            )
+            channel_down = False
+            for attempt in range(1, self.max_attempts + 1):
+                started = perf_counter()
+                try:
+                    raw_response = _post_json(
+                        request=provider_request,
+                        timeout_seconds=self.timeout_seconds,
+                    )
+                    parsed = adapter.response_parser(raw_response)
+                    latency_ms = (perf_counter() - started) * 1000
+                    self._emit_execution_event(
+                        provider=provider,
+                        task_type=task_type,
+                        org_id=org_record.org_id,
+                        status="success",
+                        latency_ms=latency_ms,
+                        base_url=base_url,
+                        endpoint_called=endpoint_called,
+                        key_alias=key.key_alias,
+                        model=active_model,
+                        attempt=attempt,
+                    )
+                    self._release_db_transaction()
+                    return parsed
+                except HTTPError as exc:
+                    channel_down = exc.code == 503
+                    last_error = AIProviderExecutionError(
+                        "AI_PROVIDER_HTTP_ERROR",
+                        f"AI provider '{provider}' returned HTTP {exc.code}.",
+                        provider=provider,
+                        task_type=task_type,
+                        status_code=502,
+                        details={
+                            "http_status": exc.code,
+                            "attempt": attempt,
+                            "model": active_model,
+                        },
+                    )
+                except TimeoutError as exc:
+                    last_error = AIProviderExecutionError(
+                        "AI_PROVIDER_TIMEOUT",
+                        f"AI provider '{provider}' request timed out.",
+                        provider=provider,
+                        task_type=task_type,
+                        status_code=504,
+                        details={"attempt": attempt, "model": active_model},
+                    )
+                except (URLError, json.JSONDecodeError, ValueError) as exc:
+                    last_error = AIProviderExecutionError(
+                        "AI_PROVIDER_REQUEST_FAILED",
+                        f"AI provider '{provider}' request failed.",
+                        provider=provider,
+                        task_type=task_type,
+                        status_code=502,
+                        details={
+                            "attempt": attempt,
+                            "error_class": exc.__class__.__name__,
+                            "model": active_model,
+                        },
+                    )
                 latency_ms = (perf_counter() - started) * 1000
                 self._emit_execution_event(
                     provider=provider,
                     task_type=task_type,
                     org_id=org_record.org_id,
-                    status="success",
+                    status="failed",
                     latency_ms=latency_ms,
                     base_url=base_url,
                     endpoint_called=endpoint_called,
                     key_alias=key.key_alias,
-                    model=model,
+                    model=active_model,
                     attempt=attempt,
+                    error=last_error.structured_error() if last_error else None,
                 )
                 self._release_db_transaction()
-                return parsed
-            except HTTPError as exc:
-                last_error = AIProviderExecutionError(
-                    "AI_PROVIDER_HTTP_ERROR",
-                    f"AI provider '{provider}' returned HTTP {exc.code}.",
-                    provider=provider,
-                    task_type=task_type,
-                    status_code=502,
-                    details={"http_status": exc.code, "attempt": attempt},
-                )
-            except TimeoutError as exc:
-                last_error = AIProviderExecutionError(
-                    "AI_PROVIDER_TIMEOUT",
-                    f"AI provider '{provider}' request timed out.",
-                    provider=provider,
-                    task_type=task_type,
-                    status_code=504,
-                    details={"attempt": attempt},
-                )
-            except (URLError, json.JSONDecodeError, ValueError) as exc:
-                last_error = AIProviderExecutionError(
-                    "AI_PROVIDER_REQUEST_FAILED",
-                    f"AI provider '{provider}' request failed.",
-                    provider=provider,
-                    task_type=task_type,
-                    status_code=502,
-                    details={
-                        "attempt": attempt,
-                        "error_class": exc.__class__.__name__,
-                    },
-                )
-            latency_ms = (perf_counter() - started) * 1000
-            self._emit_execution_event(
-                provider=provider,
-                task_type=task_type,
-                org_id=org_record.org_id,
-                status="failed",
-                latency_ms=latency_ms,
-                base_url=base_url,
-                endpoint_called=endpoint_called,
-                key_alias=key.key_alias,
-                model=model,
-                attempt=attempt,
-                error=last_error.structured_error() if last_error else None,
-            )
-            self._release_db_transaction()
+            if not channel_down:
+                break
 
         resolved_fallback = fallback_provider or DEFAULT_FALLBACK_PROVIDERS.get(provider)
         if fallback_allowed and resolved_fallback:

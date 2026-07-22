@@ -254,24 +254,39 @@ def _resolve_chat_key(db: Session, user: User | None):
     return context.key_for_step("brand_audit")
 
 
+# 与 ai_provider_router.MODEL_FALLBACKS 同思路:4sapi「OpenAI优质」分组
+# 会整组掉线(503 No available channel),低档通道仍在。审查是 fail-closed
+# 硬门,通道故障时按序降级,恢复后自动回到首选模型。
+_AUDIT_MODEL_CANDIDATES = ("gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.2-high")
+
+
 def _chat_completion(key, messages: list[dict[str, Any]]) -> str:
     url = key.url.rstrip("/")
     if not url.endswith("/v1"):
         url = f"{url}/v1"
     url = f"{url}/chat/completions"
-    body = {"model": "gpt-5.6-luna", "messages": messages}
+    last_error: Exception | None = None
     with httpx.Client(timeout=_AUDIT_TIMEOUT_SECONDS) as client:
-        response = client.post(
-            url,
-            headers={
-                "Content-Type": "application/json",
-                key.header_name: key.header_value,
-            },
-            json=body,
-        )
-        response.raise_for_status()
-        payload = response.json()
-    return str(payload["choices"][0]["message"]["content"] or "")
+        for model in _AUDIT_MODEL_CANDIDATES:
+            response = client.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    key.header_name: key.header_value,
+                },
+                json={"model": model, "messages": messages},
+            )
+            if response.status_code == 503:
+                last_error = httpx.HTTPStatusError(
+                    f"channel down for {model}",
+                    request=response.request,
+                    response=response,
+                )
+                continue
+            response.raise_for_status()
+            payload = response.json()
+            return str(payload["choices"][0]["message"]["content"] or "")
+    raise last_error or RuntimeError("brand audit: no AI channel available")
 
 
 def _json_from_reply(reply: str) -> dict[str, Any]:
