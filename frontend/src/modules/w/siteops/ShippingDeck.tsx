@@ -13,6 +13,7 @@ import {
   getShippingBoard,
   getShippingClasses,
   getShippingRules,
+  getShippingZones,
   isHttpProductSourceUrl,
   normalizeProductSourceSku,
   patchOrderTracking,
@@ -33,6 +34,7 @@ import {
   type ShippingRuleType,
   type ShippingSimulationResult,
   type ShippingSyncStatus,
+  type ShippingZoneOption,
   type ShippingZoneRate,
   type TrackingStatus,
   type WOrder,
@@ -247,6 +249,7 @@ export function ShippingDeck() {
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [items, setItems] = useState<ShippingBoardItem[]>([]);
   const [shippingClasses, setShippingClasses] = useState<ShippingClass[]>([]);
+  const [wooZones, setWooZones] = useState<ShippingZoneOption[]>([]);
   const [rules, setRules] = useState<ShippingRule[]>([]);
   const [ruleDrafts, setRuleDrafts] = useState<RuleDraft[]>([]);
   const [classDrafts, setClassDrafts] = useState<ClassDraft[]>([]);
@@ -362,13 +365,17 @@ export function ShippingDeck() {
     const load = async () => {
       setLoading(true);
       try {
-        const [orderData, board, classData, ruleData] = await Promise.all([
-          getOrders("all"),
-          getShippingBoard("all", 500),
-          getShippingClasses(),
-          getShippingRules(),
-        ]);
+        const [orderData, board, classData, ruleData, zoneData] =
+          await Promise.all([
+            getOrders("all"),
+            getShippingBoard("all", 500),
+            getShippingClasses(),
+            getShippingRules(),
+            // 区域下拉是锦上添花:Woo 不可达时拿空表,退回手填,绝不拖垮页面
+            getShippingZones().catch(() => [] as ShippingZoneOption[]),
+          ]);
         if (!current) return;
+        setWooZones(zoneData);
         applyOrders(orderData);
         setSummary(board.summary);
         setItems(board.items);
@@ -1685,18 +1692,47 @@ export function ShippingDeck() {
                                 className={styles.zoneRateRow}
                                 key={`${row.key}-zone-${index}`}
                               >
-                                <input
-                                  aria-label="区域名"
-                                  className={styles.formInput}
-                                  disabled={syncInFlight}
-                                  onChange={(event) =>
-                                    updateZoneRate(row.key, index, {
-                                      zone_name: event.target.value,
-                                    })
-                                  }
-                                  placeholder="区域名（如 USA / Europe）"
-                                  value={rate.zone_name}
-                                />
+                                {wooZones.length > 0 ? (
+                                  <select
+                                    aria-label="区域名"
+                                    className={styles.formInput}
+                                    disabled={syncInFlight}
+                                    onChange={(event) =>
+                                      updateZoneRate(row.key, index, {
+                                        zone_name: event.target.value,
+                                      })
+                                    }
+                                    value={rate.zone_name}
+                                  >
+                                    <option value="">选择区域…</option>
+                                    {wooZones.map((zone) => (
+                                      <option key={zone.id} value={zone.name}>
+                                        {zone.name}
+                                      </option>
+                                    ))}
+                                    {rate.zone_name &&
+                                    !wooZones.some(
+                                      (zone) => zone.name === rate.zone_name,
+                                    ) ? (
+                                      <option value={rate.zone_name}>
+                                        {rate.zone_name}（Woo 中未找到）
+                                      </option>
+                                    ) : null}
+                                  </select>
+                                ) : (
+                                  <input
+                                    aria-label="区域名"
+                                    className={styles.formInput}
+                                    disabled={syncInFlight}
+                                    onChange={(event) =>
+                                      updateZoneRate(row.key, index, {
+                                        zone_name: event.target.value,
+                                      })
+                                    }
+                                    placeholder="区域名（如 USA / Europe）"
+                                    value={rate.zone_name}
+                                  />
+                                )}
                                 <input
                                   aria-label="基础运费"
                                   className={styles.formInput}

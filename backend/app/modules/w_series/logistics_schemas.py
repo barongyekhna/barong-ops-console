@@ -46,6 +46,11 @@ class ZoneRate(LogisticsStrictRequest):
         return value.strip()
 
 
+class ShippingZoneItem(BaseModel):
+    id: int
+    name: str
+
+
 class ShippingSyncJobResponse(BaseModel):
     job_id: str
     status: str

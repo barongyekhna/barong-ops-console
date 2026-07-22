@@ -115,6 +115,40 @@ def _target_org_id(db: Session) -> str | None:
         )
 
 
+def list_woo_shipping_zones(db: Session) -> list[dict[str, Any]]:
+    """只读拉取 Woo 配送区域(供运费模板下拉选择,消灭区域名手误)。
+
+    凭据走 H 桥的解析链(密钥管理→env 回退);Woo 不可达或未配凭据时
+    返回空表——前端据此优雅退回手填输入框,绝不因此报错。
+    排除 id=0 的「其余未覆盖区域」兜底区。
+    """
+
+    from ...services import wp_bridge
+
+    try:
+        credentials = wp_bridge._resolve_credentials(  # noqa: SLF001 - 站内共享口径
+            db=db, org_id=_target_org_id(db)
+        )
+        if credentials is None:
+            return []
+        url = f"{credentials.base_url.rstrip('/')}/wp-json/wc/v3/shipping/zones"
+        result = wp_bridge._request_json(  # noqa: SLF001 - 站内共享口径
+            url, credentials=credentials, authenticated=True
+        )
+        data = result.get("data")
+        if not result.get("reachable") or not isinstance(data, list):
+            return []
+        zones: list[dict[str, Any]] = []
+        for zone in data:
+            zone_id = zone.get("id") if isinstance(zone, dict) else None
+            name = str(zone.get("name") or "").strip() if isinstance(zone, dict) else ""
+            if isinstance(zone_id, int) and zone_id > 0 and name:
+                zones.append({"id": zone_id, "name": name})
+        return zones
+    except Exception:  # noqa: BLE001 - 下拉选项是锦上添花,失败不许影响页面
+        return []
+
+
 def track17_key(db: Session) -> str:
     """Resolve the W-S 17TRACK key from the central secret binding."""
 

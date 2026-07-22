@@ -58,6 +58,7 @@ from .logistics_schemas import (
     PublicTrackResult,
     PublicTrackingEvent,
     ShippingSyncJobResponse,
+    ShippingZoneItem,
     SyncResultRequest,
     SyncResultResponse,
     TrackingPatchRequest,
@@ -730,6 +731,18 @@ def _load_product(db: Session, product_id: UUID) -> KProductKnowledgeProduct:
     if product is None:
         raise HTTPException(status_code=404, detail="产品不存在。")
     return product
+
+
+@router.get("/shipping/zones", response_model=list[ShippingZoneItem])
+def shipping_zones_list(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_READ)),
+) -> list[ShippingZoneItem]:
+    """Woo 配送区域实时清单——运费模板区域下拉的数据源(失败返回空表)。"""
+    del user
+    return [
+        ShippingZoneItem(**zone) for zone in logistics.list_woo_shipping_zones(db)
+    ]
 
 
 @router.get("/shipping/classes", response_model=list[ShippingClassItem])

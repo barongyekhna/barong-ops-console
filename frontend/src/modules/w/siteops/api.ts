@@ -314,6 +314,20 @@ async function readJson<T>(response: Response, label: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+export type ShippingZoneOption = {
+  id: number;
+  name: string;
+};
+
+export async function getShippingZones(): Promise<ShippingZoneOption[]> {
+  const response = await fetch(`${API_PROXY_BASE}/w/shipping/zones`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson<ShippingZoneOption[]>(response, "配送区域");
+}
+
 export async function getShippingClasses(): Promise<ShippingClass[]> {
   const response = await fetch(`${API_PROXY_BASE}/w/shipping/classes`, {
     cache: "no-store",

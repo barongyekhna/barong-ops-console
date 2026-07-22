@@ -1239,6 +1239,9 @@ function isAllowedWPath(method: string, path: string[]) {
   ) {
     return method === "PUT" || method === "DELETE";
   }
+  if (path.length === 3 && path[1] === "shipping" && path[2] === "zones") {
+    return method === "GET";
+  }
   if (
     path.length === 3 &&
     path[1] === "shipping" &&
