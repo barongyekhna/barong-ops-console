@@ -325,6 +325,17 @@ def _role_label(
     return str(value or "").strip()[:128] or None
 
 
+def _spec_reference_asset_id(spec: dict[str, Any]) -> UUID | None:
+    """运营者新增图可携带专属参考图(brief spec.reference_asset_id)。"""
+    raw = str(spec.get("reference_asset_id") or "").strip()
+    if not raw:
+        return None
+    try:
+        return UUID(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def _spec_seo(spec: dict[str, Any]) -> dict[str, Any]:
     output: dict[str, Any] = {
         key: str(spec.get(key) or "").strip()
@@ -797,12 +808,14 @@ def enqueue_image_render_jobs(
                     (id, product_id, batch_id, position, placement, role_label,
                      asset_role, mission, prompt, overlay_text, aspect_ratio,
                      seo_json, status, requested_by_username,
-                     workspace_key, business_context, scope_mode)
+                     workspace_key, business_context, scope_mode,
+                     reference_asset_id)
                 VALUES
                     (:id, :product_id, :batch_id, :position, :placement, :role_label,
                      :asset_role, :mission, :prompt, :overlay_text, :aspect_ratio,
                      CAST(:seo_json AS jsonb), 'pending', :username,
-                     :workspace_key, :business_context, :scope_mode)
+                     :workspace_key, :business_context, :scope_mode,
+                     :reference_asset_id)
                 """
             ),
             {
@@ -814,6 +827,7 @@ def enqueue_image_render_jobs(
                 "role_label": _role_label(spec, overlay),
                 "asset_role": asset_role,
                 "mission": str(spec.get("mission") or "") or None,
+                "reference_asset_id": _spec_reference_asset_id(spec),
                 "prompt": prompt,
                 # The historical column remains Text to avoid another queue
                 # migration; it now stores the normalized v1 overlay JSON.
@@ -1766,6 +1780,7 @@ def enqueue_rework_job(
     asset_id: UUID,
     extra_prompt: str,
     use_current_as_reference: bool,
+    reference_override: KProductKnowledgeMediaAsset | None = None,
 ) -> tuple[UUID, dict[str, Any]]:
     """单张图重做：原 prompt + 临时 REVISION 指令（冲突以新指令为准，不写回
     作图指令）。参考图二选一：这版图本身（在其基础上改）或产品原始参考图。"""
@@ -1781,9 +1796,15 @@ def enqueue_rework_job(
             "REWORK_ASSET_NOT_FOUND", "要重做的图不存在或不可重做。", status_code=404
         )
     extra = (extra_prompt or "").strip()
-    if not extra:
+    if not extra and reference_override is None:
         raise KImageRenderError(
             "REWORK_PROMPT_REQUIRED", "请填写这张图的修改要求。", status_code=422
+        )
+    if not extra:
+        # 贴了专属参考图但没写要求:参考图本身就是指令
+        extra = (
+            "Match the NEW reference image supplied by the operator for the "
+            "product's appearance."
         )
     meta = asset.metadata_json
     base_prompt = str(meta.get("image_prompt_enhanced") or "").strip()
@@ -1796,7 +1817,13 @@ def enqueue_rework_job(
         "conflicts with anything above, THIS revision wins): "
         + extra
     )
-    if use_current_as_reference:
+    if reference_override is not None:
+        prompt += (
+            "\nThe attached reference image is a NEW reference supplied by the "
+            "operator for THIS image — follow it for the product's appearance "
+            "and key details while honoring the original prompt intent."
+        )
+    elif use_current_as_reference:
         prompt += (
             "\nThe attached reference image IS the previous accepted version of "
             "this exact image — keep its composition, style, and content, and "
@@ -1868,7 +1895,11 @@ def enqueue_rework_job(
             "workspace_key": scope_context.workspace_key,
             "business_context": scope_context.business_context,
             "scope_mode": scope_context.scope_mode,
-            "reference_asset_id": asset.id if use_current_as_reference else None,
+            "reference_asset_id": (
+                reference_override.id
+                if reference_override is not None
+                else (asset.id if use_current_as_reference else None)
+            ),
         },
     )
     return batch_id, _job_dict(job_id, batch_id, position, str(meta.get("placement") or PLACEMENT_GALLERY), asset.asset_role)

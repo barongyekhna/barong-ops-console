@@ -12,6 +12,9 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  addBriefImage,
+  applyBriefOverlay,
+  getOverlayFields,
   getRenderAssets,
   getRenderJobs,
   mediaAssetPreviewUrl,
@@ -20,6 +23,7 @@ import {
   retryRenderJobs,
   reworkRenderAsset,
   saveRenderAssets,
+  type OverlayFieldOption,
   type RenderAsset,
   type RenderJobsResult,
 } from "./api";
@@ -57,6 +61,16 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
   const [reworkAsset, setReworkAsset] = useState<RenderAsset | null>(null);
   const [reworkPrompt, setReworkPrompt] = useState("");
   const [reworkUseCurrent, setReworkUseCurrent] = useState(true);
+  const [reworkReferenceUrl, setReworkReferenceUrl] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addScene, setAddScene] = useState("");
+  const [addPlacement, setAddPlacement] = useState<"gallery" | "description">(
+    "gallery",
+  );
+  const [addReferenceUrl, setAddReferenceUrl] = useState("");
+  const [overlayAsset, setOverlayAsset] = useState<RenderAsset | null>(null);
+  const [overlayFields, setOverlayFields] = useState<OverlayFieldOption[]>([]);
+  const [overlayPicked, setOverlayPicked] = useState<string[]>([]);
 
   const mounted = useRef(true);
   const timer = useRef<number | null>(null);
@@ -157,6 +171,7 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
         asset_id: target.asset_id,
         extra_prompt: reworkPrompt,
         use_current_as_reference: reworkUseCurrent,
+        reference_image_url: reworkReferenceUrl.trim() || null,
       });
       setNotice(
         `第 ${target.position} 张已排队重做（${
@@ -165,8 +180,61 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
       );
       setReworkAsset(null);
       setReworkPrompt("");
+      setReworkReferenceUrl("");
       setPreviewAsset(null);
     }, "重做提交失败，请重试。");
+  };
+
+  const submitAddImage = () => {
+    void runAction(async () => {
+      await addBriefImage(productId, {
+        scene: addScene.trim(),
+        placement: addPlacement,
+        reference_image_url: addReferenceUrl.trim() || null,
+      });
+      setNotice(
+        `已把这张图追加进作图方案（${
+          addPlacement === "gallery" ? "轮播图库" : "描述内嵌"
+        }）并排队渲染，SEO 字段已自动生成。`,
+      );
+      setAddOpen(false);
+      setAddScene("");
+      setAddReferenceUrl("");
+    }, "新增图片失败，请重试。");
+  };
+
+  const openOverlayDialog = (asset: RenderAsset) => {
+    setOverlayAsset(asset);
+    setOverlayPicked([]);
+    setOverlayFields([]);
+    void getOverlayFields(productId)
+      .then((fields) => setOverlayFields(fields))
+      .catch(() => setOverlayFields([]));
+  };
+
+  const toggleOverlayField = (field: string) => {
+    setOverlayPicked((current) =>
+      current.includes(field)
+        ? current.filter((item) => item !== field)
+        : current.length >= 4
+          ? current
+          : [...current, field],
+    );
+  };
+
+  const submitOverlay = () => {
+    if (!overlayAsset) {
+      return;
+    }
+    const target = overlayAsset;
+    void runAction(async () => {
+      await applyBriefOverlay(productId, target.position, overlayPicked);
+      setNotice(
+        `第 ${target.position} 张已按所选规格重排渲染——真实数值由系统精确画上图。`,
+      );
+      setOverlayAsset(null);
+      setPreviewAsset(null);
+    }, "加标注失败，请重试。");
   };
 
   const active = isActive(jobs);
@@ -209,6 +277,20 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
               重试失败的 {failedJobs.length} 张
             </button>
           ) : null}
+          <button
+            className="secondary-button"
+            disabled={busy || active || !hasBrief}
+            onClick={() => setAddOpen(true)}
+            title={
+              hasBrief
+                ? "在 AI 方案之外追加一张图（可贴专属参考图，手选放轮播还是描述）"
+                : "请先生成作图指令"
+            }
+            type="button"
+          >
+            <ImagePlay aria-hidden="true" size={16} />
+            添加图片
+          </button>
           <button
             className="secondary-button"
             disabled={busy || active || !hasBrief}
@@ -381,6 +463,7 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
                 onClick={() => {
                   setReworkAsset(previewAsset);
                   setReworkPrompt("");
+                  setReworkReferenceUrl("");
                   setReworkUseCurrent(true);
                 }}
                 type="button"
@@ -388,6 +471,18 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
                 <Wand2 aria-hidden="true" size={15} />
                 不满意，重做
               </button>
+              {previewAsset.asset_role !== "main" ? (
+                <button
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => openOverlayDialog(previewAsset)}
+                  title="从已核实规格里挑几条，系统把真实数值精确画上图（亚马逊风信息图）"
+                  type="button"
+                >
+                  <CheckCircle2 aria-hidden="true" size={15} />
+                  加标注
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -428,6 +523,17 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
                 value={reworkPrompt}
               />
             </label>
+            <label className={styles.field}>
+              <span>
+                专属参考图链接（可选）——贴了就以它为最高优先参考，适合“这张图想换个实物/角度”的场景
+              </span>
+              <input
+                inputMode="url"
+                onChange={(event) => setReworkReferenceUrl(event.target.value)}
+                placeholder="1688 图片右键「复制图片地址」贴这里；留空则按下面二选一"
+                value={reworkReferenceUrl}
+              />
+            </label>
             <div className={styles.renderReworkChoices}>
               <label>
                 <input
@@ -457,7 +563,7 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
             <div className={styles.renderLightboxActions}>
               <button
                 className="primary-button"
-                disabled={busy || !reworkPrompt.trim()}
+                disabled={busy || (!reworkPrompt.trim() && !reworkReferenceUrl.trim())}
                 onClick={submitRework}
                 type="button"
               >
@@ -467,6 +573,162 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
                   <Wand2 aria-hidden="true" size={15} />
                 )}
                 提交重做
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ---- 添加图片弹窗 ---- */}
+      {addOpen ? (
+        <div
+          className={styles.renderLightbox}
+          onMouseDown={() => setAddOpen(false)}
+          role="presentation"
+        >
+          <div
+            className={styles.renderReworkModal}
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-label="添加图片"
+          >
+            <div className={styles.renderLightboxHead}>
+              <strong>在方案之外添加一张图</strong>
+              <button
+                aria-label="取消添加"
+                className="secondary-button"
+                onClick={() => setAddOpen(false)}
+                type="button"
+              >
+                <X aria-hidden="true" size={16} />
+              </button>
+            </div>
+            <label className={styles.field}>
+              <span>想要什么画面（一句话描述，中英文都行）</span>
+              <textarea
+                onChange={(event) => setAddScene(event.target.value)}
+                placeholder="例：办公桌上，手边放着捏捏球，屏幕前的人伸手去拿"
+                rows={3}
+                value={addScene}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>专属参考图链接（可选）</span>
+              <input
+                inputMode="url"
+                onChange={(event) => setAddReferenceUrl(event.target.value)}
+                placeholder="留空则用产品默认参考图"
+                value={addReferenceUrl}
+              />
+            </label>
+            <div className={styles.renderReworkChoices}>
+              <label>
+                <input
+                  checked={addPlacement === "gallery"}
+                  name="add-placement"
+                  onChange={() => setAddPlacement("gallery")}
+                  type="radio"
+                />
+                <span>
+                  <strong>放进轮播图库</strong> —— 页面顶部的产品图轮播
+                </span>
+              </label>
+              <label>
+                <input
+                  checked={addPlacement === "description"}
+                  name="add-placement"
+                  onChange={() => setAddPlacement("description")}
+                  type="radio"
+                />
+                <span>
+                  <strong>放进描述内嵌</strong> —— 详情页正文里的图文混排
+                </span>
+              </label>
+            </div>
+            <p className={styles.copyReviewHint}>
+              新图的 SEO 四件套（标题/alt/说明/描述）自动生成,和 AI 方案图同一标准;
+              渲染完成后同样进暂存区,满意再保存。
+            </p>
+            <div className={styles.renderLightboxActions}>
+              <button
+                className="primary-button"
+                disabled={busy || !addScene.trim()}
+                onClick={submitAddImage}
+                type="button"
+              >
+                {busy ? (
+                  <LoaderCircle aria-hidden="true" className="spin" size={15} />
+                ) : (
+                  <ImagePlay aria-hidden="true" size={15} />
+                )}
+                添加并开始渲染
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ---- 加标注弹窗 ---- */}
+      {overlayAsset ? (
+        <div
+          className={styles.renderLightbox}
+          onMouseDown={() => setOverlayAsset(null)}
+          role="presentation"
+        >
+          <div
+            className={styles.renderReworkModal}
+            onMouseDown={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-label="加标注"
+          >
+            <div className={styles.renderLightboxHead}>
+              <strong>给第 {overlayAsset.position} 张加规格标注</strong>
+              <button
+                aria-label="取消加标注"
+                className="secondary-button"
+                onClick={() => setOverlayAsset(null)}
+                type="button"
+              >
+                <X aria-hidden="true" size={16} />
+              </button>
+            </div>
+            <p className={styles.copyReviewHint}>
+              勾选要画上图的已核实规格（最多 4 条）——数值由系统按规格库精确绘制,
+              不是 AI 画字,不会出现乱码或吹牛数据。
+            </p>
+            {overlayFields.length === 0 ? (
+              <p className={styles.copyReviewHint}>
+                该产品暂无可标注的已核实规格——先去「规格（事实）」补充材质/尺寸等真实数据。
+              </p>
+            ) : (
+              <div className={styles.renderReworkChoices}>
+                {overlayFields.map((field) => (
+                  <label key={field.field}>
+                    <input
+                      checked={overlayPicked.includes(field.field)}
+                      onChange={() => toggleOverlayField(field.field)}
+                      type="checkbox"
+                    />
+                    <span>
+                      <strong>{field.label}</strong> — {field.value_text}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className={styles.renderLightboxActions}>
+              <button
+                className="primary-button"
+                disabled={busy || overlayPicked.length === 0}
+                onClick={submitOverlay}
+                type="button"
+              >
+                {busy ? (
+                  <LoaderCircle aria-hidden="true" className="spin" size={15} />
+                ) : (
+                  <CheckCircle2 aria-hidden="true" size={15} />
+                )}
+                应用并重画这张
               </button>
             </div>
           </div>

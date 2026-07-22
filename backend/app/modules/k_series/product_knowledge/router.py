@@ -5516,8 +5516,20 @@ def product_knowledge_render_assets_save(
 
 class RenderReworkRequest(BaseModel):
     asset_id: UUID
-    extra_prompt: str
+    extra_prompt: str = ""
     use_current_as_reference: bool = False
+    # 可选:为这张图贴专属参考图(优先级最高;落地为 reference 媒资)
+    reference_image_url: str | None = Field(default=None, max_length=2000)
+
+
+class BriefImageAddRequest(BaseModel):
+    scene: str = Field(min_length=1, max_length=2000)
+    placement: Literal["gallery", "description"]
+    reference_image_url: str | None = Field(default=None, max_length=2000)
+
+
+class BriefOverlayApplyRequest(BaseModel):
+    source_fields: list[str] = Field(min_length=1, max_length=8)
 
 
 @router.post(
@@ -5531,12 +5543,28 @@ def product_knowledge_render_rework(
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
 ) -> RenderEnqueueResponse:
-    """单张重做：原 prompt + 临时修改要求；参考图 = 这版图或原始参考图。"""
+    """单张重做：原 prompt + 临时修改要求；参考图 = 专属新参考图/这版图/原始参考图。"""
     scope_context = _scope_context(request)
     try:
         product = get_product(db, product_id=product_id, scope_context=scope_context)
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
+    reference_override = None
+    if payload.reference_image_url:
+        from .brief_operator_edits import store_operator_reference_asset
+
+        try:
+            reference_override = store_operator_reference_asset(
+                db,
+                product=product,
+                reference_image_url=payload.reference_image_url.strip(),
+                user=user,
+            )
+        except Exception as exc:  # noqa: BLE001 - 下载失败要人话报错
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"专属参考图下载失败：{str(exc)[:200]}",
+            ) from exc
     try:
         batch_id, job = enqueue_rework_job(
             db,
@@ -5546,6 +5574,7 @@ def product_knowledge_render_rework(
             asset_id=payload.asset_id,
             extra_prompt=payload.extra_prompt,
             use_current_as_reference=payload.use_current_as_reference,
+            reference_override=reference_override,
         )
     except KImageRenderError as exc:
         _raise_render_error(exc)
@@ -5553,6 +5582,192 @@ def product_knowledge_render_rework(
     return RenderEnqueueResponse(
         batch_id=str(batch_id),
         jobs=[RenderJobItem(**job)],
+    )
+
+
+@router.post(
+    "/products/{product_id}/brief-images",
+    response_model=RenderEnqueueResponse,
+)
+def product_knowledge_brief_image_add(
+    product_id: UUID,
+    payload: BriefImageAddRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> RenderEnqueueResponse:
+    """在 AI 作图方案之外新增一张图:手选去处,SEO 四件套保证齐全,当场排渲染。"""
+    scope_context = _scope_context(request)
+    try:
+        product = get_product(db, product_id=product_id, scope_context=scope_context)
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    instruction = product.image_instruction_json
+    if not isinstance(instruction, dict) or not isinstance(
+        instruction.get("images"), list
+    ) or not instruction["images"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="请先生成作图指令，再在方案之外新增图片。",
+        )
+    from .brief_operator_edits import (
+        build_operator_brief_image,
+        operator_image_prompt_and_seo,
+        store_operator_reference_asset,
+    )
+
+    reference_asset_id: str | None = None
+    if payload.reference_image_url:
+        try:
+            asset = store_operator_reference_asset(
+                db,
+                product=product,
+                reference_image_url=payload.reference_image_url.strip(),
+                user=user,
+            )
+            reference_asset_id = str(asset.id)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"参考图下载失败：{str(exc)[:200]}",
+            ) from exc
+    prompt_and_seo = operator_image_prompt_and_seo(
+        db, product=product, scene=payload.scene.strip()
+    )
+    positions = [
+        int(image.get("position") or 0)
+        for image in instruction["images"]
+        if isinstance(image, dict)
+    ]
+    new_position = max(positions or [0]) + 1
+    spec = build_operator_brief_image(
+        position=new_position,
+        placement=payload.placement,
+        scene=payload.scene.strip(),
+        prompt_and_seo=prompt_and_seo,
+        reference_asset_id=reference_asset_id,
+    )
+    updated = dict(instruction)
+    updated["images"] = [*instruction["images"], spec]
+    updated["image_count"] = len(updated["images"])
+    product.image_instruction_json = updated
+    db.add(product)
+    db.flush()
+    try:
+        batch_id, jobs = enqueue_image_render_jobs(
+            db,
+            product=product,
+            user=user,
+            scope_context=scope_context,
+            positions=[new_position],
+        )
+    except KImageRenderError as exc:
+        _raise_render_error(exc)
+    db.commit()
+    return RenderEnqueueResponse(
+        batch_id=str(batch_id),
+        jobs=[RenderJobItem(**job) for job in jobs],
+    )
+
+
+@router.get("/products/{product_id}/overlay-fields")
+def product_knowledge_overlay_fields(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> dict[str, Any]:
+    """「加标注」可选字段:当前产品已核实、可画上图的规格值。"""
+    del user
+    try:
+        product = get_product(
+            db, product_id=product_id, scope_context=_scope_context(request)
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    from .brief_operator_edits import available_overlay_fields
+
+    return {"fields": available_overlay_fields(db, product)}
+
+
+@router.post(
+    "/products/{product_id}/brief-images/{position}/overlay",
+    response_model=RenderEnqueueResponse,
+)
+def product_knowledge_brief_overlay_apply(
+    product_id: UUID,
+    position: int,
+    payload: BriefOverlayApplyRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> RenderEnqueueResponse:
+    """给方案中某张图加标注(真实规格值由合成器画上图)并重排渲染。"""
+    scope_context = _scope_context(request)
+    try:
+        product = get_product(db, product_id=product_id, scope_context=scope_context)
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    instruction = product.image_instruction_json
+    images = (
+        instruction.get("images") if isinstance(instruction, dict) else None
+    )
+    if not isinstance(images, list) or not images:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="请先生成作图指令。",
+        )
+    target_index = next(
+        (
+            index
+            for index, image in enumerate(images)
+            if isinstance(image, dict) and int(image.get("position") or 0) == position
+        ),
+        None,
+    )
+    if target_index is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"作图方案里没有第 {position} 张图。",
+        )
+    target = dict(images[target_index])
+    if str(target.get("role") or "").strip().lower() == "main":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="白底主图不允许加标注（家规：主图只有产品）。",
+        )
+    from .brief_operator_edits import build_preset_overlay
+
+    try:
+        overlay = build_preset_overlay(payload.source_fields)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    target["overlay"] = overlay
+    target["role"] = "feature_callout"
+    new_images = [*images]
+    new_images[target_index] = target
+    updated = dict(instruction)
+    updated["images"] = new_images
+    product.image_instruction_json = updated
+    db.add(product)
+    db.flush()
+    try:
+        batch_id, jobs = enqueue_image_render_jobs(
+            db,
+            product=product,
+            user=user,
+            scope_context=scope_context,
+            positions=[position],
+        )
+    except KImageRenderError as exc:
+        _raise_render_error(exc)
+    db.commit()
+    return RenderEnqueueResponse(
+        batch_id=str(batch_id),
+        jobs=[RenderJobItem(**job) for job in jobs],
     )
 
 

@@ -1518,6 +1518,34 @@ function isAllowedKPath(method: string, path: string[]) {
   }
 
   if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "brief-images"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "overlay-fields"
+  ) {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 6 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "brief-images" &&
+    path[5] === "overlay"
+  ) {
+    return method === "POST";
+  }
+
+  if (
     path.length === 5 &&
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&

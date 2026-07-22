@@ -649,11 +649,64 @@ export async function reworkRenderAsset(
     asset_id: string;
     extra_prompt: string;
     use_current_as_reference: boolean;
+    reference_image_url?: string | null;
   },
 ): Promise<RenderEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/render-rework`;
   const response = await fetch(`${API_PROXY_BASE}${path}`, {
     body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<RenderEnqueueResult>(response, path);
+}
+
+export async function addBriefImage(
+  productId: string,
+  payload: {
+    scene: string;
+    placement: "gallery" | "description";
+    reference_image_url?: string | null;
+  },
+): Promise<RenderEnqueueResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/brief-images`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<RenderEnqueueResult>(response, path);
+}
+
+export type OverlayFieldOption = {
+  field: string;
+  label: string;
+  value_text: string;
+};
+
+export async function getOverlayFields(
+  productId: string,
+): Promise<OverlayFieldOption[]> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/overlay-fields`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  const data = await readJson<{ fields: OverlayFieldOption[] }>(response, path);
+  return data.fields ?? [];
+}
+
+export async function applyBriefOverlay(
+  productId: string,
+  position: number,
+  sourceFields: string[],
+): Promise<RenderEnqueueResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/brief-images/${position}/overlay`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ source_fields: sourceFields }),
     cache: "no-store",
     headers: buildHeaders(true),
     method: "POST",
