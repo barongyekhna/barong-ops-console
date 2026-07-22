@@ -190,7 +190,16 @@ def test_non_leaf_taxonomy_node_uses_real_path_leaf_or_uncategorized() -> None:
         assert leaf.name == "In-Ground Lights"
         assert leaf.key == "path:home lighting in ground lights"
 
+        # 2026-07-22 用户拍板:有意选中的非叶类目也用自身名字自动出简写,
+        # 不再落 Uncategorized(Executive Toys → ET 案例)。
         product.category_path = "Home > Lighting"
+        leaf = resolve_product_leaf(db, product)
+        assert leaf.name == "Lighting"
+        assert leaf.key == "google:ROOT"
+
+        # 完全无类目才落 UNC 兜底
+        product.google_product_category = None
+        product.category_path = None
         leaf = resolve_product_leaf(db, product)
         assert leaf.name == "Uncategorized"
         assert leaf.key == "fallback:uncategorized"

@@ -238,6 +238,9 @@ def resolve_product_leaf(db: Session, product: Any) -> LeafCategory:
 
     non_leaf_ids: set[tuple[str, str]] = set()
     non_leaf_paths: set[str] = set()
+    # 用户有意选中的非叶类目(如 Executive Toys,下有 Magnet Toys 等子类):
+    # 记住第一个带名字的,兜底时用它的名字自动出简写,而不是落 UNC。
+    non_leaf_named: tuple[str, str, str] | None = None
     for table_name, taxonomy, category_id in lookups:
         row = _category_row(
             db,
@@ -250,6 +253,12 @@ def resolve_product_leaf(db: Session, product: Any) -> LeafCategory:
             normalized_id = str(row.get("id") or category_id or "").strip()
             if normalized_id:
                 non_leaf_ids.add((taxonomy, normalized_id))
+                if non_leaf_named is None:
+                    non_leaf_name = str(row.get("name") or "").strip() or (
+                        _path_leaf(row.get("full_path")) or ""
+                    )
+                    if non_leaf_name:
+                        non_leaf_named = (taxonomy, normalized_id, non_leaf_name)
             for raw_non_leaf_path in (row.get("full_path"), row.get("name")):
                 normalized_non_leaf_path = _normalized_name(
                     str(raw_non_leaf_path or "")
@@ -279,6 +288,21 @@ def resolve_product_leaf(db: Session, product: Any) -> LeafCategory:
                 key=f"path:{normalized_path}"[:128],
                 name=name,
             )
+
+    if non_leaf_named is not None:
+        taxonomy, normalized_id, non_leaf_name = non_leaf_named
+        logger.warning(
+            "SKU using non-leaf category name for prefix "
+            "product_id=%s taxonomy=%s category_id=%s name=%s",
+            getattr(product, "id", None),
+            taxonomy,
+            normalized_id,
+            non_leaf_name,
+        )
+        return LeafCategory(
+            key=f"{taxonomy}:{normalized_id}"[:128],
+            name=non_leaf_name,
+        )
 
     for taxonomy, category_id in (
         ("google", getattr(product, "google_product_category", None)),
