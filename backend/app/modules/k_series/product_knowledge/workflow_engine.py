@@ -33,7 +33,7 @@ from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import Request
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ....db.session import SessionLocal
@@ -3095,6 +3095,77 @@ def _finalize_dtc_seo(
     return output
 
 
+def _variant_pack_quantities(db: Session, product: Any) -> list[int]:
+    """产品各变体的包装数量(用于数量变体的确定性盒内文案)。"""
+    try:
+        rows = db.execute(
+            text(
+                "SELECT quantity FROM k_product_knowledge_variants "
+                "WHERE product_id IN (:p, :p_hex)"
+            ),
+            {
+                "p": str(product.id),
+                "p_hex": str(product.id).replace("-", ""),
+            },
+        ).scalars().all()
+    except Exception:  # noqa: BLE001 - 盒内文案兜底不许炸文案生成
+        return []
+    return [int(q) for q in rows if q is not None]
+
+
+def _pack_aware_box_section(
+    result: dict[str, Any],
+    *,
+    pack_quantities: list[int],
+    package_includes: list[str] | None,
+) -> dict[str, Any]:
+    """数量变体产品的「What's in the box」由程序确定性生成。
+
+    AI 写的盒内数量对多包装买家必然只对一半(2026-07-23 实锤:2 个装买家
+    读到 "includes one")。数量互异时无条件覆盖为按包装口径的真话;
+    单一数量产品保持原文不动。
+    """
+    quantities = sorted({q for q in pack_quantities if q and q > 0})
+    if len(quantities) < 2:
+        return result
+    base_item = ""
+    for candidate in package_includes or []:
+        cleaned = str(candidate or "").strip().rstrip(".")
+        if cleaned:
+            base_item = cleaned
+            break
+    if not base_item:
+        base_item = "item"
+    singular = base_item[:-1] if base_item.endswith("s") and not base_item.endswith("ss") else base_item
+    clauses = []
+    for quantity in quantities:
+        noun = singular if quantity == 1 else (
+            singular if singular.endswith("s") else singular + "s"
+        )
+        pack_label = f"{quantity} Pack" + ("s" if quantity > 1 else "")
+        clauses.append(f"the {pack_label} option includes {quantity} {noun}")
+    body = (
+        "Depending on the pack size you choose, "
+        + "; ".join(clauses)
+        + ". Every unit is identical."
+    )
+    output = dict(result)
+    ppc = dict(output.get("product_page_copy") or {})
+    chunks = list(ppc.get("chunk_sections") or [])
+    replaced = False
+    for index, chunk in enumerate(chunks):
+        if isinstance(chunk, dict) and re.search(
+            r"what'?s in the box", str(chunk.get("heading") or ""), re.IGNORECASE
+        ):
+            chunks[index] = {**chunk, "body": body}
+            replaced = True
+    if not replaced:
+        chunks.append({"heading": "What's in the box", "body": body})
+    ppc["chunk_sections"] = chunks
+    output["product_page_copy"] = ppc
+    return output
+
+
 def _keyword_coverage_receipt(
     result: dict[str, Any],
     final_keywords: list[str],
@@ -5243,64 +5314,109 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "Marketing copy provider output must be a JSON object.",
                 status_code=502,
             )
-        result = project_approved_selling_points(result, approved_points)
-        try:
-            result = enforce_package_evidence_consistency(
-                result,
-                package_includes=package_includes,
-                structured_specs=product.structured_specs_json,
-            )
-        except TitleEvidenceConsistencyError as exc:
-            raise KWorkflowExecutionError(
-                "MARKETING_COPY_TITLE_NUMERIC_UNSAFE",
-                str(exc),
-                status_code=409,
-            ) from exc
-        if channel == "dtc":
-            result = self._validate_faq_with_single_rewrite(
-                result,
-                research=faq_research,
-                approved_points=approved_points,
-                structured_specs=product.structured_specs_json,
-                package_includes=package_includes,
-                key=key,
-                gate_context=gate_context,
-            )
+        pack_quantities = _variant_pack_quantities(self.db, product)
+
+        def _postprocess_copy(raw_result: dict[str, Any]) -> dict[str, Any]:
+            staged = project_approved_selling_points(raw_result, approved_points)
             try:
-                result = enforce_title_evidence_consistency(
-                    result,
-                    # product_name_en is the only customer identity fallback.
-                    # A keyword must never replace a degenerated product title.
-                    product_name=product.product_name_en,
-                    product_type=product.product_type,
-                    category_name=(
-                        product.category_path
-                        or product.merchant_product_type
-                        or product.category_hint
-                    ),
-                    site_brand=SITE_BRAND,
-                    approved_selling_points={"bullets": approved_points},
-                    structured_specs=product.structured_specs_json,
+                staged = enforce_package_evidence_consistency(
+                    staged,
                     package_includes=package_includes,
-                )
-                # Evidence and numeric reconciliation run before wording changes.
-                # The finalizer then closes normal and product-name fallback paths
-                # into the same H1/title/meta contract and re-runs the shared
-                # numeric helper as a last-mile publishing defense.
-                result = _finalize_dtc_seo(
-                    result,
-                    final_keywords=final_keywords,
-                    site_brand=SITE_BRAND,
                     structured_specs=product.structured_specs_json,
-                    package_includes=package_includes,
                 )
             except TitleEvidenceConsistencyError as exc:
                 raise KWorkflowExecutionError(
-                    "MARKETING_COPY_TITLE_DEGENERATE",
+                    "MARKETING_COPY_TITLE_NUMERIC_UNSAFE",
                     str(exc),
                     status_code=409,
                 ) from exc
-        result = _stamp_keyword_coverage(result, final_keywords)
+            if channel == "dtc":
+                staged = self._validate_faq_with_single_rewrite(
+                    staged,
+                    research=faq_research,
+                    approved_points=approved_points,
+                    structured_specs=product.structured_specs_json,
+                    package_includes=package_includes,
+                    key=key,
+                    gate_context=gate_context,
+                )
+                try:
+                    staged = enforce_title_evidence_consistency(
+                        staged,
+                        # product_name_en is the only customer identity fallback.
+                        # A keyword must never replace a degenerated product title.
+                        product_name=product.product_name_en,
+                        product_type=product.product_type,
+                        category_name=(
+                            product.category_path
+                            or product.merchant_product_type
+                            or product.category_hint
+                        ),
+                        site_brand=SITE_BRAND,
+                        approved_selling_points={"bullets": approved_points},
+                        structured_specs=product.structured_specs_json,
+                        package_includes=package_includes,
+                    )
+                    # Evidence and numeric reconciliation run before wording changes.
+                    # The finalizer then closes normal and product-name fallback paths
+                    # into the same H1/title/meta contract and re-runs the shared
+                    # numeric helper as a last-mile publishing defense.
+                    staged = _finalize_dtc_seo(
+                        staged,
+                        final_keywords=final_keywords,
+                        site_brand=SITE_BRAND,
+                        structured_specs=product.structured_specs_json,
+                        package_includes=package_includes,
+                    )
+                except TitleEvidenceConsistencyError as exc:
+                    raise KWorkflowExecutionError(
+                        "MARKETING_COPY_TITLE_DEGENERATE",
+                        str(exc),
+                        status_code=409,
+                    ) from exc
+                # 数量变体产品的「What's in the box」由程序确定性生成:
+                # 1 个装买家和 2 个装买家看到的都是真话(2026-07-23 用户拍板)。
+                staged = _pack_aware_box_section(
+                    staged,
+                    pack_quantities=pack_quantities,
+                    package_includes=package_includes,
+                )
+            return _stamp_keyword_coverage(staged, final_keywords)
+
+        result = _postprocess_copy(result)
+        coverage = result.get("coverage") or {}
+        if coverage.get("warning") and coverage.get("missing_keywords"):
+            # 覆盖率自修复(2026-07-23 用户拍板):终选关键词覆盖不达标时,
+            # 带着缺失词清单重写一轮,两版之间择优——不再让大流量词漏网。
+            repair_input = dict(ai_input)
+            repair_input["instruction"] = (
+                str(ai_input.get("instruction") or "")
+                + "\n\nREVISION REQUIRED — the previous draft failed final-keyword "
+                "coverage. Each of these exact phrases MUST appear naturally at "
+                "least once in customer-facing copy (an H2 heading or a body "
+                "sentence), without keyword stuffing and without inventing any "
+                "new claim: "
+                + "; ".join(str(k) for k in coverage["missing_keywords"])
+            )
+            try:
+                retry_raw = self._execute_provider(
+                    provider="chatgpt",
+                    task_type="generate",
+                    key=key,
+                    gate_context=gate_context,
+                    payload=repair_input,
+                )
+                if isinstance(retry_raw, dict):
+                    retry_result = _postprocess_copy(retry_raw)
+                    retry_rate = (retry_result.get("coverage") or {}).get("rate") or 0
+                    if retry_rate > (coverage.get("rate") or 0):
+                        result = retry_result
+            except Exception:  # noqa: BLE001 - 自修复失败保留首版,绝不阻塞
+                logger.warning(
+                    "keyword coverage repair retry failed product=%s",
+                    product.id,
+                    exc_info=True,
+                )
         result["evidence_contract"] = "pdp-evidence-v1"
         result["evidence_digest"] = evidence_digest
         result["selling_points_digest"] = _hash_json(approved_points)
