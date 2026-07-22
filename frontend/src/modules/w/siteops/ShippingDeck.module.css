@@ -645,3 +645,22 @@
     grid-column: auto;
   }
 }
+
+/* 运费模板表:操作列钉在右缘,不随横向滚动移出视野(2026-07-22 用户反馈"没有保存按钮") */
+.stickyActionHeader,
+.stickyActionCell {
+  position: sticky;
+  right: 0;
+  background: rgb(8 16 26 / 97%);
+  box-shadow: -12px 0 14px -12px rgb(0 0 0 / 65%);
+}
+
+.table tr:hover .stickyActionCell {
+  background: rgb(13 24 36 / 97%);
+}
+
+.zoneRateHint {
+  font-size: 0.74rem;
+  color: rgb(157 199 219 / 75%);
+  line-height: 1.5;
+}

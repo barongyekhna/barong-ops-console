@@ -1565,7 +1565,14 @@ export function ShippingDeck() {
       {activeTab === "classes" ? (
         <section className={styles.panel} aria-label="运费模板">
           <p className={styles.mutedLine}>
-            slug 必须与 WooCommerce 后台的运费类别 slug 完全一致；「保存并同步到 Woo」会经 n8n 直接写入 Woo 后台，区域名需与 Woo 配送区域名一致。
+            slug 必须与 WooCommerce 后台的运费类别 slug 完全一致；「保存并同步到 Woo」会经 n8n 直接写入 Woo 后台。
+          </p>
+          <p className={styles.zoneRateHint}>
+            <strong>区域费率怎么填</strong>：区域名填 Woo
+            配送区域的名字（当前有 USA / Canada / Mexico /
+            Europe，不分大小写）；「基础运费」= 该区域每单统一收的运费；「本类别附加费」=
+            购物车里含本模板产品时额外加收的钱（可留空）。运费金额就填在这里——「保存并同步到
+            Woo」后自动写入该区域的统一运费并开启收费，不用再进 Woo 后台。
           </p>
           {loading ? (
             <div className={styles.state}>
@@ -1587,7 +1594,7 @@ export function ShippingDeck() {
                     <th>备注</th>
                     <th>区域费率</th>
                     <th>同步状态</th>
-                    <th>操作</th>
+                    <th className={styles.stickyActionHeader}>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1687,7 +1694,7 @@ export function ShippingDeck() {
                                       zone_name: event.target.value,
                                     })
                                   }
-                                  placeholder="zone_name"
+                                  placeholder="区域名（如 USA / Europe）"
                                   value={rate.zone_name}
                                 />
                                 <input
@@ -1700,7 +1707,7 @@ export function ShippingDeck() {
                                       base_cost: event.target.value,
                                     })
                                   }
-                                  placeholder="base_cost"
+                                  placeholder="基础运费（如 6.99）"
                                   value={rate.base_cost}
                                 />
                                 <input
@@ -1713,7 +1720,7 @@ export function ShippingDeck() {
                                       class_cost: event.target.value,
                                     })
                                   }
-                                  placeholder="class_cost"
+                                  placeholder="本类别附加费（可空）"
                                   value={rate.class_cost}
                                 />
                                 <button
@@ -1746,7 +1753,7 @@ export function ShippingDeck() {
                             {SYNC_STATUS_LABELS[row.sync_status]}
                           </span>
                         </td>
-                        <td>
+                        <td className={styles.stickyActionCell}>
                           <span className={styles.actionRow}>
                             <button
                               className="secondary-button"
