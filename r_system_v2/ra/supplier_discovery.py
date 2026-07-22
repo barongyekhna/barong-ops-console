@@ -1022,6 +1022,12 @@ def _append_1688_keyword_fallback_offers(
     exchange_rate_usd_cny: Decimal | None,
     result_limit: int,
 ) -> dict[str, list[Any]]:
+    # 2026-07-22 实测判死刑:近 5 天 ~27,000 次 Serper 兜底搜索只换来 3 条带价
+    # 货源(谷歌搜到的 1688 链接被 x5sec 反爬墙挡住取不到价),而官方接口同期
+    # 产出 2,069 条带价。默认停用,Serper 预算全留给渠道信号;
+    # 确要重开设 RA_SERPER_FALLBACK_ENABLED=1(仍受日额度台账约束)。
+    if os.getenv("RA_SERPER_FALLBACK_ENABLED", "0") != "1":
+        return {"searches": [], "offers": [], "warnings": []}
     warnings: list[str] = []
     searches: list[dict[str, object]] = []
     offers: list[dict[str, object]] = []
