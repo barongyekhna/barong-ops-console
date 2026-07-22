@@ -48,6 +48,11 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "default": "gpt-5.6-luna",
         "chat": "gpt-5.6-luna",
         "generate": "gpt-5.6-luna",
+        # 作图指令首发用家规模型;schema 校验失败的重试改用格式纪律
+        # 最强的 5.2-high(2026-07-22:代理商的 luna 通道连续产出缺
+        # overlay 的越规输出,重试同模型无效)。
+        "image_brief": "gpt-5.6-luna",
+        "image_brief_retry": "gpt-5.2-high",
     },
     "claude": {
         "default": "claude-opus-4-8-thinking",

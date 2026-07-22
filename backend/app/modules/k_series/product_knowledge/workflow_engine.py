@@ -5367,7 +5367,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         self.db.commit()
         provider_result = self._execute_provider(
             provider="chatgpt",
-            task_type="generate",
+            task_type="image_brief",
             key=key,
             gate_context=gate_context,
             payload=ai_input,
@@ -5399,11 +5399,11 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 approved_points,
             )
         except KWorkflowExecutionError:
-            # 采样波动会导致一次性的格式滑坡(漏 overlay/漏 images 数组)。
-            # 重采样一次再判死,省得用户手动反复点(2026-07-22)。
+            # 采样波动/代理侧模型偷工都会产出越规输出(漏 overlay/漏 images)。
+            # 重试换格式纪律最强的模型(image_brief_retry → 5.2-high)再判死。
             provider_result = self._execute_provider(
                 provider="chatgpt",
-                task_type="generate",
+                task_type="image_brief_retry",
                 key=key,
                 gate_context=gate_context,
                 payload=ai_input,
