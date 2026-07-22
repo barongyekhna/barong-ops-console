@@ -40,6 +40,7 @@ from r_system_v2.ra.quota_ledger import (
     PROVIDER_1688_APP_CALLS,
     PROVIDER_1688_CPS_IMAGE_SEARCH,
     PROVIDER_1688_IMAGE_SEARCH,
+    PROVIDER_SERPER,
     RAQuotaExhaustedError,
     refund,
     try_consume,
@@ -326,6 +327,13 @@ def discover_1688_supplier_offers(
         query = search_query.query
         search_id = str(uuid4())
         _discard_db_transaction(db)
+        # 2026-07-22 血泪教训:Serper 路径曾无额度闸,12 天烧光 5 万次搜索包。
+        # 每次出网前必须过台账(RA_SERPER_DAILY_BUDGET);额度尽即停,次日自动恢复。
+        try:
+            try_consume(db, PROVIDER_SERPER)
+        except RAQuotaExhaustedError:
+            warnings.append("Serper 日预算已尽,今日剩余关键词搜索跳过")
+            break
         try:
             results = client.search(query, num=max(10, limit * 4))
             status = "complete"
@@ -1036,6 +1044,13 @@ def _append_1688_keyword_fallback_offers(
         query = search_query.query
         search_id = str(uuid4())
         _discard_db_transaction(db)
+        # 2026-07-22 血泪教训:此兜底曾无额度闸,~5000 次/天烧光 5 万次搜索包。
+        # 每次出网前必须过台账(RA_SERPER_DAILY_BUDGET);额度尽即停,次日自动恢复。
+        try:
+            try_consume(db, PROVIDER_SERPER)
+        except RAQuotaExhaustedError:
+            warnings.append(f"{asin}: Serper 日预算已尽,跳过 1688 关键词兜底")
+            break
         try:
             results = client.search(query, num=max(10, result_limit * 4))
             status = "complete"

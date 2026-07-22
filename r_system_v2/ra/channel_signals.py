@@ -412,6 +412,20 @@ def _serper_or_mock(
         db.rollback()
     except Exception:
         pass
+    # 2026-07-22 起 Serper 全部出网必须过日预算台账(RA_SERPER_DAILY_BUDGET);
+    # 额度尽退回 mock 信号,渠道分组照常算,不阻塞选品链。
+    from r_system_v2.ra.quota_ledger import (
+        PROVIDER_SERPER,
+        RAQuotaExhaustedError,
+        try_consume,
+    )
+
+    try:
+        try_consume(db, PROVIDER_SERPER)
+    except RAQuotaExhaustedError:
+        return _mock_serp(
+            keyword=keyword, product=product, reason="serper_daily_budget_exhausted"
+        )
     raw = _serper_search(api_key=key, keyword=keyword)
     return _serp_signal_from_response(raw, keyword=keyword, provider_mode="real_serper")
 
