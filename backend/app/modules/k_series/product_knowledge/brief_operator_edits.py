@@ -202,6 +202,28 @@ def available_overlay_fields(
                 "value_text": value_text,
             }
         )
+    # 运营者在「规格(事实)」手填的附加规格同样可标注(additional_specs.<key>)
+    additional = structured_specs.get("additional_specs")
+    if isinstance(additional, list):
+        for item in additional:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key") or "").strip()
+            if not key:
+                continue
+            ref = f"additional_specs.{key}"
+            if ref not in OVERLAY_SOURCE_FIELDS:
+                continue
+            snapshot = _structured_spec_evidence_snapshot(structured_specs, ref)
+            if snapshot is None:
+                continue
+            value_text = str(snapshot.get("value_text") or "").strip()
+            if not value_text:
+                continue
+            label = str(item.get("label") or key).strip() or key
+            fields.append(
+                {"field": ref, "label": label, "value_text": value_text}
+            )
     return fields
 
 
