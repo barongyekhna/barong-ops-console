@@ -877,11 +877,13 @@ export function ProductListFull() {
     setWorkflowBusyAction("risk-review");
     setWorkflowError("");
     try {
+      // 只有工作流正停在风险审批步时才走风险审批端点;风险早已批完的
+      // 后续重提交(如手动增删关键词后)必须走纯板块提交存指纹——
+      // 否则会带着过期的决策清单撞 409 RISK_REVIEW_INCOMPLETE(2026-07-22 实锤)。
       const canUseWorkflowReview = Boolean(
         workflow?.id &&
           (workflow.current_step === "risk_term_manual_review" ||
-            workflow.current_step === "risk_term_review_manual" ||
-            workflow.risk_approval_log_json?.approved === true),
+            workflow.current_step === "risk_term_review_manual"),
       );
       if (canUseWorkflowReview) {
         const updated = await reviewWorkflowRiskTerms(openProduct.id, {

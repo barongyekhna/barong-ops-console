@@ -1958,6 +1958,11 @@ export function ProductDetail({
           </div>
         </div>
 
+        {keywordReviewError ? (
+          <p className={styles.sellingPointsError} role="alert">
+            {keywordReviewError}
+          </p>
+        ) : null}
         <div className={styles.sectionFooter}>
           <span data-complete={keywordsComplete}>
             {keywordsComplete
@@ -2543,6 +2548,11 @@ export function ProductDetail({
           </p>
         ) : null}
 
+        {sellingPointReviewError ? (
+          <p className={styles.sellingPointsError} role="alert">
+            {sellingPointReviewError}
+          </p>
+        ) : null}
         <div className={styles.sectionFooter}>
           <span data-complete={sellingPointsComplete}>
             {sellingPointsComplete
