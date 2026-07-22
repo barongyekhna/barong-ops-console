@@ -360,6 +360,33 @@ export function ShippingDeck() {
     setRuleDrafts(data.map(toRuleDraft));
   }, []);
 
+  // 同步是异步的(派单 n8n → 回报落库):只要有模板停在「同步中」,每 5 秒
+  // 静默拉一次最新状态,只更新同步中的行——正在编辑的其他行草稿不受影响。
+  const hasPendingClassSync = classDrafts.some(
+    (row) => row.sync_status === "pending",
+  );
+  useEffect(() => {
+    if (!hasPendingClassSync) return;
+    const timer = window.setInterval(() => {
+      void (async () => {
+        try {
+          const data = await getShippingClasses();
+          setShippingClasses(data);
+          setClassDrafts((current) =>
+            current.map((row) => {
+              if (row.sync_status !== "pending" || !row.id) return row;
+              const fresh = data.find((item) => item.id === row.id);
+              return fresh ? toClassDraft(fresh) : row;
+            }),
+          );
+        } catch {
+          // 轮询失败静默,下一轮再试
+        }
+      })();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingClassSync]);
+
   useEffect(() => {
     let current = true;
     const load = async () => {
