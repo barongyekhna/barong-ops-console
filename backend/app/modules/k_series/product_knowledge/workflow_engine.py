@@ -3027,6 +3027,15 @@ def _finalize_dtc_seo(
     )
     h1 = _truncate_heading(h1, _DTC_H1_MAX_LENGTH)
 
+    # H1 地板(2026-07-23):主关键词必须领跑 H1。AI 偶发写出不含关键词的
+    # 超短 H1(实锤 'Slow Rebound Relief')时,确定性重组「主关键词 – 原 H1」
+    # ——关键词过了风控门、原 H1 过了证据门,两段拼接零新增声明。
+    floor_keyword = _clean_seo_text(final_keywords[0]) if final_keywords else ""
+    if floor_keyword and not _phrase_is_projected_from_safe_h1(floor_keyword, h1):
+        h1 = _truncate_heading(
+            f"{_heading_case(floor_keyword)} – {h1}", _DTC_H1_MAX_LENGTH
+        )
+
     primary_phrase = _primary_phrase_from_safe_h1(h1, final_keywords)
     phrase_limit = _DTC_SEO_TITLE_MAX_LENGTH - len(f" | {site_brand}")
     # 2026-07-23 用户拍板:SEO 标题用满版面(总长瞄准 55-60)。主短语偏短时
