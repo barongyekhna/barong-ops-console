@@ -27,6 +27,7 @@ SERPER_HOSTS = frozenset(("google.serper.dev",))
 KEEPA_HOSTS = frozenset(("api.keepa.com",))
 # 独立站 WP 桥凭据(H 站点健康):单站点系统,站点域名与全后端其它硬编码一致
 WORDPRESS_HOSTS = frozenset(("barongyekhna.com", "www.barongyekhna.com"))
+TRACK17_HOSTS = frozenset(("api.17track.net",))
 RAINFOREST_HOSTS = frozenset(("api.rainforestapi.com",))
 ALIBABA_HOSTS = frozenset(("gw.open.1688.com",))
 GOOGLE_OAUTH_URL = "https://oauth2.googleapis.com/token"
@@ -110,6 +111,8 @@ def adapter_for_target(target: ProbeTarget) -> str:
         return "n8n"
     if key_type == "wordpress" or "wordpress" in aliases:
         return "wordpress"
+    if key_type == "track17" or "track17" in aliases or hostname in TRACK17_HOSTS:
+        return "track17"
     return "unsupported"
 
 
@@ -715,6 +718,68 @@ def _probe_wordpress(
     )
 
 
+def _probe_track17(
+    target: ProbeTarget,
+    *,
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> ProbeResult:
+    """17TRACK 最小检测:打 getquota 额度接口(零消耗,只验 17token)。
+
+    17TRACK 的鉴权失败通常也回 HTTP 200,错误码在 body 的 code 字段
+    (-1801xxxx 段为密钥/鉴权类错误)。
+    """
+
+    adapter = "track17"
+    started = perf_counter()
+    response = _request(
+        "POST",
+        "https://api.17track.net/track/v2.2/getquota",
+        allowed_hosts=TRACK17_HOSTS,
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        headers={
+            "17token": str(target.secret_value),
+            "Content-Type": "application/json",
+        },
+        json={},
+    )
+    if response.status_code == 200:
+        payload = _json_dict(response) or {}
+        code = payload.get("code")
+        if code == 0:
+            return _finish(
+                adapter=adapter,
+                started=started,
+                status=HEALTHY,
+                reason_code="quota_ok",
+                http_status=200,
+            )
+        # 只有鉴权段(-181000xx,如 -18010002=key 不存在)才判密钥失效;
+        # -1801 段靠后的编号(如额度类)一律 provider_error,避免误报换钥匙。
+        if isinstance(code, int) and -18010099 <= code <= -18010000:
+            return _finish(
+                adapter=adapter,
+                started=started,
+                status="invalid",
+                reason_code="authentication_rejected",
+                http_status=200,
+            )
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="provider_error",
+            reason_code=f"track17_code_{code}",
+            http_status=200,
+        )
+    return _status_from_http(
+        adapter=adapter,
+        started=started,
+        response=response,
+        success_reason="quota_ok",
+    )
+
+
 def probe_target(
     target: ProbeTarget,
     *,
@@ -793,6 +858,12 @@ def probe_target(
         )
     if adapter == "wordpress":
         return _probe_wordpress(
+            target,
+            enforce_public_network=enforce_public_network,
+            transport=transport,
+        )
+    if adapter == "track17":
+        return _probe_track17(
             target,
             enforce_public_network=enforce_public_network,
             transport=transport,

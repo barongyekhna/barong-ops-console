@@ -223,3 +223,45 @@ def test_serper_credits_exhausted_maps_to_actionable_reason() -> None:
     )
     assert result.status == "provider_error"
     assert result.reason_code == "provider_credits_exhausted"
+
+
+def test_track17_probe_reads_body_code_semantics() -> None:
+    def ok_handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "api.17track.net"
+        assert request.url.path == "/track/v2.2/getquota"
+        assert request.headers["17token"] == "test-secret-value"
+        return httpx.Response(200, json={"code": 0, "data": {"quota_total": 100}})
+
+    target = _target(url="https://api.17track.net", key_type="track17")
+    assert adapter_for_target(target) == "track17"
+    result = probe_target(
+        target,
+        enforce_public_network=False,
+        transport=httpx.MockTransport(ok_handler),
+    )
+    assert result.status == "healthy"
+    assert result.reason_code == "quota_ok"
+
+    # 17TRACK 鉴权失败也回 HTTP 200,错误码在 body(-1801xxxx 段)
+    def bad_key_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": -18010002, "data": None})
+
+    result = probe_target(
+        target,
+        enforce_public_network=False,
+        transport=httpx.MockTransport(bad_key_handler),
+    )
+    assert result.status == "invalid"
+    assert result.reason_code == "authentication_rejected"
+
+    # 其它业务错误码(如额度类)→ provider_error,不误判为密钥失效
+    def other_error_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"code": -18019902, "data": None})
+
+    result = probe_target(
+        target,
+        enforce_public_network=False,
+        transport=httpx.MockTransport(other_error_handler),
+    )
+    assert result.status == "provider_error"
+    assert result.reason_code == "track17_code_-18019902"
