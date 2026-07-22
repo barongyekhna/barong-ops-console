@@ -3029,6 +3029,26 @@ def _finalize_dtc_seo(
 
     primary_phrase = _primary_phrase_from_safe_h1(h1, final_keywords)
     phrase_limit = _DTC_SEO_TITLE_MAX_LENGTH - len(f" | {site_brand}")
+    # 2026-07-23 用户拍板:SEO 标题用满版面(总长瞄准 55-60)。主短语偏短时
+    # 用 H1(已过证据门,主关键词开头)填宽——只按完整子句降级:整条放不下
+    # 就从细节子句里整项丢弃,绝不截出"– Pot"这类残句;单词细节不值得保留。
+    if len(primary_phrase) < phrase_limit:
+        widen_candidates = [h1]
+        if " – " in h1:
+            h1_head, _, h1_detail = h1.partition(" – ")
+            detail_items = re.split(r",\s+|\s+&\s+", h1_detail)
+            for keep in range(len(detail_items) - 1, 0, -1):
+                kept_detail = ", ".join(detail_items[:keep])
+                if len(kept_detail.split()) < 2:
+                    continue
+                widen_candidates.append(f"{h1_head} – {kept_detail}")
+        widened_phrase = max(
+            (c for c in widen_candidates if len(c) <= phrase_limit),
+            key=len,
+            default=None,
+        )
+        if widened_phrase and len(widened_phrase) > len(primary_phrase):
+            primary_phrase = widened_phrase
     primary_phrase = _truncate_heading(primary_phrase, max(1, phrase_limit))
     primary_phrase = reconcile_title_numeric_claims(
         primary_phrase,

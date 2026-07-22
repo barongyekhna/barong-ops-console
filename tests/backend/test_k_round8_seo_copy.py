@@ -27,7 +27,8 @@ def test_round8_copy_prompt_requires_readable_h1_short_title_and_bounded_meta() 
     assert "not a supplier noun list" in instruction
     assert "lead with the primary keyword" in instruction
     assert "| Barong Yekhna" in instruction
-    assert "never over 60 characters" in instruction
+    assert "TOTAL length of 55-60 characters" in instruction
+    assert "never exceed 60 characters" in instruction
     assert "at most 160 characters" in instruction
     assert "nested storage or backpacking" in instruction
 
@@ -122,7 +123,8 @@ def test_dtc_seo_product_name_fallback_is_rewritten_not_republished_verbatim() -
     seo = result["seo"]
     assert seo["h1"] == "Camping Cookware Mess Kit – Pot, Kettle & Pan Set"
     assert len(seo["h1"]) <= 70
-    assert seo["title"] == "Camping Cookware Mess Kit | Barong Yekhna"
+    # 2026-07-23 用户拍板:标题用满 55-60(整子句填宽,不留残词)
+    assert seo["title"] == "Camping Cookware Mess Kit – Pot, Kettle | Barong Yekhna"
     assert len(seo["title"]) <= 60
 
 
@@ -139,7 +141,7 @@ def test_dtc_seo_fallback_without_keywords_still_breaks_up_supplier_noun_list() 
 
     seo = result["seo"]
     assert seo["h1"] == "Cookware Mess Kit – Pot, Kettle & Pan Set"
-    assert seo["title"] == "Cookware Mess Kit | Barong Yekhna"
+    assert seo["title"] == "Cookware Mess Kit – Pot, Kettle & Pan Set | Barong Yekhna"
     assert len(seo["h1"]) <= 70
     assert seo["title"].endswith(" | Barong Yekhna")
     assert len(seo["title"]) <= 60
@@ -298,7 +300,7 @@ def test_p_series_projects_the_normalized_h1_and_short_meta_title() -> None:
 
     assert assemble._title_for_upload(copy, product) == copy["seo"]["h1"]
     seo = assemble._seo_for_upload(copy, product)
-    assert seo.title == "Portable Camp Stove | Barong Yekhna"
+    assert seo.title == "Portable Camp Stove – Piezo Ignition | Barong Yekhna"
     assert seo.description == "A compact stove for campsite meals."
 
 

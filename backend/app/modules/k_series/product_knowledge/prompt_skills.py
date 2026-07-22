@@ -313,8 +313,11 @@ def marketing_copy_instruction(channel: str) -> str:
         "unsupported modifier. For DTC SEO, write `seo.h1` as a natural English "
         "product heading, not a supplier noun list: lead with the primary keyword, then "
         "use an en dash or comma to separate a concise supported detail, targeting 70 "
-        "characters or fewer. Keep `seo.title` separate and short in the exact pattern "
-        "`<short primary keyword phrase> | Barong Yekhna`, never over 60 characters. "
+        "characters or fewer. Write `seo.title` in the exact pattern "
+        "`<keyword-rich phrase> | Barong Yekhna` and USE THE FULL WIDTH: target a "
+        "TOTAL length of 55-60 characters including the brand suffix — lead with the "
+        "primary keyword, then add one supported modifier or benefit to fill the "
+        "width; never exceed 60 characters. "
         "Write `seo.meta_description` as one natural sentence of at most 160 characters; "
         "when supported and relevant, naturally cover one or two high-conversion long-tail "
         "intents such as nested storage or backpacking, without keyword stuffing.\n"
@@ -392,7 +395,7 @@ def marketing_copy_instruction(channel: str) -> str:
         '  "json_ld": {"data": {"@type": "Product", "name": "<...>", "description":'
         ' "<...>", "brand": {"@type": "Brand", "name": "<site_brand, NEVER any'
         ' other brand>"}}},\n'
-        '  "seo": {"title": "<short primary keyword phrase | Barong Yekhna, <=60 chars>",'
+        '  "seo": {"title": "<keyword-rich phrase | Barong Yekhna, total 55-60 chars>",'
         ' "meta_description": "<natural sentence, <=160 chars>",'
         ' "h1": "<primary keyword first; natural English with an en dash or comma, about'
         ' <=70 chars>", "url_slug": "<lowercase, hyphenated, 3-5 meaningful words>"},\n'
