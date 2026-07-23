@@ -403,6 +403,15 @@ parts.append(rule(RV, ["#reviews .commentlist .comment_container", "#reviews ol.
 parts.append(rule(RV, ["#reviews .woocommerce-Reviews-title"],
     "color:#1b1a18!important;letter-spacing:-.01em!important"))
 
+# ============ 产品页手机布局修复(2026-07-23 无头浏览器实锤)============
+# Flatsome 顶部 = 图库(col large-6) + 购买信息(col-fit, 无条件 flex:1 无手机兜底),
+# 手机上被压成"左小图 + 右一长条"(购买按钮文字都截断)。849px 以下强制
+# 电商标准布局:图库全宽在上,购买信息全宽在下。
+parts.append("@media(max-width:849px){"
+    "body.single-product .product-gallery.col{flex:0 0 100%!important;max-width:100%!important}"
+    "body.single-product .product-info.col-fit{flex:0 0 100%!important;max-width:100%!important}"
+    "}")
+
 CSS = "".join(parts)
 open("shop_house.css", "w").write(CSS)
 # 安全自检：确保没有任何裸 body 简单选择器后面直接跟 { (会命中整个 body)
