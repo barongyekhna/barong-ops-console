@@ -112,7 +112,20 @@ class ProductKnowledgeVariantItem(BaseModel):
     # 结构与父体 dimensions_json / weight_json 同构,落库进 attributes_json.physical。
     dimensions_json: dict[str, Any] | list[Any] | None = None
     weight_json: dict[str, Any] | list[Any] | None = None
+    # 可选:该变体(颜色)的专属参考图链接——同色多卡填一张即可。
+    # 渲染管线按颜色自动出"该色主图",上架时挂到对应 Woo variation(选色即换图)。
+    reference_image_url: str | None = Field(default=None, max_length=2000)
     attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("reference_image_url")
+    @classmethod
+    def _validate_variant_reference_url(cls, value: str | None) -> str | None:
+        cleaned = (value or "").strip()
+        if not cleaned:
+            return None
+        if not cleaned.lower().startswith(("http://", "https://")):
+            raise ValueError("变体参考图链接必须以 http:// 或 https:// 开头")
+        return cleaned
 
     @field_validator("attributes")
     @classmethod

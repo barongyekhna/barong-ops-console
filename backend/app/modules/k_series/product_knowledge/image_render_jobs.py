@@ -341,11 +341,91 @@ def _spec_seo(spec: dict[str, Any]) -> dict[str, Any]:
         key: str(spec.get(key) or "").strip()
         for key in ("title", "alt", "caption", "description")
     }
-    for key in ("selling_point_index", "selling_point_id", "selling_point_text", "proof_intent"):
+    for key in (
+        "selling_point_index",
+        "selling_point_id",
+        "selling_point_text",
+        "proof_intent",
+        "variant_color",
+    ):
         value = spec.get(key)
         if value not in (None, ""):
             output[key] = value
     return output
+
+
+# 颜色变体主图的固定位号段(101+):与作图指令的小位号天然隔离,
+# 重渲染时同色稳定同位,「保存」流程按位归档旧图的语义保持不变。
+_COLORWAY_POSITION_BASE = 100
+
+
+def _colorway_specs(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    known_positions: set[int],
+) -> list[dict[str, Any]]:
+    """按颜色自动生成"该色主图"渲染任务(2026-07-23 颜色变体图片管线)。
+
+    数据源 = 建品时按变体入库的专属参考图(metadata.variant_reference=true,
+    带 variant_color)。每个颜色一张,挂该色参考图渲染;产出资产带
+    variant_color 标记,上架装配据此挂到对应 Woo variation(选色即换图)。
+    锦上添花语义:任何查询失败返回空表,绝不拖垮排图。
+    """
+
+    try:
+        rows = db.scalars(
+            select(KProductKnowledgeMediaAsset)
+            .where(
+                KProductKnowledgeMediaAsset.product_id == product.id,
+                KProductKnowledgeMediaAsset.asset_role == "reference",
+                KProductKnowledgeMediaAsset.status == "available",
+            )
+            .order_by(KProductKnowledgeMediaAsset.created_at.desc())
+        ).all()
+    except Exception:  # noqa: BLE001 - fail-safe garnish
+        return []
+    by_color: dict[str, KProductKnowledgeMediaAsset] = {}
+    for row in rows:
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        if not meta.get("variant_reference"):
+            continue
+        color = str(meta.get("variant_color") or "").strip()
+        if not color or color in by_color:
+            continue
+        by_color[color] = row
+    if not by_color:
+        return []
+
+    name = (product.product_name_en or product.primary_keyword or "product").strip()
+    keyword = (product.primary_keyword or name).strip()
+    specs: list[dict[str, Any]] = []
+    position = _COLORWAY_POSITION_BASE
+    for color, asset in sorted(by_color.items()):
+        position += 1
+        while position in known_positions:
+            position += 1
+        specs.append(
+            {
+                "position": position,
+                "role": "detail",
+                "placement": PLACEMENT_GALLERY,
+                "reference_asset_id": str(asset.id),
+                "variant_color": color,
+                "mission": f"Colorway gallery shot – {color}",
+                "prompt": (
+                    f"Bright, clean ecommerce gallery photo of the {color} colorway "
+                    f"of {name}, three-quarter angled view on a warm light "
+                    "background, soft natural shadow, the product is the only "
+                    "subject. Match the attached reference image EXACTLY for the "
+                    f"{color} color, finish, and details."
+                ),
+                "title": f"{name} – {color}"[:180],
+                "alt": f"{color} {keyword} colorway"[:180],
+                "caption": f"The {color} colorway."[:160],
+                "description": f"{name} in the {color} colorway."[:300],
+            }
+        )
+    return specs
 
 
 # --- reference photo --------------------------------------------------------
@@ -446,6 +526,8 @@ def store_reference_image_asset(
     mime_type: str,
     source_url: str,
     user: User | None,
+    variant: KProductKnowledgeVariant | None = None,
+    extra_metadata: dict[str, Any] | None = None,
 ) -> KProductKnowledgeMediaAsset:
     """Persist an F supplier reference through the canonical K media path.
 
@@ -469,7 +551,8 @@ def store_reference_image_asset(
             status_code=422,
         )
 
-    variant = _first_variant(db, product)
+    if variant is None:
+        variant = _first_variant(db, product)
     if variant is None:
         raise KImageRenderError(
             "REFERENCE_VARIANT_MISSING",
@@ -539,6 +622,7 @@ def store_reference_image_asset(
             "imported_reference": True,
             "k_image_ai_generation_allowed": False,
             "k_image_review_allowed": False,
+            **(extra_metadata or {}),
         },
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
@@ -702,6 +786,11 @@ def enqueue_image_render_jobs(
     for index, spec in enumerate(images, start=1):
         specs.append((_spec_position(spec, index), spec))
     known_positions = {position for position, _ in specs}
+    # 颜色变体主图:按色自动追加(有变体专属参考图才会出现;位号段 101+)
+    for colorway_spec in _colorway_specs(db, product, known_positions):
+        colorway_position = int(colorway_spec["position"])
+        specs.append((colorway_position, colorway_spec))
+        known_positions.add(colorway_position)
     wanted: set[int] | None = None
     if positions:
         wanted = {int(p) for p in positions}
@@ -1216,6 +1305,8 @@ def _store_render_asset(
             "selling_point_id": seo.get("selling_point_id"),
             "selling_point_text": str(seo.get("selling_point_text") or "") or None,
             "proof_intent": str(seo.get("proof_intent") or "") or None,
+            # 颜色变体主图标记:上架装配据此把图挂到对应 Woo variation
+            "variant_color": str(seo.get("variant_color") or "") or None,
             "overlay": overlay,
             "overlay_result": overlay_result,
             "mission": job.get("mission") or "",

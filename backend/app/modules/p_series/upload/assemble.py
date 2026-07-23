@@ -529,7 +529,48 @@ def _image_assets(
     return out
 
 
-def _variants(db: Session, product: Any) -> list[Variant]:
+def _colorway_image_urls(
+    db: Session,
+    product: Any,
+    base_url: str,
+    *,
+    job_id: str | None,
+    job_token: str | None,
+) -> dict[str, str]:
+    """颜色 → 该色主图取图 URL(渲染资产 metadata.variant_color 标记)。
+
+    变体图是锦上添花:任何查询失败返回空表,绝不拖垮上架装配。
+    """
+    try:
+        rows = db.execute(
+            text(
+                "SELECT id, metadata_json FROM k_product_knowledge_media_assets "
+                "WHERE product_id = :p AND status = 'available' AND asset_type = 'image' "
+                "  AND metadata_json->>'render_pipeline' = 'k_auto_render' "
+                "  AND COALESCE(metadata_json->>'variant_color', '') != '' "
+                "ORDER BY updated_at DESC"
+            ),
+            {"p": str(product.id)},
+        ).mappings().all()
+    except Exception:  # noqa: BLE001 - fail-safe garnish
+        return {}
+    urls: dict[str, str] = {}
+    for r in rows:
+        meta = r["metadata_json"] if isinstance(r["metadata_json"], dict) else {}
+        color = str(meta.get("variant_color") or "").strip()
+        if color and color not in urls:
+            urls[color] = _media_fetch_url(
+                base_url, job_id=job_id, job_token=job_token, asset_id=str(r["id"])
+            )
+    return urls
+
+
+def _variants(
+    db: Session,
+    product: Any,
+    *,
+    colorway_urls: dict[str, str] | None = None,
+) -> list[Variant]:
     # 双格式绑定:Postgres uuid 两种写法都认;SQLite 测试库存的是无横杠 hex
     rows = db.execute(
         text(
@@ -552,6 +593,7 @@ def _variants(db: Session, product: Any) -> list[Variant]:
                 currency=(product.price_currency or "USD"),
             )
         physical = _variant_physical(r["attributes_json"])
+        raw_color = str(r["color"] or "").strip()
         out.append(
             Variant(
                 sku=r["variant_sku"],
@@ -564,6 +606,8 @@ def _variants(db: Session, product: Any) -> list[Variant]:
                 price=price,
                 dimensions=physical.get("dimensions"),
                 weight=physical.get("weight"),
+                # 该色主图:上架器把它挂到对应 Woo variation(选色即换图)
+                image=(colorway_urls or {}).get(raw_color),
             )
         )
     return out
@@ -798,7 +842,13 @@ def assemble_upload_package(
     issued_sku = ensure_product_sku(db, product)
     # SKU migration rekeys legacy variants atomically; read them only after the
     # product identifier is final so the package cannot leak ASIN-derived SKUs.
-    variants = _variants(db, product)
+    variants = _variants(
+        db,
+        product,
+        colorway_urls=_colorway_image_urls(
+            db, product, base_url, job_id=job_id, job_token=job_token
+        ),
+    )
     # 多变体产品父体不设价:契约父价取变体最低价(Woo 的 "from" 展示价口径),
     # 真实售价由每个变体自己的 price 决定;门禁已保证变体价齐全。
     regular_price = getattr(product, "regular_price", None)

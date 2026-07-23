@@ -85,8 +85,10 @@ def test_assemble_includes_resolved_path_and_wc_leaf_id(
     ]
     events: list[str] = []
 
-    def variants(actual_db: object, product: SimpleNamespace) -> list[object]:
-        del product
+    def variants(
+        actual_db: object, product: SimpleNamespace, **kwargs: object
+    ) -> list[object]:
+        del product, kwargs
         assert actual_db is db
         events.append("variants")
         return []

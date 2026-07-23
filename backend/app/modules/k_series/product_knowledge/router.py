@@ -3046,6 +3046,25 @@ def product_knowledge_create(
                 "manual-create reference image failed product=%s",
                 getattr(product, "id", None),
             )
+        try:
+            from .manual_reference import attach_variant_reference_images
+
+            variant_outcomes = attach_variant_reference_images(
+                db, product=product, user=user
+            )
+            if any(item.get("status") == "stored" for item in variant_outcomes):
+                db.commit()
+            if variant_outcomes:
+                logger.info(
+                    "variant reference images product=%s outcomes=%s",
+                    product.id,
+                    variant_outcomes,
+                )
+        except Exception:  # noqa: BLE001 - reference image is optional garnish
+            logger.exception(
+                "manual-create reference image failed product=%s",
+                getattr(product, "id", None),
+            )
     return _product_read(db, product)
 
 

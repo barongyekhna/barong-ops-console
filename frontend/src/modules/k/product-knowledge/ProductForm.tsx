@@ -385,6 +385,7 @@ function emptyVariantInput(): ProductVariantFormInput {
       unit: "kg",
       value: "",
     },
+    reference_image_url: "",
   };
 }
 
@@ -698,6 +699,14 @@ function buildVariantPayloads(
       return { ok: false, message: `变体 ${index + 1}：${weight.message}` };
     }
 
+    const referenceUrl = variant.reference_image_url.trim();
+    if (referenceUrl && !/^https?:\/\//i.test(referenceUrl)) {
+      return {
+        ok: false,
+        message: `变体 ${index + 1}：参考图链接必须以 http:// 或 https:// 开头（可留空）。`,
+      };
+    }
+
     out.push({
       attributes: {
         attribute_schema: "attribute_builder_v1",
@@ -711,6 +720,7 @@ function buildVariantPayloads(
       size: optionalText(firstValueFor("size")),
       dimensions_json: dimensions.value,
       weight_json: weight.value,
+      reference_image_url: referenceUrl || null,
     });
   }
 
@@ -975,6 +985,18 @@ export function ProductForm({
       ...current,
       package_includes: current.package_includes.filter(
         (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function updateVariantReferenceUrl(index: number, value: string) {
+    setValues((current) => ({
+      ...current,
+      variants: current.variants.map((variant, variantIndex) =>
+        variantIndex === index
+          ? { ...variant, reference_image_url: value }
+          : variant,
       ),
     }));
     clearFormErrors();
@@ -2084,6 +2106,18 @@ export function ProductForm({
                         placeholder="19.99"
                         required
                         value={variant.price_override}
+                      />
+                    </label>
+                    <label className={styles.field}>
+                      <span>该色参考图链接（可选，同色填一张即可）</span>
+                      <input
+                        autoComplete="off"
+                        inputMode="url"
+                        onChange={(event) =>
+                          updateVariantReferenceUrl(index, event.target.value)
+                        }
+                        placeholder="贴该颜色实物图；作图自动出该色主图，买家选色即换图"
+                        value={variant.reference_image_url}
                       />
                     </label>
                   </div>

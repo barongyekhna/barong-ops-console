@@ -231,6 +231,7 @@ export type ProductVariantInput = {
   price_override?: number | null;
   dimensions_json?: Record<string, unknown> | null;
   weight_json?: Record<string, unknown> | null;
+  reference_image_url?: string | null;
   attributes?: Record<string, unknown>;
 };
 
@@ -246,6 +247,7 @@ export type ProductVariantFormInput = {
   price_override: string;
   dimensions_input: ProductDimensionsInput;
   weight_input: ProductWeightInput;
+  reference_image_url: string;
 };
 
 export type ProductManualSpecInput = {

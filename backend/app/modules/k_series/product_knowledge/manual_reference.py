@@ -116,6 +116,79 @@ def attach_manual_reference_image(
     return {"status": "stored", "origin": origin, "bytes": len(contents)}
 
 
+def attach_variant_reference_images(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    user: User | None,
+) -> list[dict[str, Any]]:
+    """变体(颜色)专属参考图:从变体行的 attributes_json.reference_image_url
+    下载入库,资产绑定该变体并打上 variant_color 标记。
+
+    同色多卡(1 个装/2 个装)只入库一次;单张失败跳过不阻塞。渲染管线据
+    variant_color 自动出"每色主图",上架时挂到对应 Woo variation。
+    """
+
+    from sqlalchemy import select
+
+    from ...f_series.enrichment.images import (
+        FImageUnavailableError,
+        get_candidate_image,
+    )
+    from .image_render_jobs import store_reference_image_asset
+    from .models import KProductKnowledgeVariant
+
+    variants = list(
+        db.scalars(
+            select(KProductKnowledgeVariant)
+            .where(KProductKnowledgeVariant.product_id == product.id)
+            .order_by(KProductKnowledgeVariant.created_at.asc())
+        )
+    )
+    results: list[dict[str, Any]] = []
+    seen_colors: set[str] = set()
+    for variant in variants:
+        attrs = variant.attributes_json if isinstance(variant.attributes_json, dict) else {}
+        url = str(attrs.get("reference_image_url") or "").strip()
+        if not url:
+            continue
+        color_key = str(variant.color or "").strip() or variant.variant_sku
+        if color_key in seen_colors:
+            continue
+        seen_colors.add(color_key)
+        try:
+            contents, mime_type = get_candidate_image(
+                f"k-variant-ref-{product.id}-{color_key}", url, "full"
+            )
+            store_reference_image_asset(
+                db,
+                product=product,
+                contents=contents,
+                mime_type=mime_type,
+                source_url=url,
+                user=user,
+                variant=variant,
+                extra_metadata={
+                    "variant_reference": True,
+                    "variant_color": str(variant.color or "").strip() or None,
+                },
+            )
+            results.append({"status": "stored", "color": color_key})
+        except (FImageUnavailableError, Exception) as exc:  # noqa: BLE001
+            logger.warning(
+                "variant reference image failed product=%s color=%s: %s",
+                product.id,
+                color_key,
+                str(exc)[:160],
+            )
+            results.append(
+                {"status": "failed", "color": color_key, "reason": str(exc)[:160]}
+            )
+    if results:
+        db.flush()
+    return results
+
+
 def attach_manual_reference_images(
     db: Session,
     *,

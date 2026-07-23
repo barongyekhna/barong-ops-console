@@ -788,6 +788,10 @@ def _variant_rows_for_payload(
         }
         if physical:
             attributes_json["physical"] = physical
+        # 变体(颜色)专属参考图:先随行落库,建品路由的 fail-safe 钩子
+        # 再统一下载进媒体库(下载失败不阻塞建品)。
+        if data.get("reference_image_url"):
+            attributes_json["reference_image_url"] = data["reference_image_url"]
         rows.append(
             KProductKnowledgeVariant(
                 id=uuid4(),

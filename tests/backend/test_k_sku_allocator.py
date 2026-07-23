@@ -453,7 +453,7 @@ def test_p_package_allocates_after_category_fail_safe_rollback(
 
         monkeypatch.setattr(p_assemble, "_image_assets", lambda *args, **kwargs: [])
 
-        def current_variants(session, _product):
+        def current_variants(session, _product, **_kwargs):
             row = session.scalar(
                 select(KProductKnowledgeVariant).where(
                     KProductKnowledgeVariant.product_id == product.id
