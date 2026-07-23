@@ -410,6 +410,9 @@ parts.append(rule(RV, ["#reviews .woocommerce-Reviews-title"],
 parts.append("@media(max-width:849px){"
     "body.single-product .product-gallery.col{flex:0 0 100%!important;max-width:100%!important}"
     "body.single-product .product-info.col-fit{flex:0 0 100%!important;max-width:100%!important}"
+    # 手机端凤凰 logo 居中:主题 medium-logo-center 开着,但家规把 #logo 改成
+    # flex 容器后没声明居中,图靠左了——这里补上(桌面端不受影响)
+    ".header-inner #logo{justify-content:center!important}"
     "}")
 
 CSS = "".join(parts)
