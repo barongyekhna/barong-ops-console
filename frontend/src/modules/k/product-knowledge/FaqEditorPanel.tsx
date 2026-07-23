@@ -18,7 +18,14 @@ function formatError(error: unknown): string {
  * page_faq 是唯一数据源：页面可见 FAQ、FAQPage 结构化数据都由它派生。
  * 这里改完 → 名册点「重推」→ 两处自动同步（同一链接原地更新）。
  */
-export function FaqEditorPanel({ productId }: { productId: string }) {
+export function FaqEditorPanel({
+  productId,
+  refreshKey = 0,
+}: {
+  productId: string;
+  /** 上层数据变化(如文案生成完成)时 +1，触发重新拉取。 */
+  refreshKey?: number;
+}) {
   const [items, setItems] = useState<ProductFaqItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -56,7 +63,7 @@ export function FaqEditorPanel({ productId }: { productId: string }) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   function updateItem(index: number, patch: Partial<ProductFaqItem>) {
     setItems((current) =>

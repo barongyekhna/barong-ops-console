@@ -24,6 +24,7 @@ import hashlib
 import html
 import json
 import logging
+import os
 import re
 from collections import Counter
 from collections.abc import Callable, Mapping
@@ -2551,6 +2552,108 @@ def _trace_has_step(
     step: str,
 ) -> bool:
     return any(item.get("step") == step for item in execution.trace_json or [])
+
+
+# --- 孤儿工作流自愈 ---------------------------------------------------------
+# 工作流同步跑在 gunicorn 请求线程里,发版重启会把执行中的工作流杀成孤儿
+# running(2026-07-23 实况):DB 状态永远"进行中",前端重试按钮锁死。
+
+_process_tree_start_cache: datetime | None = None
+_process_tree_start_resolved = False
+
+
+def _process_tree_start_time() -> datetime | None:
+    """gunicorn master(父进程)的启动时刻。
+
+    比"卡了 N 分钟"阈值精确:AI 步骤最坏能合法沉默 ~20 分钟(240s 超时
+    × 多级降级),而"最后更新早于当前进程树启动"的 running 工作流,其线程
+    必然已随上一代进程死亡——零误判。dev 场景 ppid 是 shell,启动更早,
+    只会少判不会错判(fail-safe 方向)。
+    """
+    global _process_tree_start_cache, _process_tree_start_resolved
+    if _process_tree_start_resolved:
+        return _process_tree_start_cache
+    try:
+        with open("/proc/stat", encoding="ascii") as fh:
+            btime = next(
+                int(line.split()[1]) for line in fh if line.startswith("btime ")
+            )
+        # 容器内 ppid 可能为 0(自身就是 1 号进程);兜底用容器 1 号进程
+        # (= 容器启动时刻,只早不晚,fail-safe 方向)。
+        candidate_pids = [pid for pid in (os.getppid(), 1) if pid > 0]
+        start_jiffies: int | None = None
+        for pid in candidate_pids:
+            try:
+                with open(f"/proc/{pid}/stat", encoding="ascii") as fh:
+                    # comm 字段可含空格/括号,以最后一个 ')' 为界再切分。
+                    fields = fh.read().rpartition(")")[2].split()
+                start_jiffies = int(fields[19])  # 第 22 字段 starttime
+                break
+            except OSError:
+                continue
+        if start_jiffies is None:
+            raise OSError("no readable /proc/<pid>/stat")
+        hertz = os.sysconf("SC_CLK_TCK")
+        _process_tree_start_cache = datetime.fromtimestamp(
+            btime + start_jiffies / hertz, tz=UTC
+        )
+    except Exception:  # noqa: BLE001 - 非 Linux/异常环境下放弃自愈,不影响主流程
+        _process_tree_start_cache = None
+    _process_tree_start_resolved = True
+    return _process_tree_start_cache
+
+
+def reap_orphan_running_execution(
+    db: Session,
+    execution: KProductKnowledgeWorkflowExecution | None,
+) -> bool:
+    """读取时发现孤儿 running 工作流则补一条 failed trace 并标记 blocked。
+
+    解锁前端重试按钮(按钮只认 failed/blocked);已完成的步骤结果保留,
+    重试从中断步骤续跑。返回是否做了标记。
+    """
+    if execution is None or execution.status != "running":
+        return False
+    boot = _process_tree_start_time()
+    if boot is None:
+        return False
+    updated_at = execution.updated_at
+    if updated_at is None:
+        return False
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    if updated_at >= boot:
+        return False
+    trace = list(execution.trace_json or [])
+    trace.append(
+        {
+            "step": execution.current_step,
+            "status": "failed",
+            "error": {
+                "code": "ORPHANED_BY_RESTART",
+                "reason": "backend_restart",
+                "message": (
+                    "后端重启中断了该步骤,已自动标记失败;"
+                    "点击重试可从当前步骤续跑。"
+                ),
+            },
+            "timestamp": datetime.now(UTC).isoformat(),
+            "input_summary": {},
+            "output_summary": {},
+        }
+    )
+    execution.trace_json = trace
+    execution.status = "blocked"
+    db.add(execution)
+    db.commit()
+    logger.warning(
+        "K workflow orphan reaped: workflow_id=%s step=%s (updated_at=%s < boot=%s)",
+        execution.id,
+        execution.current_step,
+        updated_at.isoformat(),
+        boot.isoformat(),
+    )
+    return True
 
 
 def _rollback_deepseek_product_fields(

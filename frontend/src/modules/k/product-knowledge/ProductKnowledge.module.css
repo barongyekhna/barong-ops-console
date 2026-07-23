@@ -2961,3 +2961,30 @@
   font-size: 0.82rem;
   margin: 6px 0 0;
 }
+
+/* --- 产品名内联编辑 ------------------------------------------------------ */
+.nameEditButton {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: 8px;
+  padding: 2px;
+  vertical-align: middle;
+}
+
+.nameEditButton:hover {
+  color: var(--fg, inherit);
+}
+
+.nameEditRow {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.nameEditRow input {
+  flex: 1;
+  min-width: 260px;
+}

@@ -187,6 +187,7 @@ export type ProductKnowledgeCreatePayload = {
 
 export type ProductKnowledgeUpdatePayload = Partial<{
   review_status: ProductReviewStatus;
+  product_name_en: string;
   package_includes_json: string[] | null;
   structured_specs_json: Record<string, unknown> | null;
 }>;

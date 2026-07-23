@@ -159,6 +159,7 @@ from .workflow_engine import (
     KWorkflowOrchestratorV2,
     KWorkflowExecutionError,
     _user_uuid,
+    reap_orphan_running_execution,
 )
 from ....services.module_execution_gate import ModuleExecutionGateError
 from .generation_jobs import enqueue_generation_jobs, jobs_status
@@ -3387,6 +3388,8 @@ def product_knowledge_workflow_latest(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="K workflow execution was not found.",
         )
+    # 发版重启杀成的孤儿 running 在读取时自愈为 blocked,解锁重试按钮。
+    reap_orphan_running_execution(db, execution)
     return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
 
 

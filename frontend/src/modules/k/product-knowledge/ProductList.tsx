@@ -1198,6 +1198,13 @@ export function ProductListFull() {
             }
             onDeleteMedia={(assetId) => handleDeleteMedia(assetId)}
             onGenerateSellingPoints={handleGenerateSellingPoints}
+            onProductPatched={(updated) =>
+              setProducts((current) =>
+                current.map((item) =>
+                  item.id === updated.id ? { ...item, ...updated } : item,
+                ),
+              )
+            }
             onRefreshWorkflow={() => void loadWorkflowRuntime(openProduct.id)}
             onRetryWorkflowStep={(step, payload) =>
               void handleRetryWorkflowStep(step, payload)

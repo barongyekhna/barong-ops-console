@@ -19,6 +19,8 @@ import { RenderImagesPanel } from "./RenderImagesPanel";
 type CopyArtDirectionProps = {
   productId: string;
   channel?: string | null;
+  /** 作图保存成功后通知上层刷新（图片绑定板块等）。 */
+  onAssetsSaved?: () => void;
 };
 
 type SectionStatus = "idle" | "generating" | "done" | "failed";
@@ -38,10 +40,12 @@ function latestJob(jobs: GenerationJob[], jobType: string): GenerationJob | unde
   return jobs.find((job) => job.job_type === jobType);
 }
 
-export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) {
+export function CopyArtDirection({ productId, channel, onAssetsSaved }: CopyArtDirectionProps) {
   const router = useRouter();
 
   const [copy, setCopy] = useState<unknown>(null);
+  // 文案生成完成后 +1，驱动 FAQ 面板重新拉取（否则显示旧的空状态）。
+  const [faqRefreshKey, setFaqRefreshKey] = useState(0);
   const [copyZh, setCopyZh] = useState<string | null>(null);
   const [copyChannel, setCopyChannel] = useState<string | null>(channel ?? null);
   const [copyStatus, setCopyStatus] = useState<SectionStatus>("idle");
@@ -72,6 +76,7 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
       setCopyZh((product as { marketing_copy_zh?: string | null }).marketing_copy_zh ?? null);
       setCopyChannel((product as { channel?: string | null }).channel ?? channel ?? null);
       setCopyStatus("done");
+      setFaqRefreshKey((key) => key + 1);
     } else {
       setBrief((product as { image_instruction_json?: unknown }).image_instruction_json ?? null);
       setBriefZh((product as { image_instruction_zh?: string | null }).image_instruction_zh ?? null);
@@ -315,9 +320,9 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
         )}
       </section>
 
-      <RenderImagesPanel hasBrief={Boolean(brief)} productId={productId} />
+      <RenderImagesPanel hasBrief={Boolean(brief)} onSaved={onAssetsSaved} productId={productId} />
 
-      <FaqEditorPanel productId={productId} />
+      <FaqEditorPanel productId={productId} refreshKey={faqRefreshKey} />
 
       <BrandAuditPanel productId={productId} />
     </>

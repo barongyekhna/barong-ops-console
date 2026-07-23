@@ -32,6 +32,8 @@ import styles from "./ProductKnowledge.module.css";
 type RenderImagesPanelProps = {
   productId: string;
   hasBrief: boolean;
+  /** 保存成功后通知上层重拉图片绑定等数据（详情页图片板块靠它刷新）。 */
+  onSaved?: () => void;
 };
 
 const POLL_MS = 5000;
@@ -51,7 +53,7 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProps) {
+export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImagesPanelProps) {
   const [jobs, setJobs] = useState<RenderJobsResult | null>(null);
   const [assets, setAssets] = useState<RenderAsset[]>([]);
   const [busy, setBusy] = useState(false);
@@ -159,6 +161,7 @@ export function RenderImagesPanel({ productId, hasBrief }: RenderImagesPanelProp
           : "已全部保存，品牌审查已自动排队。",
       );
       setPreviewAsset(null);
+      onSaved?.();
     }, "保存失败，请重试。");
 
   const submitRework = () => {

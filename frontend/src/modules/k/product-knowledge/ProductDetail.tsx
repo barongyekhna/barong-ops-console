@@ -125,6 +125,7 @@ type ProductDetailProps = {
   onCollapse?: () => void;
   onDeleteMedia?: (assetId: string) => Promise<void> | void;
   onGenerateSellingPoints?: () => void;
+  onProductPatched?: (updated: ProductKnowledgeListItem) => void;
   onRefreshWorkflow?: () => void;
   onRetryWorkflowStep?: (
     step: string,
@@ -471,6 +472,7 @@ export function ProductDetail({
   onCollapse,
   onDeleteMedia,
   onGenerateSellingPoints,
+  onProductPatched,
   onRefreshWorkflow,
   onRetryWorkflowStep,
   onSaveProductInfo,
@@ -487,6 +489,11 @@ export function ProductDetail({
 }: ProductDetailProps) {
   const [targetMarket, setTargetMarket] = useState("US");
   const [serpQuery, setSerpQuery] = useState("");
+  // 产品英文名内联编辑（品牌审查撞第三方品牌词时的自救入口）。
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameError, setNameError] = useState("");
   const [selectedMediaFiles, setSelectedMediaFiles] = useState<File[]>([]);
   const [isDraggingMedia, setIsDraggingMedia] = useState(false);
   const [mediaError, setMediaError] = useState("");
@@ -1424,12 +1431,97 @@ export function ProductDetail({
 
   const iSystemHref = buildISystemHref(currentProduct, selectedVariant);
 
+  async function saveProductName() {
+    if (!product) {
+      return;
+    }
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      setNameError("产品名不能为空。");
+      return;
+    }
+    setIsSavingName(true);
+    setNameError("");
+    try {
+      const updated = await updateProduct(product.id, {
+        product_name_en: trimmed,
+      });
+      onProductPatched?.(updated);
+      setIsEditingName(false);
+    } catch (error) {
+      setNameError(error instanceof Error ? error.message : "保存失败，请重试。");
+    } finally {
+      setIsSavingName(false);
+    }
+  }
+
   return (
     <aside className={styles.detail} aria-label="产品详情">
       <div className={styles.detailHeading}>
         <div>
           <span className={styles.eyebrow}>详情</span>
-          <h3>{displayValue(product.product_name_en)}</h3>
+          {isEditingName ? (
+            <div className={styles.nameEditRow}>
+              <input
+                aria-label="产品英文名"
+                disabled={isSavingName}
+                onChange={(event) => setNameDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    void saveProductName();
+                  } else if (event.key === "Escape") {
+                    setIsEditingName(false);
+                    setNameError("");
+                  }
+                }}
+                value={nameDraft}
+              />
+              <button
+                className="primary-button"
+                disabled={isSavingName}
+                onClick={() => void saveProductName()}
+                type="button"
+              >
+                {isSavingName ? (
+                  <LoaderCircle aria-hidden="true" className="spin" size={15} />
+                ) : (
+                  <Save aria-hidden="true" size={15} />
+                )}
+                保存
+              </button>
+              <button
+                className="secondary-button"
+                disabled={isSavingName}
+                onClick={() => {
+                  setIsEditingName(false);
+                  setNameError("");
+                }}
+                type="button"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <h3>
+              {displayValue(product.product_name_en)}
+              <button
+                aria-label="编辑产品名"
+                className={styles.nameEditButton}
+                onClick={() => {
+                  setNameDraft(product.product_name_en ?? "");
+                  setNameError("");
+                  setIsEditingName(true);
+                }}
+                title="编辑产品英文名"
+                type="button"
+              >
+                <Pencil aria-hidden="true" size={14} />
+              </button>
+            </h3>
+          )}
+          {nameError ? (
+            <p className={styles.sellingPointsError}>{nameError}</p>
+          ) : null}
         </div>
         <div className={styles.detailActions}>
           <span className={styles.statusBadge}>
@@ -2601,6 +2693,7 @@ export function ProductDetail({
 
       {product ? (
         <CopyArtDirection
+          onAssetsSaved={onRefreshWorkflow}
           productId={product.id}
           channel={(product as { channel?: string | null }).channel ?? null}
         />
