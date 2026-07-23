@@ -348,7 +348,11 @@ def _synchronize_product_sku_family(
     ).all()
     new_by_variant_id: dict[Any, str] = {}
     new_by_old_sku: dict[str, str] = {}
+    old_parent_skus: set[str] = set()
     for variant in variants:
+        old_parent = str(variant.parent_sku or "").strip().upper()
+        if old_parent and old_parent != sku:
+            old_parent_skus.add(old_parent)
         old_variant_sku = str(variant.variant_sku or "").strip()
         new_variant_sku = f"{sku}-{variant.variant_hash}"
         if old_variant_sku:
@@ -381,6 +385,35 @@ def _synchronize_product_sku_family(
             elif new_asset_sku is not None and "variant_sku" in metadata:
                 metadata["variant_sku"] = new_asset_sku
             asset.metadata_json = metadata
+
+    # W-S 货源库随 SKU 迁移(2026-07-23 实锤:UNC-001→ET-001 后货源成孤儿,
+    # 订单页误显「补货源」)。跨模块裸 SQL + savepoint fail-safe:W 表不存在
+    # (部分单测库)或冲突时静默跳过,绝不拖垮 SKU 迁移本身。
+    legacy_parent = str(getattr(product, "parent_sku", "") or "").strip().upper()
+    if legacy_parent and legacy_parent != sku:
+        old_parent_skus.add(legacy_parent)
+    old_parent_skus.discard(sku)
+    if old_parent_skus:
+        try:
+            with db.begin_nested():
+                for old_sku in sorted(old_parent_skus):
+                    db.execute(
+                        text(
+                            "UPDATE w_product_sources SET sku = :new, "
+                            "updated_at = CURRENT_TIMESTAMP "
+                            "WHERE sku = :old "
+                            "AND NOT EXISTS (SELECT 1 FROM w_product_sources "
+                            "                WHERE sku = :new)"
+                        ),
+                        {"new": sku, "old": old_sku},
+                    )
+        except SQLAlchemyError:
+            logger.debug(
+                "w_product_sources rekey skipped product=%s sku=%s",
+                getattr(product, "id", None),
+                sku,
+                exc_info=True,
+            )
 
 
 def ensure_product_sku(

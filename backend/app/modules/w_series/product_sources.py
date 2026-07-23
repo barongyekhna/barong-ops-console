@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -19,16 +20,41 @@ def normalize_sku(value: object) -> str:
     return str(value).strip().upper()
 
 
+# K 变体 SKU = 父SKU-8位HEX(variant_hash);货源永远按父 SKU 归档
+_VARIANT_SKU_SUFFIX_RE = re.compile(r"^(?P<parent>.+)-[0-9A-F]{8}$")
+
+
+def parent_sku_of(normalized_sku: str) -> str | None:
+    """变体 SKU 的父 SKU;不是变体格式则返回 None。"""
+
+    match = _VARIANT_SKU_SUFFIX_RE.match(normalized_sku)
+    return match.group("parent") if match else None
+
+
+def _sku_candidates(value: object) -> list[str]:
+    """订单行 SKU 的货源匹配候选:自身优先,变体则追加父 SKU 兜底。
+
+    2026-07-23 实锤:变体订单(ET-001-BFD8A626)按精确 SKU 找不到父级
+    (ET-001)名下的货源,页面误显示「补货源」。
+    """
+
+    normalized = normalize_sku(value)
+    if not normalized:
+        return []
+    parent = parent_sku_of(normalized)
+    return [normalized, parent] if parent else [normalized]
+
+
 def _normalized_skus_for_items(
     item_payloads: Iterable[list[dict[str, Any]] | None],
 ) -> set[str]:
     return {
-        normalized
+        candidate
         for items in item_payloads
         if isinstance(items, list)
         for item in items
         if isinstance(item, dict)
-        if (normalized := normalize_sku(item.get("sku")))
+        for candidate in _sku_candidates(item.get("sku"))
     }
 
 
@@ -61,7 +87,14 @@ def enrich_items(
     enriched: list[dict[str, Any]] = []
     for original in items:
         item = dict(original)
-        source = sources_by_sku.get(normalize_sku(item.get("sku")))
+        source = next(
+            (
+                sources_by_sku[candidate]
+                for candidate in _sku_candidates(item.get("sku"))
+                if candidate in sources_by_sku
+            ),
+            None,
+        )
         if source is None:
             item.update(
                 source_url=None,
