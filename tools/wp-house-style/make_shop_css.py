@@ -373,6 +373,36 @@ parts.append(f"{E4} .by-404-btn{{background:#1b1a18!important;color:#faf9f6!impo
 parts.append(f"{E4} .by-404-btn.ghost{{background:transparent!important;color:#1b1a18!important;border:1px solid #d9d7d3!important}}")
 parts.append(f"{E4} .by-404-btn:hover{{opacity:.86!important}}")
 
+# ============ 商品页评价区(2026-07-23 用户反馈:米黄大卡片丑)============
+# 家规语言:白瓷卡 + 柔和描边投影 + 墨字 + 金星 + 墨黑胶囊按钮,底色回归纸面。
+RV = ["body.single-product"]
+# 区块与主题面板不叠底色
+parts.append(rule(RV, ["#reviews", ".woocommerce-Reviews", ".woocommerce-tabs", ".tab-panels .panel", ".product-footer"],
+    "background:transparent!important"))
+# 米黄提示卡(暂无评价等通知)→ 白瓷卡
+parts.append(rule(RV, ["#reviews .woocommerce-info", "#reviews .woocommerce-noreviews", "#reviews .woocommerce-message"],
+    "background:#fff!important;border:1px solid #e7e4df!important;border-radius:14px!important;color:#3d3a36!important;padding:15px 20px!important;box-shadow:0 1px 2px rgba(20,20,30,.04)!important;margin:0 0 18px!important"))
+# 撰写评价的表单容器 → 白瓷卡(与游客查询表单同款体量)
+parts.append(rule(RV, ["#reviews #review_form_wrapper", "#reviews .comment-respond"],
+    "background:#fff!important;border:1px solid #e7e4df!important;border-radius:18px!important;padding:clamp(18px,2.6vw,26px)!important;box-shadow:0 1px 2px rgba(20,20,30,.04),0 16px 40px -24px rgba(20,20,30,.12)!important"))
+parts.append(rule(RV, ["#reviews .comment-reply-title"],
+    "font-size:17px!important;font-weight:700!important;color:#1b1a18!important;display:block;margin:0 0 12px!important"))
+# 输入框:圆角描边,聚焦转墨色
+parts.append(rule(RV, ["#reviews input[type=text]", "#reviews input[type=email]", "#reviews textarea"],
+    "border:1px solid #d9d7d3!important;border-radius:12px!important;background:#fff!important;padding:11px 14px!important;box-shadow:none!important"))
+parts.append(rule(RV, ["#reviews input[type=text]:focus", "#reviews input[type=email]:focus", "#reviews textarea:focus"],
+    "border-color:#1b1a18!important;outline:none!important"))
+# 提交按钮:墨黑胶囊
+parts.append(rule(RV, ["#reviews input[type=submit]", "#reviews .form-submit .submit"],
+    "background:#1b1a18!important;color:#faf9f6!important;border:0!important;border-radius:999px!important;padding:12px 28px!important;font-weight:600!important;letter-spacing:.02em!important"))
+# 打分星星:金色
+parts.append(rule(RV, ["#reviews .stars a", "#reviews .star-rating span"], "color:#e7a12c!important"))
+# 已有评价的卡片
+parts.append(rule(RV, ["#reviews .commentlist .comment_container", "#reviews ol.commentlist li .comment-text"],
+    "background:#fff!important;border:1px solid #ece9e4!important;border-radius:14px!important;box-shadow:none!important"))
+parts.append(rule(RV, ["#reviews .woocommerce-Reviews-title"],
+    "color:#1b1a18!important;letter-spacing:-.01em!important"))
+
 CSS = "".join(parts)
 open("shop_house.css", "w").write(CSS)
 # 安全自检：确保没有任何裸 body 简单选择器后面直接跟 { (会命中整个 body)
