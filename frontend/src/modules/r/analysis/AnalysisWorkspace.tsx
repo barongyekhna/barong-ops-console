@@ -33,6 +33,7 @@ import type {
 } from "@/modules/r/analysis/types";
 
 import { RadarScan } from "@/modules/r/analysis/RadarScan";
+import { CruiseSwitch } from "./CruiseSwitch";
 
 import styles from "./AnalysisWorkspace.module.css";
 
@@ -267,6 +268,7 @@ export function AnalysisWorkspace() {
 
   return (
     <div className={styles.workspace}>
+      <CruiseSwitch />
       <RadarScan
         running={running}
         query={query}

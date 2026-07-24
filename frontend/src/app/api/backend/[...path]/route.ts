@@ -1768,7 +1768,16 @@ function isAllowedRPath(method: string, path: string[]) {
     if (
       method === "GET" &&
       path.length === 3 &&
-      ["framework", "status"].includes(path[2])
+      ["framework", "status", "cruise"].includes(path[2])
+    ) {
+      return true;
+    }
+
+    if (
+      method === "POST" &&
+      path.length === 4 &&
+      path[2] === "cruise" &&
+      path[3] === "toggle"
     ) {
       return true;
     }

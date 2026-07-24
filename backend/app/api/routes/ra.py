@@ -484,6 +484,87 @@ def ra_run_get(
     )
 
 
+class CruiseToggleRequest(BaseModel):
+    paused: bool
+
+
+def _cruise_today_usage(db: Session, org_id: str) -> dict[str, object]:
+    """今日 R-A 烧钱概况:AI 评估次数 + 各出网 provider 台账用量。"""
+    from r_system_v2.ra.quota_ledger import provider_label
+
+    with without_org_data_isolation():
+        ai_evals = db.execute(
+            text(
+                "SELECT COUNT(*) FROM ra_ai_evaluations "
+                "WHERE created_at::date = CURRENT_DATE"
+            )
+        ).scalar()
+        providers = db.execute(
+            text(
+                "SELECT provider, used FROM ra_provider_quota_usage "
+                "WHERE day = CURRENT_DATE AND used > 0 ORDER BY used DESC"
+            )
+        ).mappings().all()
+    return {
+        "ai_evaluations": int(ai_evals or 0),
+        "providers": [
+            {
+                "provider": r["provider"],
+                "label": provider_label(r["provider"]),
+                "used": int(r["used"]),
+            }
+            for r in providers
+        ],
+    }
+
+
+def _cruise_state(db: Session, org_id: str) -> dict[str, object]:
+    from r_system_v2.ra.runtime_flags import FLAG_CRUISE_PAUSED, get_flag, is_cruise_paused
+
+    with without_org_data_isolation():
+        paused = is_cruise_paused(db)
+        meta = db.execute(
+            text(
+                "SELECT updated_at, updated_by FROM ra_runtime_flags WHERE flag = :f"
+            ),
+            {"f": FLAG_CRUISE_PAUSED},
+        ).mappings().first()
+    return {
+        "paused": paused,
+        "updated_at": meta["updated_at"].isoformat() if meta and meta["updated_at"] else None,
+        "updated_by": meta["updated_by"] if meta else None,
+        "today": _cruise_today_usage(db, org_id),
+    }
+
+
+@router.get("/cruise")
+def ra_cruise_status(
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    """自动巡航开关状态 + 今日烧钱概况。"""
+    target_org = _required_target_org(db, user)
+    return _cruise_state(db, target_org.org_id)
+
+
+@router.post("/cruise/toggle")
+def ra_cruise_toggle(
+    payload: CruiseToggleRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    """一键暂停/恢复自动巡航(界面开关)。暂停即停所有按次烧钱的自动流;
+    手动选品不受影响;R-W(Keepa 月付)完全不碰。"""
+    from r_system_v2.ra.runtime_flags import set_cruise_paused
+
+    target_org = _required_target_org(db, user)
+    actor = getattr(user, "username", None) or getattr(user, "email", None)
+    with without_org_data_isolation():
+        set_cruise_paused(db, payload.paused, actor=actor)
+    db.commit()
+    return _cruise_state(db, target_org.org_id)
+
+
 @router.post("/runs/{run_id}/cancel")
 def ra_run_cancel(
     run_id: str,

@@ -191,3 +191,26 @@ export function getLatestRaAutoProfitJob(query?: RaAutoProfitJobItemsQuery) {
     timeoutMs: 60_000,
   });
 }
+
+export type RaCruiseState = {
+  paused: boolean;
+  updated_at: string | null;
+  updated_by: string | null;
+  today: {
+    ai_evaluations: number;
+    providers: { provider: string; label: string; used: number }[];
+  };
+};
+
+export async function getCruiseState(): Promise<RaCruiseState> {
+  return apiRequest<RaCruiseState>(`${RA_API_BASE}/cruise`, {
+    method: "GET",
+  });
+}
+
+export async function toggleCruise(paused: boolean): Promise<RaCruiseState> {
+  return apiRequest<RaCruiseState>(`${RA_API_BASE}/cruise/toggle`, {
+    method: "POST",
+    body: JSON.stringify({ paused }),
+  });
+}

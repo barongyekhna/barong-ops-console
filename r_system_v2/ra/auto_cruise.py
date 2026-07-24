@@ -98,6 +98,11 @@ class RaAutoCruiseScheduler:
     def tick(self, *, log: Callable[[str], None]) -> None:
         if not self.org_id:
             return
+        # 界面开关(2026-07-23):数据库标志位暂停时,跳过所有「按次烧钱」的
+        # 自动流(每日巡库/夜扫/误杀抽检);扩库任务(手动触发的收尾)照常。
+        if self._cruise_paused():
+            self._process_expansion_jobs(log=log)
+            return
         if self.enabled():
             self._ensure_daily_cruise_job(log=log)
         if self.night_scan_enabled() and self._in_night_window():
@@ -106,6 +111,16 @@ class RaAutoCruiseScheduler:
             self._daily_audit(log=log)
         # Opus 每日 top10 已按用户要求移除——改为分组页手动「Opus 建议」按钮。
         self._process_expansion_jobs(log=log)
+
+    def _cruise_paused(self) -> bool:
+        from r_system_v2.ra.runtime_flags import is_cruise_paused
+
+        try:
+            with self.session_factory() as db:
+                with self.without_isolation():
+                    return is_cruise_paused(db)
+        except Exception:  # noqa: BLE001 - 读标志失败按「暂停」处理:宁可不烧钱
+            return True
 
     # ------------------------------------------------------------ switches
     def enabled(self) -> bool:
