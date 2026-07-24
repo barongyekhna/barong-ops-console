@@ -2001,10 +2001,24 @@ def enqueue_rework_job(
         )
 
     position = int(meta.get("position") or 0)
-    seo = {
+    seo: dict[str, Any] = {
         key: str(meta.get(key) or "")
         for key in ("title", "alt", "caption", "description")
     }
+    # 重做必须沿用原图的身份标记,否则 _store_render_asset 从 seo 读不到就写成
+    # None,新图被降级:variant_color 丢 → 颜色/套装变体主图退化成普通图库图
+    # (实锤 2026-07-24 ET-005 五合一套装);selling_point_* / proof_intent 丢
+    # → 卖点图与证据绑定断裂。保留原始类型(selling_point_index 是 int)。
+    for identity_key in (
+        "variant_color",
+        "selling_point_index",
+        "selling_point_id",
+        "selling_point_text",
+        "proof_intent",
+    ):
+        value = meta.get(identity_key)
+        if value not in (None, ""):
+            seo[identity_key] = value
     batch_id = uuid4()
     job_id = uuid4()
     db.execute(
