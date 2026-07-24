@@ -121,6 +121,51 @@ NON_MAIN_EVIDENCE_BLOCK = (
     "space, but never duplicate the main-image composition."
 )
 
+# 节日轻氛围(2026-07-23 用户拍板):只加环境不碰产品;仅场景/描述图用,
+# 主图与颜色变体主图永远纯净(GMC 主图合规)。铁律:产品本体、形状、颜色、
+# 标记不变,不加任何文字。
+_FESTIVAL_ATMOSPHERE = {
+    "halloween": (
+        "warm amber and soft purple ambient light, a few tasteful Halloween "
+        "accents in the far background (a small pumpkin, subtle cobweb, gentle "
+        "candle glow), cozy autumn-evening mood"
+    ),
+    "christmas": (
+        "warm cozy holiday light, soft bokeh string lights and a hint of pine "
+        "and red-gold ornaments in the far background, festive winter-evening mood"
+    ),
+    "valentines": (
+        "soft warm romantic light, a few blurred pink and red rose petals and "
+        "gentle heart-shaped bokeh in the far background, tender mood"
+    ),
+    "thanksgiving": (
+        "warm golden-hour light, subtle autumn leaves and a small gourd in the "
+        "far background, cozy harvest mood"
+    ),
+    "easter": (
+        "soft bright pastel spring light, a few blurred pastel eggs and fresh "
+        "greenery in the far background, cheerful mood"
+    ),
+    "new_year": (
+        "warm festive light with soft golden bokeh and a hint of celebratory "
+        "sparkle in the far background, upbeat evening mood"
+    ),
+}
+
+
+def _festival_block(festival_style: str | None) -> str:
+    atmosphere = _FESTIVAL_ATMOSPHERE.get(str(festival_style or "").strip().lower())
+    if not atmosphere:
+        return ""
+    return (
+        "\n\nFESTIVE ATMOSPHERE (light touch, environment only): set this scene "
+        f"with {atmosphere}. Keep it subtle and tasteful — the product stays the "
+        "clear hero and must remain physically unchanged (same shape, colour, "
+        "markings as the reference). Festive elements live only in the softly "
+        "blurred background, never on or overlapping the product, and never as "
+        "text."
+    )
+
 _MAIN_ROLE_ALIASES = frozenset({"main", "hero_main", "主图", "白底主图"})
 _WHITE_SECONDARY_ROLE_ALIASES = frozenset(
     {"white_secondary", "white_background", "white-background", "白底副图"}
@@ -836,6 +881,13 @@ def enqueue_image_render_jobs(
     from .brand_guard import BRAND_REMOVAL_PROMPT_BLOCK, normalized_brand_terms
 
     brand_terms = normalized_brand_terms(product)
+    warnings_json = getattr(product, "ai_warnings_json", None)
+    festival_style = (
+        warnings_json.get("festival_style")
+        if isinstance(warnings_json, dict)
+        else None
+    )
+    festival_block = _festival_block(festival_style)
     batch_id = uuid4()
     created: list[dict[str, Any]] = []
     for position, spec in sorted(specs, key=lambda item: item[0]):
@@ -883,6 +935,15 @@ def enqueue_image_render_jobs(
             # This final block wins over a stale/global studio style block and
             # prevents a proof shot from degrading into a clean product pose.
             prompt += PROOF_SCENE_BLOCK
+        # 节日轻氛围:只给场景/描述图注入;主图与颜色变体主图(带 variant_color)
+        # 永远纯净——GMC 主图/变体展示图合规底线。
+        is_colorway_main = bool(str(spec.get("variant_color") or "").strip())
+        if (
+            festival_block
+            and asset_role != ASSET_ROLE_MAIN
+            and not is_colorway_main
+        ):
+            prompt += festival_block
         overlay = _overlay_snapshot(
             spec,
             product_id=product.id,
@@ -1629,6 +1690,7 @@ def list_render_assets(
                 "asset_role": row.asset_role,
                 "status": row.status,
                 "role_label": meta.get("role_label") or "",
+                "variant_color": str(meta.get("variant_color") or "") or None,
                 "staged_at": meta.get("staged_at"),
             }
         )

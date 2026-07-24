@@ -5469,6 +5469,7 @@ class RenderAssetItem(BaseModel):
     asset_role: str
     status: str
     role_label: str | None = None
+    variant_color: str | None = None
     staged_at: str | None = None
 
 

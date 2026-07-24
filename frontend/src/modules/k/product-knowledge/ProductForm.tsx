@@ -411,6 +411,7 @@ function makeInitialValues(): ProductFormValues {
     channel: "dtc",
     category_id: "",
     category_label: "",
+    festival_style: "",
     variants: [emptyVariantInput()],
     weight_input: {
       unit: "kg",
@@ -1420,6 +1421,7 @@ export function ProductForm({
         product_type: values.product_type,
         channel: values.channel,
         category_id: values.category_id || null,
+        festival_style: values.festival_style || null,
         regular_price: price.value?.value ?? null,
         raw_input_text: rawInputText,
         review_status: "draft",
@@ -1612,6 +1614,27 @@ export function ProductForm({
               <option value="simple_product">{labels.simpleProduct}</option>
               <option value="variable_product">{labels.variableProduct}</option>
             </select>
+          </label>
+
+          <label className={styles.field}>
+            <span>节日风格（可选，轻氛围）</span>
+            <select
+              onChange={(event) =>
+                updateValue("festival_style", event.target.value)
+              }
+              value={values.festival_style}
+            >
+              <option value="">无（家规纯净背景）</option>
+              <option value="halloween">万圣节 Halloween</option>
+              <option value="christmas">圣诞节 Christmas</option>
+              <option value="valentines">情人节 Valentine's</option>
+              <option value="thanksgiving">感恩节 Thanksgiving</option>
+              <option value="easter">复活节 Easter</option>
+              <option value="new_year">新年 New Year</option>
+            </select>
+            <small style={{ color: "var(--mm-muted,#8b867f)", fontSize: "0.78rem" }}>
+              只给场景图/描述图加节日氛围；主图和各颜色变体主图始终保持纯净背景（合规底线）。
+            </small>
           </label>
 
           <div className={styles.inlineFields}>

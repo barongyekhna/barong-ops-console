@@ -221,6 +221,13 @@ def create_product(
             organization_name=TARGET_ORGANIZATION_NAME,
         )
         product.channel = (payload.channel or "dtc").strip().lower()
+        # 节日风格进运营配置容器(ai_warnings_json 已是事实容器:keyword_review
+        # 等都存这)。渲染时按此给场景图/描述图注入节日轻氛围;零迁移。
+        if payload.festival_style:
+            product.ai_warnings_json = {
+                **(product.ai_warnings_json or {}),
+                "festival_style": payload.festival_style,
+            }
         _apply_manual_category(db, product, payload.category_id)
         # Missing category-template fields are diagnostic only: creation still
         # succeeds and the canonical P gate blocks only when an approved

@@ -183,6 +183,7 @@ export type ProductKnowledgeCreatePayload = {
   attributes?: ProductKnowledgeAttributeInput[];
   channel?: string;
   category_id?: string | null;
+  festival_style?: string | null;
 };
 
 export type ProductKnowledgeUpdatePayload = Partial<{
@@ -295,6 +296,7 @@ export type ProductFormValues = {
   channel: string;
   category_id: string;
   category_label: string;
+  festival_style: string;
 };
 
 export type KWorkflowStatus =

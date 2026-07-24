@@ -356,6 +356,22 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
                 <strong>
                   #{asset.position} {asset.role_label || placementLabel(asset.placement)}
                 </strong>
+                {asset.variant_color ? (
+                  <span
+                    style={{
+                      display: "inline-block",
+                      background: "rgba(231,161,44,0.16)",
+                      color: "#b26a00",
+                      borderRadius: 6,
+                      padding: "1px 7px",
+                      fontSize: "0.74rem",
+                      fontWeight: 600,
+                      width: "fit-content",
+                    }}
+                  >
+                    🎨 {asset.variant_color} 专属主图
+                  </span>
+                ) : null}
                 <span>
                   {placementLabel(asset.placement)}
                   {asset.asset_role === "main" ? " · 主图" : ""}

@@ -192,7 +192,28 @@ class ProductKnowledgeCreate(BaseModel):
     # 可选:多条参考图链接(多角度/多颜色)。第一张成功入库的作为主参考图,
     # 其余全部落 K 媒体库备渲染;单条失败跳过不阻塞建品。
     reference_image_urls: list[str] | None = Field(default=None, max_length=8)
+    # 可选:节日风格(轻氛围)——只给场景图/描述图注入节日环境,主图与颜色
+    # 变体主图永远保持家规纯净(GMC 主图合规底线)。空/none=不加节日氛围。
+    festival_style: str | None = Field(default=None, max_length=32)
     variants: list[ProductKnowledgeVariantItem] = Field(default_factory=list)
+
+    @field_validator("festival_style")
+    @classmethod
+    def _validate_festival_style(cls, value: str | None) -> str | None:
+        cleaned = (value or "").strip().lower()
+        if not cleaned or cleaned == "none":
+            return None
+        allowed = {
+            "halloween",
+            "christmas",
+            "valentines",
+            "thanksgiving",
+            "easter",
+            "new_year",
+        }
+        if cleaned not in allowed:
+            raise ValueError(f"不支持的节日风格:{cleaned}")
+        return cleaned
     attributes: list[ProductKnowledgeAttributeItem] = Field(default_factory=list)
     keywords: list[ProductKnowledgeKeywordItem] = Field(default_factory=list)
     risk_terms: list[ProductKnowledgeRiskTermItem] = Field(default_factory=list)

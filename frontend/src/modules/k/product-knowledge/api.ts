@@ -614,6 +614,7 @@ export type RenderAsset = {
   asset_role: string;
   status: string; // staged | available
   role_label: string | null;
+  variant_color: string | null;
   staged_at: string | null;
 };
 
