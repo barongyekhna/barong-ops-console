@@ -859,6 +859,13 @@ class KProductKnowledgeWorkflowEngine:
             "raw_input_language": product.raw_input_language,
             "required_output": list(DEEPSEEK_ENRICHMENT_FIELDS),
         }
+        # 上面 _product_snapshot / key_for_step 读 ORM 属性会 autobegin 一个
+        # 只读事务;DeepSeek 富化实测可慢到 15min(远超 idle-in-transaction 8s
+        # 与连接回收 600s),若把它挂到出网调用上,连接会被掐断,富化结果写库时
+        # 整段回滚——英文名/字段全丢、退回中文兜底(实锤 2026-07-24 ET-005)。
+        # 出网前提交释放:此刻无脏写(进度已在上方 _commit_workflow_progress 落库),
+        # commit 仅关闭只读事务,安全。
+        self.db.commit()
         provider_output = self._execute_provider(
             provider="deepseek",
             task_type="generate",

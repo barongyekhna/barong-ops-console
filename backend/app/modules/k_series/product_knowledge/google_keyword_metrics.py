@@ -49,11 +49,16 @@ def fetch_keyword_metrics(
     )
 
     try_consume(db, PROVIDER_GOOGLE_ADS_PLANNER, amount=1)
-    # 注意:不做 rollback——K 工作流引擎调用本函数时正处于带未提交状态的
-    # 事务中(R-A 那套出网前 rollback 在这里会炸掉管线半成品)。两跳 HTTP
-    # 合计 <10s,短暂 idle-in-transaction 可接受。
+    # try_consume 内部已 commit(见 quota_ledger),管线半成品此刻已落库,
+    # 无未提交状态可丢——原先"出网前不敢 rollback 怕炸半成品"的前提不成立。
 
     payload = _credentials(db)
+    # 出网前必须释放连接:下面两跳 Google HTTP(token 20s + metrics 40s)会
+    # 远超数据库 idle-in-transaction 上限(生产 8s)。若把 _credentials 那次
+    # SELECT 开着的只读事务一直挂到 HTTP 返回,连接会被 Postgres 掐断,回来
+    # 写库即炸,整条 K 关键词管线连带回滚(实锤 2026-07-24 ET-005 风险放行
+    # 连续 409)。此处只有只读查询,rollback 释放连接绝对安全。
+    db.rollback()
     token_response = httpx.post(
         "https://oauth2.googleapis.com/token",
         data={
