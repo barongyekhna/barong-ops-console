@@ -597,11 +597,9 @@ def _variants(
         out.append(
             Variant(
                 sku=r["variant_sku"],
-                color=imperialize_text(r["color"]) if r["color"] else None,
-                size=imperialize_text(r["size"]) if r["size"] else None,
-                function=(
-                    imperialize_text(r["function"]) if r["function"] else None
-                ),
+                color=_variant_option_text(r["color"]),
+                size=_variant_option_text(r["size"]),
+                function=_variant_option_text(r["function"]),
                 quantity=r["quantity"],
                 price=price,
                 dimensions=physical.get("dimensions"),
@@ -611,6 +609,25 @@ def _variants(
             )
         )
     return out
+
+
+def _variant_option_text(value: Any) -> str | None:
+    """变体选项标签(color/size/function)绝不能静默消失。
+
+    imperialize_text 是给"公制度量"文字做转换/fail-closed 的:遇到 CJK 或无法
+    转换的残留就返回 None。但 color/size/function 是**选项标签**不是度量,一旦
+    返回 None,这个变体在 Woo 上就丢了该属性、下拉里选不到(实锤 2026-07-24
+    ET-005:中文颜色 金/蓝/白/粉/五合一套装 被清空,Woo 只剩英文 Red)。
+    因此:能安全转换就用转换结果(如 "10 cm"→"3.9 in"),否则保留 trim 后的
+    原文,让上游把标签规范成英文,而不是在这里把整个变体属性丢掉。
+    """
+    if value is None:
+        return None
+    converted = imperialize_text(value)
+    if converted:
+        return converted
+    text = str(value).strip()
+    return text or None
 
 
 def _variant_physical(attributes_json: Any) -> dict[str, Any]:
