@@ -311,10 +311,12 @@ def _run_brand_audit_job(
             rerender_started = False
 
     if audit["clean"]:
-        title = f"品牌审查通过：{product.sku or product.product_key}"
-        level = "success"
-        body = None
-    elif rerender_started:
+        # 品牌审查通过是常态：不再往铃铛塞「通过」通知——一个多图产品会渲染出
+        # 二十多张图、每次收尾都审查一遍，条条「通过」会把铃铛刷到 99+。
+        # 通过状态在产品页 brand_audit_json 里可见；只有抓到冒牌品牌 / 审查失败
+        # 才通知。上架门禁读的是 brand_audit_json，不依赖此通知。
+        return "brand-guard-v1"
+    if rerender_started:
         title = f"品牌审查检出图像品牌标识，已自动重渲染 {len(image_violations)} 张图"
         level = "warning"
         body = "; ".join(
