@@ -54,10 +54,13 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "image_brief": "gpt-5.6-luna",
         "image_brief_retry": "gpt-5.2-high",
     },
+    # 2026-07-25 用户拍板:关键词终筛升到 Opus 5,并换上 claude-max 分组的新钥匙。
+    # 注意该分组没有 -thinking 变体(实探 claude-opus-5-thinking 返 503 无渠道),
+    # 模型名必须是裸的 claude-opus-5。
     "claude": {
-        "default": "claude-opus-4-8-thinking",
-        "chat": "claude-opus-4-8-thinking",
-        "generate": "claude-opus-4-8-thinking",
+        "default": "claude-opus-5",
+        "chat": "claude-opus-5",
+        "generate": "claude-opus-5",
     },
 }
 
@@ -73,6 +76,10 @@ DEFAULT_FALLBACK_PROVIDERS = {
 # 通道恢复后首选模型自动回归——不用人工切配置。
 MODEL_FALLBACKS: dict[str, list[str]] = {
     "chatgpt": ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.2-high"],
+    # 2026-07-25:Claude 侧原本没有同组降级链——2026-07-24 实况是整个
+    # claude-官方 分组掉光(0 模型可见/全 503),终筛只能整条腿断掉转投 GPT。
+    # 新 claude-max 分组里 4-8 与 5 同在,配上降级链后单个模型掉线不再断腿。
+    "claude": ["claude-opus-5", "claude-opus-4-8"],
 }
 # 240s:降级到低档模型(如 5.2-high)生成整页文案实测会超过 150s;
 # 生成类任务全部走异步 job,放宽超时不影响交互体验(2026-07-22)。

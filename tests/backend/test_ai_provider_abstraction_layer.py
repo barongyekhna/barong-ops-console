@@ -92,7 +92,7 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
     )
     assert (
         AIModelRouter.resolve_model(provider="claude", task_type="chat")
-        == "claude-opus-4-8-thinking"
+        == "claude-opus-5"
     )
 
     adapter_cases = [
@@ -114,7 +114,7 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
             ClaudeAdapter,
             "https://4sapi.example",
             "chat",
-            "claude-opus-4-8-thinking",
+            "claude-opus-5",
             "https://4sapi.example/v1/messages",
         ),
         (
@@ -257,8 +257,10 @@ def test_execution_router_falls_back_to_default_provider(
     )
 
     assert result == {"content": "ok"}
+    # 非 503 的普通故障不触发同组换模型(MODEL_FALLBACKS 只认通道级 503),
+    # 因此这里直接跨供应商兜底到 chatgpt。
     assert captured[0].url == "https://4sapi-claude.example/v1/messages"
-    assert captured[0].body["model"] == "claude-opus-4-8-thinking"
+    assert captured[0].body["model"] == "claude-opus-5"
     assert captured[1].url == "https://4sapi-chatgpt.example/v1/chat/completions"
     assert captured[1].body["model"] == "gpt-5.6-luna"
 
