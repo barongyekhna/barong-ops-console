@@ -65,3 +65,6 @@ backups/c19-asset/
 
 # Local cold backups (serpbear decommission etc.) must stay out of Git.
 backups/
+
+# One-off WP diagnostic plugin (bkismet signup debug) — keep on disk, out of Git.
+backend/app/modules/p_series/wordpress/plugins/barong-hookdump.php
