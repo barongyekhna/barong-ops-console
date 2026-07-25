@@ -1068,6 +1068,186 @@
   border-radius: 6px;
 }
 
+/* ── 变体价格核对表 ───────────────────────────────────────────── */
+.sectionHint {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: #6b7a75;
+}
+
+.variantPriceTableWrap {
+  overflow-x: auto;
+}
+
+.variantPriceTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.variantPriceTable th {
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6b7a75;
+  white-space: nowrap;
+  border-bottom: 1px solid #e3e7e5;
+}
+
+.variantPriceTable td {
+  padding: 9px 10px;
+  vertical-align: middle;
+  border-bottom: 1px solid #eef1ef;
+}
+
+.variantPriceTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.variantPriceTable strong {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.variantPriceSku {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.76rem;
+  color: #6b7a75;
+  white-space: nowrap;
+}
+
+.variantPriceCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.variantPriceCell input {
+  width: 112px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+  outline: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.variantPriceCell input:focus {
+  border-color: var(--signal-dark);
+  box-shadow: 0 0 0 3px rgb(32 180 134 / 12%);
+}
+
+/* 没填价格的变体一眼可见——多变体产品缺一个价就上不了架 */
+.variantPriceCell input[data-missing="true"] {
+  border-color: #e08a8a;
+  background: #fff6f6;
+}
+
+.variantPriceFlag {
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.variantPriceFlag[data-tone="bad"] { color: #c0392b; }
+.variantPriceFlag[data-tone="changed"] { color: #b8860b; }
+
+.variantPriceActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.variantPriceStatus {
+  font-size: 0.78rem;
+  color: #6b7a75;
+}
+
+/* 编辑态的卖点行:必须盖过上面那条三列网格。
+   只读态一行是「类别 / 文案 / 重要度」三个元素,正好三列;编辑态一行有
+   七个控件,继续套三列就会被硬塞着换行——中文对照和「逐条决定」下拉框
+   会掉进 42px 那列被压成一条缝。编辑态改成竖向分层,自己排。 */
+.sellingPointBullets li.spEditRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+}
+
+/* 一行元信息:序号 + 类别 + 重要度 + 决定 + 删除,各自给够宽度 */
+.spRowHead {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) 92px minmax(128px, 168px) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.spRowOrdinal {
+  min-width: 24px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #6b7a75;
+  font-variant-numeric: tabular-nums;
+}
+
+.spRowScore input {
+  text-align: center;
+}
+
+.spRowDecision select {
+  width: 100%;
+  height: 38px;
+  min-width: 0;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+
+.spRowDelete {
+  height: 38px;
+  white-space: nowrap;
+}
+
+/* 中文对照:整行独占,不再被挤成竖条 */
+.spZhLine {
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: #3e4542;
+  background: #eef3f1;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
+.spZhLine > span {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #6b7a75;
+}
+
+/* 编辑态的文案框不需要那么高——短句占一大块空框很难受 */
+.sellingPointBullets li.spEditRow textarea {
+  min-height: 58px;
+}
+
 .sellingPointBullets strong {
   overflow-wrap: anywhere;
   font-size: 0.78rem;
@@ -1272,6 +1452,7 @@
   .sectionFooter,
   .sellingPointEditorGrid,
   .sellingPointBullets li,
+  .spRowHead,
   .sellingPointsMetrics,
   .workflowStages,
   .workflowStages li,
@@ -1479,6 +1660,40 @@
   border-color: var(--mm-line, rgb(120 200 255 / 16%));
 }
 .keywordColumn { background: rgb(8 15 26 / 45%); border-color: var(--mm-line, rgb(120 200 255 / 16%)); }
+.spZhLine {
+  color: rgb(198 224 240 / 88%);
+  background: rgb(8 15 26 / 55%);
+}
+.spZhLine > span { color: rgb(125 170 200 / 80%); }
+.spRowOrdinal { color: rgb(125 170 200 / 75%); }
+
+.sectionHint,
+.variantPriceSku,
+.variantPriceStatus { color: rgb(157 199 219 / 80%); }
+.variantPriceTable th {
+  color: rgb(157 199 219 / 80%);
+  border-bottom-color: var(--mm-line, rgb(120 200 255 / 16%));
+}
+.variantPriceTable td {
+  color: #cfe8f5;
+  border-bottom-color: rgb(120 200 255 / 10%);
+}
+.variantPriceTable strong { color: #eafaff; }
+.variantPriceCell input {
+  color: #eafaff;
+  background: rgb(6 14 24 / 75%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+}
+.variantPriceCell input:focus {
+  border-color: rgb(57 212 255 / 55%);
+  box-shadow: 0 0 0 3px rgb(57 212 255 / 12%);
+}
+.variantPriceCell input[data-missing="true"] {
+  border-color: rgb(255 107 107 / 55%);
+  background: rgb(60 12 18 / 45%);
+}
+.variantPriceFlag[data-tone="bad"] { color: rgb(255 138 138); }
+.variantPriceFlag[data-tone="changed"] { color: rgb(255 205 118); }
 .columnHeading strong,
 .sellingPointBullets strong { color: #eafaff; }
 

@@ -39,6 +39,7 @@ import {
   mediaAssetThumbnailUrl,
   patchProductShipping,
   updateProduct,
+  updateVariantPrices,
 } from "./api";
 import { CopyArtDirection } from "./CopyArtDirection";
 import { ProductSpecsPanel } from "./ProductSpecsPanel";
@@ -539,6 +540,12 @@ export function ProductDetail({
   const [sellingPointsTouched, setSellingPointsTouched] = useState(false);
   const [isEditingSellingPoints, setIsEditingSellingPoints] = useState(false);
   const [sellingPointsCopyStatus, setSellingPointsCopyStatus] = useState("");
+  const [variantPriceDrafts, setVariantPriceDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [isSavingVariantPrices, setIsSavingVariantPrices] = useState(false);
+  const [variantPriceError, setVariantPriceError] = useState("");
+  const [variantPriceStatus, setVariantPriceStatus] = useState("");
   const [shippingProduct, setShippingProduct] =
     useState<ProductKnowledgeDetail | null>(null);
   const [shippingClasses, setShippingClasses] = useState<WShippingClassOption[]>([]);
@@ -1455,6 +1462,56 @@ export function ProductDetail({
     }
   }
 
+  async function saveVariantPrices() {
+    if (!product) {
+      return;
+    }
+    const variants = product.variants ?? [];
+    const items: { variant_id: string; price_override: number }[] = [];
+    for (const variant of variants) {
+      const draft = variantPriceDrafts[variant.id];
+      if (draft === undefined) {
+        continue;
+      }
+      const trimmed = draft.trim();
+      if (!trimmed) {
+        setVariantPriceError("变体价格不能留空——多变体产品每个变体都必须有价。");
+        return;
+      }
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        setVariantPriceError(`「${formatVariantDisplayName(variant)}」的价格不是有效数字。`);
+        return;
+      }
+      const current = variant.price_override;
+      if (current !== null && Math.abs(current - parsed) < 0.005) {
+        continue;
+      }
+      items.push({ price_override: parsed, variant_id: variant.id });
+    }
+    if (!items.length) {
+      setVariantPriceError("");
+      setVariantPriceStatus("没有改动。");
+      return;
+    }
+    setIsSavingVariantPrices(true);
+    setVariantPriceError("");
+    setVariantPriceStatus("");
+    try {
+      await updateVariantPrices(product.id, items);
+      const refreshed = await getProduct(product.id);
+      onProductPatched?.(refreshed);
+      setVariantPriceDrafts({});
+      setVariantPriceStatus(`已保存 ${items.length} 个变体的价格。`);
+    } catch (error) {
+      setVariantPriceError(
+        error instanceof Error ? error.message : "保存失败，请重试。",
+      );
+    } finally {
+      setIsSavingVariantPrices(false);
+    }
+  }
+
   return (
     <aside className={styles.detail} aria-label="产品详情">
       <div className={styles.detailHeading}>
@@ -1568,6 +1625,118 @@ export function ProductDetail({
           <dd>{formatDate(product.updated_at)}</dd>
         </div>
       </dl>
+
+      {(product.variants?.length ?? 0) > 0 ? (
+        <section className={styles.workflowSection} aria-labelledby="k-variant-prices">
+          <div className={styles.sellingPointsHeading}>
+            <div>
+              <h4 id="k-variant-prices">变体价格核对</h4>
+              <p className={styles.sectionHint}>
+                {product.product_type === "variable_product"
+                  ? "多变体产品的价格全部按变体走（父级价格留空）。逐行核对，改完点保存。"
+                  : "核对该产品的定价，改完点保存。"}
+              </p>
+            </div>
+          </div>
+
+          <div className={styles.variantPriceTableWrap}>
+            <table className={styles.variantPriceTable}>
+              <thead>
+                <tr>
+                  <th scope="col">变体</th>
+                  <th scope="col">SKU</th>
+                  {/* 站点单一币种结算,读取接口也不返 price_currency */}
+                  <th scope="col">价格（USD）</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(product.variants ?? []).map((variant) => {
+                  const draft = variantPriceDrafts[variant.id];
+                  const stored =
+                    variant.price_override === null
+                      ? ""
+                      : String(variant.price_override);
+                  const value = draft === undefined ? stored : draft;
+                  const missing = value.trim() === "";
+                  const changed = draft !== undefined && draft.trim() !== stored;
+                  return (
+                    <tr key={variant.id}>
+                      <td>
+                        <strong>{formatVariantDisplayName(variant)}</strong>
+                      </td>
+                      <td className={styles.variantPriceSku}>
+                        {variant.variant_sku}
+                      </td>
+                      <td>
+                        <div className={styles.variantPriceCell}>
+                          <input
+                            aria-label={`${formatVariantDisplayName(variant)} 的价格`}
+                            data-missing={missing}
+                            disabled={isSavingVariantPrices}
+                            inputMode="decimal"
+                            min={0}
+                            onChange={(event) => {
+                              setVariantPriceStatus("");
+                              setVariantPriceDrafts((previous) => ({
+                                ...previous,
+                                [variant.id]: event.target.value,
+                              }));
+                            }}
+                            placeholder="未设置"
+                            step={0.01}
+                            type="number"
+                            value={value}
+                          />
+                          {missing ? (
+                            <span
+                              className={styles.variantPriceFlag}
+                              data-tone="bad"
+                            >
+                              未设置
+                            </span>
+                          ) : null}
+                          {changed ? (
+                            <span
+                              className={styles.variantPriceFlag}
+                              data-tone="changed"
+                            >
+                              待保存
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {variantPriceError ? (
+            <p className={styles.sellingPointsError} role="alert">
+              {variantPriceError}
+            </p>
+          ) : null}
+
+          <div className={styles.variantPriceActions}>
+            {variantPriceStatus ? (
+              <span className={styles.variantPriceStatus}>{variantPriceStatus}</span>
+            ) : null}
+            <button
+              className="secondary-button"
+              disabled={
+                isSavingVariantPrices ||
+                Object.keys(variantPriceDrafts).length === 0
+              }
+              onClick={() => void saveVariantPrices()}
+              type="button"
+            >
+              <CheckCircle2 aria-hidden="true" size={15} />
+              {isSavingVariantPrices ? "保存中…" : "保存价格"}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {currentShippingProduct?.channel === "dtc" ? (
         <section className={styles.workflowSection} aria-labelledby="k-shipping">
@@ -2544,39 +2713,83 @@ export function ProductDetail({
 
             <ul className={styles.sellingPointBullets}>
               {sellingBullets.map((bullet, index) => (
-                <li key={bullet.id || `${index}-${bullet.category}`}>
-                  <input
-                    aria-label="卖点类别"
-                    onChange={(event) =>
-                      updateBullet(index, { category: event.target.value })
-                    }
-                    value={bullet.category}
-                  />
-                  <textarea
-                    aria-label="卖点文案"
-                    onChange={(event) =>
-                      updateBullet(index, { text: event.target.value })
-                    }
-                    rows={3}
-                    value={bullet.text}
-                  />
+                <li
+                  className={styles.spEditRow}
+                  key={bullet.id || `${index}-${bullet.category}`}
+                >
+                  <div className={styles.spRowHead}>
+                    <span className={styles.spRowOrdinal}>{index + 1}</span>
+                    <label className={styles.field}>
+                      <span>类别</span>
+                      <input
+                        aria-label="卖点类别"
+                        onChange={(event) =>
+                          updateBullet(index, { category: event.target.value })
+                        }
+                        value={bullet.category}
+                      />
+                    </label>
+                    <label className={`${styles.field} ${styles.spRowScore}`}>
+                      <span>重要度</span>
+                      <input
+                        aria-label="重要度"
+                        min={0}
+                        onChange={(event) =>
+                          updateBullet(index, {
+                            importance_score: Number(event.target.value),
+                          })
+                        }
+                        step={0.1}
+                        type="number"
+                        value={bullet.importance_score}
+                      />
+                    </label>
+                    <label className={`${styles.field} ${styles.spRowDecision}`}>
+                      <span>逐条决定</span>
+                      <select
+                        aria-label="卖点审核决定"
+                        onChange={(event) =>
+                          updateBullet(index, {
+                            review_decision: event.target.value as BulletPoint["review_decision"],
+                          })
+                        }
+                        value={bullet.review_decision ?? "candidate"}
+                      >
+                        <option value="candidate">待决定</option>
+                        <option value="approve">通过</option>
+                        <option value="edit">编辑后通过</option>
+                        <option value="reject">拒绝</option>
+                      </select>
+                    </label>
+                    <button
+                      className={`secondary-button ${styles.spRowDelete}`}
+                      onClick={() => removeSellingPoint(index)}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={15} />
+                      删除
+                    </button>
+                  </div>
+
+                  <label className={styles.field}>
+                    <span>卖点文案</span>
+                    <textarea
+                      aria-label="卖点文案"
+                      onChange={(event) =>
+                        updateBullet(index, { text: event.target.value })
+                      }
+                      rows={2}
+                      value={bullet.text}
+                    />
+                  </label>
+
                   {bullet.text_zh ? (
-                    <small className={styles.spZhText}>
-                      中文对照：{bullet.text_zh}
-                    </small>
+                    <p className={styles.spZhLine}>
+                      <span>中文对照</span>
+                      {bullet.text_zh}
+                    </p>
                   ) : null}
-                  <input
-                    aria-label="重要度"
-                    min={0}
-                    onChange={(event) =>
-                      updateBullet(index, {
-                        importance_score: Number(event.target.value),
-                      })
-                    }
-                    step={0.1}
-                    type="number"
-                    value={bullet.importance_score}
-                  />
+
                   <label className={styles.field}>
                     <span>证据</span>
                     <input
@@ -2591,31 +2804,6 @@ export function ProductDetail({
                       value={bullet.evidence ?? ""}
                     />
                   </label>
-                  <label className={styles.field}>
-                    <span>逐条决定</span>
-                    <select
-                      aria-label="卖点审核决定"
-                      onChange={(event) =>
-                        updateBullet(index, {
-                          review_decision: event.target.value as BulletPoint["review_decision"],
-                        })
-                      }
-                      value={bullet.review_decision ?? "candidate"}
-                    >
-                      <option value="candidate">待决定</option>
-                      <option value="approve">通过</option>
-                      <option value="edit">编辑后通过</option>
-                      <option value="reject">拒绝</option>
-                    </select>
-                  </label>
-                  <button
-                    className="secondary-button"
-                    onClick={() => removeSellingPoint(index)}
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" size={15} />
-                    删除
-                  </button>
                 </li>
               ))}
             </ul>

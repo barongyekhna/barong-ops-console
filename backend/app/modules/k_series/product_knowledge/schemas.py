@@ -495,6 +495,24 @@ class ProductKnowledgeListResponse(BaseModel):
     offset: int = Field(ge=0)
 
 
+class ProductKnowledgeVariantPriceItem(BaseModel):
+    variant_id: UUID
+    price_override: Decimal = Field(ge=0)
+
+
+class ProductKnowledgeVariantPricePatch(BaseModel):
+    """改变体价格。多变体产品每个变体必须有价(2026-07-22 用户拍板),
+    因此这里只收非空价格——想清空价格等于把产品退回不可上架状态,
+    不给这条路。"""
+
+    items: list[ProductKnowledgeVariantPriceItem] = Field(default_factory=list)
+
+
+class ProductKnowledgeVariantListResponse(BaseModel):
+    items: list[ProductKnowledgeVariantRead] = Field(default_factory=list)
+    count: int = 0
+
+
 class ProductKnowledgeAttributePatch(BaseModel):
     items: list[ProductKnowledgeAttributeItem] = Field(default_factory=list)
 

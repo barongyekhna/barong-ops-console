@@ -125,6 +125,8 @@ from .schemas import (
     ProductKnowledgeRiskTermListResponse,
     ProductKnowledgeRiskTermPatch,
     ProductKnowledgeUpdate,
+    ProductKnowledgeVariantListResponse,
+    ProductKnowledgeVariantPricePatch,
     ProductKnowledgeVariantRead,
     ProductKnowledgeWorkflowControlRequest,
     ProductKnowledgeWorkflowExecutionRead,
@@ -152,6 +154,7 @@ from .service import (
     patch_keywords,
     patch_risk_terms,
     update_product,
+    update_variant_prices,
 )
 from .workflow_engine import (
     IMAGE_SOURCE_MANUAL,
@@ -3212,6 +3215,33 @@ def product_knowledge_attributes(
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
     return ProductKnowledgeAttributeListResponse(items=items, count=len(items))
+
+
+@router.patch(
+    "/products/{product_id}/variant-prices",
+    response_model=ProductKnowledgeVariantListResponse,
+)
+def product_knowledge_variant_prices_patch(
+    product_id: UUID,
+    payload: ProductKnowledgeVariantPricePatch,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> ProductKnowledgeVariantListResponse:
+    del user
+    try:
+        variants = update_variant_prices(
+            db,
+            product_id=product_id,
+            payload=payload,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    items = [
+        ProductKnowledgeVariantRead.model_validate(variant) for variant in variants
+    ]
+    return ProductKnowledgeVariantListResponse(items=items, count=len(items))
 
 
 @router.patch(

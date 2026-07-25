@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 
 from .category_resolver import assign_manual_category
 from .constants import TARGET_ORGANIZATION_NAME
-from .errors import KConflictError, KInvalidStateError, KProductNotFoundError
+from .errors import (
+    KConflictError,
+    KInvalidStateError,
+    KProductNotFoundError,
+    KValidationError,
+)
 from .models import (
     KProductKnowledgeAIEvent,
     KProductKnowledgeAttribute,
@@ -33,6 +38,7 @@ from .schemas import (
     ProductKnowledgeKeywordPatch,
     ProductKnowledgeRiskTermPatch,
     ProductKnowledgeUpdate,
+    ProductKnowledgeVariantPricePatch,
 )
 from .scope_shim import KScopeContext, apply_scope_filters, normalize_scope_context
 from .sku_allocator import ensure_product_sku
@@ -336,6 +342,46 @@ def update_product(
     _commit(db)
     db.refresh(product)
     return product
+
+
+def update_variant_prices(
+    db: Session,
+    *,
+    product_id: UUID,
+    payload: ProductKnowledgeVariantPricePatch,
+    scope_context: KScopeContext,
+) -> list[KProductKnowledgeVariant]:
+    """改变体价格,只动价格。
+
+    刻意 **不** 调 invalidate_evidence_outputs:价格不是卖点/文案/作图指令的
+    证据来源(那些讲的是材质、用法、场景),为改一个价把已审过的产出全清空
+    会把人坑惨。规格/包装清单变了才是事实变更,那条路径不变。
+    """
+
+    product = _require_scoped_product(db, product_id, scope_context)
+    if product.product_status == "archived":
+        raise KInvalidStateError("Archived K products cannot be updated.")
+
+    variants = list(
+        db.scalars(
+            select(KProductKnowledgeVariant)
+            .where(KProductKnowledgeVariant.product_id == product.id)
+            .order_by(KProductKnowledgeVariant.created_at.asc())
+        )
+    )
+    by_id = {variant.id: variant for variant in variants}
+
+    for item in payload.items:
+        variant = by_id.get(item.variant_id)
+        if variant is None:
+            raise KValidationError("Variant does not belong to this product.")
+        variant.price_override = item.price_override
+
+    if payload.items:
+        _commit(db)
+        for variant in variants:
+            db.refresh(variant)
+    return variants
 
 
 def archive_product(

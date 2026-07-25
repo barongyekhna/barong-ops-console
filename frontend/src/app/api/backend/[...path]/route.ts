@@ -1036,6 +1036,15 @@ function isAllowedPPath(method: string, path: string[]) {
   ) {
     return method === "POST";
   }
+  // POST /p/products/{id}/faq-recheck  (用户在 WP 发布后手动复检 FAQ 结构化数据)
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "faq-recheck"
+  ) {
+    return method === "POST";
+  }
   return false;
 }
 
@@ -1440,6 +1449,16 @@ function isAllowedKPath(method: string, path: string[]) {
     ["attributes", "keywords", "risk-terms"].includes(path[3])
   ) {
     return method === "GET" || method === "PATCH";
+  }
+
+  // 变体价格核对表：多变体产品的价格全按变体走，逐行改价。
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "variant-prices"
+  ) {
+    return method === "PATCH";
   }
 
   if (

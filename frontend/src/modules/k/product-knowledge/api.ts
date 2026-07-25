@@ -8,6 +8,7 @@ import type {
   KImportISystemImagePayload,
   KImportISystemImageResponse,
   KMediaListResponse,
+  ProductKnowledgeVariant,
   ProductReadinessState,
   ProductSectionState,
   KRiskReviewPayload,
@@ -280,6 +281,27 @@ export async function updateProduct(
   );
 
   return readJson<ProductKnowledgeDetail>(response, path);
+}
+
+export async function updateVariantPrices(
+  productId: string,
+  items: { variant_id: string; price_override: number }[],
+): Promise<{ items: ProductKnowledgeVariant[]; count: number }> {
+  const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/variant-prices`;
+  const response = await fetch(
+    `${API_PROXY_BASE}${path}`,
+    {
+      body: JSON.stringify({ items }),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "PATCH",
+    },
+  );
+
+  return readJson<{ items: ProductKnowledgeVariant[]; count: number }>(
+    response,
+    path,
+  );
 }
 
 export async function deleteProduct(
