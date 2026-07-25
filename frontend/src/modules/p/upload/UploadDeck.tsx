@@ -15,8 +15,10 @@ import {
   dispatchProducts,
   getBoard,
   getUploadJobs,
+  recheckFaq,
   type BoardProduct,
   type BoardResult,
+  type FaqRecheckResult,
   type UploadJob,
   type UploadJobsResult,
 } from "./api";
@@ -58,6 +60,10 @@ export function UploadDeck() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [faqBusyId, setFaqBusyId] = useState<string | null>(null);
+  const [faqResults, setFaqResults] = useState<
+    Record<string, FaqRecheckResult>
+  >({});
   const [activeTab, setActiveTab] = useState<"pending" | "uploaded" | "ledger">(
     "pending",
   );
@@ -129,6 +135,32 @@ export function UploadDeck() {
     },
     [load],
   );
+
+  const handleFaqRecheck = useCallback(async (productId: string) => {
+    setFaqBusyId(productId);
+    try {
+      const result = await recheckFaq(productId);
+      setFaqResults((prev) => ({ ...prev, [productId]: result }));
+    } catch (recheckError) {
+      setFaqResults((prev) => ({
+        ...prev,
+        [productId]: {
+          status: "audit_failed",
+          ok: false,
+          page_url: null,
+          schema_faq_count: null,
+          visible_faq_present: null,
+          missing_from_visible: null,
+          message:
+            recheckError instanceof Error
+              ? recheckError.message
+              : "FAQ 复检失败。",
+        },
+      }));
+    } finally {
+      setFaqBusyId(null);
+    }
+  }, []);
 
   const summary = ledger?.summary;
   const jobs = ledger?.jobs ?? [];
@@ -340,11 +372,14 @@ export function UploadDeck() {
                   <th>产品</th>
                   <th>价格</th>
                   <th>店铺页</th>
+                  <th>FAQ 结构化数据</th>
                   <th>再次上传</th>
                 </tr>
               </thead>
               <tbody>
-                {uploaded.map((product: BoardProduct) => (
+                {uploaded.map((product: BoardProduct) => {
+                  const faq = faqResults[product.product_id];
+                  return (
                   <tr key={product.product_id}>
                     <td className={styles.productCell}>
                       <strong>{product.product_name || "（未命名）"}</strong>
@@ -364,6 +399,62 @@ export function UploadDeck() {
                       ) : (
                         "—"
                       )}
+                    </td>
+                    <td>
+                      <div className={styles.faqCell}>
+                        <button
+                          className="secondary-button"
+                          disabled={faqBusyId !== null}
+                          onClick={() =>
+                            void handleFaqRecheck(product.product_id)
+                          }
+                          title="抓取真实上架页，核对 FAQ 结构化数据与页面可见 FAQ 是否一致"
+                          type="button"
+                        >
+                          {faqBusyId === product.product_id ? (
+                            <LoaderCircle
+                              aria-hidden="true"
+                              className="spin"
+                              size={14}
+                            />
+                          ) : (
+                            <RefreshCw aria-hidden="true" size={14} />
+                          )}
+                          复检
+                        </button>
+                        {faq ? (
+                          <span
+                            className={styles.faqResult}
+                            data-tone={
+                              faq.ok === true
+                                ? "ok"
+                                : faq.status === "deferred_unpublished"
+                                  ? "muted"
+                                  : "bad"
+                            }
+                            title={faq.message}
+                          >
+                            {faq.ok === true ? (
+                              <>
+                                <CheckCircle2 aria-hidden="true" size={12} />
+                                一致
+                                {faq.schema_faq_count != null
+                                  ? `（${faq.schema_faq_count}组）`
+                                  : ""}
+                              </>
+                            ) : faq.status === "deferred_unpublished" ? (
+                              "页面待发布"
+                            ) : (
+                              <>
+                                <AlertTriangle aria-hidden="true" size={12} />
+                                {faq.status === "mismatch"
+                                  ? "不一致，请复查"
+                                  : faq.message}
+                              </>
+                            )}
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td>
                       <button
@@ -388,7 +479,8 @@ export function UploadDeck() {
                       </button>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

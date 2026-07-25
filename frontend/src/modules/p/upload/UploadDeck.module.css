@@ -185,6 +185,35 @@
   background: rgb(255 184 76 / 10%);
 }
 
+.faqCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.faqResult {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.faqResult[data-tone="ok"] {
+  color: rgb(97 240 175);
+}
+
+.faqResult[data-tone="bad"] {
+  color: rgb(255 138 138);
+}
+
+.faqResult[data-tone="muted"] {
+  color: rgb(170 178 194);
+  font-weight: 600;
+}
+
 .wooLink {
   color: rgb(102 214 255);
   text-decoration: none;

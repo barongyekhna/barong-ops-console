@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.error import HTTPError
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
@@ -93,6 +94,17 @@ class DispatchResponse(BaseModel):
     dispatched: bool
 
 
+class FaqRecheckResponse(BaseModel):
+    # passed | mismatch | deferred_unpublished | no_upload | audit_failed
+    status: str
+    ok: bool | None = None
+    page_url: str | None = None
+    schema_faq_count: int | None = None
+    visible_faq_present: bool | None = None
+    missing_from_visible: list | None = None
+    message: str
+
+
 class UploadResultRequest(BaseModel):
     status: str  # success | failed
     external_product_id: str | None = None
@@ -122,6 +134,23 @@ def _audit_published_faq_after_success(
             allowed_base_url=get_settings().wp_base_url,
         )
     except Exception as exc:  # noqa: BLE001 - publication is never rolled back
+        # 产品先上架成 Woo 草稿，公开页此刻还是 404/403 —— 要等用户在 WP 手动发布，
+        # 这不是 FAQ 出错，只是页面还没公开。记 deferred、不发刺眼的错误通知（否则
+        # 每次上架都虚惊一次，还会把真正的 FAQ 不一致淹没）。真正的对账留到发布后
+        # 由「复检 FAQ」触发。其它异常（超时 / 5xx / 解析失败）才是真问题，照旧告警。
+        if isinstance(exc, HTTPError) and exc.code in (401, 403, 404, 410):
+            logger.info(
+                "FAQ audit deferred (page not public yet) product_id=%s url=%s code=%s",
+                product_id,
+                external_url,
+                exc.code,
+            )
+            return {
+                "status": "deferred_unpublished",
+                "ok": None,
+                "page_url": external_url,
+                "http_code": exc.code,
+            }
         audit = {
             "status": "audit_failed",
             "ok": False,
@@ -408,6 +437,92 @@ def p_dispatch(
         job_id=job.job_id,
         status=job.status,
         dispatched=(job.status == "dispatched"),
+    )
+
+
+@router.post("/products/{product_id}/faq-recheck", response_model=FaqRecheckResponse)
+def p_faq_recheck(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_p_permission(PERMISSION_READ)),
+) -> FaqRecheckResponse:
+    """发布后手动复检：抓真实上架页，核对 FAQPage 结构化数据与页面可见 FAQ 是否
+    一致。只有真不一致才告警；页面还是草稿（404/403）时如实返回「待发布」。"""
+
+    del request, user
+    job = db.scalars(
+        select(PUploadJob)
+        .where(
+            PUploadJob.product_id == product_id,
+            PUploadJob.status == "success",
+            PUploadJob.external_url.is_not(None),
+        )
+        .order_by(PUploadJob.finished_at.desc(), PUploadJob.created_at.desc())
+    ).first()
+    if job is None or not job.external_url:
+        return FaqRecheckResponse(
+            status="no_upload",
+            ok=None,
+            message="该产品还没有成功上架记录，无法复检。",
+        )
+    try:
+        audit = audit_published_faq(
+            job.external_url,
+            allowed_base_url=get_settings().wp_base_url,
+        )
+    except HTTPError as exc:
+        if exc.code in (401, 403, 404, 410):
+            return FaqRecheckResponse(
+                status="deferred_unpublished",
+                ok=None,
+                page_url=job.external_url,
+                message="页面还没发布（Woo 草稿），发布后再点复检。",
+            )
+        return FaqRecheckResponse(
+            status="audit_failed",
+            ok=False,
+            page_url=job.external_url,
+            message=f"抓取上架页失败：HTTP {exc.code}。",
+        )
+    except Exception as exc:  # noqa: BLE001 - recheck never rolls anything back
+        logger.exception("FAQ recheck failed product_id=%s", product_id)
+        return FaqRecheckResponse(
+            status="audit_failed",
+            ok=False,
+            page_url=job.external_url,
+            message=f"复检失败：{exc.__class__.__name__}。",
+        )
+
+    ok = audit.get("ok") is True
+    if not ok:
+        create_notification(
+            db,
+            event_type="p.upload.faq_sync_mismatch",
+            title="上架页 FAQ 与结构化数据不一致",
+            body="FAQPage schema 含有页面不可见的问答；请立即复查。",
+            level="error",
+            source="p.woocommerce",
+            product_id=product_id,
+            external_refs={
+                "woo_product_id": job.external_product_id,
+                "url": job.external_url,
+            },
+            payload=audit,
+        )
+        db.commit()
+    return FaqRecheckResponse(
+        status=str(audit.get("status") or ("passed" if ok else "mismatch")),
+        ok=ok,
+        page_url=job.external_url,
+        schema_faq_count=audit.get("schema_faq_count"),
+        visible_faq_present=audit.get("visible_faq_present"),
+        missing_from_visible=audit.get("missing_from_visible"),
+        message=(
+            "FAQ 与结构化数据一致 ✅"
+            if ok
+            else "发现结构化数据里有页面不可见的问答，请复查。"
+        ),
     )
 
 

@@ -86,6 +86,30 @@ export async function getBoard(): Promise<BoardResult> {
   return readJson<BoardResult>(response, "产品分组加载失败");
 }
 
+export type FaqRecheckResult = {
+  status: string; // passed | mismatch | deferred_unpublished | no_upload | audit_failed
+  ok: boolean | null;
+  page_url: string | null;
+  schema_faq_count: number | null;
+  visible_faq_present: boolean | null;
+  missing_from_visible: unknown[] | null;
+  message: string;
+};
+
+export async function recheckFaq(productId: string): Promise<FaqRecheckResult> {
+  const headers = buildHeaders();
+  headers.set("Content-Type", "application/json");
+  const response = await fetch(
+    `${API_PROXY_BASE}/p/products/${productId}/faq-recheck`,
+    {
+      cache: "no-store",
+      headers,
+      method: "POST",
+    },
+  );
+  return readJson<FaqRecheckResult>(response, "FAQ 复检失败");
+}
+
 export async function dispatchProducts(
   productIds: string[],
 ): Promise<{ queued: string[]; blocked: { product_id: string; blockers: string[] }[] }> {
