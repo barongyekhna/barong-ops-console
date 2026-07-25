@@ -158,7 +158,12 @@ DEEPSEEK_ENRICHMENT_FIELDS = (
     "product_name_en",
     "brand_name",
     "manufacturer",
-    "product_type",
+    # NOTE: product_type is the structural enum column (simple_product /
+    # variable_product), NOT an AI-enrichable field. DeepSeek returns a
+    # category-style descriptive string for "product_type" which violates the
+    # enum CHECK constraint and rolls back the whole enrichment write. The
+    # descriptive product type is captured via merchant_product_type /
+    # category_hint below, so the enum must never be overwritten by enrichment.
     "short_description_en",
     "long_description_en",
     "primary_use_case_en",
@@ -1041,8 +1046,30 @@ class KProductKnowledgeWorkflowEngine:
             or provider_output.get("results")
             or provider_output.get("items")
         )
-        if not keywords:
-            keywords = _keywords_from_organic_results(organic_results, query)
+        # Serper /search returns clean, human-written phrases in
+        # relatedSearches[].query and peopleAlsoAsk[].question — real buyer
+        # queries (PAA is prime long-tail / GEO material). Prefer these over
+        # n-gramming organic titles, which yields SERP-title shrapnel
+        # ("Water Kakadu USA", "2026 Expert"). N-gram fallback only fires when
+        # the SERP surfaced no related searches, PAA, or provider keywords.
+        related_searches = _safe_string_list(
+            [
+                r.get("query")
+                for r in (provider_output.get("relatedSearches") or [])
+                if isinstance(r, dict)
+            ]
+        )
+        people_also_ask = _safe_string_list(
+            [
+                r.get("question")
+                for r in (provider_output.get("peopleAlsoAsk") or [])
+                if isinstance(r, dict)
+            ]
+        )
+        serp_phrases = _dedupe_strings([*keywords, *related_searches, *people_also_ask])
+        if not serp_phrases:
+            serp_phrases = _keywords_from_organic_results(organic_results, query)
+        keywords = _dedupe_strings([query, *payload.seed_keywords, *serp_phrases])[:40]
         if not keywords:
             self._fail_execution(
                 execution,
