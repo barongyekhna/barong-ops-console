@@ -91,9 +91,21 @@ HOUSE_STYLE_BLOCK = (
     "the upper left; a soft subtle contact shadow directly beneath the product. "
     "Generous negative space, product centered at a consistent scale. Crisp "
     "focus, true-to-life vivid saturated product colour. Clean, airy, high-end "
-    "catalog aesthetic. No props, no text, no clutter. CONSISTENCY: same "
-    "product as the reference image — do not alter product shape, colour, or "
-    "markings."
+    "catalog aesthetic. No props, no text, no clutter."
+)
+
+# 产品保真硬约束:每一张图(不分角色)都追加。允许换取景/角度/场景,但产品
+# 本体的几何/比例/控件布局/颜色/标记必须与参考图一致——生成式作图会重画整张
+# 画布含产品,不加这句非主图就漂。放在 prompt 末尾=最后一句最高优先。
+PRODUCT_FIDELITY_BLOCK = (
+    "\n\nPRODUCT FIDELITY (non-negotiable, applies to this and every image): the "
+    "physical product must stay IDENTICAL to the attached reference photo — same "
+    "shape, proportions, body and head geometry, and the exact layout and number "
+    "of its buttons, ports, display and controls, plus the same textures, colour "
+    "and markings. You may re-frame it, change its angle, show it in use, and "
+    "place it in the requested scene, but never redesign, restyle, reshape, add, "
+    "remove, merge, or reposition any physical part of the product, and never "
+    "invent product details you cannot see in the reference."
 )
 
 INFO_OVERLAY_BASE_BLOCK = (
@@ -944,6 +956,8 @@ def enqueue_image_render_jobs(
             and not is_colorway_main
         ):
             prompt += festival_block
+        # 产品保真:所有角色的最后一句,锁死几何/控件/颜色/标记(可换姿势/场景)。
+        prompt += PRODUCT_FIDELITY_BLOCK
         overlay = _overlay_snapshot(
             spec,
             product_id=product.id,

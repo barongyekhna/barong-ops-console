@@ -245,10 +245,18 @@ def _run_brand_audit_job(
 
     image_violations = audit.get("image_violations") or []
     text_violations = audit.get("text_violations") or []
+    # 几何变形是 gpt-image 生成式上限,重渲也修不好 → 不自动重渲(白烧额度),
+    # 只挡发布 + 通知人工改用真照。自动重渲只对品牌标识违规有意义。
+    brand_image_violations = [
+        v for v in image_violations if v.get("category") != "geometry"
+    ]
+    geometry_violations = [
+        v for v in image_violations if v.get("category") == "geometry"
+    ]
     rerender_started = False
     if (
         not audit["clean"]
-        and image_violations
+        and brand_image_violations
         and not text_violations
         and not audit.get("errors")
         and attempt < 2
@@ -270,7 +278,7 @@ def _run_brand_audit_job(
                     brief_positions.add(index)
         hints: dict[int, str] = {}
         orphans_archived = 0
-        for violation in image_violations:
+        for violation in brand_image_violations:
             if violation.get("position") is None:
                 continue
             position = int(violation["position"])
@@ -317,11 +325,26 @@ def _run_brand_audit_job(
         # 才通知。上架门禁读的是 brand_audit_json，不依赖此通知。
         return "brand-guard-v1"
     if rerender_started:
-        title = f"品牌审查检出图像品牌标识，已自动重渲染 {len(image_violations)} 张图"
+        title = f"品牌审查检出图像品牌标识，已自动重渲染 {len(brand_image_violations)} 张图"
         level = "warning"
         body = "; ".join(
             f"第{violation.get('position')}张: {str(violation.get('finding'))[:80]}"
-            for violation in image_violations
+            for violation in brand_image_violations
+        )
+    elif geometry_violations and not text_violations and not audit.get("errors"):
+        # 几何变形不自动重渲(修不好)：挡发布并提示人工改用真照/换图。
+        title = (
+            f"审查检出 {len(geometry_violations)} 张图产品被AI画变形："
+            f"{product.sku or product.product_key}"
+        )
+        level = "error"
+        body = (
+            "已挡下发布(不会自动重渲，重渲修不好几何)。请把这些位号改用真实产品"
+            "照或人工换图："
+            + "; ".join(
+                f"第{violation.get('position')}张: {str(violation.get('finding'))[:80]}"
+                for violation in geometry_violations[:6]
+            )
         )
     else:
         title = f"品牌审查未通过：{product.sku or product.product_key}"
@@ -333,7 +356,11 @@ def _run_brand_audit_job(
             ]
             + [
                 f"第{violation.get('position')}张图有品牌标识"
-                for violation in image_violations[:6]
+                for violation in brand_image_violations[:6]
+            ]
+            + [
+                f"第{violation.get('position')}张图产品变形"
+                for violation in geometry_violations[:6]
             ]
             + ([f"{len(audit['errors'])} 步审查失败(fail-closed)"] if audit.get("errors") else [])
         )
@@ -350,6 +377,8 @@ def _run_brand_audit_job(
                 "clean": audit["clean"],
                 "text_violations": len(text_violations),
                 "image_violations": len(image_violations),
+                "brand_image_violations": len(brand_image_violations),
+                "geometry_violations": len(geometry_violations),
                 "attempt": audit.get("attempt"),
             },
         )

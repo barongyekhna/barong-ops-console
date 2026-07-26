@@ -395,6 +395,100 @@ def ai_image_violation(key, image_bytes: bytes, mime_type: str) -> list[str]:
     return out or ["image flagged (no detail returned)"]
 
 
+_GEOMETRY_AUDIT_INSTRUCTION = (
+    "You are a product-fidelity auditor for an e-commerce catalog. The FIRST "
+    "image is the TRUE reference photo of the product. The SECOND image is an "
+    "AI-rendered marketing image of the SAME product that will be published only "
+    "if the product's physical form was preserved. Compare ONLY the product "
+    "itself and flag the rendered image if the product's SHAPE, PROPORTIONS, "
+    "body or head/nozzle geometry, or the layout/number/position of its buttons, "
+    "ports, screen/display, hose, or controls is CLEARLY different from the "
+    "reference — i.e. the AI redrew, distorted, merged, added or removed physical "
+    "product parts. IGNORE every difference that is NOT the product's physical "
+    "form: colour and finish (colour variants are intentional), background, "
+    "scene, props, people, lighting, angle, framing, zoom, and whether water is "
+    "spraying. Only flag clear, obvious product distortion; when the product "
+    "looks like the same physical object, do NOT flag. "
+    'Return ONLY JSON: {"flagged": true|false, "findings": ["<what differs>"]}'
+)
+
+
+def ai_geometry_violation(
+    key,
+    reference_bytes: bytes,
+    reference_mime: str,
+    rendered_bytes: bytes,
+    rendered_mime: str,
+) -> list[str]:
+    """Vision compare rendered image vs reference; return product-distortion
+    findings (empty = faithful). Sends reference first, rendered second."""
+    ref_b64 = base64.b64encode(reference_bytes).decode("ascii")
+    ren_b64 = base64.b64encode(rendered_bytes).decode("ascii")
+    reply = _chat_completion(
+        key,
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _GEOMETRY_AUDIT_INSTRUCTION},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{reference_mime};base64,{ref_b64}"
+                        },
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{rendered_mime};base64,{ren_b64}"
+                        },
+                    },
+                ],
+            }
+        ],
+    )
+    parsed = _json_from_reply(reply)
+    if not parsed.get("flagged"):
+        return []
+    findings = parsed.get("findings")
+    out = (
+        [str(f)[:300] for f in findings if str(f).strip()]
+        if isinstance(findings, list)
+        else []
+    )
+    return out or ["product geometry differs from the reference photo"]
+
+
+def _reference_previews(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> tuple[dict[str, tuple[bytes, str]], tuple[bytes, str] | None]:
+    """Load reference product photos for the geometry check: a {variant_color:
+    (bytes, mime)} map plus a default. Reference assets are the original supplier
+    photos (asset_role='reference'), never pipeline renders."""
+    rows = db.scalars(
+        select(KProductKnowledgeMediaAsset).where(
+            KProductKnowledgeMediaAsset.product_id == product.id,
+            KProductKnowledgeMediaAsset.status == "available",
+            KProductKnowledgeMediaAsset.asset_type == "image",
+            KProductKnowledgeMediaAsset.asset_role == "reference",
+        )
+    ).all()
+    by_color: dict[str, tuple[bytes, str]] = {}
+    default: tuple[bytes, str] | None = None
+    for row in rows:
+        loaded = _asset_preview_bytes(row)
+        if loaded is None:
+            continue
+        if default is None:
+            default = loaded
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        color = str(meta.get("variant_color") or "").strip().lower()
+        if color:
+            by_color[color] = loaded
+    return by_color, default
+
+
 def _asset_preview_bytes(
     asset: KProductKnowledgeMediaAsset,
 ) -> tuple[bytes, str] | None:
@@ -438,7 +532,7 @@ def run_brand_audit(
 
     # 图像字节先全部载入内存 —— 后面的 AI 循环要几分钟，期间绝不能持有
     # 打开的 DB 事务（idle-in-transaction 8s 就会被杀）。
-    images_to_audit: list[tuple[str, Any, bytes, str]] = []
+    images_to_audit: list[tuple[str, Any, str, bytes, str]] = []
     for asset in _render_assets(db, product):
         meta = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
         position = meta.get("position")
@@ -447,7 +541,24 @@ def run_brand_audit(
             errors.append(f"image_load[{position}]: file missing")
             continue
         contents, mime = loaded
-        images_to_audit.append((str(asset.id), position, contents, mime))
+        variant_color = str(meta.get("variant_color") or "").strip().lower()
+        images_to_audit.append((str(asset.id), position, variant_color, contents, mime))
+
+    # 产品几何保真检查用的参考图(原厂图,非渲染图);缺失=跳过几何检查(fail-open)。
+    geometry_audit_on = os.getenv("K_GEOMETRY_AUDIT_ENABLED", "1").strip() not in (
+        "0",
+        "false",
+        "off",
+        "",
+    )
+    reference_by_color: dict[str, tuple[bytes, str]] = {}
+    reference_default: tuple[bytes, str] | None = None
+    if geometry_audit_on and images_to_audit:
+        try:
+            reference_by_color, reference_default = _reference_previews(db, product)
+        except Exception as exc:  # noqa: BLE001 - geometry check is best-effort
+            _LOGGER.warning("reference load for geometry audit failed %s: %s",
+                            product.id, exc)
 
     key = None
     try:
@@ -465,7 +576,8 @@ def run_brand_audit(
             _LOGGER.warning("text audit failed for %s: %s", product.id, exc)
             errors.append(f"text_audit: {str(exc)[:200]}")
 
-        for asset_id, position, contents, mime in images_to_audit:
+        for asset_id, position, variant_color, contents, mime in images_to_audit:
+            # 1) 品牌 + 半成品审查(fail-closed:失败记 errors 挡门)。
             try:
                 findings = ai_image_violation(key, contents, mime)
             except Exception as exc:  # noqa: BLE001
@@ -482,9 +594,35 @@ def run_brand_audit(
                     {
                         "asset_id": asset_id,
                         "position": position,
+                        "category": "brand",
                         "finding": "; ".join(findings)[:500],
                     }
                 )
+            # 2) 产品几何保真审查(fail-open:审查器出错不挡门,只有明确变形才挡)。
+            reference = reference_by_color.get(variant_color) or reference_default
+            if geometry_audit_on and reference is not None:
+                try:
+                    geo_findings = ai_geometry_violation(
+                        key, reference[0], reference[1], contents, mime
+                    )
+                except Exception as exc:  # noqa: BLE001 - quality gate, never fail-closed
+                    _LOGGER.warning(
+                        "geometry audit failed for %s pos %s: %s",
+                        product.id,
+                        position,
+                        exc,
+                    )
+                    geo_findings = []
+                if geo_findings:
+                    image_violations.append(
+                        {
+                            "asset_id": asset_id,
+                            "position": position,
+                            "category": "geometry",
+                            "finding": "产品几何与原图不符(AI画变形): "
+                            + "; ".join(geo_findings)[:400],
+                        }
+                    )
 
     # 去重文本违规
     seen = set()
