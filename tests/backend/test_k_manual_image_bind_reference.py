@@ -63,6 +63,31 @@ def test_add_image_accepts_uploaded_reference_asset() -> None:
     assert "reference_asset_id" in model
 
 
+def test_gallery_only_square_non_square_routes_to_description() -> None:
+    # 画廊铁律:画廊只放方形图,横版/竖版一律进描述内嵌(否则画廊缩略图被裁坏)。
+    from backend.app.modules.p_series.upload import assemble
+
+    src = inspect.getsource(assemble._image_assets)
+    # SELECT 必须取回像素尺寸才能判方形
+    assert "width, height" in src
+    # 非方形判定 + 主图/尺寸图恒留画廊
+    assert "non_square" in src
+    assert "is_main" in src
+    assert "is_dimension" in src
+
+
+def test_manual_upload_records_pixel_dimensions() -> None:
+    # 手动上传必须记 width/height,否则组包无从判断横竖版 → 画廊分流失效。
+    from backend.app.modules.k_series.product_knowledge import router
+
+    helper = inspect.getsource(router._image_dimensions)
+    assert "Image.open" in helper
+    upload = inspect.getsource(router.upload_product_media_asset)
+    assert "_image_dimensions(contents)" in upload
+    assert "width=img_width" in upload
+    assert "height=img_height" in upload
+
+
 def test_manual_reference_upload_reuses_existing_upload_endpoint() -> None:
     # req3:手动上传当参考图 = 走现有 upload_product_media_asset(asset_role=reference),
     # 参考图解析器 _original_photo_assets 接受任何非渲染 available 图(含手动 reference)。

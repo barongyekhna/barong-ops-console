@@ -1210,6 +1210,24 @@ def _validate_uploaded_image(contents: bytes, declared_mime: str | None) -> str:
     return detected_mime
 
 
+def _image_dimensions(contents: bytes) -> tuple[int | None, int | None]:
+    """Best-effort pixel dimensions. Metadata only — never fails an upload.
+
+    画廊/描述分流按纵横比走(画廊只放方形),所以手动上传也必须记下真实
+    像素尺寸,否则组包时无从判断该图是横版/竖版还是方形。
+    """
+    from io import BytesIO
+
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(contents)) as img:
+            return int(img.width), int(img.height)
+    except Exception:  # noqa: BLE001 - dimensions are metadata, not a gate
+        logger.exception("Failed to read uploaded image dimensions")
+        return None, None
+
+
 def _decode_image_base64(value: str) -> bytes:
     raw = value.strip()
     if raw.startswith("data:"):
@@ -4966,6 +4984,7 @@ def upload_product_media_asset(
             detail="Uploaded image file is empty.",
         )
     mime_type = _validate_uploaded_image(contents, file.content_type)
+    img_width, img_height = _image_dimensions(contents)
     object_key = f"images/{product.product_key}/{variant.variant_sku}/{uuid4()}-{filename}"
     storage_path = _write_k_media_file(object_key, contents)
     content_sha256 = hashlib.sha256(contents).hexdigest()
@@ -4997,6 +5016,8 @@ def upload_product_media_asset(
         file_url_placeholder=None,
         file_size=len(contents),
         mime_type=mime_type,
+        width=img_width,
+        height=img_height,
         source=IMAGE_SOURCE_MANUAL,
         metadata_json={
             "content_sha256": content_sha256,
@@ -5153,8 +5174,8 @@ def import_i_system_images(
             file_url_placeholder=None,
             file_size=len(contents),
             mime_type=mime_type,
-            width=item.width,
-            height=item.height,
+            width=item.width if item.width is not None else _image_dimensions(contents)[0],
+            height=item.height if item.height is not None else _image_dimensions(contents)[1],
             source=IMAGE_SOURCE_I_SYSTEM,
             metadata_json={
                 **_safe_media_metadata(item.metadata),

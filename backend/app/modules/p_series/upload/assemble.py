@@ -434,7 +434,7 @@ def _image_assets(
     # (metadata.upload_bound=true)。未绑定的手动图不取。
     rows = db.execute(
         text(
-            "SELECT id, asset_role, mime_type, metadata_json "
+            "SELECT id, asset_role, mime_type, width, height, metadata_json "
             "FROM k_product_knowledge_media_assets "
             "WHERE product_id = :p AND status = 'available' "
             "  AND asset_type = 'image' "
@@ -457,11 +457,25 @@ def _image_assets(
             )
             role_label = str(meta.get("role_label") or "").strip()
             is_dimension = role_label.lower() in {"dimension", "尺寸图"} or overlay_role == "dimension"
-            placement = (
-                "description"
-                if (meta.get("placement") == "description" and not is_dimension)
-                else "gallery"
+            is_main = r["asset_role"] == "main"
+            # 画廊铁律(2026-07-27 用户拍板):画廊只放方形图 —— 买家侧画廊缩略图
+            # 按方形裁切,横版/竖版混进去会被切坏。非方形图一律走描述内嵌(图文
+            # 并茂、不裁切)。主图与尺寸图恒留画廊;尺寸未知(width/height 为空)
+            # 则保持既有 placement 判定,不误伤。
+            width = r.get("width")
+            height = r.get("height")
+            non_square = bool(
+                width
+                and height
+                and abs(int(width) - int(height)) > max(int(width), int(height)) * 0.05
             )
+            explicit_description = meta.get("placement") == "description" and not is_dimension
+            if is_main or is_dimension:
+                placement = "gallery"
+            elif explicit_description or non_square:
+                placement = "description"
+            else:
+                placement = "gallery"
             position = int(meta.get("position") or 0)
             asset_id = str(r["id"])
             out.append(
