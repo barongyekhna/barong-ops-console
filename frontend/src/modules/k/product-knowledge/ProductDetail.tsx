@@ -38,8 +38,10 @@ import {
   mediaAssetFileUrl,
   mediaAssetThumbnailUrl,
   patchProductShipping,
+  setImageUploadBound,
   updateProduct,
   updateVariantPrices,
+  uploadProductMediaAsset,
 } from "./api";
 import { CopyArtDirection } from "./CopyArtDirection";
 import { ProductSpecsPanel } from "./ProductSpecsPanel";
@@ -499,6 +501,9 @@ export function ProductDetail({
   const [isDraggingMedia, setIsDraggingMedia] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  // 取图绑定的乐观状态覆盖 + 忙碌集合
+  const [boundOverrides, setBoundOverrides] = useState<Record<string, boolean>>({});
+  const [bindingBoundIds, setBindingBoundIds] = useState<string[]>([]);
   const [pendingMediaUploads, setPendingMediaUploads] = useState<PendingMediaUpload[]>(
     [],
   );
@@ -1038,6 +1043,72 @@ export function ProductDetail({
     event.preventDefault();
     setIsDraggingMedia(false);
     setUploadFiles(Array.from(event.dataTransfer.files));
+  }
+
+  const isUploadBound = (asset: KMediaAsset): boolean => {
+    if (asset.id in boundOverrides) {
+      return boundOverrides[asset.id];
+    }
+    const meta = asset.metadata as { upload_bound?: unknown } | null;
+    return meta?.upload_bound === true;
+  };
+
+  async function toggleUploadBound(asset: KMediaAsset) {
+    if (!product) {
+      return;
+    }
+    const next = !isUploadBound(asset);
+    setBindingBoundIds((ids) => [...ids, asset.id]);
+    setMediaError("");
+    try {
+      await setImageUploadBound(product.id, asset.id, next);
+      setBoundOverrides((current) => ({ ...current, [asset.id]: next }));
+    } catch (error) {
+      setMediaError(
+        error instanceof Error ? error.message : "绑定取图失败，请重试。",
+      );
+    } finally {
+      setBindingBoundIds((ids) => ids.filter((id) => id !== asset.id));
+    }
+  }
+
+  async function uploadAsReference() {
+    if (!product) {
+      return;
+    }
+    const currentProduct = product;
+    if (selectedMediaFiles.length === 0) {
+      setMediaError("请先选择本地图片文件。");
+      return;
+    }
+    if (!selectedVariantSku) {
+      setMediaError("请选择图片绑定变体。");
+      return;
+    }
+    setIsUploadingMedia(true);
+    setMediaError("");
+    try {
+      for (const file of selectedMediaFiles) {
+        await uploadProductMediaAsset(
+          currentProduct.id,
+          file,
+          selectedVariantSku,
+          "reference",
+        );
+      }
+      setSelectedMediaFiles([]);
+      if (mediaInputRef.current) {
+        mediaInputRef.current.value = "";
+      }
+      setImageSectionTouched(true);
+      await refreshProductDetail(currentProduct.id);
+    } catch (error) {
+      setMediaError(
+        error instanceof Error ? error.message : "参考图上传失败，请重试。",
+      );
+    } finally {
+      setIsUploadingMedia(false);
+    }
   }
 
   async function createMedia() {
@@ -2379,6 +2450,18 @@ export function ProductDetail({
               ? `上传 ${selectedMediaFiles.length} 张`
               : "上传"}
           </button>
+          {selectedMediaFiles.length > 0 ? (
+            <button
+              className="secondary-button"
+              disabled={isUploadingMedia || !selectedVariantSku}
+              onClick={() => void uploadAsReference()}
+              title="把选中的本地图上传为作图参考图（供 AI 渲染/重做时参考），不会直接上架取图"
+              type="button"
+            >
+              <ImagePlus aria-hidden="true" size={16} />
+              上传为参考图
+            </button>
+          ) : null}
         </div>
         {mediaError ? (
           <p className={styles.sellingPointsError}>{mediaError}</p>
@@ -2448,6 +2531,23 @@ export function ProductDetail({
                   <Send aria-hidden="true" size={15} />
                   绑定
                 </button>
+                {asset.source === "manual_upload_image" &&
+                asset.asset_role !== "reference" ? (
+                  <button
+                    className="secondary-button"
+                    disabled={bindingBoundIds.includes(asset.id)}
+                    onClick={() => void toggleUploadBound(asset)}
+                    title="绑定后这张手动图会随渲染图一起上架取图；不绑定则不取"
+                    type="button"
+                  >
+                    {bindingBoundIds.includes(asset.id) ? (
+                      <LoaderCircle aria-hidden="true" className="spin" size={15} />
+                    ) : (
+                      <Send aria-hidden="true" size={15} />
+                    )}
+                    {isUploadBound(asset) ? "已取图 · 点击移除" : "加入取图"}
+                  </button>
+                ) : null}
                 <button
                   className="secondary-button"
                   disabled={deletingMediaIds.includes(asset.id)}

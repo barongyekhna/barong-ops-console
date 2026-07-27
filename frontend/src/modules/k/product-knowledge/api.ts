@@ -699,6 +699,7 @@ export async function reworkRenderAsset(
     extra_prompt: string;
     use_current_as_reference: boolean;
     reference_image_url?: string | null;
+    reference_asset_id?: string | null;
   },
 ): Promise<RenderEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/render-rework`;
@@ -717,6 +718,7 @@ export async function addBriefImage(
     scene: string;
     placement: "gallery" | "description";
     reference_image_url?: string | null;
+    reference_asset_id?: string | null;
   },
 ): Promise<RenderEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/brief-images`;
@@ -727,6 +729,22 @@ export async function addBriefImage(
     method: "POST",
   });
   return readJson<RenderEnqueueResult>(response, path);
+}
+
+// 把一张手动上传的图标记「绑定(取图)」或取消。绑定的手动图会随渲染图进 P 上架包。
+export async function setImageUploadBound(
+  productId: string,
+  assetId: string,
+  bound: boolean,
+): Promise<KMediaAsset> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/images/${assetId}/upload-bound`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ bound }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<KMediaAsset>(response, path);
 }
 
 export type OverlayFieldOption = {
@@ -960,11 +978,12 @@ export async function uploadProductMediaAsset(
   productId: string,
   file: File,
   variantSku: string,
+  assetRole: string = "main",
 ): Promise<KMediaAsset> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("variant_sku", variantSku);
-  formData.append("asset_role", "main");
+  formData.append("asset_role", assetRole);
 
   const path = `${K_PRODUCTS_PATH}/${productId}/media/upload`;
   const response = await fetch(

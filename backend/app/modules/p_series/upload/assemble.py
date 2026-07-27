@@ -233,7 +233,8 @@ def _non_webp_image_blockers(db: Session, product: Any) -> list[str]:
                 "FROM k_product_knowledge_media_assets "
                 "WHERE product_id = :p AND asset_type = 'image' "
                 "  AND ( (status = 'available' "
-                "         AND metadata_json->>'render_pipeline' = 'k_auto_render') "
+                "         AND (metadata_json->>'render_pipeline' = 'k_auto_render' "
+                "              OR metadata_json->>'upload_bound' = 'true')) "
                 "     OR status = 'bound' ) "
                 "  AND mime_type != 'image/webp' "
                 "GROUP BY mime_type"
@@ -429,14 +430,17 @@ def _image_assets(
 ) -> list[ImageAsset]:
     """一次性作图的成品图（带 placement/SEO 四字段）；没有渲染图的老产品
     回退到 bound 媒资（纯 gallery，无 SEO 字段）。"""
+    # 取图 = K 渲染流水线成品图 OR 运营者手动上传后「点了绑定」的图
+    # (metadata.upload_bound=true)。未绑定的手动图不取。
     rows = db.execute(
         text(
             "SELECT id, asset_role, mime_type, metadata_json "
             "FROM k_product_knowledge_media_assets "
             "WHERE product_id = :p AND status = 'available' "
             "  AND asset_type = 'image' "
-            "  AND metadata_json->>'render_pipeline' = 'k_auto_render' "
-            "ORDER BY (metadata_json->>'position')::int ASC"
+            "  AND (metadata_json->>'render_pipeline' = 'k_auto_render' "
+            "       OR metadata_json->>'upload_bound' = 'true') "
+            "ORDER BY (metadata_json->>'position')::int ASC NULLS LAST"
         ),
         {"p": str(product.id)},
     ).mappings().all()

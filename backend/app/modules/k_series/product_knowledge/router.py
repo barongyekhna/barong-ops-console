@@ -5025,6 +5025,60 @@ def upload_product_media_asset(
     return _media_asset_read(row, product_ref=_product_public_ref(product))
 
 
+def _image_asset_for_product(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    asset_id: UUID,
+) -> KProductKnowledgeMediaAsset:
+    asset = (
+        db.query(KProductKnowledgeMediaAsset)
+        .filter(
+            KProductKnowledgeMediaAsset.id == asset_id,
+            KProductKnowledgeMediaAsset.product_id == product.id,
+        )
+        .one_or_none()
+    )
+    if asset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Image asset not found for this product.",
+        )
+    return asset
+
+
+class ImageUploadBoundRequest(BaseModel):
+    bound: bool = True
+
+
+@router.post(
+    "/products/{product_id}/images/{asset_id}/upload-bound",
+    response_model=MediaAssetRead,
+)
+def set_image_upload_bound(
+    product_id: UUID,
+    asset_id: UUID,
+    payload: ImageUploadBoundRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> MediaAssetRead:
+    """把一张手动上传的图标记「绑定(取图)」或取消。绑定的手动图会随 K 渲染图
+    一起进 P 上架包;未绑定的不取。对 K 渲染图无影响(它们始终取)。"""
+    del user
+    product = get_product(
+        db, product_id=product_id, scope_context=_scope_context(request)
+    )
+    asset = _image_asset_for_product(db, product=product, asset_id=asset_id)
+    meta = dict(asset.metadata_json) if isinstance(asset.metadata_json, dict) else {}
+    meta["upload_bound"] = bool(payload.bound)
+    asset.metadata_json = meta
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+    return _media_asset_read(asset, product_ref=_product_public_ref(product))
+
+
 @router.post(
     "/products/{product_id}/images/import-i-output",
     response_model=ISystemImageImportResponse,
@@ -5611,14 +5665,18 @@ class RenderReworkRequest(BaseModel):
     asset_id: UUID
     extra_prompt: str = ""
     use_current_as_reference: bool = False
-    # 可选:为这张图贴专属参考图(优先级最高;落地为 reference 媒资)
+    # 可选:为这张图贴专属参考图(优先级最高;落地为 reference 媒资)。
+    # 两种来源二选一:reference_image_url=贴链接;reference_asset_id=先上传本地
+    # 文件(asset_role=reference)拿到的资产 id。asset_id 优先。
     reference_image_url: str | None = Field(default=None, max_length=2000)
+    reference_asset_id: UUID | None = None
 
 
 class BriefImageAddRequest(BaseModel):
     scene: str = Field(min_length=1, max_length=2000)
     placement: Literal["gallery", "description"]
     reference_image_url: str | None = Field(default=None, max_length=2000)
+    reference_asset_id: UUID | None = None
 
 
 class BriefOverlayApplyRequest(BaseModel):
@@ -5643,7 +5701,12 @@ def product_knowledge_render_rework(
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
     reference_override = None
-    if payload.reference_image_url:
+    if payload.reference_asset_id is not None:
+        # 运营者先上传本地文件(asset_role=reference)拿到的资产,直接当参考图。
+        reference_override = _image_asset_for_product(
+            db, product=product, asset_id=payload.reference_asset_id
+        )
+    elif payload.reference_image_url:
         from .brief_operator_edits import store_operator_reference_asset
 
         try:
@@ -5710,7 +5773,13 @@ def product_knowledge_brief_image_add(
     )
 
     reference_asset_id: str | None = None
-    if payload.reference_image_url:
+    if payload.reference_asset_id is not None:
+        # 已上传的本地文件(asset_role=reference)直接当参考图。
+        asset = _image_asset_for_product(
+            db, product=product, asset_id=payload.reference_asset_id
+        )
+        reference_asset_id = str(asset.id)
+    elif payload.reference_image_url:
         try:
             asset = store_operator_reference_asset(
                 db,

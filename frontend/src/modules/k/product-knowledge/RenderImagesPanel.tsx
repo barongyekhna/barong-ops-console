@@ -15,6 +15,7 @@ import {
   addBriefImage,
   applyBriefOverlay,
   getOverlayFields,
+  getProduct,
   getRenderAssets,
   getRenderJobs,
   mediaAssetPreviewUrl,
@@ -23,6 +24,7 @@ import {
   retryRenderJobs,
   reworkRenderAsset,
   saveRenderAssets,
+  uploadProductMediaAsset,
   type OverlayFieldOption,
   type RenderAsset,
   type RenderJobsResult,
@@ -64,12 +66,33 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
   const [reworkPrompt, setReworkPrompt] = useState("");
   const [reworkUseCurrent, setReworkUseCurrent] = useState(true);
   const [reworkReferenceUrl, setReworkReferenceUrl] = useState("");
+  const [reworkReferenceAssetId, setReworkReferenceAssetId] = useState<string | null>(
+    null,
+  );
+  const [reworkReferenceName, setReworkReferenceName] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [addScene, setAddScene] = useState("");
   const [addPlacement, setAddPlacement] = useState<"gallery" | "description">(
     "gallery",
   );
   const [addReferenceUrl, setAddReferenceUrl] = useState("");
+  const [addReferenceAssetId, setAddReferenceAssetId] = useState<string | null>(null);
+  const [addReferenceName, setAddReferenceName] = useState("");
+  const [uploadingRef, setUploadingRef] = useState(false);
+
+  // 上传本地文件作为参考图 → 返回 reference 资产 id(参考图是产品级,任取一个变体挂载)
+  const uploadReferenceFile = async (file: File): Promise<string> => {
+    const detail = await getProduct(productId);
+    const variantSku =
+      (detail as { variants?: { variant_sku?: string | null }[] }).variants?.find(
+        (v) => v.variant_sku,
+      )?.variant_sku ?? null;
+    if (!variantSku) {
+      throw new Error("产品没有可挂载的变体,无法上传参考图。");
+    }
+    const asset = await uploadProductMediaAsset(productId, file, variantSku, "reference");
+    return asset.id;
+  };
   const [overlayAsset, setOverlayAsset] = useState<RenderAsset | null>(null);
   const [overlayFields, setOverlayFields] = useState<OverlayFieldOption[]>([]);
   const [overlayPicked, setOverlayPicked] = useState<string[]>([]);
@@ -175,6 +198,7 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
         extra_prompt: reworkPrompt,
         use_current_as_reference: reworkUseCurrent,
         reference_image_url: reworkReferenceUrl.trim() || null,
+        reference_asset_id: reworkReferenceAssetId,
       });
       setNotice(
         `第 ${target.position} 张已排队重做（${
@@ -184,6 +208,8 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
       setReworkAsset(null);
       setReworkPrompt("");
       setReworkReferenceUrl("");
+      setReworkReferenceAssetId(null);
+      setReworkReferenceName("");
       setPreviewAsset(null);
     }, "重做提交失败，请重试。");
   };
@@ -194,6 +220,7 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
         scene: addScene.trim(),
         placement: addPlacement,
         reference_image_url: addReferenceUrl.trim() || null,
+        reference_asset_id: addReferenceAssetId,
       });
       setNotice(
         `已把这张图追加进作图方案（${
@@ -203,7 +230,34 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
       setAddOpen(false);
       setAddScene("");
       setAddReferenceUrl("");
+      setAddReferenceAssetId(null);
+      setAddReferenceName("");
     }, "新增图片失败，请重试。");
+  };
+
+  const handleReferenceFilePick = async (
+    file: File | undefined,
+    which: "rework" | "add",
+  ) => {
+    if (!file) {
+      return;
+    }
+    setUploadingRef(true);
+    setError(null);
+    try {
+      const assetId = await uploadReferenceFile(file);
+      if (which === "rework") {
+        setReworkReferenceAssetId(assetId);
+        setReworkReferenceName(file.name);
+      } else {
+        setAddReferenceAssetId(assetId);
+        setAddReferenceName(file.name);
+      }
+    } catch (uploadError) {
+      setError(errorMessage(uploadError, "参考图上传失败，请重试。"));
+    } finally {
+      setUploadingRef(false);
+    }
   };
 
   const openOverlayDialog = (asset: RenderAsset) => {
@@ -283,7 +337,11 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
           <button
             className="secondary-button"
             disabled={busy || active || !hasBrief}
-            onClick={() => setAddOpen(true)}
+            onClick={() => {
+              setAddReferenceAssetId(null);
+              setAddReferenceName("");
+              setAddOpen(true);
+            }}
             title={
               hasBrief
                 ? "在 AI 方案之外追加一张图（可贴专属参考图，手选放轮播还是描述）"
@@ -483,6 +541,8 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
                   setReworkAsset(previewAsset);
                   setReworkPrompt("");
                   setReworkReferenceUrl("");
+                  setReworkReferenceAssetId(null);
+                  setReworkReferenceName("");
                   setReworkUseCurrent(true);
                 }}
                 type="button"
@@ -549,9 +609,25 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
               <input
                 inputMode="url"
                 onChange={(event) => setReworkReferenceUrl(event.target.value)}
-                placeholder="1688 图片右键「复制图片地址」贴这里；留空则按下面二选一"
+                placeholder="贴图片链接（1688/Amazon 等）；或用下面「上传本地图」"
                 value={reworkReferenceUrl}
               />
+            </label>
+            <label className={styles.field}>
+              <span>或 上传本地图片作参考图（可选）</span>
+              <input
+                accept="image/*"
+                disabled={uploadingRef}
+                onChange={(event) =>
+                  void handleReferenceFilePick(event.target.files?.[0], "rework")
+                }
+                type="file"
+              />
+              {uploadingRef ? (
+                <small>上传中…</small>
+              ) : reworkReferenceAssetId ? (
+                <small>已上传参考图：{reworkReferenceName}（将优先使用）</small>
+              ) : null}
             </label>
             <div className={styles.renderReworkChoices}>
               <label>
@@ -582,7 +658,13 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
             <div className={styles.renderLightboxActions}>
               <button
                 className="primary-button"
-                disabled={busy || (!reworkPrompt.trim() && !reworkReferenceUrl.trim())}
+                disabled={
+                  busy ||
+                  uploadingRef ||
+                  (!reworkPrompt.trim() &&
+                    !reworkReferenceUrl.trim() &&
+                    !reworkReferenceAssetId)
+                }
                 onClick={submitRework}
                 type="button"
               >
@@ -636,9 +718,25 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
               <input
                 inputMode="url"
                 onChange={(event) => setAddReferenceUrl(event.target.value)}
-                placeholder="留空则用产品默认参考图"
+                placeholder="贴图片链接；或用下面「上传本地图」；留空则用产品默认参考图"
                 value={addReferenceUrl}
               />
+            </label>
+            <label className={styles.field}>
+              <span>或 上传本地图片作参考图（可选）</span>
+              <input
+                accept="image/*"
+                disabled={uploadingRef}
+                onChange={(event) =>
+                  void handleReferenceFilePick(event.target.files?.[0], "add")
+                }
+                type="file"
+              />
+              {uploadingRef ? (
+                <small>上传中…</small>
+              ) : addReferenceAssetId ? (
+                <small>已上传参考图：{addReferenceName}（将优先使用）</small>
+              ) : null}
             </label>
             <div className={styles.renderReworkChoices}>
               <label>
