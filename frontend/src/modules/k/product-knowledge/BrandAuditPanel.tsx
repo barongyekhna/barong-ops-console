@@ -1,10 +1,38 @@
 "use client";
 
 import { LoaderCircle, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { getGenerationJobs, getProduct, runBrandAudit } from "./api";
+import {
+  getGenerationJobs,
+  getProduct,
+  ignoreBrandFinding,
+  runBrandAudit,
+} from "./api";
 import styles from "./ProductKnowledge.module.css";
+
+// 与后端 brand_guard.brand_finding_fingerprint 保持一致
+function textFingerprint(surface?: string, term?: string): string {
+  const s = (surface ?? "").trim().toLowerCase();
+  const t = (term ?? "").trim().toLowerCase().split(/\s+/).join(" ");
+  return `text::${s}::${t}`;
+}
+function imageFingerprint(position?: number, category?: string): string {
+  const c = (category ?? "").trim().toLowerCase();
+  return `image::${position}::${c}`;
+}
+
+const LINK_BTN_STYLE: CSSProperties = {
+  marginLeft: 6,
+  background: "none",
+  border: "none",
+  color: "#1a73e8",
+  cursor: "pointer",
+  padding: 0,
+  font: "inherit",
+  textDecoration: "underline",
+};
 
 type BrandAuditPanelProps = {
   productId: string;
@@ -19,6 +47,7 @@ type TextViolation = {
 type ImageViolation = {
   asset_id?: string;
   position?: number;
+  category?: string;
   finding?: string;
 };
 
@@ -29,6 +58,7 @@ type BrandAudit = {
   blacklist_terms?: string[];
   text_violations?: TextViolation[];
   image_violations?: ImageViolation[];
+  ignored_findings?: string[];
   errors?: string[];
 };
 
@@ -42,9 +72,32 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
   const [audit, setAudit] = useState<BrandAudit | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [busyFp, setBusyFp] = useState<string | null>(null);
 
   const mounted = useRef(true);
   const timer = useRef<number | null>(null);
+
+  const handleIgnore = async (
+    fingerprint: string,
+    payload: Parameters<typeof ignoreBrandFinding>[1],
+  ) => {
+    setBusyFp(fingerprint);
+    setError(null);
+    try {
+      const result = await ignoreBrandFinding(productId, payload);
+      if (mounted.current) {
+        setAudit(result.brand_audit_json as BrandAudit);
+      }
+    } catch (ignoreError) {
+      if (mounted.current) {
+        setError(errorMessage(ignoreError, "放行/撤销失败，请重试。"));
+      }
+    } finally {
+      if (mounted.current) {
+        setBusyFp(null);
+      }
+    }
+  };
 
   const clearTimer = useCallback(() => {
     if (timer.current !== null) {
@@ -118,6 +171,7 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
   const textViolations = audit?.text_violations ?? [];
   const imageViolations = audit?.image_violations ?? [];
   const auditErrors = audit?.errors ?? [];
+  const ignoredSet = new Set(audit?.ignored_findings ?? []);
   const hasProblems =
     textViolations.length > 0 || imageViolations.length > 0 || auditErrors.length > 0;
 
@@ -186,19 +240,59 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
           </p>
           {hasProblems ? (
             <ul className={styles.copyReviewHint} style={{ margin: 0, paddingLeft: 18 }}>
-              {textViolations.map((violation, index) => (
-                <li key={`t${index}`}>
-                  文字：<strong>{violation.term}</strong>（{violation.surface}）
-                  {violation.evidence ? ` —— “…${violation.evidence}…”` : null}
-                </li>
-              ))}
-              {imageViolations.map((violation, index) => (
-                <li key={`i${index}`}>
-                  图像：第 {violation.position} 张 —— {violation.finding}
-                </li>
-              ))}
+              {textViolations.map((violation, index) => {
+                const fp = textFingerprint(violation.surface, violation.term);
+                const ignored = ignoredSet.has(fp);
+                return (
+                  <li key={`t${index}`} style={ignored ? { opacity: 0.55 } : undefined}>
+                    文字：<strong>{violation.term}</strong>（{violation.surface}）
+                    {violation.evidence ? ` —— “…${violation.evidence}…”` : null}
+                    {ignored ? <em> · 已放行</em> : null}{" "}
+                    <button
+                      type="button"
+                      style={LINK_BTN_STYLE}
+                      disabled={busyFp === fp}
+                      onClick={() =>
+                        void handleIgnore(fp, {
+                          kind: "text",
+                          ignored: !ignored,
+                          surface: violation.surface,
+                          term: violation.term,
+                        })
+                      }
+                    >
+                      {busyFp === fp ? "…" : ignored ? "撤销放行" : "忽略（放行）"}
+                    </button>
+                  </li>
+                );
+              })}
+              {imageViolations.map((violation, index) => {
+                const fp = imageFingerprint(violation.position, violation.category);
+                const ignored = ignoredSet.has(fp);
+                return (
+                  <li key={`i${index}`} style={ignored ? { opacity: 0.55 } : undefined}>
+                    图像：第 {violation.position} 张 —— {violation.finding}
+                    {ignored ? <em> · 已放行</em> : null}{" "}
+                    <button
+                      type="button"
+                      style={LINK_BTN_STYLE}
+                      disabled={busyFp === fp}
+                      onClick={() =>
+                        void handleIgnore(fp, {
+                          kind: "image",
+                          ignored: !ignored,
+                          position: violation.position,
+                          category: violation.category,
+                        })
+                      }
+                    >
+                      {busyFp === fp ? "…" : ignored ? "撤销放行" : "忽略（放行）"}
+                    </button>
+                  </li>
+                );
+              })}
               {auditErrors.map((item, index) => (
-                <li key={`e${index}`}>审查步骤失败（按未通过处理）：{item}</li>
+                <li key={`e${index}`}>审查步骤失败（不可忽略，fail-closed）：{item}</li>
               ))}
             </ul>
           ) : null}

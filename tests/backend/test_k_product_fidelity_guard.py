@@ -81,11 +81,13 @@ def test_run_brand_audit_wires_geometry_check_fail_open() -> None:
 
 
 def test_geometry_violation_gates_publish_via_clean_flag() -> None:
-    # clean 由 image_violations 决定;几何违规进 image_violations → clean=False → 挡门
+    # 几何违规进 image_violations → 未被忽略则计入 unresolved → clean=False → 挡门。
+    # (clean 计算已升级为按"排除忽略后仍未解决"算,见 test_k_brand_audit_ignore。)
     from backend.app.modules.k_series.product_knowledge import brand_guard
 
     src = inspect.getsource(brand_guard.run_brand_audit)
-    assert '"clean": not deduped and not image_violations and not errors' in src
+    assert '"clean": not unresolved and not errors' in src
+    assert "_audit_violation_fingerprints(deduped, image_violations)" in src
 
 
 def test_geometry_violations_do_not_trigger_auto_rerender() -> None:

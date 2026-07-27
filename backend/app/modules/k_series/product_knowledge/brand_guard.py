@@ -59,6 +59,30 @@ SITE_BRAND_WHITELIST = {
     "yekhna",
 }
 
+# 通用技术/接口/标准/评级/材料词——永远不是"品牌"。AI 文本审查偶尔把它们误判成
+# 商标(如 USB-C 被当品牌名挡上架),这里兜底过滤,避免误报。运营者仍可对个别
+# 判定用「忽略」放行(ignored_findings),两条路互补。
+_GENERIC_TERM_WHITELIST = {
+    "usb", "usb-c", "usb c", "usbc", "usb-a", "usb a", "type-c", "type c",
+    "usb type-c", "usb type c", "micro-usb", "micro usb", "usb-micro", "usb 2.0",
+    "usb 3.0", "usb-c cable", "usb c cable",
+    "bluetooth", "wi-fi", "wifi",
+    "led", "lcd", "oled",
+    "ipx4", "ipx5", "ipx6", "ipx7", "ipx8", "ip65", "ip66", "ip67", "ip68",
+    "li-ion", "lithium-ion", "lithium ion", "mah", "wh",
+    "qi", "pd", "quick charge",
+    "abs", "tpu", "tpe", "pvc", "eva", "silicone",
+}
+
+
+def _is_generic_non_brand(term: str) -> bool:
+    """通用技术/接口/标准/材料词,永不视作第三方品牌。"""
+    normalized = " ".join(str(term or "").strip().lower().split())
+    return (
+        normalized in SITE_BRAND_WHITELIST
+        or normalized in _GENERIC_TERM_WHITELIST
+    )
+
 _AUDIT_TIMEOUT_SECONDS = 150.0
 _VISION_DETAIL_MAX_SIDE = 1280  # 用 preview 尺寸足够认 logo
 
@@ -308,6 +332,10 @@ _TEXT_AUDIT_INSTRUCTION = (
     "occurrence of a third-party brand name, trademark, manufacturer name, or "
     "model-series name that implies a brand (e.g. 'ididi', 'Lululemon', "
     "'Gruper'). Generic product words (yoga mat, stainless steel) are fine. "
+    "Do NOT flag generic technical, connector, interface, standard, rating, or "
+    "material terms — e.g. USB, USB-C, Type-C, Bluetooth, Wi-Fi, LED, LCD, IPX8, "
+    "IP67, Li-ion, mAh, ABS, TPU, silicone — these are industry-standard terms, "
+    "not brands. "
     f'"{SITE_BRAND}" and its variants are the site\'s own brand and are ALLOWED. '
     "Return ONLY JSON: {\"violations\": [{\"surface\": \"<surface id>\", "
     "\"term\": \"<the brand term>\", \"evidence\": \"<short quote>\"}]} — empty "
@@ -338,7 +366,7 @@ def ai_text_violations(
         if not isinstance(item, dict):
             continue
         term = str(item.get("term") or "").strip()
-        if term.lower() in SITE_BRAND_WHITELIST:
+        if _is_generic_non_brand(term):
             continue
         out.append(
             {
@@ -509,6 +537,69 @@ def _asset_preview_bytes(
     return None
 
 
+# --- 忽略/人工放行 --------------------------------------------------------
+
+def brand_finding_fingerprint(kind: str, finding: dict[str, Any]) -> str:
+    """一条审查发现的稳定指纹,用于「忽略」放行(跨审查重跑保持一致)。
+    text=surface+term;image=position+category(几何/品牌)。"""
+    if kind == "text":
+        surface = str(finding.get("surface") or "").strip().lower()
+        term = " ".join(str(finding.get("term") or "").strip().lower().split())
+        return f"text::{surface}::{term}"
+    if kind == "image":
+        category = str(finding.get("category") or "").strip().lower()
+        return f"image::{finding.get('position')}::{category}"
+    return f"{kind}::{finding}"
+
+
+def _audit_violation_fingerprints(
+    text_violations: list[dict[str, Any]],
+    image_violations: list[dict[str, Any]],
+) -> list[str]:
+    return [brand_finding_fingerprint("text", v) for v in text_violations] + [
+        brand_finding_fingerprint("image", v) for v in image_violations
+    ]
+
+
+def set_brand_finding_ignored(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    fingerprint: str,
+    ignored: bool,
+) -> dict[str, Any]:
+    """把某条审查发现标记为「忽略」(人工放行)或撤销,并按忽略后重算 clean。
+    忽略清单存在 brand_audit_json.ignored_findings,审查重跑会结转(见 run_brand_audit)。
+    调用方 commit。"""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    audit = (
+        dict(product.brand_audit_json)
+        if isinstance(product.brand_audit_json, dict)
+        else {}
+    )
+    ignore_set = set(audit.get("ignored_findings") or [])
+    if ignored:
+        ignore_set.add(fingerprint)
+    else:
+        ignore_set.discard(fingerprint)
+    audit["ignored_findings"] = sorted(ignore_set)
+    unresolved = [
+        fp
+        for fp in _audit_violation_fingerprints(
+            audit.get("text_violations") or [],
+            audit.get("image_violations") or [],
+        )
+        if fp not in ignore_set
+    ]
+    audit["clean"] = not unresolved and not (audit.get("errors"))
+    audit["unresolved_count"] = len(unresolved)
+    product.brand_audit_json = audit
+    flag_modified(product, "brand_audit_json")
+    db.add(product)
+    return audit
+
+
 # --- 主入口 -------------------------------------------------------------------
 
 def run_brand_audit(
@@ -521,7 +612,17 @@ def run_brand_audit(
     """跑一次完整审查并把结果写到 product.brand_audit_json（调用方 commit）。
 
     fail-closed：AI 调用失败会记进 errors 且 clean=False，门禁照样拦。
+
+    运营者「忽略」放行的发现(brand_audit_json.ignored_findings)会结转,重跑后仍
+    生效——被忽略的 text/image 违规不再计入 clean。errors 永不可忽略。
     """
+    prev_audit = (
+        product.brand_audit_json
+        if isinstance(product.brand_audit_json, dict)
+        else {}
+    )
+    ignored_findings = list(prev_audit.get("ignored_findings") or [])
+
     surfaces = collect_text_surfaces(db, product)
     terms = _normalized_terms(product)
     fingerprint = brand_fingerprint(db, product)
@@ -634,8 +735,14 @@ def run_brand_audit(
         seen.add(marker)
         deduped.append(violation)
 
+    ignore_set = set(ignored_findings)
+    unresolved = [
+        fp
+        for fp in _audit_violation_fingerprints(deduped, image_violations)
+        if fp not in ignore_set
+    ]
     audit = {
-        "clean": not deduped and not image_violations and not errors,
+        "clean": not unresolved and not errors,
         "fingerprint": fingerprint,
         "audited_at": datetime.now(UTC).isoformat(),
         "attempt": attempt,
@@ -643,6 +750,8 @@ def run_brand_audit(
         "blacklist_terms": terms,
         "text_violations": deduped,
         "image_violations": image_violations,
+        "ignored_findings": ignored_findings,
+        "unresolved_count": len(unresolved),
         "errors": errors,
     }
     fresh = db.get(KProductKnowledgeProduct, product.id)
@@ -663,13 +772,26 @@ def audit_gate_blockers(
         return ["品牌审查未跑：先在产品页跑「品牌审查」并通过"]
     if audit.get("fingerprint") != brand_fingerprint(db, product):
         return ["内容在品牌审查后有改动：请重新跑「品牌审查」"]
-    if audit.get("clean"):
+    # 忽略清单权威:被人工放行的发现不再阻塞上架。errors 永不可忽略(fail-closed)。
+    ignore_set = set(audit.get("ignored_findings") or [])
+    text_unresolved = [
+        v
+        for v in (audit.get("text_violations") or [])
+        if brand_finding_fingerprint("text", v) not in ignore_set
+    ]
+    image_unresolved = [
+        v
+        for v in (audit.get("image_violations") or [])
+        if brand_finding_fingerprint("image", v) not in ignore_set
+    ]
+    errors = audit.get("errors") or []
+    if not text_unresolved and not image_unresolved and not errors:
         return []
     problems = []
-    for violation in (audit.get("text_violations") or [])[:5]:
+    for violation in text_unresolved[:5]:
         problems.append(f"{violation.get('term')}({violation.get('surface')})")
-    for violation in (audit.get("image_violations") or [])[:5]:
+    for violation in image_unresolved[:5]:
         problems.append(f"第{violation.get('position')}张图:{violation.get('finding', '')[:60]}")
-    if audit.get("errors"):
-        problems.append(f"审查有 {len(audit['errors'])} 步失败(fail-closed)")
+    if errors:
+        problems.append(f"审查有 {len(errors)} 步失败(fail-closed)")
     return ["品牌审查未通过：" + "；".join(problems)]

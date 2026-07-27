@@ -5327,6 +5327,46 @@ def product_knowledge_brand_audit(
     return _enqueue_generation([product_id], "brand_audit", request, db, user)
 
 
+class BrandAuditIgnoreRequest(BaseModel):
+    kind: str = Field(pattern="^(text|image)$")
+    ignored: bool = True
+    surface: str | None = None
+    term: str | None = None
+    position: int | None = None
+    category: str | None = None
+
+
+@router.post("/products/{product_id}/brand-audit/ignore")
+def product_knowledge_brand_audit_ignore(
+    product_id: UUID,
+    payload: BrandAuditIgnoreRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> dict[str, Any]:
+    """人工放行/撤销一条品牌审查发现(误报或已人工确认保留)。被忽略的发现不再
+    阻塞上架;errors 永不可忽略。审查重跑会结转忽略清单。"""
+    from .brand_guard import brand_finding_fingerprint, set_brand_finding_ignored
+
+    product = get_product(
+        db, product_id=product_id, scope_context=_scope_context(request)
+    )
+    fingerprint = brand_finding_fingerprint(
+        payload.kind,
+        {
+            "surface": payload.surface,
+            "term": payload.term,
+            "position": payload.position,
+            "category": payload.category,
+        },
+    )
+    audit = set_brand_finding_ignored(
+        db, product=product, fingerprint=fingerprint, ignored=payload.ignored
+    )
+    db.commit()
+    return {"brand_audit_json": audit, "fingerprint": fingerprint}
+
+
 @router.post(
     "/products/generate-copy/batch",
     response_model=GenerationEnqueueResponse,

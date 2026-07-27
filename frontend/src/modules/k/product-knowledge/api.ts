@@ -629,6 +629,32 @@ export function runBrandAudit(productId: string): Promise<GenerationEnqueueResul
   );
 }
 
+export type BrandFindingIgnore = {
+  kind: "text" | "image";
+  ignored: boolean;
+  surface?: string | null;
+  term?: string | null;
+  position?: number | null;
+  category?: string | null;
+};
+
+export async function ignoreBrandFinding(
+  productId: string,
+  payload: BrandFindingIgnore,
+): Promise<{ brand_audit_json: unknown; fingerprint: string }> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/brand-audit/ignore`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<{ brand_audit_json: unknown; fingerprint: string }>(
+    response,
+    path,
+  );
+}
+
 export type RenderAsset = {
   asset_id: string;
   position: number;
