@@ -7,6 +7,7 @@ import pytest
 
 from backend.app.modules.k_series.product_knowledge.faq_research import (
     build_faq_research,
+    is_faq_question_candidate,
     validate_generated_faq,
 )
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
@@ -305,3 +306,46 @@ def test_malformed_evidence_refs_are_dropped(malformed_refs: Any) -> None:
             "reason": "malformed_evidence_refs",
         }
     ]
+
+
+def test_malfunction_questions_are_rejected_from_faq_candidates() -> None:
+    # Device-malfunction / repair questions are post-purchase troubleshooting, not
+    # buyer intent, and invite generic answers that can contradict the product
+    # (the submersible-pump "check the intake" bug). They must never be candidates.
+    for question in (
+        "Why does my shower pump keep running but no leak?",
+        "Why is my camping shower not working?",
+        "Why won't my shower pump turn on?",
+        "Why is my pump leaking?",
+        "Why does my battery keep draining?",
+        "How do I fix a portable shower pump?",
+        "How to reset the shower pump?",
+    ):
+        assert is_faq_question_candidate(question) is False, question
+
+
+def test_genuine_buyer_questions_survive_the_malfunction_filter() -> None:
+    for question in (
+        "How does this portable camping shower pump draw water?",
+        "Does this portable camping shower heat the water?",
+        "How long does the battery last, and how do you recharge it?",
+        "Can you adjust the water flow and pause it between rinses?",
+        "Is the pump waterproof enough to sit in the water?",
+        "What is the best portable shower for camping?",
+        "Can I use it with a solar panel?",
+        "How do I clean the shower head?",
+    ):
+        assert is_faq_question_candidate(question) is True, question
+
+
+def test_faq_prompt_grounds_answers_in_product_mechanism() -> None:
+    from backend.app.modules.k_series.product_knowledge.prompt_skills import (
+        marketing_copy_instruction,
+    )
+
+    prompt = marketing_copy_instruction(channel="dtc")
+    # Answers must ground in THIS product's facts, never generic snippet guidance
+    # that could contradict the real mechanism; unanswerable clusters are dropped.
+    assert "does NOT supply the answer" in prompt
+    assert "THIS product's real mechanism" in prompt
+    assert "DROP that cluster" in prompt

@@ -49,6 +49,23 @@ _ARTICLE_OR_LISTICLE_TITLE = re.compile(
     r"|\bput\s+to\s+the\s+test\b)",
     re.IGNORECASE,
 )
+# Device-malfunction / repair questions ("why does my pump keep running", "how
+# to fix", "won't turn on") are post-purchase troubleshooting, not pre-purchase
+# buyer intent, and they invite generic category answers that can contradict how
+# THIS product actually works (a submersible pump has no intake hose to "check").
+# Reject them from FAQ candidates so the answer generator is never handed a
+# malfunction frame it can only resolve with unsafe generic guidance.
+_MALFUNCTION_QUESTION = re.compile(
+    r"\bhow (?:do|can) (?:i|you) (?:fix|repair|reset|troubleshoot)\b"
+    r"|\bhow to (?:fix|repair|reset|troubleshoot)\b"
+    r"|\bwhy (?:does|is|are|do|did|won'?t|wo n'?t|isn'?t|does\s?n'?t)\b.{0,40}?"
+    r"\b(?:keep|keeps|kept|stop\w*|won'?t|wo n'?t|not work\w*|leak\w*|broken|"
+    r"beep\w*|shut\w*|dying|drain\w*|overheat\w*|not charg\w*|turn\w*|start\w*)\b"
+    r"|\b(?:not working|stopped working|won'?t turn on|wo n'?t turn on|won'?t charge|"
+    r"not charging|no power|keeps? (?:running|leaking|beeping|shutting|turning off)|"
+    r"troubleshoot\w*|malfunction\w*)\b",
+    re.IGNORECASE,
+)
 # Keep this list deliberately data-like and easy to extend when brand review
 # discovers another competitor leaking out of Serper.  Only distinctive third-
 # party names belong here; product/material words would create false positives.
@@ -494,6 +511,7 @@ def is_faq_question_candidate(value: Any) -> bool:
         and _QUESTION_START.match(question)
         and _QUESTION_END.search(question)
         and not _ARTICLE_OR_LISTICLE_TITLE.search(question)
+        and not _MALFUNCTION_QUESTION.search(question)
         and not _looks_like_third_party_brand_question(question)
     )
 
