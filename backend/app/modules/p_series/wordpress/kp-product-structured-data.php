@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Barong K Product Structured Data
  * Description: Projects publishable K data into the active Woo/Yoast Product graph.
- * Version: 1.2.0
+ * Version: 1.3.0
  *
  * Deploy as a WordPress must-use plugin. Yoast WooCommerce SEO owns the live
  * Product graph on the production site, while WooCommerce core remains a
@@ -205,6 +205,54 @@ function barong_k_schema_availability( $product ) {
 }
 
 /**
+ * Domestic (US) OfferShippingDetails, mirroring the public Shipping Policy page
+ * word-for-word: $2.99 flat rate, 3–5 business-day handling, 8–12 business-day
+ * transit. Kept as constants so the structured data can never drift above what
+ * the policy page promises — the exact GMC misrepresentation trap this store was
+ * suspended for. If the Shipping Policy page changes, update these together.
+ *
+ * Free-over-$100 is deliberately not encoded: the honest base rate is $2.99, and
+ * a conditional-free claim is a promotion, not a guaranteed per-offer rate.
+ *
+ * Returns are intentionally NOT emitted as an offer-level MerchantReturnPolicy:
+ * the real policy is a 30-day guarantee for defects / transit damage / wrong
+ * items only and explicitly excludes change-of-mind returns, which does not map
+ * to a truthful returnPolicyCategory. The Organization-level merchantReturnLink
+ * already points buyers and Google to the full policy page.
+ *
+ * @return array<string, mixed>
+ */
+function barong_k_schema_shipping_details() {
+	return array(
+		'@type'               => 'OfferShippingDetails',
+		'shippingRate'        => array(
+			'@type'    => 'MonetaryAmount',
+			'value'    => '2.99',
+			'currency' => 'USD',
+		),
+		'shippingDestination' => array(
+			'@type'          => 'DefinedRegion',
+			'addressCountry' => 'US',
+		),
+		'deliveryTime'        => array(
+			'@type'        => 'ShippingDeliveryTime',
+			'handlingTime' => array(
+				'@type'    => 'QuantitativeValue',
+				'minValue' => 3,
+				'maxValue' => 5,
+				'unitCode' => 'DAY',
+			),
+			'transitTime'  => array(
+				'@type'    => 'QuantitativeValue',
+				'minValue' => 8,
+				'maxValue' => 12,
+				'unitCode' => 'DAY',
+			),
+		),
+	);
+}
+
+/**
  * Fill one Offer with fields required by the Product rich-result contract.
  *
  * @param array<string, mixed> $offer Existing offer data.
@@ -232,6 +280,7 @@ function barong_k_schema_offer( $offer, $product ) {
 	$offer['priceValidUntil'] = barong_k_schema_price_valid_until( $product );
 	$offer['availability']    = barong_k_schema_availability( $product );
 	$offer['itemCondition']   = 'https://schema.org/NewCondition';
+	$offer['shippingDetails'] = barong_k_schema_shipping_details();
 	return $offer;
 }
 
@@ -336,6 +385,15 @@ function barong_k_yoast_offer_schema( $offer, $variation, $product ) {
  * missing last mile: without it the meta was authored but never emitted.
  */
 function barong_k_faq_schema_render() {
+	// Idempotency guard: emit the FAQPage graph at most once per request. The
+	// live page was observed carrying two byte-identical FAQPage blocks because
+	// this render ran twice in one footer pass; a static latch collapses any
+	// repeat call (duplicate hook registration, second plugin copy, or a theme
+	// that fires wp_footer more than once) to a single emission.
+	static $already_rendered = false;
+	if ( $already_rendered ) {
+		return;
+	}
 	if ( ! is_singular( 'product' ) ) {
 		return;
 	}
@@ -377,6 +435,7 @@ function barong_k_faq_schema_render() {
 	if ( empty( $entities ) ) {
 		return;
 	}
+	$already_rendered = true;
 	$schema = array(
 		'@context'   => 'https://schema.org',
 		'@type'      => 'FAQPage',
