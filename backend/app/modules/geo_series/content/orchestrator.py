@@ -433,7 +433,18 @@ class GeoContentOrchestrator:
             "answer_blocks": revised.get("answer_blocks") or [],
         }
         if isinstance(revised.get("seo"), dict):
-            item.seo_json = revised["seo"]
+            new_seo = dict(revised["seo"])
+            # 死规矩(2026-07-29 实地踩到): 已经发布过的文章,slug 锁死。
+            # 重写时模型改了 seo.url_slug,发布流照着改了 WordPress 固定链接,
+            # 线上网址当场失效。刚发布几小时还好,一篇有排名的文章这么改就是
+            # 把积累的权重直接丢掉。内容可以重写,地址不行。
+            if item.wp_post_id:
+                old_slug = (item.seo_json or {}).get("url_slug") if isinstance(
+                    item.seo_json, dict
+                ) else None
+                if old_slug:
+                    new_seo["url_slug"] = old_slug
+            item.seo_json = new_seo
         item.brand_audit_json = audit
         # A rewrite invalidates the previous approval — it must be re-reviewed.
         item.review_status = "pending"

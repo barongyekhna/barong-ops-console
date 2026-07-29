@@ -1606,3 +1606,40 @@ def test_not_worth_it_section_may_not_end_with_a_pitch() -> None:
     prompt = geo_content_instruction()
     assert "NO sales language" in prompt
     assert "must NOT end" in prompt
+
+
+def test_revise_prompt_carries_the_same_writing_rules() -> None:
+    """只改主提示词不够:重写走的是另一套提示词,不同步的话重写出来还是老毛病。"""
+    from backend.app.modules.geo_series.content.prompt_skills import (
+        geo_revise_instruction,
+    )
+
+    p = geo_revise_instruction()
+    assert "回答问句,不要介绍产品" in p
+    assert "什么情况下不值得——这半边是强制的" in p
+    assert "不许出现推销语言" in p
+    assert "条件判断不是事实主张" in p
+    # 句句写全称是原稿实测出来的毛病
+    assert "别每句话都写产品全称" in p
+
+
+def test_published_slug_is_locked_against_rewrites() -> None:
+    """2026-07-29 实地踩到:重写时模型改了 seo.url_slug,发布流照着改了 WordPress
+    固定链接,线上网址当场失效。内容可以重写,地址不行。两道锁。"""
+    from types import SimpleNamespace
+
+    from backend.app.modules.geo_series.content import assemble as asm
+    from backend.app.modules.geo_series.content import orchestrator as orch
+
+    # 一道锁:控制台侧,已发布的文章重写时不许改 slug
+    src = inspect.getsource(orch.GeoContentOrchestrator.revise_item)
+    assert "if item.wp_post_id:" in src
+    assert 'new_seo["url_slug"] = old_slug' in src
+
+    # 二道锁:发布包对已发布的 post 干脆不下发 slug
+    src2 = inspect.getsource(asm.assemble_guide_package)
+    assert "None\n                        if item.wp_post_id" in src2
+
+    # n8n 侧:没有 slug 时不许把 slug 写成空字符串
+    code = _geo_node("拆文章")["parameters"]["jsCode"]
+    assert "if (seo.url_slug) body.slug = seo.url_slug;" in code

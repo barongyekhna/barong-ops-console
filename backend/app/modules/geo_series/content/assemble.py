@@ -106,7 +106,13 @@ def assemble_guide_package(
                     meta_description=(
                         str(seo_raw.get("meta_description") or "").strip() or None
                     ),
-                    url_slug=str(seo_raw.get("url_slug") or "").strip() or None,
+                    # 二道锁:已经发布过的 post 干脆不下发 slug,让 WordPress 保持
+                    # 现有固定链接。即使库里的 slug 被改脏了,线上地址也动不了。
+                    url_slug=(
+                        None
+                        if item.wp_post_id
+                        else (str(seo_raw.get("url_slug") or "").strip() or None)
+                    ),
                 ),
                 schema_type="FAQPage" if item.item_type == "qa" else "Article",
                 faq=faq,
