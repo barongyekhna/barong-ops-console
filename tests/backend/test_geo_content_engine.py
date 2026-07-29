@@ -1388,7 +1388,8 @@ def test_monitor_consumes_quota_before_calling_and_refunds_on_failure() -> None:
     """烧钱铁律:新出网付费调用当天接台账;失败要退还,否则额度被白吃掉。"""
     from backend.app.modules.geo_series.monitor import service
 
-    src = inspect.getsource(service.run_sweep)
+    # 计量与事务纪律现在住在共享执行核心里(run_sweep 与候选探测都走它)
+    src = inspect.getsource(service.sweep_questions)
     assert "PROVIDER_GEO_SERPER_MONITOR" in src
     # 先扣额度,再发请求
     assert src.index("try_consume(") < src.index("fetch_first_page(")
@@ -1421,3 +1422,40 @@ def test_monitor_seeding_reuses_real_buyer_questions_and_is_idempotent() -> None
     assert "picked_questions_json" in src
     # 重复导入不许产生重复行
     assert "existing" in src and "skipped" in src
+
+
+def test_topic_probe_is_cached_and_capped() -> None:
+    """选题界面上的按钮:一次点击不能烧一片额度。
+    一周内查过的候选不重查,单次最多探测 MAX_PROBE_PER_CALL 条。"""
+    from backend.app.modules.geo_series.monitor import probe
+
+    assert probe.MAX_PROBE_PER_CALL <= 50
+    assert probe.CACHE_DAYS >= 1
+    src = inspect.getsource(probe.probe_candidates)
+    assert "fresh_ids" in src and "cached" in src
+    assert "len(to_check) < max(0, limit)" in src
+    # 探测出来的候选不加入常规监测名单
+    assert "is_active=0" in src
+    # 共享执行核心,不另起一套计量/事务逻辑
+    assert "sweep_questions(" in src
+
+
+def test_topic_candidates_carry_terrain_for_pick_time_decisions() -> None:
+    """首轮监测的教训:四条选题全是 best X(守门人榜单主场),
+    选的时候看不见阵地。现在候选自带阵地读数。"""
+    from backend.app.modules.geo_series import router
+
+    src = inspect.getsource(router.geo_topic_candidates)
+    assert "terrain_by_question" in src
+    assert 'candidate["terrain"]' in src
+    paths = {r.path for r in router.router.routes}
+    assert "/geo/clusters/{cluster_id}/topic-terrain" in paths
+
+
+def test_terrain_lookup_matches_questions_loosely() -> None:
+    """问号、大小写、空格不该让候选和监测记录对不上。"""
+    from backend.app.modules.geo_series.monitor.probe import normalize_question
+
+    a = normalize_question("How Long Do Portable Showers Last?")
+    b = normalize_question("  how long do portable showers last  ")
+    assert a == b

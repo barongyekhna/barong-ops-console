@@ -115,6 +115,32 @@ def run_sweep(
         questions = questions[: max(0, limit)]
     if not questions:
         raise MonitorError("没有在监测的问句——先从话题簇导入几条。")
+    return sweep_questions(db, questions=questions, scope_context=scope_context, user=user)
+
+
+def sweep_questions(
+    db: Session,
+    *,
+    questions: list[GeoMonitorQuestion],
+    scope_context: KScopeContext,
+    user: Any | None = None,
+) -> GeoMonitorRun:
+    """The shared execution core: check exactly these rows, once each.
+
+    Both the recurring watch-list sweep and the pre-pick candidate probe go through
+    here, so the metering, the transaction discipline and the per-question failure
+    handling cannot drift apart between the two entry points.
+    """
+    from r_system_v2.ra.quota_ledger import (
+        PROVIDER_GEO_SERPER_MONITOR,
+        RAQuotaExhaustedError,
+        ensure_quota_schema,
+        refund,
+        try_consume,
+    )
+
+    if not questions:
+        raise MonitorError("没有要检查的问句。")
 
     org_id = getattr(scope_context, "workspace_key", None)
     ensure_quota_schema(db)

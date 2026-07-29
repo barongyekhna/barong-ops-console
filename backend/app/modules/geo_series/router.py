@@ -35,6 +35,7 @@ from .content.publish_gate import (
     publish_blockers,
     publishable_items,
 )
+from .monitor.probe import normalize_question, probe_candidates, terrain_by_question
 from .monitor.seed import seed_from_cluster
 from .monitor.service import MonitorError, run_sweep
 from .monitor.state import monitor_state
@@ -231,7 +232,44 @@ def geo_topic_candidates(
     if cluster is None:
         raise HTTPException(status_code=404, detail="Cluster not found.")
     candidates = list_topic_candidates(db, cluster=cluster, scope_context=scope)
+    # 阵地数据挂到候选上:选题时就能看见"这条打不打得动",
+    # 而不是写完发布了才发现前排全是守门人榜单(2026-07-29 首轮监测的教训)。
+    terrain = terrain_by_question(db, cluster_id=cluster_id)
+    for candidate in candidates:
+        reading = terrain.get(normalize_question(str(candidate.get("question") or "")))
+        candidate["terrain"] = reading or None
     return {"candidates": candidates, "picked": cluster.picked_questions_json or []}
+
+
+@router.post("/clusters/{cluster_id}/topic-terrain")
+def geo_probe_topic_terrain(
+    cluster_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_EXECUTE)),
+) -> dict[str, Any]:
+    """Check the search terrain of this cluster's topic candidates.
+
+    Metered and cached: a candidate read within the last week is not re-checked,
+    and one press probes at most MAX_PROBE_PER_CALL new questions.
+    """
+    scope = _scope_context(request)
+    cluster = service.get_cluster(db, cluster_id=cluster_id, scope_context=scope)
+    if cluster is None:
+        raise HTTPException(status_code=404, detail="Cluster not found.")
+    candidates = list_topic_candidates(db, cluster=cluster, scope_context=scope)
+    questions = [str(c.get("question") or "") for c in candidates]
+    try:
+        outcome = probe_candidates(
+            db,
+            cluster_id=cluster_id,
+            questions=questions,
+            scope_context=scope,
+            user=user,
+        )
+    except MonitorError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return outcome
 
 
 @router.post("/clusters/{cluster_id}/picked-questions")

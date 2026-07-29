@@ -11,6 +11,7 @@ import {
   getMonitorState,
   seedMonitorFromCluster,
   runMonitorSweep,
+  probeTopicTerrain,
   dispatchBacklinks,
   publishCluster,
   reviseItem,
@@ -109,6 +110,7 @@ export function GeoContentDeck() {
   const [busy, setBusy] = useState(false);
   const [spotlightBusy, setSpotlightBusy] = useState<string | null>(null);
   const [loadingTopics, setLoadingTopics] = useState(false);
+  const [probeBusy, setProbeBusy] = useState(false);
   const [openProducts, setOpenProducts] = useState(false);
   const [openTopics, setOpenTopics] = useState(true);
   const [openAnalysis, setOpenAnalysis] = useState<Set<string>>(new Set());
@@ -236,6 +238,20 @@ export function GeoContentDeck() {
       else n.set(k, c.question);
       return n;
     });
+  }
+
+  async function handleProbeTerrain() {
+    if (!selectedId) return;
+    setProbeBusy(true);
+    setError(null);
+    try {
+      await probeTopicTerrain(selectedId);
+      await loadTopics(selectedId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProbeBusy(false);
+    }
   }
 
   async function handleSavePicks() {
@@ -577,6 +593,14 @@ export function GeoContentDeck() {
                         刷新候选
                       </button>
                       <button
+                        onClick={() => void handleProbeTerrain()}
+                        disabled={busy || probeBusy || candidates.length === 0}
+                        style={GHOST_BTN}
+                        title="查这些候选问句的自然搜索阵地：谁在占位、打不打得动"
+                      >
+                        {probeBusy ? "探测中…" : "探测阵地"}
+                      </button>
+                      <button
                         onClick={() => void handleSavePicks()}
                         disabled={busy}
                         style={PRIMARY_BTN}
@@ -604,6 +628,27 @@ export function GeoContentDeck() {
                                 <span style={{ ...BADGE, opacity: 0.85 }}>
                                   {INTENT_LABEL[c.intent] || c.intent}
                                 </span>
+                                {c.terrain ? (
+                                  <span
+                                    style={{
+                                      ...BADGE,
+                                      color:
+                                        c.terrain.terrain === "soft"
+                                          ? GREEN
+                                          : c.terrain.terrain === "hard"
+                                            ? RED
+                                            : GOLD,
+                                    }}
+                                    title={`前排：${c.terrain.top_domains.join(" · ")}`}
+                                  >
+                                    {c.terrain.terrain === "soft"
+                                      ? "软"
+                                      : c.terrain.terrain === "hard"
+                                        ? "硬"
+                                        : "中"}
+                                    {c.terrain.attackability}
+                                  </span>
+                                ) : null}
                                 <span style={{ ...SCORE_PILL }}>{c.score}</span>
                               </label>
                             </li>

@@ -1044,6 +1044,9 @@ function isAllowedGeoPath(method: string, path: string[]) {
     if (path[3] === "picked-questions") {
       return method === "POST";
     }
+    if (path[3] === "topic-terrain") {
+      return method === "POST";
+    }
   }
   // POST /geo/items/{id}/review  |  POST /geo/items/{id}/analyze
   if (

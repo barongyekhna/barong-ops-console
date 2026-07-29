@@ -191,8 +191,17 @@ export async function getClusterJobs(
   return readJson(response, "任务状态加载失败");
 }
 
+export type GeoTerrainReading = {
+  attackability: number;
+  terrain: string;
+  our_position: number | null;
+  top_domains: string[];
+  checked_at: string | null;
+};
+
 export type GeoTopicCandidate = {
   question: string;
+  terrain?: GeoTerrainReading | null;
   source: string; // k_faq | f_keyword
   source_type: string;
   intent: string;
@@ -450,4 +459,17 @@ export async function runMonitorSweep(): Promise<{
     method: "POST",
   });
   return readJson(response, "监测执行失败");
+}
+
+export async function probeTopicTerrain(clusterId: string): Promise<{
+  checked: number;
+  cached: number;
+  created: number;
+  skipped_over_cap: number;
+}> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/geo/clusters/${clusterId}/topic-terrain`,
+    { cache: "no-store", headers: buildHeaders(true), method: "POST" },
+  );
+  return readJson(response, "探测选题阵地失败");
 }
