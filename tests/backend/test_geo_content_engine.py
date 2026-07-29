@@ -676,6 +676,7 @@ def test_intra_cluster_links_are_placeholders_until_posts_exist() -> None:
     html = render_article_html(
         item,
         product_links={"PSPE-001": "https://site/product/x/"},
+        product_labels={"PSPE-001": "Portable Camping Shower"},
         sibling_links=[("Sibling", "item-2")],
     )
     # the product page exists → real link; the sibling post does not → placeholder
@@ -830,3 +831,166 @@ def test_machine_endpoints_are_token_authenticated() -> None:
     paths = {r.path for r in machine_router.router.routes}
     assert "/geo/clusters/{cluster_id}/publish-package" in paths
     assert "/geo/publishes/{job_id}/result" in paths
+
+
+def test_guide_html_labels_products_with_their_public_h1_never_a_uuid() -> None:
+    """线上事故 2026-07-29: 正文出现「The product in this guide 33dabc7b-…」。
+    产品标签必须等于产品页 H1;拿不到标题宁可不渲染,绝不退回 UUID。"""
+    from backend.app.modules.geo_series.content.publish_html import render_article_html
+
+    pid = "33dabc7b-83ea-4409-8b92-c086e6e91c26"
+
+    class _Item:
+        body_json = {"sections": [{"heading": "H", "body": "B"}]}
+        source_product_ids_json = [pid]
+
+    html = render_article_html(
+        _Item(),
+        product_links={pid: "https://example.com/product/x/"},
+        product_labels={pid: "Portable Camping Shower – Rechargeable off-grid rinses"},
+        sibling_links=[],
+    )
+    assert "Portable Camping Shower" in html
+    assert pid not in html
+
+    # 没有标题 → 整条不渲染,而不是把 UUID 摆到读者面前
+    bare = render_article_html(
+        _Item(),
+        product_links={pid: "https://example.com/product/x/"},
+        product_labels={},
+        sibling_links=[],
+    )
+    assert pid not in bare
+    assert "The product in this guide" not in bare
+
+
+def test_product_display_title_follows_the_same_h1_chain_as_p_upload() -> None:
+    from backend.app.modules.geo_series.content.product_links import (
+        product_display_title,
+    )
+
+    class _P:
+        id = "id-1"
+        marketing_copy_json = {"seo": {"h1": "The H1", "title": "The SEO title"}}
+        product_name_en = "English name"
+        sku = "PSPE-001"
+        product_key = "pspe_001"
+
+    assert product_display_title(_P()) == "The H1"
+
+    p = _P()
+    p.marketing_copy_json = {"seo": {"title": "The SEO title"}}
+    assert product_display_title(p) == "The SEO title"
+
+    p.marketing_copy_json = None
+    assert product_display_title(p) == "English name"
+
+
+def test_guides_hub_shows_big_categories_but_never_the_full_breadcrumb() -> None:
+    """主页要像 help center:大类目成卡片、叶子类目在卡片里。
+    整条 A > B > C > D > E 面包屑绝不进正文——那会让整站看起来只做一个类目。"""
+    from backend.app.modules.geo_series.content.guides_index import render_index_html
+
+    path = (
+        "Sporting Goods > Outdoor Recreation > Camping & Hiking > "
+        "Portable Toilets & Showers > Portable Showers & Privacy Enclosures"
+    )
+    html = render_index_html(
+        [
+            {
+                "category_path": path,
+                "clusters": [
+                    {
+                        "title": "portable camping shower — buyer guide",
+                        "articles": [{"title": "T", "url": "https://x/a/"}],
+                    }
+                ],
+            }
+        ]
+    )
+    assert "<h3>Sporting Goods</h3>" in html
+    assert "<h4>Portable Showers &amp; Privacy Enclosures</h4>" in html
+    assert "Outdoor Recreation &gt; Camping" not in html
+    assert "1 guide<" in html
+
+
+def test_guides_hub_has_a_search_box_and_manual_category_chips() -> None:
+    from backend.app.modules.geo_series.content.guides_index import render_index_html
+
+    html = render_index_html(
+        [
+            {
+                "category_path": "Sporting Goods > A > Portable Showers",
+                "clusters": [
+                    {"title": "c1", "articles": [{"title": "t1", "url": "https://x/1/"}]}
+                ],
+            },
+            {
+                "category_path": "Toys & Games > B > Executive Toys",
+                "clusters": [
+                    {"title": "c2", "articles": [{"title": "t2", "url": "https://x/2/"}]}
+                ],
+            },
+        ]
+    )
+    assert 'type="search"' in html
+    assert html.count('class="geo-hub-chip"') == 3  # All + 两个大类目
+    assert 'data-top="sporting-goods"' in html
+    assert 'data-top="toys-games"' in html
+    assert 'data-search="' in html
+    # JS 关掉也要能用:默认不隐藏任何内容
+    assert " hidden>" not in html
+
+
+def test_guides_hub_search_haystack_covers_titles_and_categories() -> None:
+    import re
+
+    from backend.app.modules.geo_series.content.guides_index import render_index_html
+
+    html = render_index_html(
+        [
+            {
+                "category_path": "Sporting Goods > A > Portable Showers",
+                "clusters": [
+                    {
+                        "title": "buyer guide",
+                        "articles": [
+                            {"title": "How the pump works", "url": "https://x/1/"}
+                        ],
+                    }
+                ],
+            }
+        ]
+    )
+    hay = re.search(r'data-search="([^"]*)"', html).group(1)
+    for term in ["how the pump works", "buyer guide", "portable showers", "sporting goods"]:
+        assert term in hay
+
+
+def test_guides_hub_collapses_article_lists() -> None:
+    """页面会随类目/文章增长,列表必须可折叠;用原生 <details>,JS 关掉也能展开。"""
+    from backend.app.modules.geo_series.content.guides_index import render_index_html
+
+    html = render_index_html(
+        [
+            {
+                "category_path": "Sporting Goods > A > Portable Showers",
+                "clusters": [
+                    {
+                        "title": "buyer guide",
+                        "articles": [
+                            {"title": "t1", "url": "https://x/1/"},
+                            {"title": "t2", "url": "https://x/2/"},
+                        ],
+                    }
+                ],
+            }
+        ]
+    )
+    assert '<details class="geo-hub-leaf">' in html
+    assert "<summary>" in html
+    assert '<span class="geo-hub-leaf-n">2</span>' in html
+    # 默认收起(没有 open 属性)——这正是"不会越来越长"的关键
+    assert "<details class=\"geo-hub-leaf\" open>" not in html
+    # 搜索必须能把折叠的分组自动打开,否则搜了等于搜不到
+    assert "leaf.open=true" in html

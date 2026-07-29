@@ -76,6 +76,51 @@ def latest_public_url(
     return resolved
 
 
+def product_display_title(product: Any) -> str:
+    """The exact H1 the buyer sees on the product page.
+
+    P resolves the Woo product title as seo.h1 → seo.title → product_name_en →
+    product_key (``p_series.upload.assemble._title_for_upload``). GEO must land on
+    the same string: an article that names the product differently from its own PDP
+    reads as a different product to both a buyer and an answer engine. Never fall
+    back to the UUID — it leaked into live copy once (2026-07-29) and is meaningless
+    to a reader.
+    """
+    marketing = getattr(product, "marketing_copy_json", None)
+    seo = marketing.get("seo") if isinstance(marketing, dict) else None
+    seo = seo if isinstance(seo, dict) else {}
+    for candidate in (
+        seo.get("h1"),
+        seo.get("title"),
+        getattr(product, "product_name_en", None),
+        getattr(product, "name", None),
+        getattr(product, "sku", None),
+        getattr(product, "product_key", None),
+    ):
+        text = " ".join(str(candidate or "").split())
+        if text:
+            return text
+    return ""
+
+
+def product_label_map(products: list[Any]) -> dict[str, str]:
+    """{every identifier content may cite → the product's public H1}."""
+    labels: dict[str, str] = {}
+    for product in products:
+        title = product_display_title(product)
+        if not title:
+            continue
+        for alias in (
+            product.id,
+            getattr(product, "product_key", None),
+            getattr(product, "sku", None),
+        ):
+            alias_text = str(alias or "").strip()
+            if alias_text:
+                labels[alias_text] = title
+    return labels
+
+
 def product_link_map(
     db: Session, products: list[Any]
 ) -> tuple[dict[str, str], list[str]]:
@@ -107,4 +152,9 @@ def product_link_map(
     return links, unlinkable
 
 
-__all__ = ["latest_public_url", "product_link_map"]
+__all__ = [
+    "latest_public_url",
+    "product_display_title",
+    "product_label_map",
+    "product_link_map",
+]

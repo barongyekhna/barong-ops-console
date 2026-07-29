@@ -38,6 +38,7 @@ def render_article_html(
     item: Any,
     *,
     product_links: dict[str, str],
+    product_labels: dict[str, str] | None = None,
     sibling_links: list[tuple[str, Any]],
 ) -> str:
     """Body HTML for one guide piece.
@@ -85,7 +86,7 @@ def render_article_html(
             )
 
     # Rail 1: the products this piece is about, as real links.
-    referenced = _referenced_products(item, product_links)
+    referenced = _referenced_products(item, product_links, product_labels or {})
     if referenced:
         items = "".join(
             f'<li><a class="geo-product-link" href="{escape(url)}">{escape(label)}</a></li>'
@@ -111,19 +112,28 @@ def render_article_html(
 
 
 def _referenced_products(
-    item: Any, product_links: dict[str, str]
+    item: Any,
+    product_links: dict[str, str],
+    product_labels: dict[str, str],
 ) -> list[tuple[str, str]]:
-    """(label, url) for each product this piece cites and that is publicly live."""
+    """(label, url) for each product this piece cites and that is publicly live.
+
+    The label must be the product's public H1. It used to fall back to whatever
+    identifier the copy cited, which put a raw UUID in front of readers in live
+    content (2026-07-29). A product with no resolvable title is dropped rather than
+    linked under a meaningless label.
+    """
     raw = item.source_product_ids_json
     refs = [str(r).strip() for r in raw] if isinstance(raw, list) else []
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
     for ref in refs:
         url = product_links.get(ref)
-        if not url or url in seen:
+        label = product_labels.get(ref, "").strip()
+        if not url or not label or url in seen:
             continue
         seen.add(url)
-        out.append((ref, url))
+        out.append((label, url))
     return out
 
 

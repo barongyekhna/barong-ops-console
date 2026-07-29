@@ -30,7 +30,7 @@ from ..contract.publish_package import (
     Seo,
 )
 from .models import GeoContentCluster, GeoContentItem
-from .product_links import product_link_map
+from .product_links import product_label_map, product_link_map
 from .publish_gate import publishable_items
 from .publish_html import link_token, plain_text, render_article_html
 
@@ -65,6 +65,7 @@ def assemble_guide_package(
     ready = publishable_items(items)
     products = _cluster_products(db, cluster, scope_context)
     product_links, _unlinkable = product_link_map(db, products)
+    product_labels = product_label_map(products)
 
     articles: list[Article] = []
     for item in ready:
@@ -72,7 +73,10 @@ def assemble_guide_package(
             (str(other.title), str(other.id)) for other in ready if other.id != item.id
         ]
         html = render_article_html(
-            item, product_links=product_links, sibling_links=siblings
+            item,
+            product_links=product_links,
+            product_labels=product_labels,
+            sibling_links=siblings,
         )
         seo_raw = item.seo_json if isinstance(item.seo_json, dict) else {}
         body = item.body_json if isinstance(item.body_json, dict) else {}
