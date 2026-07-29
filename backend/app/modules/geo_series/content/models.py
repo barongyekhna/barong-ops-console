@@ -136,7 +136,7 @@ class GeoContentItem(
         CheckConstraint(
             "item_type IN ("
             "'hub', 'how_it_works', 'comparison', 'scenario', 'qa', "
-            "'product_spotlight'"
+            "'question_answer', 'product_spotlight'"
             ")",
             name=conv("ck_geo_items_valid_type"),
         ),

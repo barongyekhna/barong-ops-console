@@ -1459,3 +1459,54 @@ def test_terrain_lookup_matches_questions_loosely() -> None:
     a = normalize_question("How Long Do Portable Showers Last?")
     b = normalize_question("  how long do portable showers last  ")
     assert a == b
+
+
+def test_question_answer_is_the_one_repeatable_item_type() -> None:
+    """五个单例类型写满后簇就"封顶"了,新问句无处安放——而 M4 证明能赢的
+    正是具体问句。单题深答必须可重复,且只在真有待写问句时才算工作量。"""
+    from backend.app.modules.geo_series.content.constants import (
+        ITEM_TYPES,
+        REPEATABLE_ITEM_TYPES,
+    )
+    from backend.app.modules.geo_series.content import orchestrator as orch
+
+    assert "question_answer" in ITEM_TYPES
+    assert "question_answer" in REPEATABLE_ITEM_TYPES
+    # 枢纽这类必须仍是单例,否则一个簇会长出两个 hub 自我竞争
+    for singleton in ("hub", "how_it_works", "comparison", "scenario", "qa"):
+        assert singleton not in REPEATABLE_ITEM_TYPES
+
+    src = inspect.getsource(orch.GeoContentOrchestrator.generate_cluster)
+    # 可重复类型不进 skip 名单
+    assert "i.item_type not in REPEATABLE_ITEM_TYPES" in src
+    # 但"只剩可重复类型"且没有待写问句时,仍要判定为无事可做
+    assert "set(unwritten_types) <= REPEATABLE_ITEM_TYPES" in src
+
+
+def test_prompt_defines_one_article_per_question() -> None:
+    from backend.app.modules.geo_series.content.prompt_skills import (
+        geo_content_instruction,
+    )
+
+    prompt = geo_content_instruction()
+    assert "question_answer" in prompt
+    assert "answering exactly ONE required question" in prompt
+
+
+def test_server_computes_which_types_to_write_not_the_model() -> None:
+    """2026-07-29 实测:列出全部类型再让模型减去 skip_item_types,
+    当只剩一种时模型直接跑飞——自造 item_type 和响应形状。减法必须服务端做完。"""
+    from backend.app.modules.geo_series.content import orchestrator as orch
+    from backend.app.modules.geo_series.content.prompt_skills import (
+        geo_content_instruction,
+    )
+
+    src = inspect.getsource(orch.GeoContentOrchestrator.generate_cluster)
+    assert '"produce_item_types"' in src
+    assert 't not in skip_item_types and t != "product_spotlight"' in src
+
+    prompt = geo_content_instruction()
+    assert "`produce_item_types` lists EXACTLY" in prompt
+    assert "never invent an item_type" in prompt
+    # 一条待写问句一篇深答
+    assert "ONE PER pending required question" in prompt

@@ -64,6 +64,7 @@ const ITEM_TYPE_LABEL: Record<string, string> = {
   comparison: "对比",
   scenario: "场景",
   qa: "问答",
+  question_answer: "单题深答",
   product_spotlight: "产品专属",
 };
 

@@ -28,13 +28,26 @@ PERMISSION_KEYS: tuple[str, ...] = (
 # opt-in article for a differentiated product inside a shared cluster (e.g. a
 # panda-shaped shower next to the plain one) — it keeps that product's distinct
 # selling points without splitting the topic into duplicate clusters.
+#
+# `question_answer` is the one type that REPEATS: one article answering exactly one
+# buyer question. The singleton types fill up after five pieces and a cluster goes
+# "full", which is wrong — terrain monitoring (M4) showed the winnable ground is
+# specific questions ("how long does it last", "what goes wrong"), and each of those
+# deserves its own page rather than a paragraph inside a combined FAQ.
 ITEM_TYPES: tuple[str, ...] = (
     "hub",
     "how_it_works",
     "comparison",
     "scenario",
     "qa",
+    "question_answer",
     "product_spotlight",
+)
+
+# Types a cluster may hold more than one of. Everything else is a singleton, so a
+# re-run never produces a second hub competing with the first.
+REPEATABLE_ITEM_TYPES: frozenset[str] = frozenset(
+    {"question_answer", "product_spotlight"}
 )
 
 # Generation job types processed by the standalone geo-worker.
@@ -48,6 +61,7 @@ __all__ = [
     "PERMISSION_MANAGE",
     "PERMISSION_KEYS",
     "ITEM_TYPES",
+    "REPEATABLE_ITEM_TYPES",
     "JOB_TYPE_CONTENT",
     "JOB_TYPES",
     "DEFAULT_WORKSPACE_KEY",

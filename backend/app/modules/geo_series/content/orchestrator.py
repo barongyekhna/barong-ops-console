@@ -35,7 +35,7 @@ from ...k_series.product_knowledge.evidence_guard import canonical_package_inclu
 from ...k_series.product_knowledge.models import KProductKnowledgeProduct
 from ...k_series.product_knowledge.scope_shim import KScopeContext, apply_scope_filters
 from .analysis import attach_analysis_safely
-from .constants import ITEM_TYPES
+from .constants import ITEM_TYPES, REPEATABLE_ITEM_TYPES
 from .guards import audit_content_item, evidence_number_corpus
 from .models import GeoContentCluster, GeoContentItem
 from .prompt_skills import (
@@ -105,7 +105,7 @@ class GeoContentOrchestrator:
         kept = self._kept_items(cluster.id)
         covered_questions = _covered_questions(kept)
         skip_item_types = sorted(
-            {i.item_type for i in kept if i.item_type != "product_spotlight"}
+            {i.item_type for i in kept if i.item_type not in REPEATABLE_ITEM_TYPES}
         )
         pending_questions = [
             q
@@ -114,7 +114,9 @@ class GeoContentOrchestrator:
         ]
         if kept and not pending_questions and required_questions:
             unwritten_types = [t for t in ITEM_TYPES if t not in skip_item_types]
-            if not unwritten_types or unwritten_types == ["product_spotlight"]:
+            # Repeatable types are always "unwritten", so they only count as work
+            # when there is actually a pending question to hang one on.
+            if not unwritten_types or set(unwritten_types) <= REPEATABLE_ITEM_TYPES:
                 cluster.status = "needs_review"
                 self.db.flush()
                 raise GeoContentError(
@@ -135,6 +137,15 @@ class GeoContentOrchestrator:
             "required_questions": pending_questions or required_questions,
             # Already-approved pieces stay; do not produce these types again.
             "skip_item_types": skip_item_types,
+            # The server does the subtraction. Listing every type and asking the
+            # model to subtract `skip_item_types` made it go off-contract entirely
+            # once only one type was left (2026-07-29: it invented an item_type and
+            # a response shape of its own). Tell it exactly what to write.
+            "produce_item_types": [
+                t
+                for t in ITEM_TYPES
+                if t not in skip_item_types and t != "product_spotlight"
+            ],
             # So the new pieces complement the kept ones instead of repeating them.
             "existing_content": [
                 {"item_type": i.item_type, "title": i.title} for i in kept

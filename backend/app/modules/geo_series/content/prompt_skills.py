@@ -61,19 +61,28 @@ def geo_content_instruction() -> str:
         "existing pieces rather than repeat their angle. Likewise, never re-answer a "
         "question an existing piece already answers.\n"
         "\n"
-        "Produce these item_types (skip one only if the facts cannot support it): "
-        "`hub` (one topic overview / how-to-choose), `how_it_works` (how this kind "
-        "of product works, grounded in THIS product's mechanism), `comparison` "
-        "(generic types/approaches or the product's variants), `scenario` (concrete "
-        "use-cases the facts support), `qa` (a cluster of buyer question→answer "
-        "blocks). Prefer 4-6 items total; quality over quantity.\n"
+        "WHAT TO PRODUCE: `produce_item_types` lists EXACTLY the item_types you "
+        "must return — the server has already removed the slots that are taken. "
+        "Return one item per listed type, EXCEPT `question_answer`, of which you "
+        "return ONE PER pending required question. Never return an item_type that "
+        "is not in that list, and never invent an item_type or a response shape of "
+        "your own.\n"
+        "\n"
+        "The types mean: `question_answer` (one article answering exactly ONE "
+        "answering exactly ONE required question, in depth, titled as that "
+        "question — this is the type "
+        "that wins specific searches), `hub` (one topic overview / how-to-choose), "
+        "`how_it_works` (how this kind of product works, grounded in THIS product's "
+        "mechanism), `comparison` (generic types/approaches or the product's "
+        "variants), `scenario` (concrete use-cases the facts support), `qa` (a "
+        "cluster of buyer question→answer blocks). Quality over quantity.\n"
         "\n"
         "OUTPUT CONTRACT (mandatory — return ONLY a JSON object with EXACTLY this "
         "shape, no markdown, no prose outside the JSON):\n"
         "{\n"
         '  "content_items": [\n'
         "    {\n"
-        '      "item_type": "hub|how_it_works|comparison|scenario|qa",\n'
+        '      "item_type": "hub|how_it_works|comparison|scenario|qa|question_answer",\n'
         '      "title": "<question- or topic-shaped H1, <=70 chars>",\n'
         '      "sections": [{"heading": "<H2>", "body": "<2-4 sentence plain-text '
         'paragraph, grounded>"}],\n'
