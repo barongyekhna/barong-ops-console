@@ -36,6 +36,11 @@ from ...k_series.product_knowledge.models import KProductKnowledgeProduct
 from ...k_series.product_knowledge.scope_shim import KScopeContext, apply_scope_filters
 from .analysis import attach_analysis_safely
 from .constants import ITEM_TYPES, REPEATABLE_ITEM_TYPES
+from .fact_sufficiency import (
+    fact_blockers,
+    fact_warnings,
+    product_fact_report,
+)
 from .guards import audit_content_item, evidence_number_corpus
 from .models import GeoContentCluster, GeoContentItem
 from .prompt_skills import (
@@ -87,10 +92,27 @@ class GeoContentOrchestrator:
         )
         evidence_numbers: set[str] = set()
         payload_products: list[dict[str, Any]] = []
+        fact_reports: list[dict[str, Any]] = []
         for product in products:
             facts, numbers = self._product_facts(product)
             payload_products.append(facts)
             evidence_numbers |= numbers
+            fact_reports.append(product_fact_report(facts, numbers))
+
+        # Nothing verifiable to say → do not write. The grounding rule stops the
+        # model inventing, but not from writing fluent emptiness, and emptiness is
+        # what no output guard can catch. Refuse, and name what to go fill in.
+        for note in fact_warnings(fact_reports):
+            logger.warning("GEO cluster %s: %s", cluster.id, note)
+        thin = fact_blockers(fact_reports)
+        if thin:
+            cluster.status = "draft"
+            self.db.flush()
+            raise GeoContentError(
+                "GEO_INSUFFICIENT_FACTS",
+                "事实不足，拒绝生成（宁可不写，也不写正确的废话）：\n" + "\n".join(thin),
+                status_code=409,
+            )
 
         category_path = self._category_path_text(cluster)
         # Operator-picked real buyer questions become the server-owned required set.

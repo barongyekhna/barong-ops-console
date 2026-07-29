@@ -1538,3 +1538,71 @@ def test_critique_flags_product_description_wearing_a_question_hat() -> None:
     assert "回答问句" in prompt and "介绍产品" in prompt
     assert "拿不定主意" in prompt or "拿定主意" in prompt
     assert "什么情况下不值得" in prompt
+
+
+# ===================================================================
+# 事实充分性:宁可不写,也不写正确的废话
+# ===================================================================
+
+
+def test_fact_gate_blocks_emptiness_but_not_low_density() -> None:
+    """实测推翻了第一版设计:捏捏 5 个产品只有 0-3 个数字,却写出了具体、诚实、
+    能区分五款的内容——因为事实密度的要求是分品类的(参数驱动 vs 偏好驱动)。
+    所以只拦"根本没被描述过",低密度只警告。"""
+    from backend.app.modules.geo_series.content.fact_sufficiency import (
+        fact_blockers,
+        fact_warnings,
+        product_fact_report,
+    )
+
+    shower = product_fact_report(
+        {"sku": "PSPE-001", "specs": [1] * 3, "selling_points": [1] * 14},
+        {str(n) for n in range(22)},
+    )
+    squishy = [
+        product_fact_report(
+            {"sku": f"ET-00{i}", "specs": [1] * 3, "selling_points": [1] * 5},
+            {"1", "2", "3"} if i > 1 else set(),
+        )
+        for i in range(1, 6)
+    ]
+    # 两者都放行——低密度不是拒绝的理由
+    assert fact_blockers([shower]) == []
+    assert fact_blockers(squishy) == []
+    # 但低密度要如实告知
+    assert fact_warnings(squishy)
+    assert fact_warnings([shower]) == []
+
+    # 真正的空:没数字、没规格、没卖点
+    blank = product_fact_report({"sku": "X-001", "specs": [], "selling_points": []}, set())
+    blockers = fact_blockers([blank])
+    assert blockers and "X-001" in blockers[0]
+    assert "去 K" in blockers[0]
+
+    # 部分为空:点名,让人补上或摘掉
+    mixed = fact_blockers([shower, blank])
+    assert mixed and "X-001" in mixed[0]
+
+    assert fact_blockers([]) == [
+        "这个话题簇下面没有产品——先从 P 上架一个产品把簇挂起来。"
+    ]
+
+
+def test_fact_gate_runs_before_the_ai_call() -> None:
+    """拦在调用之前:既省钱,也避免把空洞内容写进库再靠人去发现。"""
+    from backend.app.modules.geo_series.content import orchestrator as orch
+
+    src = inspect.getsource(orch.GeoContentOrchestrator.generate_cluster)
+    assert "GEO_INSUFFICIENT_FACTS" in src
+    assert src.index("fact_blockers(") < src.index("self._call_ai(")
+
+
+def test_not_worth_it_section_may_not_end_with_a_pitch() -> None:
+    """一段专门讲「别买」的文字,以推销收尾就等于自毁可信度。"""
+    from backend.app.modules.geo_series.content.prompt_skills import (
+        geo_content_instruction,
+    )
+
+    prompt = geo_content_instruction()
+    assert "NO sales language" in prompt
+    assert "must NOT end" in prompt
