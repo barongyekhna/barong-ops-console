@@ -1054,6 +1054,10 @@ function isAllowedGeoPath(method: string, path: string[]) {
   ) {
     return method === "POST";
   }
+  // GET (预览) / POST (派单) /geo/backlinks —— 产品页反链刷新
+  if (path.length === 2 && path[1] === "backlinks") {
+    return method === "GET" || method === "POST";
+  }
   // POST /geo/clusters/{id}/products/{pid}/spotlight
   if (
     path.length === 6 &&

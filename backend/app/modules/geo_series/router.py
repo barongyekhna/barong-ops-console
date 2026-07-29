@@ -35,6 +35,9 @@ from .content.publish_gate import (
     publish_blockers,
     publishable_items,
 )
+from .content.backlink_jobs import create_backlink_job
+from .content.backlink_jobs import jobs_recent as backlink_jobs_recent
+from .content.backlink_targets import collect_backlink_targets
 from .content.publish_jobs import create_publish_job, jobs_for_cluster
 from .content.critique import (
     collect_critiques,
@@ -481,3 +484,77 @@ def geo_review_item(
 # Surface GeoContentError (raised in the worker, but also usable synchronously)
 # as a clean HTTP error if any endpoint ever calls the orchestrator directly.
 __all__ = ["router", "GeoContentError"]
+
+
+@router.get("/backlinks")
+def geo_backlink_state(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_READ)),
+) -> dict[str, Any]:
+    """What a backlink run would do right now, plus the recent ledger."""
+    targets, skipped = collect_backlink_targets(db)
+    return {
+        "ready": bool(targets),
+        "target_count": len(targets),
+        "targets": [
+            {
+                "sku": t.get("sku"),
+                "woo_product_id": t.get("woo_product_id"),
+                "guide_count": t.get("guide_count"),
+            }
+            for t in targets
+        ],
+        "skipped": skipped,
+        "jobs": [
+            {
+                "job_id": j.job_id,
+                "status": j.status,
+                "error": j.error,
+                "updated_count": len(j.updated_items_json or []),
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+                "finished_at": j.finished_at.isoformat() if j.finished_at else None,
+            }
+            for j in backlink_jobs_recent(db)
+        ],
+    }
+
+
+@router.post("/backlinks")
+def geo_backlink_dispatch(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_EXECUTE)),
+) -> dict[str, Any]:
+    """Refresh the 'Learn more' block on every live product page that has guides.
+
+    Owner's ruling (2026-07-29): this is a button, not an automatic side effect of
+    publishing — product pages are paid-traffic landing pages, so a human decides
+    when they change.
+    """
+    scope = _scope_context(request)
+    targets, skipped = collect_backlink_targets(db)
+    if not targets:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "ready": False,
+                "blockers": skipped
+                or ["没有需要更新的产品页——先发布指南，或先把产品上架。"],
+            },
+        )
+    job = create_backlink_job(
+        db,
+        scope_context=scope,
+        targets=targets,
+        user=user,
+        public_base=_public_base(),
+    )
+    db.commit()
+    return {
+        "job_id": job.job_id,
+        "status": job.status,
+        "dispatched": job.status == "dispatched",
+        "target_count": len(targets),
+        "skipped": skipped,
+    }

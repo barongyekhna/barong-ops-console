@@ -66,6 +66,9 @@ def assemble_guide_package(
     products = _cluster_products(db, cluster, scope_context)
     product_links, _unlinkable = product_link_map(db, products)
     product_labels = product_label_map(products)
+    # Every product in the cluster, so a product added to this category later shows
+    # up on the next publish without regenerating or re-approving anything.
+    cluster_product_ids = [str(p.id) for p in products]
 
     articles: list[Article] = []
     for item in ready:
@@ -76,6 +79,7 @@ def assemble_guide_package(
             item,
             product_links=product_links,
             product_labels=product_labels,
+            cluster_product_ids=cluster_product_ids,
             sibling_links=siblings,
         )
         seo_raw = item.seo_json if isinstance(item.seo_json, dict) else {}

@@ -7,6 +7,8 @@ import {
   generateCluster,
   getCritiqueSummary,
   getPublishState,
+  getBacklinkState,
+  dispatchBacklinks,
   publishCluster,
   reviseItem,
   generateProductSpotlight,
@@ -20,6 +22,7 @@ import {
   type GeoClusterProduct,
   type GeoCritiqueSummary,
   type GeoPublishState,
+  type GeoBacklinkState,
   type GeoItem,
   type GeoJob,
   type GeoTopicCandidate,
@@ -112,6 +115,8 @@ export function GeoContentDeck() {
   const [openSummary, setOpenSummary] = useState(false);
   const [publish, setPublish] = useState<GeoPublishState | null>(null);
   const [publishBusy, setPublishBusy] = useState(false);
+  const [backlink, setBacklink] = useState<GeoBacklinkState | null>(null);
+  const [backlinkBusy, setBacklinkBusy] = useState(false);
 
   const refreshClusters = useCallback(async () => {
     try {
@@ -135,6 +140,11 @@ export function GeoContentDeck() {
         setPublish(await getPublishState(clusterId));
       } catch {
         setPublish(null);
+      }
+      try {
+        setBacklink(await getBacklinkState());
+      } catch {
+        setBacklink(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -312,6 +322,19 @@ export function GeoContentDeck() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setPublishBusy(false);
+    }
+  }
+
+  async function handleBacklinks() {
+    setBacklinkBusy(true);
+    setError(null);
+    try {
+      await dispatchBacklinks();
+      if (selectedId) await refreshDetail(selectedId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBacklinkBusy(false);
     }
   }
 
@@ -654,6 +677,78 @@ export function GeoContentDeck() {
                   ) : (
                     <p style={HINT}>还没有发布过。</p>
                   )}
+                </div>
+              </section>
+
+              {/* 产品页反链（轨道2）：产品页 → 对应类目的指南文章 */}
+              <section style={CARD}>
+                <div style={{ ...SECTION_TOGGLE, cursor: "default" }}>
+                  <strong>产品页反链</strong>
+                  {backlink ? (
+                    <span style={COUNT_PILL}>{backlink.target_count} 个产品页</span>
+                  ) : null}
+                  <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.55 }}>
+                    只挂对应类目的指南文章，绝不挂 /guides/ 主页
+                  </span>
+                  <button
+                    onClick={() => void handleBacklinks()}
+                    disabled={backlinkBusy || !backlink?.ready}
+                    style={PRIMARY_BTN}
+                  >
+                    {backlinkBusy ? "派单中…" : "同步产品页反链"}
+                  </button>
+                </div>
+                <div style={SECTION_BODY}>
+                  <p style={HINT}>
+                    在产品描述最底部维护一个「Learn more」区块，指向这个类目已发布的指南。
+                    只改 description 一个字段，不碰价格、图片、类目；重复跑不会叠加。
+                  </p>
+                  {backlink && backlink.targets.length > 0 ? (
+                    <ul style={{ ...RESET_LIST, gap: 6, marginTop: 10 }}>
+                      {backlink.targets.map((t) => (
+                        <li key={t.woo_product_id} style={ROW}>
+                          <span style={{ ...BADGE, color: GREEN }}>
+                            {t.sku || t.woo_product_id}
+                          </span>
+                          <span style={{ fontSize: 13 }}>
+                            将挂 {t.guide_count} 篇指南
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {backlink && backlink.skipped.length > 0 ? (
+                    <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 12.5, opacity: 0.7 }}>
+                      {backlink.skipped.map((sk, i) => (
+                        <li key={i}>{sk}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {backlink && backlink.jobs.length > 0 ? (
+                    <ul style={{ ...RESET_LIST, gap: 6, marginTop: 12 }}>
+                      {backlink.jobs.slice(0, 3).map((j) => (
+                        <li key={j.job_id} style={ROW}>
+                          <span
+                            style={{
+                              ...BADGE,
+                              color:
+                                j.status === "success"
+                                  ? GREEN
+                                  : j.status === "failed"
+                                    ? RED
+                                    : GOLD,
+                            }}
+                          >
+                            {j.status}
+                          </span>
+                          <span style={{ fontSize: 12.5, opacity: 0.75 }}>
+                            更新 {j.updated_count} 个产品页
+                            {j.error ? ` — ${j.error}` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </div>
               </section>
 

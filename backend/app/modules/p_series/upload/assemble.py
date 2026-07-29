@@ -794,6 +794,25 @@ def _append_package_includes_section(
     return description_html[:closing] + section + description_html[closing:]
 
 
+def _append_related_guides_section(
+    description_html: str,
+    guides: list[tuple[str, str]],
+) -> str:
+    """Rail 2: let the product page lead back into the guides that cover it.
+
+    Without this the internal link net is one-way — a crawler or a buyer landing on
+    the PDP can never find the guides. It sits at the very bottom of the description
+    on purpose: useful to someone still deciding, never competing with the buy box.
+
+    The markup comes from ``geo_series.content.backlink`` because the backlink
+    workflow rewrites the same block on live products — two builders would fight
+    each other on every run.
+    """
+    from ...geo_series.content.backlink import apply_guides_block, build_guides_block
+
+    return apply_guides_block(description_html, build_guides_block(guides))
+
+
 def assemble_upload_package(
     db: Session,
     product: Any,
@@ -852,6 +871,20 @@ def assemble_upload_package(
     desc = build_description_html(mcj, description_images)
     desc["html"] = _append_package_includes_section(
         desc["html"], package_includes
+    )
+    # Rail 2 (product → guides). Lazy import: p_series is the lower layer, and this
+    # mirrors how the upload path already reaches GEO in jobs.py.
+    from ...geo_series.content.related_guides import (
+        published_guides_for_product_safely,
+    )
+
+    desc["html"] = _append_related_guides_section(
+        desc["html"],
+        published_guides_for_product_safely(
+            db,
+            product_id=getattr(product, "id", None),
+            product_key=getattr(product, "product_key", None),
+        ),
     )
     raw_faq_items = mcj.get("page_faq")
     faq_items = [

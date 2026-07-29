@@ -39,6 +39,7 @@ def render_article_html(
     *,
     product_links: dict[str, str],
     product_labels: dict[str, str] | None = None,
+    cluster_product_ids: list[str] | None = None,
     sibling_links: list[tuple[str, Any]],
 ) -> str:
     """Body HTML for one guide piece.
@@ -85,15 +86,22 @@ def render_article_html(
                 + "</section>"
             )
 
-    # Rail 1: the products this piece is about, as real links.
-    referenced = _referenced_products(item, product_links, product_labels or {})
+    # Rail 1: the products this guide covers, as real links.
+    referenced = _referenced_products(
+        item, product_links, product_labels or {}, cluster_product_ids
+    )
     if referenced:
         items = "".join(
             f'<li><a class="geo-product-link" href="{escape(url)}">{escape(label)}</a></li>'
             for label, url in referenced
         )
+        heading = (
+            "The product in this guide"
+            if len(referenced) == 1
+            else "The products in this guide"
+        )
         parts.append(
-            '<section class="geo-products"><h2>The product in this guide</h2>'
+            f'<section class="geo-products"><h2>{heading}</h2>'
             f"<ul>{items}</ul></section>"
         )
 
@@ -115,16 +123,32 @@ def _referenced_products(
     item: Any,
     product_links: dict[str, str],
     product_labels: dict[str, str],
+    cluster_product_ids: list[str] | None = None,
 ) -> list[tuple[str, str]]:
-    """(label, url) for each product this piece cites and that is publicly live.
+    """(label, url) for every product this guide covers and that is publicly live.
+
+    **Driven by the cluster, not by the copy.** This block is pure data — a name and
+    a link — so binding it to ``source_product_ids_json`` (frozen by the generator at
+    write time) meant a product added to the category later never appeared, even
+    though the guide is about that category. Rendering from the cluster's product
+    list instead makes "new product joins an existing cluster" a one-step fix: hit
+    publish again and the link is there — no regeneration, no re-approval, and not a
+    word of approved copy touched.
 
     The label must be the product's public H1. It used to fall back to whatever
     identifier the copy cited, which put a raw UUID in front of readers in live
-    content (2026-07-29). A product with no resolvable title is dropped rather than
-    linked under a meaningless label.
+    content (2026-07-29 — that product's ``product_key`` is itself UUID-shaped). A
+    product with no resolvable title is dropped rather than linked under a
+    meaningless label.
     """
     raw = item.source_product_ids_json
     refs = [str(r).strip() for r in raw] if isinstance(raw, list) else []
+    # The copy's own citations come first (that is what the text talks about), then
+    # everything else in the cluster.
+    for extra in cluster_product_ids or []:
+        text = str(extra).strip()
+        if text and text not in refs:
+            refs.append(text)
     seen: set[str] = set()
     out: list[tuple[str, str]] = []
     for ref in refs:

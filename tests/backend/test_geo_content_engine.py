@@ -994,3 +994,210 @@ def test_guides_hub_collapses_article_lists() -> None:
     assert "<details class=\"geo-hub-leaf\" open>" not in html
     # 搜索必须能把折叠的分组自动打开,否则搜了等于搜不到
     assert "leaf.open=true" in html
+
+
+# ===================================================================
+# 双向内链 — 新产品补链接（三步→一步）+ 产品页反向链接
+# ===================================================================
+
+
+def test_product_block_is_driven_by_the_cluster_not_the_frozen_copy() -> None:
+    """新产品进老簇后,重推一次就该出现在已发布文章里——
+    不重新生成、不重新审核、不动已批准的正文。"""
+    from types import SimpleNamespace
+
+    from backend.app.modules.geo_series.content.publish_html import render_article_html
+
+    item = SimpleNamespace(
+        body_json={"sections": [{"heading": "H", "body": "B"}]},
+        # 生成时 AI 只写死了老产品
+        source_product_ids_json=["old-product"],
+    )
+    html = render_article_html(
+        item,
+        product_links={
+            "old-product": "https://site/product/old/",
+            "new-product": "https://site/product/new/",
+        },
+        product_labels={"old-product": "Old Shower", "new-product": "New Shower"},
+        cluster_product_ids=["old-product", "new-product"],
+        sibling_links=[],
+    )
+    assert "https://site/product/new/" in html
+    assert "New Shower" in html
+    # 正文引用的产品排在前面(文章讲的就是它)
+    assert html.index("Old Shower") < html.index("New Shower")
+    assert "The products in this guide" in html  # 复数
+
+
+def test_product_block_dedupes_when_cluster_and_copy_use_different_ids() -> None:
+    """簇存行 id、文案引用 product_key,同一个产品两种标识——只能出现一次。"""
+    from types import SimpleNamespace
+
+    from backend.app.modules.geo_series.content.publish_html import render_article_html
+
+    item = SimpleNamespace(
+        body_json={"sections": []}, source_product_ids_json=["the-product-key"]
+    )
+    url = "https://site/product/x/"
+    html = render_article_html(
+        item,
+        product_links={"the-product-key": url, "the-row-id": url},
+        product_labels={"the-product-key": "Shower", "the-row-id": "Shower"},
+        cluster_product_ids=["the-row-id"],
+        sibling_links=[],
+    )
+    assert html.count(url) == 1
+    assert "The product in this guide" in html  # 单数
+
+
+def test_related_guides_ranks_hub_first_and_caps_the_list() -> None:
+    from backend.app.modules.geo_series.content import related_guides as rg
+
+    assert rg._ITEM_TYPE_ORDER["hub"] == 0
+    assert rg.MAX_GUIDES_ON_PRODUCT == 5
+    src = inspect.getsource(rg.published_guides_for_product)
+    # 只挂已批准且真的上线的文章
+    assert 'review_status == "approved"' in src
+    assert "published_url.is_not(None)" in src
+    # 行 id 与 product_key 两种标识都要认
+    assert "product_key" in src
+
+
+def test_product_description_gets_a_learn_more_block_that_cannot_break_upload() -> None:
+    from backend.app.modules.p_series.upload import assemble as pa
+
+    html = pa._append_related_guides_section(
+        "<div class='kp'><section>body</section></div>",
+        [("How it works", "https://site/how-it-works/")],
+    )
+    assert "Learn more" in html
+    assert "https://site/how-it-works/" in html
+    # 追加在描述最底部,不跟买家的下单动线抢位置
+    assert html.index("body") < html.index("Learn more")
+    assert html.rstrip().endswith("</div>")
+    # 没有指南时绝不留空区块
+    assert pa._append_related_guides_section("<div>x</div>", []) == "<div>x</div>"
+
+    # 上架路径必须走 safely 包装——GEO 侧出问题不许带崩上架
+    src = inspect.getsource(pa.assemble_upload_package)
+    assert "published_guides_for_product_safely" in src
+
+
+# ===================================================================
+# 轨道2 — 产品页反链（独立工作流 barongGEObacklink001）
+# ===================================================================
+
+
+def test_backlink_never_links_the_guides_hub() -> None:
+    """死命令(用户 2026-07-29):只挂对应类目的具体指南文章,
+    绝不挂 /guides/ 主页——把买家丢进全站索引等于浪费这次点击。"""
+    from backend.app.modules.geo_series.content.backlink import (
+        article_guides_only,
+        build_guides_block,
+    )
+
+    guides = [
+        ("Buying Guide", "https://barongyekhna.com/portable-camping-shower-guide/"),
+        ("All guides", "https://barongyekhna.com/guides/"),
+        ("Hub no slash", "https://barongyekhna.com/guides"),
+        ("Home", "https://barongyekhna.com/"),
+    ]
+    kept = article_guides_only(guides)
+    assert [t for t, _ in kept] == ["Buying Guide"]
+
+    block = build_guides_block(guides)
+    assert "/guides/" not in block
+    assert "portable-camping-shower-guide" in block
+
+    # 全是主页链接 → 干脆不出区块,而不是出一个空盒子
+    assert build_guides_block([("All", "https://barongyekhna.com/guides/")]) == ""
+
+
+def test_backlink_block_is_idempotent() -> None:
+    """读-改-写线上 HTML 的唯一安全前提:标记块「有则替换、无则追加」。"""
+    from backend.app.modules.geo_series.content.backlink import (
+        apply_guides_block,
+        build_guides_block,
+    )
+
+    block = build_guides_block([("How it works", "https://site/how/")])
+    desc = "<div class='kp'><section>body</section></div>"
+
+    once = apply_guides_block(desc, block)
+    twice = apply_guides_block(once, block)
+    thrice = apply_guides_block(twice, block)
+    assert once == twice == thrice
+    assert once.count("kp-guides") == 1
+
+    # 换成新的一批指南 → 替换而不是再加一块
+    newer = build_guides_block([("Types compared", "https://site/types/")])
+    swapped = apply_guides_block(once, newer)
+    assert swapped.count("kp-guides") == 1
+    assert "https://site/how/" not in swapped
+    assert "https://site/types/" in swapped
+
+    # 空区块 = 清掉陈旧的块
+    assert "kp-guides" not in apply_guides_block(once, "")
+
+
+def test_p_upload_and_backlink_emit_the_same_block() -> None:
+    """两个写入方必须产出逐字相同的区块,否则每次跑都会互相覆盖。"""
+    from backend.app.modules.geo_series.content.backlink import build_guides_block
+    from backend.app.modules.p_series.upload import assemble as pa
+
+    guides = [("How it works", "https://site/how/")]
+    from_p = pa._append_related_guides_section("<div></div>", guides)
+    assert build_guides_block(guides) in from_p
+
+
+def test_backlink_workflow_is_brand_new_and_writes_only_description() -> None:
+    import json
+    from pathlib import Path
+
+    wf = json.loads(
+        Path(
+            "backend/app/modules/geo_series/n8n/geo_backlink_workflow.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert wf["id"] == "barongGEObacklink001"
+    names = {n["name"] for n in wf["nodes"]}
+    assert set(wf["connections"]) <= names
+
+    code = next(
+        n["parameters"]["jsCode"] for n in wf["nodes"] if n["name"] == "拼描述"
+    )
+    # 只回写 description;绝不出现价格/库存/图片字段
+    assert "wp_body: { description: next }" in code
+    for forbidden in ("regular_price", "sale_price", "stock", "images", "categories"):
+        assert forbidden not in code
+    # Code 节点必须逐条 map(GEO 发布流踩过 $input.first() 压平)
+    split = next(
+        n["parameters"]["jsCode"] for n in wf["nodes"] if n["name"] == "拆产品"
+    )
+    assert "targets.map" in split
+    # 契约版本硬断言
+    assert "geo-backlink-package-v1" in split
+
+
+def test_backlink_queue_mirrors_serial_semantics() -> None:
+    from backend.app.modules.geo_series.content import backlink_jobs as bj
+
+    src = inspect.getsource(bj)
+    assert "IN_FLIGHT_TIMEOUT_MINUTES = 15" in src
+    assert "N8N_GEO_BACKLINK_WEBHOOK" in src
+    # 先 commit 再发——n8n 毫秒级回来取包(P 系列 2026-07-23 竞态)
+    kick = inspect.getsource(bj.kick_queue)
+    assert kick.index("db.commit()") < kick.index("_send_to_n8n(job")
+    # 终态幂等
+    assert 'if job.status in {"success", "failed"}' in inspect.getsource(bj.record_result)
+
+
+def test_backlink_machine_endpoints_are_token_authenticated() -> None:
+    from backend.app.modules.geo_series import machine_router
+
+    paths = {r.path for r in machine_router.router.routes}
+    assert "/geo/backlinks/{job_id}/package" in paths
+    assert "/geo/backlinks/{job_id}/result" in paths
+    src = inspect.getsource(machine_router)
+    assert "GeoBacklinkJob.token == token" in src

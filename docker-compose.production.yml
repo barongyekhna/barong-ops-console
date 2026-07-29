@@ -60,6 +60,7 @@ services:
       GUNICORN_GRACEFUL_TIMEOUT: "30"
       N8N_P_UPLOAD_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-p-upload"
       N8N_GEO_PUBLISH_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-geo-publish"
+      N8N_GEO_BACKLINK_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-geo-backlink"
       # W-S 物流：模板/单号同步派单 + 订单 ingest 鉴权（n8n 侧工作流用同一 token）
       N8N_W_SYNC_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-w-shipping"
       W_ORDERS_INGEST_TOKEN: "XDDlIDdhCupSE3Fs2Bkd9tYC6Pg-YbkyuI8f7NQRsiY"

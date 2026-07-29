@@ -345,7 +345,54 @@ class GeoSiteSetting(Base):
 GUIDES_PAGE_ID_KEY = "guides_page_id"
 
 
+class GeoBacklinkJob(GeoUUIDPrimaryKeyMixin, GeoScopeMixin, GeoTimestampMixin, Base):
+    """One dispatch that refreshes the "Learn more" block on live product pages.
+
+    Rail 2 of GEO delivery, kept off the P upload path on purpose: re-running a full
+    product upload to change five links would re-upload every image (429 risk) and
+    rewrite price, category and schema — an absurd blast radius for a link block.
+    This job touches exactly one Woo field, ``description``.
+
+    Same queue semantics as ``GeoPublishJob``/``PUploadJob``: one dispatch in
+    flight, commit before send, 15-minute stale reaping, terminal-state idempotency.
+    """
+
+    __tablename__ = "geo_backlink_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'dispatched', 'success', 'failed')",
+            name=conv("ck_geo_backlink_jobs_valid_status"),
+        ),
+        Index("ix_geo_backlink_jobs_status", "status"),
+        Index("ix_geo_backlink_jobs_created", "created_at"),
+    )
+
+    job_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    channel: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="woocommerce"
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="queued"
+    )
+    token: Mapped[str] = mapped_column(String(128), nullable=False)
+    # [{product_id, woo_product_id, guide_count}] resolved at dispatch time.
+    targets_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    # [{product_id, woo_product_id, updated}] reported back by the workflow.
+    updated_items_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_by_username: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    dispatched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 __all__ = [
+    "GeoBacklinkJob",
     "GeoContentCluster",
     "GeoContentItem",
     "GeoGenerationJob",

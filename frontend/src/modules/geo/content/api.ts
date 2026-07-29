@@ -347,3 +347,40 @@ export async function reviewItem(
   });
   return readJson(response, "审阅更新失败");
 }
+
+export type GeoBacklinkState = {
+  ready: boolean;
+  target_count: number;
+  targets: { sku: string | null; woo_product_id: number; guide_count: number }[];
+  skipped: string[];
+  jobs: {
+    job_id: string;
+    status: string;
+    error: string | null;
+    updated_count: number;
+    created_at: string | null;
+    finished_at: string | null;
+  }[];
+};
+
+export async function getBacklinkState(): Promise<GeoBacklinkState> {
+  const response = await fetch(`${API_PROXY_BASE}/geo/backlinks`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson(response, "产品页反链状态加载失败");
+}
+
+export async function dispatchBacklinks(): Promise<{
+  job_id: string;
+  status: string;
+  target_count: number;
+}> {
+  const response = await fetch(`${API_PROXY_BASE}/geo/backlinks`, {
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson(response, "同步产品页反链失败");
+}

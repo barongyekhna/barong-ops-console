@@ -12,6 +12,7 @@ unauthenticated route.
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -27,10 +28,17 @@ from ..k_series.product_knowledge.constants import (
 )
 from ..k_series.product_knowledge.scope_shim import KScopeContext
 from .content.assemble import assemble_guide_package, cluster_products, load_cluster_items
-from .content.models import GeoContentCluster, GeoPublishJob
+from .content.backlink import BLOCK_CLASS
+from .content.backlink_jobs import record_result as backlink_record_result
+from .content.models import GeoBacklinkJob, GeoContentCluster, GeoPublishJob
 from .content.publish_gate import publish_blockers
 from .content.publish_jobs import record_result
 from .content.wp_categories import ensure_cluster_category
+from .contract.backlink_package import (
+    GEO_BACKLINK_PACKAGE_VERSION,
+    BacklinkPackage,
+    BacklinkTarget,
+)
 from .contract.publish_package import GuidePackage
 
 router = APIRouter(prefix="/geo", tags=["geo-publish-machine"])
@@ -154,3 +162,100 @@ def geo_publish_result(
 
 
 __all__ = ["router"]
+
+
+# ------------------------------------------------------------------ rail 2
+# Product pages linking back to their guides. Same token handshake; the package is
+# fully resolved by the console so the workflow only swaps one marked block.
+
+
+class BacklinkResultEntry(BaseModel):
+    product_id: str
+    woo_product_id: int | None = None
+    updated: bool = False
+
+
+class BacklinkResultRequest(BaseModel):
+    status: str = Field(default="success")
+    updated_items: list[BacklinkResultEntry] = Field(default_factory=list)
+    error: str | None = None
+
+
+class BacklinkResultResponse(BaseModel):
+    job_id: str
+    status: str
+
+
+@router.get(
+    "/backlinks/{job_id}/package",
+    response_model=BacklinkPackage,
+    response_model_exclude_none=False,
+)
+def geo_backlink_package(
+    job_id: str,
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+) -> BacklinkPackage:
+    """The finished blocks, keyed by live Woo product id."""
+    job = db.scalar(
+        select(GeoBacklinkJob).where(
+            GeoBacklinkJob.job_id == job_id, GeoBacklinkJob.token == token
+        )
+    )
+    if job is None:
+        raise HTTPException(status_code=401, detail="token 无效。")
+
+    raw_targets = job.targets_json if isinstance(job.targets_json, list) else []
+    targets = [
+        BacklinkTarget(
+            product_id=t["product_id"],
+            sku=t.get("sku"),
+            woo_product_id=int(t["woo_product_id"]),
+            block_html=str(t.get("block_html") or ""),
+            guide_count=int(t.get("guide_count") or 0),
+        )
+        for t in raw_targets
+        if isinstance(t, dict) and t.get("product_id") and t.get("woo_product_id")
+    ]
+    return BacklinkPackage(
+        schema_version=GEO_BACKLINK_PACKAGE_VERSION,
+        job_id=job.job_id,
+        channel="woocommerce",
+        generated_at=datetime.now(UTC),
+        block_class=BLOCK_CLASS,
+        targets=targets,
+    )
+
+
+@router.post("/backlinks/{job_id}/result", response_model=BacklinkResultResponse)
+def geo_backlink_result(
+    job_id: str,
+    payload: BacklinkResultRequest,
+    x_job_token: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> BacklinkResultResponse:
+    """n8n reports which product descriptions it rewrote."""
+    updated: list[dict[str, Any]] = [
+        {
+            "product_id": entry.product_id,
+            "woo_product_id": entry.woo_product_id,
+            "updated": entry.updated,
+        }
+        for entry in payload.updated_items
+    ]
+    try:
+        job = backlink_record_result(
+            db,
+            job_id=job_id,
+            token=x_job_token,
+            status=payload.status,
+            updated_items=updated,
+            error=payload.error,
+            public_base=_callback_base(),
+        )
+    except PermissionError:
+        raise HTTPException(status_code=401, detail="job token 无效。") from None
+    if job is None:
+        raise HTTPException(status_code=404, detail="job 不存在。")
+    db.commit()
+    return BacklinkResultResponse(job_id=job.job_id, status=job.status)
