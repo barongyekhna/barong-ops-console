@@ -408,7 +408,11 @@ export function GeoContentDeck() {
   }
 
   const pendingCount = products.filter((p) => p.is_pending).length;
-  const failedJob = jobs.find((j) => j.status === "failed");
+  // 只在"最近一次生成确实失败"时报警。原来写的是在整个历史里 find 任何一条
+  // failed,于是历史上失败过一次,这条红字就永久挂着——哪怕后面已经成功三次。
+  // jobs 由后端按时间倒序给出。
+  const latestJob = jobs[0] ?? null;
+  const failedJob = latestJob?.status === "failed" ? latestJob : null;
 
   return (
     <div style={SHELL}>
@@ -520,6 +524,13 @@ export function GeoContentDeck() {
               {failedJob ? (
                 <div style={{ ...BANNER, borderColor: "rgba(221,109,99,0.45)", color: RED }}>
                   生成失败：{failedJob.error || "未知错误"}
+                  {failedJob.finished_at || failedJob.started_at ? (
+                    <span style={{ opacity: 0.6, fontSize: 12 }}>
+                      　（{new Date(
+                        failedJob.finished_at || failedJob.started_at || "",
+                      ).toLocaleString()}）
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
 
