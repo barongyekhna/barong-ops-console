@@ -196,6 +196,8 @@ class GeoContentOrchestrator:
             skip_item_types=set(skip_item_types),
             covered_questions=covered_questions,
             user=user,
+            # 问句自带的数字("5 gallon")是题目给的,不是编的——算式里可以用。
+            context_numbers=_numbers_in_questions(required_questions),
         )
 
         cluster = self._require_cluster(cluster_id, scope_context)
@@ -423,6 +425,14 @@ class GeoContentOrchestrator:
             revised,
             forbidden_terms=forbidden_terms,
             evidence_numbers=evidence_numbers,
+            context_numbers=_numbers_in_questions(
+                [{"question": item.title}]
+                + [
+                    {"question": b.get("question")}
+                    for b in (body.get("answer_blocks") or [])
+                    if isinstance(b, dict)
+                ]
+            ),
         )
         item = self.db.execute(
             select(GeoContentItem).where(GeoContentItem.id == item_id)
@@ -604,6 +614,7 @@ class GeoContentOrchestrator:
         skip_item_types: set[str],
         covered_questions: set[str],
         user: Any | None,
+        context_numbers: set[str] | None = None,
     ) -> None:
         # Regeneration replaces the cluster's own draft pieces ONLY. Content the
         # operator already approved is theirs — it must never be silently deleted
@@ -649,6 +660,7 @@ class GeoContentOrchestrator:
                 raw,
                 forbidden_terms=forbidden_terms,
                 evidence_numbers=evidence_numbers,
+                context_numbers=context_numbers,
             )
             self.db.add(
                 GeoContentItem(
@@ -670,6 +682,19 @@ class GeoContentOrchestrator:
                 )
             )
         self.db.flush()
+
+
+def _numbers_in_questions(questions: Any) -> set[str]:
+    """Numbers the questions themselves supply — given by the asker, not invented."""
+    from .guards import numbers_in_text
+
+    out: set[str] = set()
+    for entry in questions if isinstance(questions, list) else []:
+        text = (
+            entry.get("question") if isinstance(entry, dict) else entry
+        )
+        out |= numbers_in_text(str(text or ""))
+    return out
 
 
 def _covered_questions(kept_items: list[Any]) -> set[str]:

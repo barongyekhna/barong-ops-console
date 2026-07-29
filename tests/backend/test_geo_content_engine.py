@@ -1643,3 +1643,104 @@ def test_published_slug_is_locked_against_rewrites() -> None:
     # n8n 侧:没有 slug 时不许把 slug 写成空字符串
     code = _geo_node("拆文章")["parameters"]["jsCode"]
     assert "if (seo.url_slug) body.slug = seo.url_slug;" in code
+
+
+# ===================================================================
+# 算术:护栏不该惩罚精确
+# ===================================================================
+
+
+def test_guard_used_to_punish_precision() -> None:
+    """实地踩到:「约2分钟」通过(2 命中"2小时充电"),更准的「2.4分钟」被拦——
+    含糊的过、精确的死。而 5÷2.11 正是这条问句的答案。"""
+    from backend.app.modules.geo_series.content.guards import audit_content_item
+
+    item = {
+        "title": "How long does a 5 gallon portable shower last?",
+        "sections": [{"heading": "x", "body": "About 2.4 minutes at 2.11 GPM."}],
+    }
+    # 不声明算式 → 仍然被拦(护栏没有放松)
+    bare = audit_content_item(
+        item, forbidden_terms=[], evidence_numbers={"2.11"}, context_numbers={"5"}
+    )
+    assert bare["clean"] is False
+    assert any(u["number"] == "2.4" for u in bare["ungrounded_numbers"])
+
+    # 亮出算式 → 放行
+    declared = {**item, "derived_numbers": [{"value": "2.4", "from": "5 / 2.11"}]}
+    ok = audit_content_item(
+        declared, forbidden_terms=[], evidence_numbers={"2.11"}, context_numbers={"5"}
+    )
+    assert ok["clean"] is True
+
+
+def test_derivation_must_actually_compute() -> None:
+    """依然 fail-closed:算错、操作数没来源、表达式不合法,一律拒。"""
+    from backend.app.modules.geo_series.content.guards import verify_derived_numbers
+
+    ev, ctx = {"2.11"}, {"5"}
+
+    ok, bad = verify_derived_numbers(
+        [{"value": "2.4", "from": "5 / 2.11"}],
+        evidence_numbers=ev, context_numbers=ctx,
+    )
+    assert ok == {"2.4"} and bad == []
+
+    # 算错
+    _, bad = verify_derived_numbers(
+        [{"value": "9.9", "from": "5 / 2.11"}],
+        evidence_numbers=ev, context_numbers=ctx,
+    )
+    assert bad and "算错了" in bad[0]["reason"]
+
+    # 操作数凭空出现
+    _, bad = verify_derived_numbers(
+        [{"value": "7", "from": "3 + 4"}],
+        evidence_numbers=ev, context_numbers=ctx,
+    )
+    assert bad and "没有来源" in bad[0]["reason"]
+
+    # 不是算术(防注入)
+    for evil in ["__import__('os').system('x')", "open('/etc/passwd')", "5 ** 999999"]:
+        _, bad = verify_derived_numbers(
+            [{"value": "1", "from": evil}], evidence_numbers=ev, context_numbers=ctx
+        )
+        assert bad, f"没拦住: {evil}"
+
+    # 除以零
+    _, bad = verify_derived_numbers(
+        [{"value": "1", "from": "5 / 0"}], evidence_numbers=ev, context_numbers=ctx
+    )
+    assert bad
+
+
+def test_bad_derivation_makes_the_item_dirty() -> None:
+    from backend.app.modules.geo_series.content.guards import audit_content_item
+
+    audit = audit_content_item(
+        {
+            "title": "t",
+            "sections": [{"heading": "h", "body": "It lasts 9.9 minutes."}],
+            "derived_numbers": [{"value": "9.9", "from": "5 / 2.11"}],
+        },
+        forbidden_terms=[],
+        evidence_numbers={"2.11"},
+        context_numbers={"5"},
+    )
+    assert audit["clean"] is False
+    assert audit["bad_derivations"]
+
+
+def test_prompts_require_showing_the_work() -> None:
+    from backend.app.modules.geo_series.content.prompt_skills import (
+        geo_content_instruction,
+        geo_revise_instruction,
+    )
+
+    gen = geo_content_instruction()
+    assert "ARITHMETIC IS ALLOWED — BUT SHOW YOUR WORK" in gen
+    assert "derived_numbers" in gen
+    assert "Do NOT round a number into vagueness" in gen
+    rev = geo_revise_instruction()
+    assert "算术是允许的,但必须亮算式" in rev
+    assert "不许为了躲开声明而把数字含糊掉" in rev

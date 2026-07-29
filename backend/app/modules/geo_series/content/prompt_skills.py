@@ -45,6 +45,15 @@ def geo_content_instruction() -> str:
         "AI can attribute and recommend it, and list its identifier in "
         "`source_products` so we can internal-link it to its product page.\n"
         "\n"
+        "ARITHMETIC IS ALLOWED — BUT SHOW YOUR WORK. You may compute a number the "
+        "facts imply (\"5 gallons at 2.11 GPM lasts about 2.4 minutes\"), and you "
+        "SHOULD when the question asks for one — but every computed number MUST be "
+        "declared in `derived_numbers` as {\"value\": \"2.4\", \"from\": "
+        "\"5 / 2.11\", \"unit\": \"minutes\"}. Each operand must come from the "
+        "product facts or from the question itself; the server re-runs the "
+        "arithmetic and rejects the piece if it does not check out. Do NOT round a "
+        "number into vagueness to avoid declaring it — precision is the point.\n"
+        "\n"
         "ANSWER THE QUESTION — DO NOT DESCRIBE THE PRODUCT. A question is answered "
         "when a reader who has NOT made up their mind can now make it up. Reciting "
         "the product's specifications is NOT an answer to a judgement question; it "
@@ -119,7 +128,9 @@ def geo_content_instruction() -> str:
         '"meta_description": "<natural sentence <=160 chars>", "url_slug": '
         '"<lowercase-hyphenated-3-6-words>"},\n'
         '      "source_products": ["<the product_key/sku values this piece names '
-        'and should link to>"]\n'
+        'and should link to>"],\n'
+        '      "derived_numbers": [{"value": "2.4", "from": "5 / 2.11", "unit": '
+        '"minutes"}]\n'
         "    }\n"
         "  ]\n"
         "}\n"
@@ -204,6 +215,12 @@ def geo_revise_instruction() -> str:
         "\n"
         "可以照做的批评通常是:语气过于自夸、缺少客观性、没提适用局限、结构不利于"
         "被摘录、答案不够自足。这些请**在事实范围内**认真改。\n"
+        "\n"
+        "**算术是允许的,但必须亮算式。**可以算出事实蕴含的数字(如「5 加仑按 "
+        "2.11 GPM 约 2.4 分钟」),问句要答案时**就该算**;但每个算出来的数字必须"
+        "在 `derived_numbers` 里声明 {\"value\":\"2.4\",\"from\":\"5 / 2.11\"},"
+        "每个操作数要么来自产品事实、要么来自问句本身。服务端会重算一遍,对不上"
+        "就整篇打回。**不许为了躲开声明而把数字含糊掉**——精确才是价值所在。\n"
         "\n"
         "**回答问句,不要介绍产品。**一个问题被回答的标准是:还没拿定主意的读者"
         "读完能拿定主意。罗列产品参数**不构成**对判断题的回答——那是「产品介绍"
