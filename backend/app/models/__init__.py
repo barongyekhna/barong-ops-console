@@ -77,6 +77,11 @@ from ..modules.k_series.product_knowledge.models import (
 from ..modules.p_series.upload.models import KCategoryWCMap, PUploadJob
 from ..modules.cs_series.models import CSMessage, CSReply
 from ..modules.w_series.shipping.models import WProductSource
+from ..modules.geo_series.monitor.models import (
+    GeoMonitorQuestion,
+    GeoMonitorResult,
+    GeoMonitorRun,
+)
 from ..modules.geo_series.content.models import (
     GeoBacklinkJob,
     GeoContentCluster,
@@ -121,6 +126,9 @@ __all__ = [
     "ExecutionResultRecord",
     "EventStreamRecord",
     "GeoBacklinkJob",
+    "GeoMonitorQuestion",
+    "GeoMonitorResult",
+    "GeoMonitorRun",
     "GeoContentCluster",
     "GeoContentItem",
     "GeoGenerationJob",

@@ -8,6 +8,9 @@ import {
   getCritiqueSummary,
   getPublishState,
   getBacklinkState,
+  getMonitorState,
+  seedMonitorFromCluster,
+  runMonitorSweep,
   dispatchBacklinks,
   publishCluster,
   reviseItem,
@@ -23,6 +26,7 @@ import {
   type GeoCritiqueSummary,
   type GeoPublishState,
   type GeoBacklinkState,
+  type GeoMonitorState,
   type GeoItem,
   type GeoJob,
   type GeoTopicCandidate,
@@ -117,6 +121,8 @@ export function GeoContentDeck() {
   const [publishBusy, setPublishBusy] = useState(false);
   const [backlink, setBacklink] = useState<GeoBacklinkState | null>(null);
   const [backlinkBusy, setBacklinkBusy] = useState(false);
+  const [monitor, setMonitor] = useState<GeoMonitorState | null>(null);
+  const [monitorBusy, setMonitorBusy] = useState<string | null>(null);
 
   const refreshClusters = useCallback(async () => {
     try {
@@ -145,6 +151,11 @@ export function GeoContentDeck() {
         setBacklink(await getBacklinkState());
       } catch {
         setBacklink(null);
+      }
+      try {
+        setMonitor(await getMonitorState());
+      } catch {
+        setMonitor(null);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -335,6 +346,24 @@ export function GeoContentDeck() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBacklinkBusy(false);
+    }
+  }
+
+  async function handleMonitor(action: "seed" | "run") {
+    setMonitorBusy(action);
+    setError(null);
+    try {
+      if (action === "seed") {
+        if (!selectedId) return;
+        await seedMonitorFromCluster(selectedId);
+      } else {
+        await runMonitorSweep();
+      }
+      setMonitor(await getMonitorState());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMonitorBusy(null);
     }
   }
 
@@ -749,6 +778,112 @@ export function GeoContentDeck() {
                       ))}
                     </ul>
                   ) : null}
+                </div>
+              </section>
+
+              {/* 阵地监测（里程碑4）：买家问句的自然搜索阵地 */}
+              <section style={CARD}>
+                <div style={{ ...SECTION_TOGGLE, cursor: "default" }}>
+                  <strong>阵地监测</strong>
+                  {monitor ? (
+                    <span style={COUNT_PILL}>
+                      {monitor.summary.watched} 条在监测
+                    </span>
+                  ) : null}
+                  <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.55 }}>
+                    每条问句一次 Serper，上限 {monitor?.budget?.daily_budget ?? "—"}/天
+                  </span>
+                  <button
+                    onClick={() => void handleMonitor("seed")}
+                    disabled={!!monitorBusy || !selectedId}
+                    style={GHOST_BTN}
+                  >
+                    {monitorBusy === "seed" ? "导入中…" : "导入本簇选题"}
+                  </button>
+                  <button
+                    onClick={() => void handleMonitor("run")}
+                    disabled={!!monitorBusy || !monitor?.summary.watched}
+                    style={PRIMARY_BTN}
+                  >
+                    {monitorBusy === "run" ? "监测中…" : "立即监测"}
+                  </button>
+                </div>
+                <div style={SECTION_BODY}>
+                  <p style={HINT}>
+                    Serper 看不到 AI Overview，所以这里测的是 AI 答案取材的那层——
+                    自然搜索阵地：我们排第几、谁在占位、这条问句软不软。
+                    <strong> 可攻分越高越值得写。</strong>
+                  </p>
+                  {monitor && monitor.summary.checked > 0 ? (
+                    <div style={{ ...ROW, gap: 14, marginTop: 8, fontSize: 12.5 }}>
+                      <span>已检 <strong>{monitor.summary.checked}</strong></span>
+                      <span>我们上榜 <strong style={{ color: monitor.summary.ranked ? GREEN : RED }}>
+                        {monitor.summary.ranked}
+                      </strong></span>
+                      <span>软阵地待攻 <strong style={{ color: GOLD }}>
+                        {monitor.summary.soft_unclaimed}
+                      </strong></span>
+                      <span>最好名次 <strong>{monitor.summary.best_position ?? "—"}</strong></span>
+                    </div>
+                  ) : null}
+                  {monitor && monitor.questions.length > 0 ? (
+                    <ul style={{ ...RESET_LIST, gap: 10, marginTop: 12 }}>
+                      {monitor.questions.map((q) => (
+                        <li
+                          key={q.id}
+                          style={{
+                            border: `1px solid ${
+                              q.terrain === "soft" ? `${GREEN}55` : "rgba(255,255,255,.08)"
+                            }`,
+                            borderRadius: 10,
+                            padding: "10px 12px",
+                          }}
+                        >
+                          <div style={{ ...ROW, gap: 10 }}>
+                            <span
+                              style={{
+                                ...BADGE,
+                                color:
+                                  q.terrain === "soft"
+                                    ? GREEN
+                                    : q.terrain === "hard"
+                                      ? RED
+                                      : GOLD,
+                              }}
+                            >
+                              {q.terrain === "soft"
+                                ? "软"
+                                : q.terrain === "hard"
+                                  ? "硬"
+                                  : q.terrain === "mixed"
+                                    ? "中"
+                                    : "未检"}
+                              {q.attackability !== null ? ` ${q.attackability}` : ""}
+                            </span>
+                            <span style={{ ...BADGE, color: q.our_position ? GREEN : MUTED }}>
+                              {q.our_position ? `#${q.our_position}` : "未上榜"}
+                            </span>
+                            <span style={{ fontSize: 13.5 }}>{q.question}</span>
+                          </div>
+                          {q.top_results.length > 0 ? (
+                            <div style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
+                              前排：
+                              {q.top_results.slice(0, 5).map((r, i) => (
+                                <span key={r.url}>
+                                  {i > 0 ? " · " : " "}
+                                  {r.domain}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p style={HINT}>
+                      还没有监测数据——先「导入本簇选题」，再点「立即监测」。
+                    </p>
+                  )}
                 </div>
               </section>
 

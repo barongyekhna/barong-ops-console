@@ -1054,6 +1054,21 @@ function isAllowedGeoPath(method: string, path: string[]) {
   ) {
     return method === "POST";
   }
+  // GET /geo/monitor ；POST /geo/monitor/run ；POST /geo/monitor/seed-from-cluster/{id}
+  if (path.length === 2 && path[1] === "monitor") {
+    return method === "GET";
+  }
+  if (path.length === 3 && path[1] === "monitor" && path[2] === "run") {
+    return method === "POST";
+  }
+  if (
+    path.length === 4 &&
+    path[1] === "monitor" &&
+    path[2] === "seed-from-cluster" &&
+    isUuidPathSegment(path[3])
+  ) {
+    return method === "POST";
+  }
   // GET (预览) / POST (派单) /geo/backlinks —— 产品页反链刷新
   if (path.length === 2 && path[1] === "backlinks") {
     return method === "GET" || method === "POST";

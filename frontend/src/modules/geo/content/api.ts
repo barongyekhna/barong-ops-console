@@ -384,3 +384,70 @@ export async function dispatchBacklinks(): Promise<{
   });
   return readJson(response, "同步产品页反链失败");
 }
+
+export type GeoMonitorQuestion = {
+  id: string;
+  question: string;
+  intent: string | null;
+  cluster_title: string | null;
+  our_position: number | null;
+  previous_position: number | null;
+  attackability: number | null;
+  terrain: string | null;
+  holder_counts: Record<string, number>;
+  top_results: { position: number; url: string; title: string; domain: string; holder: string }[];
+  last_checked_at: string | null;
+};
+
+export type GeoMonitorState = {
+  questions: GeoMonitorQuestion[];
+  summary: {
+    watched: number;
+    checked: number;
+    ranked: number;
+    soft_unclaimed: number;
+    best_position: number | null;
+  };
+  budget: { provider?: string; daily_budget?: number };
+  runs: {
+    id: string;
+    status: string;
+    question_count: number;
+    checked_count: number;
+    error: string | null;
+    created_at: string | null;
+  }[];
+};
+
+export async function getMonitorState(): Promise<GeoMonitorState> {
+  const response = await fetch(`${API_PROXY_BASE}/geo/monitor`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson(response, "阵地监测加载失败");
+}
+
+export async function seedMonitorFromCluster(
+  clusterId: string,
+): Promise<{ added: number; skipped: number }> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/geo/monitor/seed-from-cluster/${clusterId}`,
+    { cache: "no-store", headers: buildHeaders(true), method: "POST" },
+  );
+  return readJson(response, "导入监测问句失败");
+}
+
+export async function runMonitorSweep(): Promise<{
+  run_id: string;
+  status: string;
+  checked_count: number;
+  question_count: number;
+}> {
+  const response = await fetch(`${API_PROXY_BASE}/geo/monitor/run`, {
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson(response, "监测执行失败");
+}

@@ -35,6 +35,9 @@ from .content.publish_gate import (
     publish_blockers,
     publishable_items,
 )
+from .monitor.seed import seed_from_cluster
+from .monitor.service import MonitorError, run_sweep
+from .monitor.state import monitor_state
 from .content.backlink_jobs import create_backlink_job
 from .content.backlink_jobs import jobs_recent as backlink_jobs_recent
 from .content.backlink_targets import collect_backlink_targets
@@ -557,4 +560,54 @@ def geo_backlink_dispatch(
         "dispatched": job.status == "dispatched",
         "target_count": len(targets),
         "skipped": skipped,
+    }
+
+
+# ------------------------------------------------------------------ 里程碑4
+# 阵地监测:买家问句的自然搜索结果——我们排第几、谁在占位、软不软。
+
+
+@router.get("/monitor")
+def geo_monitor_state(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_READ)),
+) -> dict[str, Any]:
+    """Watch list + the latest observation for each question."""
+    scope = _scope_context(request)
+    return monitor_state(db, scope_context=scope)
+
+
+@router.post("/monitor/seed-from-cluster/{cluster_id}")
+def geo_monitor_seed(
+    cluster_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_EXECUTE)),
+) -> dict[str, Any]:
+    """Import this cluster's chosen buyer questions into the watch list."""
+    scope = _scope_context(request)
+    added, skipped = seed_from_cluster(db, cluster_id=cluster_id, scope_context=scope)
+    db.commit()
+    return {"added": added, "skipped": skipped}
+
+
+@router.post("/monitor/run")
+def geo_monitor_run(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_EXECUTE)),
+) -> dict[str, Any]:
+    """Check every watched question once. Metered against the GEO monitor budget."""
+    scope = _scope_context(request)
+    try:
+        run = run_sweep(db, scope_context=scope, user=user)
+    except MonitorError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "run_id": str(run.id),
+        "status": run.status,
+        "question_count": run.question_count,
+        "checked_count": run.checked_count,
+        "error": run.error,
     }

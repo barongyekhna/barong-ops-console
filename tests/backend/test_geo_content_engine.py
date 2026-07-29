@@ -1323,3 +1323,101 @@ def test_console_syncs_the_exclusion_list_and_never_blocks_publishing() -> None:
     from backend.app.modules.geo_series import machine_router
 
     assert "sync_geo_category_exclusions_safely" in inspect.getsource(machine_router)
+
+
+# ===================================================================
+# 里程碑4 — 阵地监测
+# ===================================================================
+
+
+def test_terrain_reads_a_soft_page_as_attackable() -> None:
+    """2026-07-29 实测的真实结果:Amazon/Facebook/Reddit/YouTube/eBay 占前五,
+    一个权威榜单都没有 —— 这种阵地必须被判为可攻。"""
+    from backend.app.modules.geo_series.monitor.terrain import summarize
+
+    real = [
+        {"position": 1, "url": "https://www.amazon.com/dp/B0D8SXJK"},
+        {"position": 2, "url": "https://www.facebook.com/groups/1399025047071176/posts/1"},
+        {"position": 3, "url": "https://www.reddit.com/r/camping/comments/1la22ch/x"},
+        {"position": 4, "url": "https://www.youtube.com/watch?v=qMveX8COYtM"},
+        {"position": 5, "url": "https://www.ebay.com/itm/406845861913"},
+    ]
+    v = summarize(real)
+    assert v["terrain"] == "soft"
+    assert v["attackability"] >= 70
+    assert v["our_position"] is None
+
+
+def test_terrain_reads_an_authority_page_as_hard() -> None:
+    from backend.app.modules.geo_series.monitor.terrain import summarize
+
+    hard = [
+        {"position": 1, "url": "https://www.outdoorgearlab.com/topics/camping/best-camp-shower"},
+        {"position": 2, "url": "https://www.rei.com/learn/expert-advice/showers.html"},
+        {"position": 3, "url": "https://www.switchbacktravel.com/best-camping-showers"},
+        {"position": 4, "url": "https://www.cleverhiker.com/best-camp-showers/"},
+    ]
+    v = summarize(hard)
+    assert v["terrain"] == "hard"
+    assert v["attackability"] < 40
+
+
+def test_terrain_finds_our_own_position() -> None:
+    from backend.app.modules.geo_series.monitor.terrain import summarize
+
+    v = summarize(
+        [
+            {"position": 1, "url": "https://www.reddit.com/r/camping/x"},
+            {"position": 2, "url": "https://barongyekhna.com/portable-camping-shower-guide/"},
+        ]
+    )
+    assert v["our_position"] == 2
+    assert v["holder_counts"].get("ours") == 1
+
+
+def test_registrable_domain_handles_subdomains_and_cctlds() -> None:
+    from backend.app.modules.geo_series.monitor.terrain import registrable_domain
+
+    assert registrable_domain("https://www.amazon.com/x") == "amazon.com"
+    assert registrable_domain("https://old.reddit.com/r/x") == "reddit.com"
+    assert registrable_domain("https://www.amazon.co.uk/x") == "amazon.co.uk"
+    assert registrable_domain("not a url") == ""
+
+
+def test_monitor_consumes_quota_before_calling_and_refunds_on_failure() -> None:
+    """烧钱铁律:新出网付费调用当天接台账;失败要退还,否则额度被白吃掉。"""
+    from backend.app.modules.geo_series.monitor import service
+
+    src = inspect.getsource(service.run_sweep)
+    assert "PROVIDER_GEO_SERPER_MONITOR" in src
+    # 先扣额度,再发请求
+    assert src.index("try_consume(") < src.index("fetch_first_page(")
+    # 请求失败要退还
+    assert "refund(db, PROVIDER_GEO_SERPER_MONITOR" in src
+    # 出网前必须释放事务(idle-in-transaction 死规矩)
+    assert src.index("db.commit()") < src.index("fetch_first_page(")
+    # 密钥解析也慢,必须在事务释放之后、且用独立短会话(2026-07-29 实测被 8s 掐断)
+    assert src.index("db.commit()") < src.index("_serper_key(key_session")
+    # 单条问句失败不能毁掉整轮
+    assert "continue" in src
+
+
+def test_monitor_bucket_is_metered_and_capped() -> None:
+    from r_system_v2.ra.quota_ledger import (
+        DEFAULT_DAILY_BUDGETS,
+        PROVIDER_GEO_SERPER_MONITOR,
+        provider_label,
+    )
+
+    assert DEFAULT_DAILY_BUDGETS[PROVIDER_GEO_SERPER_MONITOR] > 0
+    assert provider_label(PROVIDER_GEO_SERPER_MONITOR) != PROVIDER_GEO_SERPER_MONITOR
+
+
+def test_monitor_seeding_reuses_real_buyer_questions_and_is_idempotent() -> None:
+    from backend.app.modules.geo_series.monitor import seed
+
+    src = inspect.getsource(seed.seed_from_cluster)
+    # 复用 M2 采到的真实问句,不让用户重新输
+    assert "picked_questions_json" in src
+    # 重复导入不许产生重复行
+    assert "existing" in src and "skipped" in src
