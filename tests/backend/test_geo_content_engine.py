@@ -1510,3 +1510,31 @@ def test_server_computes_which_types_to_write_not_the_model() -> None:
     assert "never invent an item_type" in prompt
     # 一条待写问句一篇深答
     assert "ONE PER pending required question" in prompt
+
+
+def test_prompt_forbids_spec_recitation_as_an_answer() -> None:
+    """用户 2026-07-29 指出最严重的问题:「值不值」被写成罗列产品参数。
+    防编造的护栏挡住了讲道理,系统只剩规格表可用。写作家规必须明确禁止。"""
+    from backend.app.modules.geo_series.content.prompt_skills import (
+        geo_content_instruction,
+    )
+
+    prompt = geo_content_instruction()
+    assert "ANSWER THE QUESTION — DO NOT DESCRIBE THE PRODUCT" in prompt
+    assert "can now make it up" in prompt
+    # 判断题必须给决策结构,而且"什么情况下不值得"这半边是强制的
+    assert "JUDGEMENT QUESTIONS" in prompt
+    assert "the conditions under which it is NOT worth it" in prompt
+    assert "mandatory" in prompt
+    # 条件判断不等于编造事实——这条要写进去,否则模型会因为怕违规而不敢下判断
+    assert "it is a conditional, not a claim of fact" in prompt
+
+
+def test_critique_flags_product_description_wearing_a_question_hat() -> None:
+    """这类毛病语法全对、审查全清,正则和硬门禁抓不到,只能靠 LLM 评审员。"""
+    from backend.app.modules.geo_series.content.analysis import analysis_instruction
+
+    prompt = analysis_instruction()
+    assert "回答问句" in prompt and "介绍产品" in prompt
+    assert "拿不定主意" in prompt or "拿定主意" in prompt
+    assert "什么情况下不值得" in prompt
