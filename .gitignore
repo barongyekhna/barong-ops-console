@@ -68,3 +68,6 @@ backups/
 
 # One-off WP diagnostic plugin (bkismet signup debug) — keep on disk, out of Git.
 backend/app/modules/p_series/wordpress/plugins/barong-hookdump.php
+
+# GEO working photos (harvested/incoming/webp) — tens of MB of binaries, stay on disk.
+geo-photos/

@@ -1376,6 +1376,85 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="geo.content",
+        display_name="GEO 内容引擎",
+        description=(
+            "Generative Engine Optimization content engine: turns K product facts "
+            "into AI-citable guide/comparison content organized along the category "
+            "tree, reviewed in-console before publishing (a later milestone)."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/geo",
+        api_namespace="/geo",
+        navigation=_navigation(
+            group="Registry",
+            label="GEO 内容引擎",
+            icon="Sparkles",
+            order=17,
+        ),
+        required_permissions=("geo.content.read",),
+        permission_manifest=(
+            _permission(
+                module_key="geo.content",
+                permission_key="geo.content.read",
+                category="business",
+                action="read",
+                label="Read GEO content",
+                description="View topic clusters and generated guide content.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="geo.content",
+                permission_key="geo.content.execute",
+                category="business",
+                action="execute",
+                label="Generate GEO content",
+                description=(
+                    "Create topic clusters and generate AI-citable guide content."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="geo.content",
+                permission_key="geo.content.manage",
+                category="business",
+                action="manage",
+                label="Manage GEO content",
+                description="Approve, reject, or edit generated guide content.",
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.geo.content",
+        data_boundary=_data_boundary(
+            reads=(
+                "geo_content_clusters",
+                "geo_content_items",
+                "geo_generation_jobs",
+                "k_product_knowledge_products",
+                "k_category_google",
+            ),
+            writes=(
+                "geo_content_clusters",
+                "geo_content_items",
+                "geo_generation_jobs",
+            ),
+            blocked_objects=("cross_module_writes",),
+        ),
+    ),
+    _manifest(
         module_key="cs.customer_service",
         display_name="客服中心",
         description=(

@@ -77,6 +77,14 @@ from ..modules.k_series.product_knowledge.models import (
 from ..modules.p_series.upload.models import KCategoryWCMap, PUploadJob
 from ..modules.cs_series.models import CSMessage, CSReply
 from ..modules.w_series.shipping.models import WProductSource
+from ..modules.geo_series.content.models import (
+    GeoContentCluster,
+    GeoContentItem,
+    GeoGenerationJob,
+    GeoPublishJob,
+    GeoSiteSetting,
+    GeoWpCategoryMap,
+)
 
 __all__ = [
     "AgentMemoryAccessLog",
@@ -111,6 +119,12 @@ __all__ = [
     "ExecutionDLQRecord",
     "ExecutionResultRecord",
     "EventStreamRecord",
+    "GeoContentCluster",
+    "GeoContentItem",
+    "GeoGenerationJob",
+    "GeoPublishJob",
+    "GeoSiteSetting",
+    "GeoWpCategoryMap",
     "JobEvent",
     "KCategoryWCMap",
     "KeyHealthCheck",

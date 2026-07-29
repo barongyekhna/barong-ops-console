@@ -343,6 +343,38 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "geo.content.read",
+        "module_key": "geo.content",
+        "category": "business",
+        "action": "read",
+        "label": "Read GEO content",
+        "description": "View topic clusters and generated guide content.",
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "geo.content.execute",
+        "module_key": "geo.content",
+        "category": "business",
+        "action": "execute",
+        "label": "Generate GEO content",
+        "description": (
+            "Create topic clusters and generate AI-citable guide content."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "geo.content.manage",
+        "module_key": "geo.content",
+        "category": "business",
+        "action": "manage",
+        "label": "Manage GEO content",
+        "description": "Approve, reject, or edit generated guide content.",
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "cs.customer_service.read",
         "module_key": "cs.customer_service",
         "category": "business",

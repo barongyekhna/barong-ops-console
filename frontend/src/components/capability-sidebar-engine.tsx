@@ -57,6 +57,8 @@ const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(
   C_SYSTEM_MODULE_ORDER.map((item) => item.module_key),
 );
 
+// ⚠️ 死规矩:新建业务系列必须往这里加前缀,否则模块在侧边栏组织树里
+// 直接隐身(W-A 踩过一次,B2B 又踩了一次)。加模块时这是第一个要改的地方。
 const ORGANIZATION_MODULE_PREFIXES = [
   "r.",
   "k.",
@@ -66,6 +68,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "h.",
   "w.",
   "cs.",
+  "geo.",
   "seo.",
   "gmc.",
 ] as const;
@@ -163,11 +166,12 @@ function isRestrictedProductModule(moduleId: string) {
     normalized.startsWith("k.") ||
     normalized.startsWith("i.") ||
     normalized.startsWith("p.") ||
-    // F/H/W 系列与产品系列同规：只在国际贸易组织下展示（死命令）。
+    // F/H/W/GEO 系列与产品系列同规：只在国际贸易组织下展示（死命令）。
     normalized.startsWith("f.") ||
     normalized.startsWith("h.") ||
     normalized.startsWith("w.") ||
     normalized.startsWith("cs.") ||
+    normalized.startsWith("geo.") ||
     normalized === "business.products" ||
     normalized.includes("product")
   );

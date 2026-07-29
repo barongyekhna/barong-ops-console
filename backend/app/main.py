@@ -40,6 +40,8 @@ from .modules.cs_series.router import public_router as cs_public_router
 from .modules.cs_series.router import router as cs_customer_service_router
 from .modules.f_series.router import router as f_enrichment_router
 from .modules.h_series.router import router as h_site_health_router
+from .modules.geo_series.router import router as geo_content_router
+from .modules.geo_series.machine_router import router as geo_machine_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
 from .modules.w_series.router import public_router as w_siteops_public_router
 from .modules.w_series.router import router as w_siteops_router
@@ -298,9 +300,16 @@ def _p_publish_gate_conflict_detail_for_production(
 ) -> dict[str, object] | None:
     """Keep only the non-sensitive P publish-gate conflict contract."""
 
+    gated_prefixes = (
+        f"{APPLICATION_API_PREFIX}/p/",
+        # GEO publishing reuses the same publish-gate conflict contract, and its
+        # blockers must stay readable in production or the operator cannot tell
+        # why a cluster refused to publish.
+        f"{APPLICATION_API_PREFIX}/geo/",
+    )
     if (
         status_code != status.HTTP_409_CONFLICT
-        or not request.url.path.startswith(f"{APPLICATION_API_PREFIX}/p/")
+        or not request.url.path.startswith(gated_prefixes)
         or not isinstance(detail, dict)
         or set(detail) != {"ready", "blockers"}
     ):
@@ -989,6 +998,9 @@ app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(c19_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(cs_customer_service_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(geo_content_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(geo_machine_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(geo_machine_router)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)

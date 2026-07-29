@@ -994,6 +994,80 @@ function isAllowedKeyHealthPath(method: string, path: string[]) {
   return path[1] === "run" && method === "POST";
 }
 
+function isAllowedGeoPath(method: string, path: string[]) {
+  if (path[0] !== "geo") {
+    return false;
+  }
+  // GET (list) / POST (create) /geo/clusters
+  if (path.length === 2 && path[1] === "clusters") {
+    return method === "GET" || method === "POST";
+  }
+  // POST /geo/clusters/from-product
+  if (
+    path.length === 3 &&
+    path[1] === "clusters" &&
+    path[2] === "from-product"
+  ) {
+    return method === "POST";
+  }
+  // GET /geo/clusters/{id}
+  if (
+    path.length === 3 &&
+    path[1] === "clusters" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "GET";
+  }
+  // POST /geo/clusters/{id}/generate ; GET /geo/clusters/{id}/jobs ;
+  // GET /geo/clusters/{id}/topic-candidates ; POST /geo/clusters/{id}/picked-questions
+  if (
+    path.length === 4 &&
+    path[1] === "clusters" &&
+    isUuidPathSegment(path[2])
+  ) {
+    if (path[3] === "generate") {
+      return method === "POST";
+    }
+    if (path[3] === "jobs") {
+      return method === "GET";
+    }
+    if (
+      path[3] === "topic-candidates" ||
+      path[3] === "critique-summary" ||
+      path[3] === "publishes"
+    ) {
+      return method === "GET";
+    }
+    if (path[3] === "publish") {
+      return method === "POST";
+    }
+    if (path[3] === "picked-questions") {
+      return method === "POST";
+    }
+  }
+  // POST /geo/items/{id}/review  |  POST /geo/items/{id}/analyze
+  if (
+    path.length === 4 &&
+    path[1] === "items" &&
+    isUuidPathSegment(path[2]) &&
+    (path[3] === "review" || path[3] === "analyze" || path[3] === "revise")
+  ) {
+    return method === "POST";
+  }
+  // POST /geo/clusters/{id}/products/{pid}/spotlight
+  if (
+    path.length === 6 &&
+    path[1] === "clusters" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "products" &&
+    isUuidPathSegment(path[4]) &&
+    path[5] === "spotlight"
+  ) {
+    return method === "POST";
+  }
+  return false;
+}
+
 function isAllowedPPath(method: string, path: string[]) {
   if (path[0] !== "p") {
     return false;
@@ -1475,6 +1549,29 @@ function isAllowedKPath(method: string, path: string[]) {
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&
     ["generate-copy", "generate-image-brief", "brand-audit"].includes(path[3])
+  ) {
+    return method === "POST";
+  }
+
+  // POST /k/products/{id}/brand-audit/ignore  逐条忽略/人工放行品牌审查发现
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "brand-audit" &&
+    path[4] === "ignore"
+  ) {
+    return method === "POST";
+  }
+
+  // POST /k/products/{id}/images/{asset_id}/upload-bound  手动图绑定上传
+  if (
+    path.length === 6 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "images" &&
+    isUuidPathSegment(path[4]) &&
+    path[5] === "upload-bound"
   ) {
     return method === "POST";
   }
@@ -1995,6 +2092,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedRwPath(method, path) ||
     isAllowedArcadePath(method, path) ||
     isAllowedNotificationsPath(method, path) ||
+    isAllowedGeoPath(method, path) ||
     isAllowedPPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);

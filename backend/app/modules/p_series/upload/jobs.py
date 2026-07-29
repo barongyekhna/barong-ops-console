@@ -182,6 +182,15 @@ def record_result(
     job.error = error
     job.finished_at = _now()
     db.flush()
+    # 上架成功即挂进 GEO 话题簇（一类目一簇：同类目产品共享话题，绝不建重复簇）。
+    # 只建/挂簇，不生成内容——选题与生成仍要人工。包在 safely 里：
+    # GEO 侧出任何问题都不许把上架回报带崩。
+    if job.status == "success":
+        from ...geo_series.content.ingest_from_p import (
+            ensure_geo_cluster_for_product_safely,
+        )
+
+        ensure_geo_cluster_for_product_safely(db, k_product_id=job.product_id)
     # 队列核心：这单落地了，自动放行下一单
     if public_base:
         try:

@@ -31,7 +31,9 @@ from .provider_config_service import (
 )
 
 AIProvider = Literal["serp", "chatgpt", "claude", "deepseek"]
-AITaskType = Literal["search", "chat", "generate", "selling_points"]
+AITaskType = Literal[
+    "search", "chat", "generate", "selling_points", "content_analysis"
+]
 
 MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
     "serp": {
@@ -43,6 +45,10 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "chat": "deepseek-v4-pro",
         "generate": "deepseek-v4-pro",
         "selling_points": "deepseek-v4-pro",
+        # GEO 审稿助读:逐篇解读(翻译/GEO 作用/为什么这么写),量大且不需要
+        # 顶配推理,用户拍板走便宜的 flash(2026-07-28 实探供应商在售模型:
+        # deepseek-v4-flash / deepseek-v4-pro)。
+        "content_analysis": "deepseek-v4-flash",
     },
     "chatgpt": {
         "default": "gpt-5.6-luna",
