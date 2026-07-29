@@ -31,10 +31,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import httpx
-from sqlalchemy import bindparam, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.orm import Session
 
 from ....core.config import Settings, get_settings
+from .models import GeoWpCategoryMap
 from ...p_series.upload.wc_categories import (  # hardened, deliberately shared
     WCCategoryConfigurationError,
     WCCategoryError,
@@ -212,37 +213,117 @@ def ensure_post_category_path(
     return parent_id
 
 
+class GeoCategoryError(RuntimeError):
+    """The cluster cannot be filed under its Google-taxonomy category."""
+
+
 def ensure_cluster_category(
     db: Session, *, cluster: object, settings: Settings | None = None
-) -> int | None:
-    """Leaf post-category id for a cluster's Google path. None = publish uncategorised."""
+) -> int:
+    """Leaf post-category id for a cluster's Google path. Raises rather than skipping.
+
+    **Owner's ruling 2026-07-29: a guide must never be published uncategorised.**
+    This used to return ``None`` on any failure and the publisher simply omitted the
+    ``categories`` field — the post went live outside the site's structure, invisible
+    to the taxonomy the whole hub is built on. Now every failure raises, the package
+    endpoint turns it into a 409, and nothing is published at all.
+
+    Creating the terms is the same find-or-create walk P uses for Woo product
+    categories, so guides and products mirror one Google tree.
+    """
     google_id = str(getattr(cluster, "google_category_id", "") or "").strip()
     if not google_id:
-        return None
+        raise GeoCategoryError(
+            "这个话题簇没有绑定谷歌类目——指南必须落在类目里，不能无类目上线。"
+        )
     from ...k_series.product_knowledge.category_resolver import google_category_path
 
     try:
         path = google_category_path(db, google_id)
-    except Exception:  # noqa: BLE001 - taxonomy lookup must not block publishing
-        logger.exception("GEO category path lookup failed for %s", google_id)
+    except Exception as exc:  # noqa: BLE001
         _rollback_cache(db)
-        return None
+        raise GeoCategoryError(f"谷歌类目 {google_id} 解析失败：{exc}") from exc
     if not path:
-        return None
+        raise GeoCategoryError(
+            f"谷歌类目 {google_id} 在类目树里找不到路径——不能无类目上线。"
+        )
     try:
         term_id = ensure_post_category_path(db, path, settings=settings)
-    except WCCategoryError:
-        logger.exception(
-            "GEO post-category ensure failed for %s; publishing uncategorised",
-            google_id,
+    except WCCategoryError as exc:
+        _rollback_cache(db)
+        raise GeoCategoryError(
+            f"WordPress 分类创建失败（{' > '.join(path)}）：{exc}"
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        _rollback_cache(db)
+        raise GeoCategoryError(
+            f"WordPress 分类创建异常（{' > '.join(path)}）：{exc}"
+        ) from exc
+    if not isinstance(term_id, int) or term_id <= 0:
+        raise GeoCategoryError(
+            f"WordPress 没有返回有效的分类 id（{' > '.join(path)}）。"
         )
-        _rollback_cache(db)
-        return None
-    except Exception:  # noqa: BLE001 - category enrichment never blocks publishing
-        logger.exception("GEO post-category ensure crashed for %s", google_id)
-        _rollback_cache(db)
-        return None
-    return term_id if isinstance(term_id, int) and term_id > 0 else None
+    return term_id
 
 
-__all__ = ["ensure_post_category_path", "ensure_cluster_category"]
+__all__ = [
+    "GEO_CATEGORY_IDS_OPTION",
+    "GeoCategoryError",
+    "ensure_cluster_category",
+    "ensure_post_category_path",
+    "sync_geo_category_exclusions",
+    "sync_geo_category_exclusions_safely",
+]
+
+
+# ---------------------------------------------------------------- rail 3
+# Keep guides out of the blog archive. The exclusion list is data, not code: the
+# console owns it and pushes it to a WordPress option that the thin plugin
+# ``barong-geo-archive`` reads. New Google categories therefore start being
+# excluded the moment they are created — the plugin is never re-uploaded.
+
+GEO_CATEGORY_IDS_OPTION = "barong_geo_category_ids"
+
+
+def sync_geo_category_exclusions(db: Session, settings: Settings | None = None) -> str:
+    """Push every category GEO owns to the site. Returns the value written."""
+    from ....services import wp_bridge
+
+    rows = db.execute(select(GeoWpCategoryMap.wp_term_id)).all()
+    ids = sorted({int(r[0]) for r in rows if r and int(r[0] or 0) > 0})
+    value = ",".join(str(i) for i in ids)
+    # 死规矩: release the transaction before talking to WordPress.
+    db.commit()
+
+    credentials = wp_bridge._resolve_credentials(db=db)
+    if credentials is None:
+        raise WCCategoryError("WordPress credentials unavailable")
+    result = wp_bridge._request_json(
+        wp_bridge._api_url(credentials, "settings"),
+        credentials=credentials,
+        authenticated=True,
+        method="POST",
+        payload={GEO_CATEGORY_IDS_OPTION: value},
+    )
+    if not result.get("reachable"):
+        raise WCCategoryError(str(result.get("error") or "settings write failed"))
+    return value
+
+
+def sync_geo_category_exclusions_safely(
+    db: Session, settings: Settings | None = None
+) -> str | None:
+    """Same, fail-open: guides are already live, the blog filter is a nicety.
+
+    Never raise into a publish run — if the plugin is not installed yet the option
+    write simply has no reader, which is exactly the pre-install state.
+    """
+    try:
+        return sync_geo_category_exclusions(db, settings)
+    except Exception:  # noqa: BLE001 - the blog filter never blocks publishing
+        logger.exception("GEO category exclusion sync failed")
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            logger.exception("GEO category exclusion rollback failed")
+        return None

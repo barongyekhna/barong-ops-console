@@ -33,7 +33,7 @@ from .content.backlink_jobs import record_result as backlink_record_result
 from .content.models import GeoBacklinkJob, GeoContentCluster, GeoPublishJob
 from .content.publish_gate import publish_blockers
 from .content.publish_jobs import record_result
-from .content.wp_categories import ensure_cluster_category
+from .content.wp_categories import GeoCategoryError, ensure_cluster_category
 from .contract.backlink_package import (
     GEO_BACKLINK_PACKAGE_VERSION,
     BacklinkPackage,
@@ -108,8 +108,14 @@ def geo_publish_package(
             status_code=409, detail={"ready": False, "blockers": blockers}
         )
 
-    # Category enrichment is best-effort and must not block publishing (mirrors P).
-    wp_category_id = ensure_cluster_category(db, cluster=cluster)
+    # 死命令(2026-07-29): 指南必须落在谷歌类目里。建不出分类就整单拒发,
+    # 绝不退化成"无类目照发"——那会让文章掉在全站结构之外。
+    try:
+        wp_category_id = ensure_cluster_category(db, cluster=cluster)
+    except GeoCategoryError as exc:
+        raise HTTPException(
+            status_code=409, detail={"ready": False, "blockers": [str(exc)]}
+        ) from exc
     return assemble_guide_package(
         db,
         cluster=cluster,
@@ -154,6 +160,11 @@ def geo_publish_result(
 
     # The hub page only lists live articles, so refresh it after a successful run.
     if job.status == "success":
+        # 新建过的类目要同步进"排除名单",否则指南会挤进 /posts 博客归档。
+        from .content.wp_categories import sync_geo_category_exclusions_safely
+
+        sync_geo_category_exclusions_safely(db)
+
         from .content.guides_index import refresh_guides_index_safely
 
         refresh_guides_index_safely(db)

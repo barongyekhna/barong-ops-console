@@ -713,9 +713,11 @@ def test_guide_categories_mirror_k_google_taxonomy() -> None:
     assert "/wp-json/wp/v2/categories" in src
     assert "wc_categories import" in src or "from ...p_series.upload.wc_categories" in src
     assert "geo_wp_category_map" in src
-    # never blocks publishing
+    # 死命令(2026-07-29,推翻了原来的"尽力而为"):建不出类目就整单拒发,
+    # 绝不退化成无类目上线——那会让文章掉在全站结构之外。
     ensure = inspect.getsource(wp_categories.ensure_cluster_category)
-    assert "return None" in ensure
+    assert "return None" not in ensure
+    assert "raise GeoCategoryError" in ensure
 
 
 def test_publish_contract_is_versioned_and_closed() -> None:
@@ -1201,3 +1203,123 @@ def test_backlink_machine_endpoints_are_token_authenticated() -> None:
     assert "/geo/backlinks/{job_id}/result" in paths
     src = inspect.getsource(machine_router)
     assert "GeoBacklinkJob.token == token" in src
+
+
+# ===================================================================
+# 死命令(2026-07-29): 指南必须落在谷歌类目里，绝不允许无类目上线
+# ===================================================================
+
+
+def test_publish_gate_blocks_a_cluster_without_a_google_category() -> None:
+    from types import SimpleNamespace
+
+    from backend.app.modules.geo_series.content.publish_gate import category_blockers
+
+    blockers = category_blockers(None, cluster=SimpleNamespace(google_category_id=""))
+    assert blockers and "类目" in blockers[0]
+
+    blockers = category_blockers(None, cluster=SimpleNamespace(google_category_id=None))
+    assert blockers
+
+
+def test_ensure_cluster_category_raises_instead_of_publishing_uncategorised() -> None:
+    """以前失败就返回 None、发布方省略 categories 字段 → 文章掉在全站结构之外。
+    现在任何失败都必须抛,由端点转 409 整单拒发。"""
+    from types import SimpleNamespace
+
+    from backend.app.modules.geo_series.content.wp_categories import (
+        GeoCategoryError,
+        ensure_cluster_category,
+    )
+
+    with pytest.raises(GeoCategoryError):
+        ensure_cluster_category(None, cluster=SimpleNamespace(google_category_id=""))
+
+    src = inspect.getsource(ensure_cluster_category)
+    assert "return None" not in src
+    assert src.count("raise GeoCategoryError") >= 4
+
+
+def test_package_endpoint_409s_when_the_category_cannot_be_created() -> None:
+    from backend.app.modules.geo_series import machine_router
+
+    src = inspect.getsource(machine_router)
+    assert "except GeoCategoryError as exc:" in src
+    assert "status_code=409" in src
+
+
+def test_publish_workflow_refuses_a_package_without_a_category() -> None:
+    """最后一道兜底:控制台门禁之外,n8n 也必须拒发无分类的包。"""
+    code = _geo_node("拆文章")["parameters"]["jsCode"]
+    assert "拒绝发布：发布包没有带分类 id" in code
+    assert "Number.isInteger(categoryId)" in code
+
+
+def test_guides_hub_keeps_text_off_the_card_edges() -> None:
+    """用户反馈:文字完全贴着白色背景两边,读起来很挤。"""
+    from backend.app.modules.geo_series.content.guides_index import render_index_html
+
+    html = render_index_html(
+        [
+            {
+                "category_path": "Sporting Goods > A > Portable Showers",
+                "clusters": [
+                    {"title": "c", "articles": [{"title": "t", "url": "https://x/1/"}]}
+                ],
+            }
+        ]
+    )
+    assert "padding:clamp(" in html
+    assert "box-sizing:border-box" in html
+
+
+# ===================================================================
+# 指南不进 /posts 博客归档（瘦插件 barong-geo-archive + 控制台遥控名单）
+# ===================================================================
+
+
+def test_archive_plugin_filters_only_the_blog_and_feeds() -> None:
+    """本地 docker WP 实测过的行为,锁住:归档/RSS 排除,
+    分类归档、站内搜索、单篇、后台一律不受影响。"""
+    from pathlib import Path
+
+    php = Path(
+        "backend/app/modules/geo_series/wordpress/plugins/barong-geo-archive.php"
+    ).read_text(encoding="utf-8")
+    # 只动主查询,且只在博客归档/订阅
+    assert "is_main_query()" in php
+    assert "$query->is_home()" in php and "$query->is_feed()" in php
+    assert "is_admin()" in php
+    assert "category__not_in" in php
+    # 分类归档/搜索/单篇不能出现在过滤条件里
+    assert "is_search" not in php
+    assert "is_category" not in php
+    assert "is_single" not in php
+    # 名单由控制台遥控,插件里不许有硬编码 id
+    assert "show_in_rest" in php
+    assert "barong_geo_category_ids" in php
+
+
+def test_archive_plugin_sanitiser_drops_rather_than_coerces() -> None:
+    """本地实测逮到的 bug: absint('-5') == 5,会误排除一个真实类目。"""
+    from pathlib import Path
+
+    php = Path(
+        "backend/app/modules/geo_series/wordpress/plugins/barong-geo-archive.php"
+    ).read_text(encoding="utf-8")
+    assert "absint( trim( $part ) )" not in php
+    assert "! preg_match( '/^[0-9]{1,10}$/', $part )" in php
+
+
+def test_console_syncs_the_exclusion_list_and_never_blocks_publishing() -> None:
+    from backend.app.modules.geo_series.content import wp_categories as wc
+
+    src = inspect.getsource(wc.sync_geo_category_exclusions)
+    # 名单来自类目缓存表,不是硬编码
+    assert "GeoWpCategoryMap.wp_term_id" in src
+    # 出网前必须先释放事务(idle-in-transaction 死规矩)
+    assert src.index("db.commit()") < src.index("_resolve_credentials")
+    # 发布链路上必须是 fail-open 的那个包装
+    from backend.app.modules.geo_series import machine_router
+
+    assert "sync_geo_category_exclusions_safely" in inspect.getsource(machine_router)

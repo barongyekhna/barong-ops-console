@@ -47,6 +47,11 @@ if (!articles.length) {{
   throw new Error('发布包里没有已批准的文章');
 }}
 const categoryId = Number(pkg.wp_category_id);
+// 死命令: 指南必须落在谷歌类目里。控制台侧已硬门禁,这里是最后一道兜底——
+// 宁可整单失败,也绝不把文章发成"无类目"。
+if (!Number.isInteger(categoryId) || categoryId <= 0) {{
+  throw new Error('拒绝发布：发布包没有带分类 id');
+}}
 return articles.map((a) => {{
   const seo = a.seo || {{}};
   // wp/v2 的 Yoast 字段走 `meta` 对象(实测可写可读回);`meta_data` 是 Woo 的形状,WP 会静默丢弃。
@@ -368,9 +373,9 @@ def build() -> dict:
         "staticData": None,
         "meta": None,
         "pinData": None,
-        "versionId": "9d1f4c22-0e3b-4a77-9f21-6b0c5f0a11e9",
-        "activeVersionId": "9d1f4c22-0e3b-4a77-9f21-6b0c5f0a11e9",
-        "versionCounter": 3,
+        "versionId": "9d1f4c22-0e3b-4a77-9f21-6b0c5f0a11ea",
+        "activeVersionId": "9d1f4c22-0e3b-4a77-9f21-6b0c5f0a11ea",
+        "versionCounter": 4,
         "triggerCount": 1,
         "tags": [],
         "shared": [

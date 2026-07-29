@@ -69,7 +69,8 @@ def top_of(breadcrumb: str) -> str:
 
 
 _HUB_CSS = """
-.geo-hub{--geo-line:rgba(128,128,128,.28);--geo-soft:rgba(128,128,128,.08)}
+.geo-hub{--geo-line:rgba(128,128,128,.28);--geo-soft:rgba(128,128,128,.08);
+ padding:clamp(18px,4vw,44px);box-sizing:border-box}
 .geo-hub-hero{text-align:center;padding:8px 0 28px}
 .geo-hub-hero h2{margin:0 0 8px;font-size:clamp(26px,4vw,38px);line-height:1.15}
 .geo-hub-lead{margin:0 auto 22px;max-width:60ch;opacity:.75;font-size:15px;line-height:1.6}
