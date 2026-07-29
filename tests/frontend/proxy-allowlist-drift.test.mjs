@@ -40,6 +40,12 @@ const KNOWN_UNPROXIED = new Set([
   // never through Next.
   "POST /api/app/h/ingest",
   "POST /api/app/p/uploads/{job_id}/result",
+  // GEO 发布与产品页反链：n8n 拉发布包 / 反链包 + 回报，一单一钥 token 鉴权。
+  // 同 P 上架流，走裸挂载的机器路由，浏览器永远不该碰到 —— 刻意不进代理白名单。
+  "GET /api/app/geo/clusters/{cluster_id}/publish-package",
+  "POST /api/app/geo/publishes/{job_id}/result",
+  "GET /api/app/geo/backlinks/{job_id}/package",
+  "POST /api/app/geo/backlinks/{job_id}/result",
   "GET /api/app/p/jobs/{job_id}/media/{asset_id}/file",
   // W-S sync callbacks, Woo order ingest and 17TRACK updates are server-to-server only.
   "POST /api/app/w/sync/{job_id}/result",
