@@ -50,6 +50,10 @@ export type CategoryReadiness = {
   pending_items: number;
   needs_review_items: number;
   prospecting_unlocked: boolean;
+  /** 这个类目落进哪些店型（对外英文名）。空 = 不会出现在任何批发页上。 */
+  store_types: string[];
+  /** covered=正常 / blocked=故意不做 / unmapped=缺映射规则 */
+  coverage: "covered" | "blocked" | "unmapped";
   shortfall: number;
 };
 

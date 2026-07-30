@@ -366,9 +366,32 @@ def category_readiness(db: Session) -> list[CategoryReadiness]:
                 shortfall=max(
                     0, CATEGORY_PROSPECTING_MIN_READY_ITEMS - ready
                 ),
+                **_coverage_for(list(key)),
             )
         )
     return out
+
+
+def _coverage_for(category_path: list[str]) -> dict[str, object]:
+    """这个类目落进哪些店型;落不进的话是"故意屏蔽"还是"还没写规则"。
+
+    **必须分开这两种**:武器/成人/医疗/烟酒是刻意不做 B2B 的,报成"缺规则"
+    会让用户来问"我的医疗产品怎么不见了";而真正缺规则的(比如实验室设备)
+    补一条映射就能用。此前两者都是静默的,产品一多根本发现不了。
+    """
+    from ..store_types import catalog as store_type_catalog
+
+    path = [p for p in category_path if p and p != "(uncategorised)"]
+    if not path:
+        return {"store_types": [], "coverage": "unmapped"}
+    specs = store_type_catalog.store_types_for_category(path)
+    if specs:
+        return {
+            "store_types": [spec["public_label"] for spec in specs],
+            "coverage": "covered",
+        }
+    blocked = store_type_catalog.is_blocked(path)
+    return {"store_types": [], "coverage": "blocked" if blocked else "unmapped"}
 
 
 # --------------------------------------------------------------------------

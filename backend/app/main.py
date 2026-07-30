@@ -41,6 +41,7 @@ from .modules.cs_series.router import router as cs_customer_service_router
 from .modules.f_series.router import router as f_enrichment_router
 from .modules.h_series.router import router as h_site_health_router
 from .modules.b2b.machine_router import router as b2b_machine_router
+from .modules.b2b.documents.router import router as b2b_documents_router
 from .modules.b2b.router import router as b2b_wholesale_router
 from .modules.geo_series.router import router as geo_content_router
 from .modules.geo_series.machine_router import router as geo_machine_router
@@ -1025,6 +1026,7 @@ app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(c19_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(cs_customer_service_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(b2b_wholesale_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(b2b_documents_router, prefix=APPLICATION_API_PREFIX)
 # 机器端点双挂载：带前缀那份被会话中间件守着，裸挂载那份才是 n8n 打的。
 app.include_router(b2b_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(b2b_machine_router)

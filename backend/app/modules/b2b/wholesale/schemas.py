@@ -112,6 +112,13 @@ class CategoryReadiness(BaseModel):
     needs_review_items: int = 0
     prospecting_unlocked: bool = False
     shortfall: int = 0
+    # 这个类目落进了哪些店型（对外英文名）。**空 = 这批货不会出现在任何批发页
+    # 上，也不进图册**，而且此前是静默的——产品多了根本发现不了。
+    store_types: list[str] = Field(default_factory=list)
+    # 空店型的两种原因，必须分开：
+    #   blocked  = 目录里**故意屏蔽**（武器/成人/医疗/烟酒），不该做 B2B
+    #   unmapped = 只是还没写映射规则，补一条就能用
+    coverage: str = "covered"
 
 
 class CategoryReadinessResponse(BaseModel):

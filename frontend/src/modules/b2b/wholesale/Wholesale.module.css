@@ -411,3 +411,28 @@
   font-size: 0.8rem;
   margin: 0;
 }
+
+/* ── 没有对应店型的类目 ────────────────────────────────────────
+   这批货不会出现在任何批发页上、也不进图册，而此前是**完全静默**的：
+   不报错、不提示，产品一多根本发现不了（2026-07-30 用户要求做成提示）。
+   用橙色而不是红色：这不是故障，是「缺一条规则」，补上就好。 */
+.badgeOrphan {
+  background: rgba(255, 176, 96, 0.14);
+  border: 1px solid rgba(255, 176, 96, 0.4);
+  border-radius: 999px;
+  color: #ffc98a;
+  cursor: help;
+  font-size: 0.74rem;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+.orphanBanner {
+  background: rgba(255, 176, 96, 0.09);
+  border: 1px solid rgba(255, 176, 96, 0.28);
+  border-radius: 8px;
+  color: #ffd9ab;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+}

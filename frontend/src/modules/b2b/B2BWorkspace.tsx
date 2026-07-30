@@ -3,13 +3,20 @@
 import { useState } from "react";
 
 import styles from "./B2BWorkspace.module.css";
+import DocumentsWorkspace from "./documents/DocumentsWorkspace";
 import { OutreachWorkspace } from "./outreach/OutreachWorkspace";
 import { ProspectWorkspace } from "./prospects/ProspectWorkspace";
 import { StoreTypeWorkspace } from "./store-types/StoreTypeWorkspace";
 import { WidgetWorkspace } from "./widget/WidgetWorkspace";
 import { WholesaleWorkspace } from "./wholesale/WholesaleWorkspace";
 
-type Tab = "store-types" | "wholesale" | "prospects" | "outreach" | "widget";
+type Tab =
+  | "store-types"
+  | "wholesale"
+  | "prospects"
+  | "outreach"
+  | "widget"
+  | "documents";
 
 // 店型排第一：它是 B2B 的主键，挖客户和出图册都从这里派生。
 const TABS: { key: Tab; label: string; hint: string }[] = [
@@ -18,6 +25,8 @@ const TABS: { key: Tab; label: string; hint: string }[] = [
   { key: "prospects", label: "客户挖掘", hint: "抓店铺、机器筛选、攒名单" },
   { key: "outreach", label: "开发信", hint: "补邮箱、写草稿、你亲手发" },
   { key: "widget", label: "产品页小窗", hint: "谁上线了、政策改了重推" },
+  // 单据排最后：它是漏斗最末端，客户说「我要了」之后才用得上。
+  { key: "documents", label: "单据", hint: "开形式发票、买家照着汇款" },
 ];
 
 export function B2BWorkspace() {
@@ -44,6 +53,7 @@ export function B2BWorkspace() {
       {tab === "prospects" ? <ProspectWorkspace /> : null}
       {tab === "outreach" ? <OutreachWorkspace /> : null}
       {tab === "widget" ? <WidgetWorkspace /> : null}
+      {tab === "documents" ? <DocumentsWorkspace /> : null}
     </div>
   );
 }

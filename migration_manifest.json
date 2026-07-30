@@ -2,10 +2,10 @@
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
   "generated_at": "2026-06-17T00:00:00Z",
   "environment": "staging",
-  "alembic_head": "20260729_13_b2b_suppressions",
-  "expected_alembic_head": "20260729_13_b2b_suppressions",
+  "alembic_head": "20260729_14_b2b_documents",
+  "expected_alembic_head": "20260729_14_b2b_documents",
   "head_locked": true,
-  "migration_count": 91,
+  "migration_count": 92,
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -97,10 +97,11 @@
     "20260729_10_craft_facts",
     "20260729_11_seo_permissions",
     "20260729_12_seo_content_tables",
-    "20260729_13_b2b_suppressions"
+    "20260729_13_b2b_suppressions",
+    "20260729_14_b2b_documents"
   ],
-  "migration_order_checksum": "0291644834c8884ff713678014aae101211639eb50a265c9e9ad931a01cca7dd",
-  "migration_hash": "b0f1fc56080155a918d8fecf376360bb8e222ed67d9433e6e8b7f0947f3ced0f",
+  "migration_order_checksum": "d45c66c6b7438849047ab0daa47ce0d97027678ce45f16a10cb3f6b4d1ccdeb6",
+  "migration_hash": "d4d3898e6ea175216c7a96a0387a1e9b173d06e41a70ce51c378b670d91c2079",
   "migrations": [
     {
       "version": "f07_core_001",
@@ -737,6 +738,13 @@
       "down_revision": "20260729_12_seo_content_tables",
       "path": "backend/alembic/versions/20260729_13_b2b_suppressions.py",
       "checksum": "527ad1cd7bd220df6c23ade57ebade2c37c6b2f2a605d7601b9d5ad0d3b06f6c",
+      "applied_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "version": "20260729_14_b2b_documents",
+      "down_revision": "20260729_13_b2b_suppressions",
+      "path": "backend/alembic/versions/20260729_14_b2b_documents.py",
+      "checksum": "33514dee2f6559a46a236c93712ff7cf709f720be9f56211fc0f4b08826bad07",
       "applied_at": "1970-01-01T00:00:00Z"
     }
   ]

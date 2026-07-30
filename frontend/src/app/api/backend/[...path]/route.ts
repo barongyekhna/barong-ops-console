@@ -1487,6 +1487,24 @@ function isAllowedB2bPath(method: string, path: string[]) {
     if (path[2] === "generate") return method === "POST";
     return isUuidPathSegment(path[2]) && method === "PATCH";
   }
+  // ---- 单据（形式发票 PI）+ 收款信息 ----
+  // GET/PUT /b2b/banking             收款银行信息（填一次，印在每张 PI 上）
+  // GET/POST /b2b/documents          单据清单 / 开单
+  // GET /b2b/documents/{id}/pdf      下载 PDF
+  if (path.length === 2 && path[1] === "banking") {
+    return method === "GET" || method === "PUT";
+  }
+  if (path.length === 2 && path[1] === "documents") {
+    return method === "GET" || method === "POST";
+  }
+  if (
+    path.length === 4 &&
+    path[1] === "documents" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "pdf"
+  ) {
+    return method === "GET";
+  }
   // ---- 永不再发名单（说过"别发了"的人，系统里再也生成不出给他的草稿）----
   // GET  /b2b/suppressions   名单
   // POST /b2b/suppressions   加进名单

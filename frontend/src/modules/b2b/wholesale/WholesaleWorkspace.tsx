@@ -184,6 +184,13 @@ export function WholesaleWorkspace() {
     });
   };
 
+  // 没有店型的类目 = 这批货静默消失在批发链路上。此前完全没有提示，
+  // 产品一多根本发现不了（2026-07-30 用户要求做成提示）。
+  const orphanCategories = useMemo(
+    () => readiness.filter((entry) => entry.coverage === "unmapped"),
+    [readiness],
+  );
+
   const [openTiers, setOpenTiers] = useState<Set<string>>(new Set());
 
   const dirtyIds = useMemo(() => {
@@ -299,6 +306,18 @@ export function WholesaleWorkspace() {
         {readiness.length === 0 ? (
           <p className={styles.empty}>还没有产品流入批发目录。</p>
         ) : (
+          <>
+            {orphanCategories.length ? (
+              <p className={styles.orphanBanner}>
+                ⚠ <strong>{orphanCategories.length} 个类目没有对应的店型</strong>
+                ，这些货<strong>不会出现在任何批发页上，也不进图册</strong>：
+                {orphanCategories
+                  .map((entry) => categoryLabel(entry.category_path))
+                  .join("、")}
+                。跟 Claude 说一声补一条映射规则就行（武器 / 成人 / 医疗 / 烟酒
+                标的是「不做 B2B」，那是刻意的，不用管）。
+              </p>
+            ) : null}
           <ul className={styles.catList}>
             {readiness.map((entry) => (
               <li
@@ -323,7 +342,21 @@ export function WholesaleWorkspace() {
                 <span className={styles.catCount}>
                   {entry.ready_items} / {minReady}
                 </span>
-                {entry.prospecting_unlocked ? (
+                {entry.coverage === "unmapped" ? (
+                  <span
+                    className={styles.badgeOrphan}
+                    title="这个类目没有对应的店型，所以这批货不会出现在任何批发页上，也不进图册。跟 Claude 说一声补一条映射规则就行。"
+                  >
+                    ⚠ 没有对应店型
+                  </span>
+                ) : entry.coverage === "blocked" ? (
+                  <span
+                    className={styles.badgeLocked}
+                    title="武器 / 成人 / 医疗 / 烟酒等品类刻意不做 B2B，这是设计如此，不是漏了。"
+                  >
+                    不做 B2B
+                  </span>
+                ) : entry.prospecting_unlocked ? (
                   <span className={styles.badgeOk}>可挖客户</span>
                 ) : (
                   <span className={styles.badgeLocked}>
@@ -341,6 +374,7 @@ export function WholesaleWorkspace() {
               </li>
             ))}
           </ul>
+          </>
         )}
       </section>
 
