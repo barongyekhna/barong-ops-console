@@ -1845,17 +1845,17 @@ def test_mining_seeds_from_the_whole_category_subtree() -> None:
     去套一个动态扩张的品类。
     """
     from backend.app.modules.geo_series.content.topic_mining import (
-        _subtree_category_names,
+        _subtree_categories,
         build_seeds,
     )
 
-    tree = inspect.getsource(_subtree_category_names)
+    tree = inspect.getsource(_subtree_categories)
     assert "c.parent_id = me.parent_id" in tree  # 兄弟叶子
     assert "c.id = me.parent_id" in tree  # 父级
     assert "fallback" in tree  # 查不到也别炸
 
     src = inspect.getsource(build_seeds)
-    assert "_subtree_category_names" in src
+    assert "_subtree_categories" in src
     # "&" 必须拆:淋浴帐篷和淋浴器在同一个叶子里
     assert 're.split(r"\\s*&\\s*", name)' in src
 
@@ -1965,3 +1965,43 @@ def test_off_topic_questions_are_dropped_and_counted() -> None:
     # 挡掉多少要明说,别让"只挖到 20 个"看起来像挖不动
     assert "off_topic_dropped" in src
     assert "漂到相邻品类" in src
+
+
+def test_mined_questions_file_themselves_under_the_right_category() -> None:
+    """从淋浴簇顺带挖到的马桶问句,属于**马桶那个兄弟叶子**,不属于淋浴簇。
+
+    记在发起簇名下两头都错:现在污染淋浴簇的候选列表,将来马桶簇建起来又拿不到
+    ——等于那 18 条白挖了。2026-07-30 用户问"淋浴器和马桶进到几个簇"时查出来的。
+    """
+    import backend.app.models as M
+
+    cols = {c.name for c in M.GeoMinedQuestion.__table__.columns}
+    assert "google_category_id" in cols
+
+    from backend.app.modules.geo_series.content import topic_mining
+
+    subtree = inspect.getsource(topic_mining._subtree_categories)
+    assert "is_leaf" in subtree
+
+    # 归档按**问句里的中心词**,不是按种子——PAA 漂移是常态,
+    # 从淋浴种子挖出来的马桶问句照样要归到马桶叶子去。
+    heads = topic_mining.leaf_head_map(
+        [
+            ("Portable Showers & Privacy Enclosures", "502994"),
+            ("Portable Toilets & Urination Devices", "503009"),
+            ("Portable Toilets & Showers", None),  # 父级不带 id
+        ]
+    )
+    assert heads["shower"] == "502994"
+    assert heads["enclosure"] == "502994"
+    assert heads["toilet"] == "503009"
+    assert topic_mining._attribute("How to empty a portable toilet?", heads) == "503009"
+    assert (
+        topic_mining._attribute("How long does a portable shower last?", heads)
+        == "502994"
+    )
+
+    take = inspect.getsource(topic_mining.mined_candidates)
+    assert "google_category_id ==" in take
+    # 没有类目归属的只给发起簇
+    assert "google_category_id.is_(None)" in take

@@ -38,6 +38,9 @@ def upgrade() -> None:
         sa.Column("depth", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("score", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("seed_query", sa.String(255), nullable=True),
+        # 按种子的类目归档,不是按发起簇——从淋浴簇顺带挖到的马桶问句
+        # 归在马桶那个叶子名下,等那个簇建起来时就已经在了。
+        sa.Column("google_category_id", sa.String(32), nullable=True),
         sa.Column("discovered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "workspace_key",
@@ -78,8 +81,14 @@ def upgrade() -> None:
     op.create_index(
         "ix_geo_mined_questions_cluster", "geo_mined_questions", ["cluster_id"]
     )
+    op.create_index(
+        "ix_geo_mined_questions_category",
+        "geo_mined_questions",
+        ["google_category_id"],
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_geo_mined_questions_category", "geo_mined_questions")
     op.drop_index("ix_geo_mined_questions_cluster", "geo_mined_questions")
     op.drop_table("geo_mined_questions")

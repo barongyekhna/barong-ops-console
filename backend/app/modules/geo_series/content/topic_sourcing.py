@@ -191,7 +191,11 @@ def list_topic_candidates(
     try:
         from .topic_mining import mined_candidates
 
-        raw += mined_candidates(db, cluster_id=cluster.id)
+        raw += mined_candidates(
+            db,
+            cluster_id=cluster.id,
+            google_category_id=cluster.google_category_id,
+        )
     except Exception:  # noqa: BLE001 - 深挖表缺席不该让候选列表崩
         pass
 

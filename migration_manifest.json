@@ -103,7 +103,7 @@
     "20260730_01_geo_mined_questions"
   ],
   "migration_order_checksum": "78c03cc780699774c41b346ebf3a90de2ee5a46416648e191bc891e4973e53cc",
-  "migration_hash": "eebe9f000c79505e068f646d7d3991028537a0984f9d7252f5eb503fade1a915",
+  "migration_hash": "75aef7a520a223d4cb940dcf5a5cfb5fa106993925686c8c4bacfa5bcdbdf31b",
   "migrations": [
     {
       "version": "f07_core_001",
@@ -760,7 +760,7 @@
       "version": "20260730_01_geo_mined_questions",
       "down_revision": "20260729_15_b2b_orders_and_credits",
       "path": "backend/alembic/versions/20260730_01_geo_mined_questions.py",
-      "checksum": "534bea932c5c19e093b40bf7868a4d6c3339c240dbab9d4f2380cf6299cc29a1",
+      "checksum": "e3b4af1f854b86aaef3588917af25472a0cdf29fcdb93cae049b112c955c0031",
       "applied_at": "2026-07-30T00:00:00Z"
     }
   ]

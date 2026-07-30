@@ -339,6 +339,10 @@ class GeoMinedQuestion(
     depth: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     seed_query: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 这条问句**属于哪个类目**——按种子的类目归档,不是按发起簇。
+    # 从淋浴簇顺带挖到的马桶问句归在马桶那个叶子名下:淋浴簇看不到(不污染),
+    # 马桶簇一建起来就能看到(不白挖)。
+    google_category_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     discovered_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

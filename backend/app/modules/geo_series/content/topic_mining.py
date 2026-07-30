@@ -60,6 +60,37 @@ def _norm(text: Any) -> str:
     return re.sub(r"\s+", " ", str(text or "")).strip().lower().rstrip("?").strip()
 
 
+def head_noun_of(chunk: str) -> str | None:
+    words = [w for w in re.findall(r"[a-z0-9]+", str(chunk or "").lower()) if len(w) >= 4]
+    if not words:
+        return None
+    last = words[-1]
+    return last[:-1] if last.endswith("s") else last
+
+
+def leaf_head_map(
+    categories: list[tuple[str, str | None]]
+) -> dict[str, str]:
+    """{中心词: 叶子类目id}。按**问句里出现的中心词**归档,比按种子归档准得多。
+
+    父级名 "Portable Toilets & Showers" 拆出来的 "Portable Toilets" 本身不带 id
+    (它来自非叶子节点),但 "toilet" 这个中心词在兄弟叶子
+    "Portable Toilets & Urination Devices" 里,所以照样能归对。
+
+    而且这样连"从淋浴种子挖出来、内容其实是马桶"的问句也能归对——
+    PAA 漂移是常态,按种子归档会把它们记错地方。
+    """
+    out: dict[str, str] = {}
+    for name, category_id in categories:
+        if not category_id:
+            continue
+        for chunk in re.split(r"\s*&\s*", name):
+            head = head_noun_of(chunk)
+            if head:
+                out.setdefault(head, category_id)
+    return out
+
+
 def head_nouns(chunks: list[str]) -> set[str]:
     """类目的**中心词**(已做单复数归一)。
 
@@ -97,6 +128,19 @@ def _on_topic(question: str, heads: set[str]) -> bool:
     return bool(words & heads)
 
 
+def _attribute(question: str, head_map: dict[str, str]) -> str | None:
+    """这条问句属于哪个叶子类目——看它提到了哪个类目的中心词。"""
+    words = {
+        (w[:-1] if w.endswith("s") else w)
+        for w in re.findall(r"[a-z0-9]+", question.lower())
+        if len(w) >= 4
+    }
+    for head, category_id in head_map.items():
+        if head in words:
+            return category_id
+    return None
+
+
 def _accept(question: str) -> bool:
     """与 topic_sourcing 同一道门:真问句、品牌安全、不是规格复述。"""
     return bool(
@@ -110,18 +154,23 @@ def _accept(question: str) -> bool:
 # ------------------------------------------------------------------ 种子
 
 
-def _subtree_category_names(db: Session, cluster: GeoContentCluster) -> list[str]:
-    """这个簇所在的**整棵子树**的类目名:自己 + 兄弟叶子 + 父级。
+def _subtree_categories(db: Session, cluster: GeoContentCluster) -> list[tuple[str, str | None]]:
+    """整棵子树的 (类目名, 类目id):自己 + 兄弟叶子 + 父级。
 
-    ``k_category_google`` 没有 ORM 模型(仓库里都是裸 SQL 访问),这里同规。
-    路径字符串里只有祖先,**兄弟叶子必须查树**——而兄弟叶子正是"还没上、
-    但迟早要上"的那些品类。查不到就退回路径末两级,挖窄一点也别炸。
+    **带上 id 是关键**:挖到的问句要按"它是从哪个类目的种子挖出来的"归档,
+    而不是按"从哪个簇发起的"。举例:从淋浴簇发起深挖,顺带挖到的便携马桶问句
+    属于 `Portable Toilets & Urination Devices` 这个**兄弟叶子**——
+    等那个簇建起来的时候,这些问句就已经在那儿等着了。
+    记在发起簇名下,则两头都错:现在污染淋浴簇的列表,将来马桶簇又拿不到。
+
+    ``k_category_google`` 没有 ORM 模型(仓库里都是裸 SQL),这里同规。
+    路径字符串里只有祖先,**兄弟叶子必须查树**。查不到就退回路径末两级。
     """
     from sqlalchemy import text as sql_text
 
     path = str(cluster.category_path or "")
     parts = [p.strip() for p in path.split(">") if p.strip()]
-    fallback = list(reversed(parts[-2:]))
+    fallback: list[tuple[str, str | None]] = [(n, None) for n in reversed(parts[-2:])]
 
     google_id = str(getattr(cluster, "google_category_id", "") or "").strip()
     if not google_id:
@@ -133,7 +182,7 @@ def _subtree_category_names(db: Session, cluster: GeoContentCluster) -> list[str
                 WITH me AS (
                     SELECT id, name, parent_id FROM k_category_google WHERE id = :gid
                 )
-                SELECT c.name
+                SELECT c.id, c.name, c.is_leaf
                 FROM k_category_google c, me
                 WHERE c.parent_id = me.parent_id OR c.id = me.parent_id
                 """
@@ -144,27 +193,33 @@ def _subtree_category_names(db: Session, cluster: GeoContentCluster) -> list[str
         logger.exception("category subtree lookup failed")
         return fallback
 
-    names = [str(r[0]).strip() for r in rows if r and str(r[0] or "").strip()]
-    return names or fallback
+    out: list[tuple[str, str | None]] = []
+    for cid, name, is_leaf in rows:
+        text_name = str(name or "").strip()
+        if not text_name:
+            continue
+        # 父级(非叶子)不归档到任何具体类目——它的问句可能属于底下任何一个叶子。
+        out.append((text_name, str(cid) if is_leaf else None))
+    return out or fallback
 
 
 def build_seeds(
     db: Session, *, cluster: GeoContentCluster, scope_context: KScopeContext
-) -> list[str]:
-    """种子查询:**整棵子树的类目词优先,产品词其次**。
+) -> list[tuple[str, str | None]]:
+    """种子查询 (词, 该词归属的类目id)。**整棵子树的类目词优先,产品词其次**。
 
     类目词是这个模块存在的理由——产品名抓不到品类层的问句,更抓不到
     "还没上但迟早要上"的兄弟品类的问句。
     """
-    seeds: list[str] = []
+    seeds: list[tuple[str, str | None]] = []
     seen: set[str] = set()
 
-    def add(text: Any) -> None:
+    def add(text: Any, category_id: str | None) -> None:
         cleaned = " ".join(str(text or "").split()).strip()
         key = cleaned.lower()
         if cleaned and key not in seen and len(cleaned) >= 4:
             seen.add(key)
-            seeds.append(cleaned)
+            seeds.append((cleaned, category_id))
 
     # ① **整棵子树**:父类目 + 它底下的所有叶子。
     #
@@ -172,19 +227,14 @@ def build_seeds(
     # 固定品类,F 系列做的就是类目富化——同一个父类目底下的相邻品今天没有、
     # 明天就会上。所以选题面不是"我们现在卖的那一个叶子",是**整棵子树**。
     #
-    # 举例:叶子是 "Portable Showers & Privacy Enclosures",父级是
-    # "Portable Toilets & Showers",兄弟叶子是 "Portable Toilets"。便携马桶的
-    # 问句不是噪音,是下一批产品的选题储备。我一度按"我们只卖淋浴"把它挡掉了,
-    # 那是拿静态品类的假设去套一个动态扩张的品类。
-    #
     # "&" 一定要拆开:淋浴帐篷(Privacy Enclosures)和淋浴器在同一个叶子里,
     # 不拆就挖不到帐篷那半边——而那正是这个模块存在的理由。
-    for name in _subtree_category_names(db, cluster):
+    for name, category_id in _subtree_categories(db, cluster):
         for chunk in re.split(r"\s*&\s*", name):
-            add(chunk)
+            add(chunk, category_id)
 
     # ② 簇的话题
-    add(cluster.topic)
+    add(cluster.topic, cluster.google_category_id)
 
     # ③ 簇里每个产品的主关键词
     product_ids = cluster.product_ids_json if isinstance(cluster.product_ids_json, list) else []
@@ -195,7 +245,7 @@ def build_seeds(
                 str(product.id) in identifiers
                 or str(getattr(product, "product_key", "")) in identifiers
             ):
-                add(getattr(product, "primary_keyword", None))
+                add(getattr(product, "primary_keyword", None), cluster.google_category_id)
 
     return seeds[:MAX_SEED_QUERIES]
 
@@ -310,8 +360,10 @@ def mine_cluster_questions(
             )
         ).all()
     }
-    # 相关性尺子 = 叶子类目 + 产品关键词的**中心词**。
-    vocab = head_nouns(seeds)
+    # 相关性尺子 = 整棵子树 + 产品关键词的**中心词**。
+    vocab = head_nouns([text for text, _cid in seeds])
+    # 归档尺子:问句里出现哪个中心词,就归哪个叶子类目。
+    head_map = leaf_head_map(_subtree_categories(db, cluster))
     org_id = getattr(scope_context, "workspace_key", None)
 
     # 出网前放掉事务;取钥匙也在事务外(GEO 监测在这一步栽过)。
@@ -326,10 +378,14 @@ def mine_cluster_questions(
     off_topic: list[str] = []
     spent = 0
     found: list[dict[str, Any]] = []
-    expansion_pool: list[str] = []
+    expansion_pool: list[tuple[str, str | None]] = []
 
-    def run_query(query: str, depth: int) -> bool:
-        """打一发。返回是否还能继续(额度、错误)。"""
+    def run_query(query: str, depth: int, category_id: str | None) -> bool:
+        """打一发。返回是否还能继续(额度、错误)。
+
+        ``category_id`` 是这个种子归属的类目——挖到的问句跟着它归档,
+        而不是跟着"从哪个簇发起"。
+        """
         nonlocal spent
         try:
             try_consume(db, PROVIDER_GEO_SERPER_TOPICS, amount=1)
@@ -370,21 +426,24 @@ def mine_cluster_questions(
                     "depth": depth,
                     "score": _score(source_type, intent, depth),
                     "seed": query[:255],
+                    # 按问句里的中心词归档;找不到才退回种子的类目。
+                    "google_category_id": _attribute(text, head_map) or category_id,
                 }
             )
             # 值得展开的两类:PAA(Google 认定的同意图问句)和相关搜索
             # (这个空间里人们还搜什么)。两者展开出来都还在同一个话题内,
             # 而且相关搜索能带出 PAA 碰不到的词面(solar / heated / tent…)。
             if depth == 0 and source_type in ("people_also_ask", "organic_question"):
-                expansion_pool.append(text)
+                # 展开出来的问句继承种子的类目归属。
+                expansion_pool.append((text, category_id))
         return True
 
-    for seed in seeds:
-        if not run_query(seed, 0):
+    for seed_text, seed_category in seeds:
+        if not run_query(seed_text, 0, seed_category):
             break
     if expand and not any("额度用尽" in n for n in notes):
-        for question in expansion_pool[:MAX_EXPANSION_QUERIES]:
-            if not run_query(question, 1):
+        for question, category_id in expansion_pool[:MAX_EXPANSION_QUERIES]:
+            if not run_query(question, 1, category_id):
                 break
 
     # 落表。挖到的问句必须存下来,否则下次进来又是一片空白。
@@ -400,6 +459,7 @@ def mine_cluster_questions(
                 depth=row["depth"],
                 score=row["score"],
                 seed_query=row["seed"],
+                google_category_id=row["google_category_id"],
                 discovered_at=now,
                 workspace_key=scope_context.workspace_key,
                 business_context=scope_context.business_context,
@@ -415,7 +475,7 @@ def mine_cluster_questions(
         )
 
     return {
-        "seeds": seeds,
+        "seeds": [text for text, _cid in seeds],
         "queries_spent": spent,
         "off_topic_dropped": len(off_topic),
         "new_questions": len(found),
@@ -424,11 +484,29 @@ def mine_cluster_questions(
     }
 
 
-def mined_candidates(db: Session, *, cluster_id: UUID) -> list[dict[str, Any]]:
-    """已挖到的问句,形状与 ``topic_sourcing`` 的候选一致好合并。"""
+def mined_candidates(
+    db: Session, *, cluster_id: UUID, google_category_id: str | None = None
+) -> list[dict[str, Any]]:
+    """这个簇能用的已挖问句,形状与 ``topic_sourcing`` 的候选一致好合并。
+
+    **按类目取,不按发起簇取。** 从淋浴簇顺带挖到的马桶问句归档在马桶那个叶子
+    名下,所以:淋浴簇看不到它们(不污染列表),马桶簇一建起来就能看到(不白挖)。
+    没有类目归属的(来自父级这种非叶子种子)只给发起簇——它们可能属于底下任何
+    一个叶子,先放在挖它的人手边。
+    """
+    from sqlalchemy import or_
+
+    conditions = [
+        (GeoMinedQuestion.cluster_id == cluster_id)
+        & GeoMinedQuestion.google_category_id.is_(None)
+    ]
+    if google_category_id:
+        conditions.append(
+            GeoMinedQuestion.google_category_id == str(google_category_id)
+        )
     rows = db.execute(
         select(GeoMinedQuestion)
-        .where(GeoMinedQuestion.cluster_id == cluster_id)
+        .where(or_(*conditions))
         .order_by(GeoMinedQuestion.score.desc())
     ).scalars()
     return [
