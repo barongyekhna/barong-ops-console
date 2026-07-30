@@ -309,6 +309,15 @@ const registryItems = [
   manifest({
     category: "business",
     denied_behavior: "show_locked",
+    external_dependencies: [],
+    module_key: "seo.content",
+    required_permissions: ["seo.content.read"],
+    route_namespace: "/seo",
+    status: "active",
+  }),
+  manifest({
+    category: "business",
+    denied_behavior: "show_locked",
     external_dependencies: ["track17"],
     module_key: "w.site_ops",
     required_permissions: ["w.site_ops.read"],
@@ -1318,6 +1327,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "h.site_health",
     "b2b.wholesale",
     "geo.content",
+    "seo.content",
     "w.site_ops",
     "cs.customer_service",
     "business.approvals",

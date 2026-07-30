@@ -1531,6 +1531,87 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="seo.content",
+        display_name="SEO 内容引擎",
+        description=(
+            "SEO content engine — GEO's other arm. GEO covers buyer questions "
+            "grounded in product specs; SEO covers what GEO cannot reach: craft "
+            "and manufacturing, brand, and cross-category topics. Milestone 1 is "
+            "the craft-fact library — a versioned, evidence-backed knowledge base "
+            "shared with GEO and B2B, with staleness alerts when a fact changes."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/seo",
+        api_namespace="/seo",
+        navigation=_navigation(
+            group="Registry",
+            label="SEO 内容引擎",
+            icon="FileText",
+            order=18,
+        ),
+        required_permissions=("seo.content.read",),
+        permission_manifest=(
+            _permission(
+                module_key="seo.content",
+                permission_key="seo.content.read",
+                category="business",
+                action="read",
+                label="Read SEO content",
+                description="View the craft-fact library and SEO content queue.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="seo.content",
+                permission_key="seo.content.execute",
+                category="business",
+                action="execute",
+                label="Generate SEO content",
+                description="Run the keyword radar and generate SEO articles.",
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="seo.content",
+                permission_key="seo.content.manage",
+                category="business",
+                action="manage",
+                label="Manage SEO content",
+                description=(
+                    "Record and approve craft facts; approve or reject SEO "
+                    "articles."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.seo.content",
+        data_boundary=_data_boundary(
+            reads=(
+                "craft_facts",
+                "craft_fact_revisions",
+                "content_fact_usage",
+                "k_product_knowledge_products",
+            ),
+            writes=(
+                "craft_facts",
+                "craft_fact_revisions",
+                "content_fact_usage",
+            ),
+            blocked_objects=("cross_module_writes",),
+        ),
+    ),
+    _manifest(
         module_key="cs.customer_service",
         display_name="客服中心",
         description=(

@@ -94,6 +94,11 @@ from ..modules.b2b.store_types.models import (
 from ..modules.b2b.wholesale.models import B2BWholesaleItem
 from ..modules.cs_series.models import CSMessage, CSReply
 from ..modules.w_series.shipping.models import WProductSource
+from ..modules.content_core.facts.models import (
+    ContentFactUsage,
+    CraftFact,
+    CraftFactRevision,
+)
 from ..modules.geo_series.monitor.models import (
     GeoMonitorQuestion,
     GeoMonitorResult,
@@ -142,6 +147,9 @@ __all__ = [
     "ExecutionDLQRecord",
     "ExecutionResultRecord",
     "EventStreamRecord",
+    "ContentFactUsage",
+    "CraftFact",
+    "CraftFactRevision",
     "GeoBacklinkJob",
     "GeoMonitorQuestion",
     "GeoMonitorResult",

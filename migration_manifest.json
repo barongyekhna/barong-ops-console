@@ -2,10 +2,10 @@
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
   "generated_at": "2026-06-17T00:00:00Z",
   "environment": "staging",
-  "alembic_head": "20260729_09_geo_item_wp_status",
-  "expected_alembic_head": "20260729_09_geo_item_wp_status",
+  "alembic_head": "20260729_11_seo_permissions",
+  "expected_alembic_head": "20260729_11_seo_permissions",
   "head_locked": true,
-  "migration_count": 87,
+  "migration_count": 89,
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -93,10 +93,12 @@
     "20260729_06_b2b_widget_jobs",
     "20260729_07_geo_question_answer_type",
     "20260729_08_b2b_site_settings",
-    "20260729_09_geo_item_wp_status"
+    "20260729_09_geo_item_wp_status",
+    "20260729_10_craft_facts",
+    "20260729_11_seo_permissions"
   ],
-  "migration_order_checksum": "0555f9dbbfd218e3ce8fec5229f463bf09d106721a3bb913b6b0d54b4e8b4752",
-  "migration_hash": "2dd18d09412fd0ef099b5e0dec8b1d96f819626b79464ab7cd8a3e1925c8efdf",
+  "migration_order_checksum": "30d978472674e8a2838fb0bfefed23688ecaf22156b673ef8326e7ca3ca1bb0e",
+  "migration_hash": "5780d232be062813a846690f3dc2c25dcaf3e5552c35bd4b092b6d992301c145",
   "migrations": [
     {
       "version": "f07_core_001",
@@ -705,6 +707,20 @@
       "down_revision": "20260729_08_b2b_site_settings",
       "path": "backend/alembic/versions/20260729_09_geo_item_wp_status.py",
       "checksum": "f9a4b3fff2dfdffb4c241f5469ead49c9d71b91feded0d5af700fdf102099845",
+      "applied_at": "2026-07-29T00:00:00Z"
+    },
+    {
+      "version": "20260729_10_craft_facts",
+      "down_revision": "20260729_09_geo_item_wp_status",
+      "path": "backend/alembic/versions/20260729_10_craft_facts.py",
+      "checksum": "9989dfccfdcfd1c875f23c95b3652030acf820533b10492abed29a86cf8c7e02",
+      "applied_at": "2026-07-29T00:00:00Z"
+    },
+    {
+      "version": "20260729_11_seo_permissions",
+      "down_revision": "20260729_10_craft_facts",
+      "path": "backend/alembic/versions/20260729_11_seo_permissions.py",
+      "checksum": "4cb51bd61c8e8b3f8eacf785e4ef52f70cbed81340ce2bc2603bc89b0407011e",
       "applied_at": "2026-07-29T00:00:00Z"
     }
   ]

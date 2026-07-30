@@ -994,6 +994,32 @@ function isAllowedKeyHealthPath(method: string, path: string[]) {
   return path[1] === "run" && method === "POST";
 }
 
+// SEO 内容引擎——本期只有工艺事实库（/seo/facts…）。
+function isAllowedSeoPath(method: string, path: string[]) {
+  if (path[0] !== "seo" || path[1] !== "facts") {
+    return false;
+  }
+  // GET（列表 + 需复核清单）/ POST（新增）/seo/facts
+  if (path.length === 2) {
+    return method === "GET" || method === "POST";
+  }
+  if (!isUuidPathSegment(path[2])) {
+    return false;
+  }
+  // PATCH /seo/facts/{id}
+  if (path.length === 3) {
+    return method === "PATCH";
+  }
+  // POST /seo/facts/{id}/approve|retire ; GET /seo/facts/{id}/revisions
+  if (path.length === 4) {
+    if (path[3] === "approve" || path[3] === "retire") {
+      return method === "POST";
+    }
+    return path[3] === "revisions" && method === "GET";
+  }
+  return false;
+}
+
 function isAllowedGeoPath(method: string, path: string[]) {
   if (path[0] !== "geo") {
     return false;
@@ -2276,6 +2302,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedArcadePath(method, path) ||
     isAllowedNotificationsPath(method, path) ||
     isAllowedGeoPath(method, path) ||
+    isAllowedSeoPath(method, path) ||
     isAllowedPPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);

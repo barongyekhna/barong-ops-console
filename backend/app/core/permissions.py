@@ -411,6 +411,38 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "seo.content.read",
+        "module_key": "seo.content",
+        "category": "business",
+        "action": "read",
+        "label": "Read SEO content",
+        "description": "View the craft-fact library and SEO content queue.",
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "seo.content.execute",
+        "module_key": "seo.content",
+        "category": "business",
+        "action": "execute",
+        "label": "Generate SEO content",
+        "description": "Run the keyword radar and generate SEO articles.",
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "seo.content.manage",
+        "module_key": "seo.content",
+        "category": "business",
+        "action": "manage",
+        "label": "Manage SEO content",
+        "description": (
+            "Record and approve craft facts; approve or reject SEO articles."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "cs.customer_service.read",
         "module_key": "cs.customer_service",
         "category": "business",

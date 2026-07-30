@@ -44,6 +44,7 @@ from .modules.b2b.machine_router import router as b2b_machine_router
 from .modules.b2b.router import router as b2b_wholesale_router
 from .modules.geo_series.router import router as geo_content_router
 from .modules.geo_series.machine_router import router as geo_machine_router
+from .modules.seo_series.router import router as seo_content_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
 from .modules.w_series.router import public_router as w_siteops_public_router
 from .modules.w_series.router import router as w_siteops_router
@@ -323,6 +324,24 @@ def _p_publish_gate_conflict_detail_for_production(
     if not all(isinstance(blocker, str) for blocker in blockers):
         return None
     return {"ready": ready, "blockers": list(blockers)}
+
+
+def _craft_fact_detail_for_production(
+    request: Request,
+    status_code: int,
+    detail: object,
+) -> str | None:
+    """工艺事实库的门禁话必须原样传到前台。
+
+    「没有依据的事实不许批准」这类消息**本身就是产品**——它告诉运营该去补什么。
+    被消毒成「Request failed.」等于把门禁变成哑谜。范围卡得很死:只有
+    ``/seo/facts`` 的 400,且 detail 是纯字符串;这些文案里没有任何敏感值。
+    """
+    if status_code != status.HTTP_400_BAD_REQUEST:
+        return None
+    if not request.url.path.startswith(f"{APPLICATION_API_PREFIX}/seo/facts"):
+        return None
+    return detail if isinstance(detail, str) and detail.strip() else None
 
 
 def _structured_failure_detail_for_production(
@@ -609,6 +628,10 @@ async def sanitized_http_exception_handler(
         )
         if detail is None:
             detail = _structured_failure_detail_for_production(request, exc.detail)
+        if detail is None:
+            detail = _craft_fact_detail_for_production(
+                request, exc.status_code, exc.detail
+            )
         if detail is None:
             detail = _production_error_detail(request, exc.status_code)
     else:
@@ -1005,6 +1028,7 @@ app.include_router(b2b_wholesale_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(b2b_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(b2b_machine_router)
 app.include_router(geo_content_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(seo_content_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(geo_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(geo_machine_router)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)

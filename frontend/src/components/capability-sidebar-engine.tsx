@@ -174,6 +174,7 @@ function isRestrictedProductModule(moduleId: string) {
     normalized.startsWith("cs.") ||
     normalized.startsWith("b2b.") ||
     normalized.startsWith("geo.") ||
+    normalized.startsWith("seo.") ||
     normalized === "business.products" ||
     normalized.includes("product")
   );

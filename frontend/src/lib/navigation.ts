@@ -188,6 +188,17 @@ export const navigationGroups: NavigationGroup[] = [
       {
         category: "business",
         denied_behavior: "show_locked",
+        href: "/seo",
+        icon: FileText,
+        label: "SEO 内容引擎",
+        module_key: "seo.content",
+        required_permission: "seo.content.read",
+        route_namespace: "/seo",
+        status: "active",
+      },
+      {
+        category: "business",
+        denied_behavior: "show_locked",
         href: "/w-s",
         icon: Boxes,
         label: "W-S 物流网络中枢",

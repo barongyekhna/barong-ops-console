@@ -99,6 +99,11 @@ class GeoContentOrchestrator:
             evidence_numbers |= numbers
             fact_reports.append(product_fact_report(facts, numbers))
 
+        # 工艺事实与产品规格并列进接地语料——写「30 分钟浸泡测试」才不会被护栏
+        # 当成编造。护栏一行都不用改:evidence_number_corpus 本就是变参。
+        craft_rows, craft_payload, craft_numbers = self._craft_facts(products)
+        evidence_numbers |= craft_numbers
+
         # Nothing verifiable to say → do not write. The grounding rule stops the
         # model inventing, but not from writing fluent emptiness, and emptiness is
         # what no output guard can catch. Refuse, and name what to go fill in.
@@ -156,6 +161,8 @@ class GeoContentOrchestrator:
             "site_brand": SITE_BRAND,
             "forbidden_brand_terms": forbidden_terms,
             "products": payload_products,
+            # 自有工厂的工艺事实:竞品抄不走的那部分内容。
+            "craft_facts": craft_payload,
             "required_questions": pending_questions or required_questions,
             # Already-approved pieces stay; do not produce these types again.
             "skip_item_types": skip_item_types,
@@ -199,6 +206,8 @@ class GeoContentOrchestrator:
             # 问句自带的数字("5 gallon")是题目给的,不是编的——算式里可以用。
             context_numbers=_numbers_in_questions(required_questions),
         )
+
+        self._record_craft_usage(cluster_id, craft_rows)
 
         cluster = self._require_cluster(cluster_id, scope_context)
         cluster.status = "needs_review"
@@ -381,6 +390,11 @@ class GeoContentOrchestrator:
             facts, numbers = self._product_facts(product)
             payload_products.append(facts)
             evidence_numbers |= numbers
+        # 重写也要拿到工艺事实:否则同一段话在生成时合规、重写时反而被判无据。
+        revise_craft_rows, revise_craft_payload, revise_craft_numbers = (
+            self._craft_facts(products)
+        )
+        evidence_numbers |= revise_craft_numbers
         forbidden_terms = sorted(
             {term for product in products for term in normalized_brand_terms(product)}
         )
@@ -408,6 +422,7 @@ class GeoContentOrchestrator:
             "current_content": current,
             "critiques": risks,
             "products": payload_products,
+            "craft_facts": revise_craft_payload,
         }
         # Release the read transaction before the long AI call (idle-in-txn rule).
         self.db.commit()
@@ -469,6 +484,8 @@ class GeoContentOrchestrator:
         }
         # The piece changed, so its old reading no longer describes it.
         item.analysis_json = None
+        # 重写 = 重新引用一次,台账要记新版本,否则它会一直挂在需复核清单上。
+        self._record_craft_usage_for(str(item.id), revise_craft_rows)
         self.db.flush()
 
         attach_analysis_safely(
@@ -553,6 +570,94 @@ class GeoContentOrchestrator:
             except Exception:  # noqa: BLE001 - path is a display nicety
                 return ""
         return ""
+
+    def _record_craft_usage(self, cluster_id: UUID, facts: list[Any]) -> None:
+        """记下这一簇的内容引用了哪些工艺事实的**哪个版本**。
+
+        我们不知道 AI 具体用了哪几条,所以按"喂进去的都算引用"记账。这会**多报**
+        (给了但没用上的也进复核清单),不会**漏报**——而漏报才是危险的那一侧:
+        工艺改了却没人知道哪篇文章跟着错了。
+        """
+        if not facts:
+            return
+        try:
+            from ...content_core.facts.service import record_usage
+
+            items = self.db.execute(
+                select(GeoContentItem.id).where(
+                    GeoContentItem.cluster_id == cluster_id
+                )
+            ).scalars().all()
+            for item_id in items:
+                record_usage(
+                    self.db,
+                    content_kind="geo_item",
+                    content_id=str(item_id),
+                    facts=facts,
+                )
+        except Exception:  # noqa: BLE001 - 台账记不上不该毁掉已生成的内容
+            logger.exception("craft-fact usage ledger write failed")
+
+    def _record_craft_usage_for(self, content_id: str, facts: list[Any]) -> None:
+        """单篇版本,给重写用。"""
+        if not facts:
+            return
+        try:
+            from ...content_core.facts.service import record_usage
+
+            record_usage(
+                self.db,
+                content_kind="geo_item",
+                content_id=content_id,
+                facts=facts,
+            )
+        except Exception:  # noqa: BLE001 - 同上,台账不该毁内容
+            logger.exception("craft-fact usage ledger write failed")
+
+    def _craft_facts(
+        self, products: list[KProductKnowledgeProduct]
+    ) -> tuple[list[Any], list[dict[str, Any]], set[str]]:
+        """已批准的工艺事实 → (原始行, 给 AI 的载荷, 接地数字)。
+
+        产品规格说的是"这台机器是什么",工艺事实说的是"我们怎么做出来的"——后者
+        是自有工厂唯一说得出、竞品抄不走的内容,也是 GEO 指南里最难被质疑的部分。
+
+        只取 ``approved``;未绑定产品的算通用工艺(整厂能力),绑定了的只给对应产品。
+        取不到就当没有——工艺库为空绝不该拖垮生成。
+        """
+        try:
+            from ...content_core.facts import service as craft
+
+            identifiers = {str(p.id) for p in products}
+            identifiers |= {
+                str(getattr(p, "product_key", "") or "") for p in products
+            }
+            identifiers.discard("")
+            rows = [
+                fact
+                for fact in craft.approved_facts(self.db)
+                if not (fact.product_ids_json or [])
+                or identifiers.intersection(
+                    {str(x) for x in (fact.product_ids_json or [])}
+                )
+            ]
+        except Exception:  # noqa: BLE001 - 工艺库是增益,不是生成的前置条件
+            logger.exception("craft-fact lookup failed; generating without them")
+            return [], [], set()
+
+        payload = [
+            {
+                "topic": fact.topic,
+                "claim": fact.claim,
+                "detail": fact.detail,
+                "value": fact.value,
+                "unit": fact.unit,
+            }
+            for fact in rows
+        ]
+        from ...content_core.facts.service import grounding_texts
+
+        return rows, payload, evidence_number_corpus(*grounding_texts(rows))
 
     def _product_facts(
         self, product: KProductKnowledgeProduct
