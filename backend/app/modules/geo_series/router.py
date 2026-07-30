@@ -272,6 +272,33 @@ def geo_probe_topic_terrain(
     return outcome
 
 
+@router.post("/clusters/{cluster_id}/mine-questions")
+def mine_cluster_questions_endpoint(
+    cluster_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_EXECUTE)),
+) -> dict[str, Any]:
+    """把这个类目的买家问句挖到底。
+
+    原有候选是零成本复用 K/F 已有数据;这条会**真的打 Serper**——从类目词出发
+    (产品名碰不到品类层的问句),并把「大家还在问」展开第二层。走
+    ``geo_serper_topics`` 台账,额度尽了就停下并说明。
+    """
+    from .content.topic_mining import TopicMiningError, mine_cluster_questions
+
+    try:
+        report = mine_cluster_questions(
+            db,
+            cluster_id=cluster_id,
+            scope_context=_scope_context(request),
+            user=user,
+        )
+    except TopicMiningError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return report
+
+
 @router.post("/clusters/{cluster_id}/picked-questions")
 def geo_save_picked_questions(
     cluster_id: UUID,

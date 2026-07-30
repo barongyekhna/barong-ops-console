@@ -226,6 +226,24 @@ export async function getTopicCandidates(
   return readJson(response, "话题候选加载失败");
 }
 
+export type MiningReport = {
+  seeds: string[];
+  queries_spent: number;
+  new_questions: number;
+  expanded: number;
+  notes: string[];
+};
+
+export async function mineClusterQuestions(
+  clusterId: string,
+): Promise<MiningReport> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/geo/clusters/${clusterId}/mine-questions`,
+    { headers: buildHeaders(true), method: "POST" },
+  );
+  return readJson(response, "选题深挖失败");
+}
+
 export async function savePickedQuestions(
   clusterId: string,
   questions: GeoPickedQuestion[],

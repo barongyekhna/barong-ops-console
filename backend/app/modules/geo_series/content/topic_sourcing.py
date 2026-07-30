@@ -186,6 +186,14 @@ def list_topic_candidates(
     """
     products = _products_for_cluster(db, cluster, scope_context)
     raw = _k_candidates(products) + _f_candidates(db, cluster)
+    # 类目级深挖出来的问句(花钱抓的,已落表)也一并合进来。它们和上面两个来源
+    # 同形,去重按归一化问句走,所以同一个问句从哪来都只会出现一次。
+    try:
+        from .topic_mining import mined_candidates
+
+        raw += mined_candidates(db, cluster_id=cluster.id)
+    except Exception:  # noqa: BLE001 - 深挖表缺席不该让候选列表崩
+        pass
 
     best: dict[str, dict[str, Any]] = {}
     for candidate in raw:

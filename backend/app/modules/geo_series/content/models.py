@@ -18,6 +18,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    UniqueConstraint,
     BigInteger,
     CheckConstraint,
     DateTime,
@@ -301,6 +302,48 @@ class GeoPublishJob(GeoUUIDPrimaryKeyMixin, GeoScopeMixin, GeoTimestampMixin, Ba
     )
 
 
+class GeoMinedQuestion(
+    GeoUUIDPrimaryKeyMixin, GeoScopeMixin, GeoTimestampMixin, Base
+):
+    """类目级深挖出来的买家问句。
+
+    **为什么要落表**:原有候选(K 的 FAQ + F 的类目词)是实时读出来的,零成本、
+    随时可重算。深挖是**花钱**换来的——一发 Serper 一笔台账——所以必须存下来,
+    否则下次进来又是一片空白,等于反复付钱买同一批问句。
+
+    ``depth`` 记的是它从第几层 PAA 挖出来的:0 = 种子直接命中,1 = 二级展开。
+    二级的更长尾、竞争更小,恰恰是能打的那批,所以打分时给了加成。
+    """
+
+    __tablename__ = "geo_mined_questions"
+    __table_args__ = (
+        UniqueConstraint(
+            "cluster_id",
+            "normalized_question",
+            name=conv("uq_geo_mined_questions_cluster_norm"),
+        ),
+        Index("ix_geo_mined_questions_cluster", "cluster_id"),
+    )
+
+    cluster_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "geo_content_clusters.id", name=conv("fk_geo_mined_questions_cluster_id")
+        ),
+        nullable=False,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    normalized_question: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    intent: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    depth: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    seed_query: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    discovered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class GeoWpCategoryMap(Base):
     """Google taxonomy id → WordPress post-category term id.
 
@@ -402,6 +445,7 @@ __all__ = [
     "GeoContentItem",
     "GeoGenerationJob",
     "GeoPublishJob",
+    "GeoMinedQuestion",
     "GeoWpCategoryMap",
     "GeoSiteSetting",
     "GUIDES_PAGE_ID_KEY",

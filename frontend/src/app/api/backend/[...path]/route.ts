@@ -1095,6 +1095,7 @@ function isAllowedGeoPath(method: string, path: string[]) {
     return method === "GET";
   }
   // POST /geo/clusters/{id}/generate ; GET /geo/clusters/{id}/jobs ;
+  // POST /geo/clusters/{id}/mine-questions —— 类目级选题深挖（真打 Serper）
   // GET /geo/clusters/{id}/topic-candidates ; POST /geo/clusters/{id}/picked-questions
   if (
     path.length === 4 &&
@@ -1118,6 +1119,10 @@ function isAllowedGeoPath(method: string, path: string[]) {
       return method === "POST";
     }
     if (path[3] === "picked-questions") {
+      return method === "POST";
+    }
+    // 类目级选题深挖——真打 Serper，走 geo_serper_topics 台账
+    if (path[3] === "mine-questions") {
       return method === "POST";
     }
     if (path[3] === "topic-terrain") {

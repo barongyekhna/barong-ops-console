@@ -1827,3 +1827,141 @@ def test_live_state_refresh_is_batched_and_fail_open() -> None:
     assert "refresh_item_live_state_safely" in inspect.getsource(
         backlink_targets.collect_backlink_targets
     )
+
+
+# ===================================================================
+# 类目级选题深挖:把一个话题的问句挖到底
+# ===================================================================
+
+
+def test_mining_seeds_from_the_whole_category_subtree() -> None:
+    """用户拍板(2026-07-30):「我要做最完整的产品链,所有产品都卖」。
+
+    这家工厂没有固定品类,F 系列做的就是类目富化——同父类目下的相邻品今天没有、
+    明天就会上。所以选题面是**整棵子树**,不是"我们现在卖的那一个叶子"。
+    兄弟叶子必须查树:路径字符串里只有祖先,查不到兄弟。
+
+    我一度按"我们只卖淋浴"把便携马桶当跑题挡掉——那是拿静态品类的假设
+    去套一个动态扩张的品类。
+    """
+    from backend.app.modules.geo_series.content.topic_mining import (
+        _subtree_category_names,
+        build_seeds,
+    )
+
+    tree = inspect.getsource(_subtree_category_names)
+    assert "c.parent_id = me.parent_id" in tree  # 兄弟叶子
+    assert "c.id = me.parent_id" in tree  # 父级
+    assert "fallback" in tree  # 查不到也别炸
+
+    src = inspect.getsource(build_seeds)
+    assert "_subtree_category_names" in src
+    # "&" 必须拆:淋浴帐篷和淋浴器在同一个叶子里
+    assert 're.split(r"\\s*&\\s*", name)' in src
+
+
+def test_paa_is_expanded_a_second_level() -> None:
+    """Google 的「大家还在问」是棵树,长尾在第二层往下。只抓第一层就等于没挖。"""
+    from backend.app.modules.geo_series.content import topic_mining
+
+    src = inspect.getsource(topic_mining.mine_cluster_questions)
+    assert "expansion_pool" in src
+    # 只展开 PAA——它是 Google 认定的同意图问句,展开出来还在同一个话题里
+    assert 'source_type in ("people_also_ask", "organic_question")' in src
+    assert "MAX_EXPANSION_QUERIES" in src
+
+
+def test_mining_is_metered_and_stops_cleanly_when_out_of_quota() -> None:
+    """死规矩(Serper 12 天烧光 5 万次那次换来的):新增出网付费调用当天接台账,
+    额度尽了优雅停下并说清楚,绝不打超额请求。"""
+    from r_system_v2.ra.quota_ledger import (
+        DEFAULT_DAILY_BUDGETS,
+        PROVIDER_GEO_SERPER_TOPICS,
+    )
+
+    assert DEFAULT_DAILY_BUDGETS[PROVIDER_GEO_SERPER_TOPICS] > 0
+
+    from backend.app.modules.geo_series.content import topic_mining
+
+    src = inspect.getsource(topic_mining.mine_cluster_questions)
+    assert "try_consume" in src
+    assert "额度用尽" in src
+    # 请求失败要退额度,否则一次网络抖动等于白扣一笔
+    assert "refund" in src
+
+
+def test_mining_never_holds_a_transaction_across_the_network() -> None:
+    from backend.app.modules.geo_series.content import topic_mining
+
+    src = inspect.getsource(topic_mining.mine_cluster_questions)
+    key_at = src.index("_serper_key")
+    commit_at = src.index("db.commit()")
+    assert commit_at < key_at, "取钥匙也要在事务外(GEO 监测在这一步栽过)"
+    inner = inspect.getsource(topic_mining.mine_cluster_questions)
+    assert "db.commit()  # 出网前放掉" in inner
+
+
+def test_mined_questions_are_persisted_because_they_cost_money() -> None:
+    """原有候选是实时读出来的、零成本;深挖是花钱换的,不落表等于反复付钱
+    买同一批问句。"""
+    import backend.app.models as M
+
+    assert hasattr(M, "GeoMinedQuestion")
+    cols = {c.name for c in M.GeoMinedQuestion.__table__.columns}
+    assert {"cluster_id", "normalized_question", "depth", "score", "seed_query"} <= cols
+    # 同一簇同一问句只存一次
+    names = {c.name for c in M.GeoMinedQuestion.__table__.constraints}
+    assert any("cluster_norm" in str(n) for n in names)
+
+
+def test_mined_questions_merge_into_the_existing_candidate_list() -> None:
+    """挖到的问句要和 K/F 的候选合并成一个列表,按归一化问句去重——
+    同一个问句从哪来都只出现一次。"""
+    from backend.app.modules.geo_series.content import topic_sourcing
+
+    src = inspect.getsource(topic_sourcing.list_topic_candidates)
+    assert "mined_candidates" in src
+    assert "_norm(candidate" in src
+
+
+def test_mined_questions_pass_the_same_quality_gate() -> None:
+    """深挖不是降低标准:真问句、品牌安全、不是规格复述,三道门一个不少。"""
+    from backend.app.modules.geo_series.content import topic_mining
+
+    src = inspect.getsource(topic_mining._accept)
+    assert "is_faq_question_candidate" in src
+    assert "is_faq_text_brand_safe" in src
+    assert "is_specification_paraphrase_question" in src
+
+
+def test_off_topic_questions_are_dropped_and_counted() -> None:
+    """第二道防线:PAA 会自然漂到相邻品类。
+    「best type of portable toilet」和淋浴只共享一个 portable,真淋浴问句共享两个以上。"""
+    from backend.app.modules.geo_series.content.topic_mining import (
+        _on_topic,
+        head_nouns,
+    )
+
+    heads = head_nouns(
+        [
+            "Portable Showers",
+            "Privacy Enclosures",
+            "Portable Toilets",  # 父级——同类目扩张的下一批品
+            "portable camping shower",
+        ]
+    )
+    assert _on_topic("How long does a 5 gallon portable shower last?", heads)
+    assert _on_topic("Do I need a privacy enclosure for camping?", heads)
+    # 只共享一个中心词也要放行——"共享 2 个词"那版把它误杀过
+    assert _on_topic("What is a solar shower?", heads)
+    # 同父类目的相邻品要放行——那是下一批产品的选题储备
+    assert _on_topic("What is the best type of portable toilet?", heads)
+    # 真正漂出去的才挡:完全不同的购买场景
+    assert not _on_topic("How do I replace my bathroom faucet cartridge?", heads)
+
+    from backend.app.modules.geo_series.content import topic_mining
+
+    src = inspect.getsource(topic_mining.mine_cluster_questions)
+    # 挡掉多少要明说,别让"只挖到 20 个"看起来像挖不动
+    assert "off_topic_dropped" in src
+    assert "漂到相邻品类" in src

@@ -22,6 +22,7 @@ import {
   listClusters,
   reviewItem,
   savePickedQuestions,
+  mineClusterQuestions,
   type GeoCluster,
   type GeoClusterProduct,
   type GeoCritiqueSummary,
@@ -124,6 +125,7 @@ export function GeoContentDeck() {
   const [busy, setBusy] = useState(false);
   const [spotlightBusy, setSpotlightBusy] = useState<string | null>(null);
   const [loadingTopics, setLoadingTopics] = useState(false);
+  const [mineReport, setMineReport] = useState<string | null>(null);
   const [probeBusy, setProbeBusy] = useState(false);
   const [tab, setTab] = useState<TabKey>("content");
   const [openProducts, setOpenProducts] = useState(false);
@@ -266,6 +268,26 @@ export function GeoContentDeck() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setProbeBusy(false);
+    }
+  }
+
+  async function handleMineQuestions() {
+    if (!selectedId) return;
+    setBusy(true);
+    setError(null);
+    setMineReport(null);
+    try {
+      const report = await mineClusterQuestions(selectedId);
+      setMineReport(
+        `挖到 ${report.new_questions} 个新问句（打了 ${report.queries_spent} 发，` +
+          `二级展开 ${report.expanded} 个）。` +
+          (report.notes.length ? " " + report.notes.join("；") : ""),
+      );
+      await loadTopics(selectedId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -676,6 +698,14 @@ export function GeoContentDeck() {
                           刷新候选
                         </button>
                         <button
+                          onClick={() => void handleMineQuestions()}
+                          disabled={busy}
+                          style={PRIMARY_BTN}
+                          title="从类目词出发真打 Serper，并把「大家还在问」展开第二层——产品名碰不到的品类问句在这里"
+                        >
+                          {busy ? "深挖中…" : "深挖选题"}
+                        </button>
+                        <button
                           onClick={() => void handleProbeTerrain()}
                           disabled={busy || probeBusy || candidates.length === 0}
                           style={GHOST_BTN}
@@ -691,6 +721,9 @@ export function GeoContentDeck() {
                           保存选题
                         </button>
                       </div>
+                      {mineReport ? (
+                        <p style={{ ...HINT, color: GREEN }}>{mineReport}</p>
+                      ) : null}
                       {loadingTopics ? (
                         <p style={HINT}>加载候选中…</p>
                       ) : candidates.length === 0 ? (

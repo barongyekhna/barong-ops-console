@@ -43,6 +43,10 @@ PROVIDER_B2B_SERPER_ENRICH = "b2b_serper_enrich"
 # 所以量随类目走不随产品数涨;新出网调用当天接台账(2026-07-22 Serper 事故的死规矩)。
 PROVIDER_GEO_SERPER_MONITOR = "geo_serper_monitor"
 
+# GEO 类目级选题深挖:一个类目一次约 15-25 发(种子 + PAA 二级展开)。
+# 死规矩(Serper 烧光 5 万次那次换来的):新增出网付费调用**当天**接台账。
+PROVIDER_GEO_SERPER_TOPICS = "geo_serper_topics"
+
 DEFAULT_DAILY_BUDGETS = {
     PROVIDER_1688_IMAGE_SEARCH: 330,
     PROVIDER_1688_CPS_IMAGE_SEARCH: 2600,
@@ -57,6 +61,7 @@ DEFAULT_DAILY_BUDGETS = {
     # 一个类目一轮约 10-20 条问句,每周跑一次绰绰有余;
     # 上限压得低,是因为监测永远不该成为烧钱的那一路。
     PROVIDER_GEO_SERPER_MONITOR: 200,
+    PROVIDER_GEO_SERPER_TOPICS: 300,
 }
 
 BUDGET_ENV_NAMES = {
@@ -71,6 +76,7 @@ BUDGET_ENV_NAMES = {
     PROVIDER_B2B_SERPER_PLACES: "B2B_SERPER_DAILY_BUDGET",
     PROVIDER_B2B_SERPER_ENRICH: "B2B_SERPER_ENRICH_DAILY_BUDGET",
     PROVIDER_GEO_SERPER_MONITOR: "GEO_SERPER_MONITOR_DAILY_BUDGET",
+    PROVIDER_GEO_SERPER_TOPICS: "GEO_SERPER_TOPICS_DAILY_BUDGET",
 }
 
 
@@ -98,6 +104,7 @@ def provider_label(provider: str) -> str:
         PROVIDER_SERPER: "Serper",
         PROVIDER_GOOGLE_ADS_PLANNER: "Google Ads 关键词规划",
         PROVIDER_GEO_SERPER_MONITOR: "GEO 阵地监测",
+        PROVIDER_GEO_SERPER_TOPICS: "GEO 选题深挖",
     }.get(provider, provider)
 
 
