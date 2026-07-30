@@ -16,6 +16,10 @@ export type BankingState = {
 export type B2BDocument = {
   id: string;
   number: string;
+  doc_type: string;
+  doc_type_label: string;
+  stage: string;
+  stage_label: string;
   status: string;
   issued_on: string;
   valid_until: string;
@@ -24,9 +28,20 @@ export type B2BDocument = {
   currency: string;
   subtotal: string;
   freight: string | null;
+  sample_credit: string | null;
   total: string;
   item_count: number;
+  source_document_id: string | null;
 };
+
+export const STAGES: { key: string; label: string }[] = [
+  { key: "quoted", label: "已报价" },
+  { key: "deposit_paid", label: "定金已到" },
+  { key: "in_production", label: "生产中" },
+  { key: "shipped", label: "已发货" },
+  { key: "balance_paid", label: "尾款已到" },
+  { key: "closed", label: "已完成" },
+];
 
 function buildHeaders(json = false) {
   const headers = new Headers({ Accept: "application/json" });
@@ -121,4 +136,66 @@ export async function downloadDocument(
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+export type SampleCredit = {
+  id: string;
+  buyer_email: string;
+  buyer_company: string | null;
+  amount: string;
+  currency: string;
+  paid_on: string;
+  note: string | null;
+  consumed: boolean;
+};
+
+/** 样品费台账。开 PI 时自动抵扣，不用你记。 */
+export async function getSampleCredits(): Promise<SampleCredit[]> {
+  const response = await fetch(`${API_PROXY_BASE}/b2b/sample-credits`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+  });
+  return readJson<SampleCredit[]>(response);
+}
+
+export async function addSampleCredit(payload: {
+  buyer_email: string;
+  amount: number;
+  buyer_company?: string | null;
+  note?: string | null;
+}): Promise<SampleCredit> {
+  const response = await fetch(`${API_PROXY_BASE}/b2b/sample-credits`, {
+    body: JSON.stringify(payload),
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<SampleCredit>(response);
+}
+
+/** 从一张 PI 派生商业发票或装箱单（发货报关要）。 */
+export async function createShippingDoc(
+  documentId: string,
+  payload: {
+    doc_type: "commercial_invoice" | "packing_list";
+    carton_count?: number | null;
+    gross_weight_kg?: number | null;
+    net_weight_kg?: number | null;
+  },
+): Promise<B2BDocument> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/b2b/documents/${documentId}/shipping`,
+    { body: JSON.stringify(payload), headers: buildHeaders(true), method: "POST" },
+  );
+  return readJson<B2BDocument>(response);
+}
+
+export async function setDocumentStage(
+  documentId: string,
+  stage: string,
+): Promise<B2BDocument> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/b2b/documents/${documentId}/stage`,
+    { body: JSON.stringify({ stage }), headers: buildHeaders(true), method: "PATCH" },
+  );
+  return readJson<B2BDocument>(response);
 }

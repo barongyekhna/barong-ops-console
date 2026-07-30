@@ -33,7 +33,40 @@ from ....db.base import Base
 from ....models.base_mixins import json_type
 
 DOC_TYPE_PROFORMA = "proforma_invoice"
-DOC_TYPES = (DOC_TYPE_PROFORMA,)
+# 发货时海关要的两张。批发页上已经承诺了「every order 提供 commercial invoice、
+# packing list 和运输单据」——承诺在先,这两张不是新功能是补欠账。
+DOC_TYPE_COMMERCIAL = "commercial_invoice"
+DOC_TYPE_PACKING = "packing_list"
+DOC_TYPES = (DOC_TYPE_PROFORMA, DOC_TYPE_COMMERCIAL, DOC_TYPE_PACKING)
+DOC_TYPE_LABELS = {
+    DOC_TYPE_PROFORMA: "形式发票 PI",
+    DOC_TYPE_COMMERCIAL: "商业发票 CI",
+    DOC_TYPE_PACKING: "装箱单 PL",
+}
+
+# 订单走到哪一步了。**只对 PI 有意义**——商业发票和装箱单是它的派生物。
+STAGE_QUOTED = "quoted"
+STAGE_DEPOSIT_PAID = "deposit_paid"
+STAGE_IN_PRODUCTION = "in_production"
+STAGE_SHIPPED = "shipped"
+STAGE_BALANCE_PAID = "balance_paid"
+STAGE_CLOSED = "closed"
+STAGES = (
+    STAGE_QUOTED,
+    STAGE_DEPOSIT_PAID,
+    STAGE_IN_PRODUCTION,
+    STAGE_SHIPPED,
+    STAGE_BALANCE_PAID,
+    STAGE_CLOSED,
+)
+STAGE_LABELS = {
+    STAGE_QUOTED: "已报价",
+    STAGE_DEPOSIT_PAID: "定金已到",
+    STAGE_IN_PRODUCTION: "生产中",
+    STAGE_SHIPPED: "已发货",
+    STAGE_BALANCE_PAID: "尾款已到",
+    STAGE_CLOSED: "已完成",
+}
 
 DOC_STATUS_DRAFT = "draft"
 DOC_STATUS_ISSUED = "issued"
@@ -45,7 +78,8 @@ class B2BDocument(Base):
     __tablename__ = "b2b_documents"
     __table_args__ = (
         CheckConstraint(
-            "doc_type IN ('proforma_invoice')",
+            "doc_type IN ('proforma_invoice', 'commercial_invoice', "
+            "'packing_list')",
             name=conv("ck_b2b_documents_doc_type"),
         ),
         CheckConstraint(
@@ -84,12 +118,34 @@ class B2BDocument(Base):
         json_type(), nullable=False, default=dict
     )
 
+    # 商业发票 / 装箱单指回它们的那张 PI:同一单的三张纸要能串起来。
+    source_document_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    # 订单走到哪一步(只对 PI 有意义)。开完 PI 之后此前是没有下文的。
+    stage: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=STAGE_QUOTED
+    )
+
+    # 装箱单要的三个数。**打包时才知道**,所以留空就在纸上印 "TBC",
+    # 不假装我们算得出来——报错的装箱单比没有更麻烦。
+    carton_count: Mapped[int | None] = mapped_column(nullable=True)
+    gross_weight_kg: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    net_weight_kg: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+
     currency: Mapped[str] = mapped_column(String(8), nullable=False, default="USD")
     subtotal: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0")
     )
     # 运费单独一行:报出来就是到门含税的全部,买家不用再算。
     freight: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # 样品费抵扣。**这是已经承诺过的**(小窗/批发页/图册/开发信四处都写了
+    # "样品费全额抵扣首单"),此前没有任何地方记账——第三个客户就开始虚。
+    sample_credit: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
     total: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, default=Decimal("0")
     )

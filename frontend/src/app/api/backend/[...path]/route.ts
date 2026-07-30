@@ -1497,13 +1497,19 @@ function isAllowedB2bPath(method: string, path: string[]) {
   if (path.length === 2 && path[1] === "documents") {
     return method === "GET" || method === "POST";
   }
+  if (path.length === 2 && path[1] === "sample-credits") {
+    return method === "GET" || method === "POST";
+  }
   if (
     path.length === 4 &&
     path[1] === "documents" &&
-    isUuidPathSegment(path[2]) &&
-    path[3] === "pdf"
+    isUuidPathSegment(path[2])
   ) {
-    return method === "GET";
+    // pdf 下载 / 派生商业发票装箱单 / 推进订单阶段
+    if (path[3] === "pdf") return method === "GET";
+    if (path[3] === "shipping") return method === "POST";
+    if (path[3] === "stage") return method === "PATCH";
+    return false;
   }
   // ---- 永不再发名单（说过"别发了"的人，系统里再也生成不出给他的草稿）----
   // GET  /b2b/suppressions   名单

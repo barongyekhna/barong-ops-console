@@ -47,7 +47,21 @@ def _block(
     return cursor
 
 
+_TITLES = {
+    "proforma_invoice": "PROFORMA INVOICE",
+    "commercial_invoice": "COMMERCIAL INVOICE",
+    "packing_list": "PACKING LIST",
+}
+_NUMBER_LABELS = {
+    "proforma_invoice": "Invoice No.",
+    "commercial_invoice": "Invoice No.",
+    "packing_list": "Packing List No.",
+}
+
+
 def render_pdf(document: Any) -> bytes:
+    doc_type = getattr(document, "doc_type", "proforma_invoice")
+    is_packing = doc_type == "packing_list"
     terms: dict[str, Any] = dict(document.terms_json or {})
     banking: dict[str, Any] = dict(terms.get("banking") or {})
     currency = document.currency or "USD"
@@ -57,7 +71,14 @@ def render_pdf(document: Any) -> bytes:
     right = PAGE_WIDTH - _MARGIN
 
     # ── 抬头 ──
-    canvas.text(_MARGIN, 748, "PROFORMA INVOICE", size=17, bold=True, color=_INK)
+    canvas.text(
+        _MARGIN,
+        748,
+        _TITLES.get(doc_type, "DOCUMENT"),
+        size=17,
+        bold=True,
+        color=_INK,
+    )
     canvas.text(
         _MARGIN, 731, str(terms.get("legal_entity") or ""), size=9, bold=True
     )
@@ -69,10 +90,17 @@ def render_pdf(document: Any) -> bytes:
     canvas.text(_MARGIN, cursor - 10, str(terms.get("contact_phone") or ""), size=8.2)
 
     # 右上角:单号 / 日期 / 有效期。买家汇款附言要写单号,放最显眼处。
-    meta_rows = (
-        ("Invoice No.", document.number),
+    meta_rows: tuple[tuple[str, Any], ...] = (
+        (_NUMBER_LABELS.get(doc_type, "No."), document.number),
         ("Date", f"{document.issued_on:%Y-%m-%d}"),
-        ("Valid until", f"{document.valid_until:%Y-%m-%d}"),
+    )
+    # **有效期只对报价有意义。** 商业发票和装箱单印"有效期"会让报关的人困惑
+    # ——那两张是既成事实的凭证,不是要约。
+    if doc_type == "proforma_invoice":
+        meta_rows += (("Valid until", f"{document.valid_until:%Y-%m-%d}"),)
+    if getattr(document, "source_document_id", None):
+        meta_rows += (("Ref. PI", getattr(document, "source_number", "") or ""),)
+    meta_rows += (
         ("Country of origin", terms.get("country_of_origin") or "China"),
     )
     row_y = 748
@@ -122,8 +150,8 @@ def render_pdf(document: Any) -> bytes:
         (col_sku + 4, "SKU"),
         (col_desc, "DESCRIPTION"),
         (col_qty, "QTY"),
-        (col_price, "UNIT PRICE"),
-        (col_total, "AMOUNT"),
+        (col_price, "CTN QTY" if is_packing else "UNIT PRICE"),
+        (col_total, "CARTONS" if is_packing else "AMOUNT"),
     ):
         canvas.text(x, head_y, label, size=7.6, bold=True, color=(1, 1, 1))
 
@@ -145,8 +173,18 @@ def render_pdf(document: Any) -> bytes:
                 color=_MUTED,
             )
         canvas.text(col_qty, y, str(entry.get("qty") or ""), size=8.4)
-        canvas.text(col_price, y, _money(entry.get("unit_price"), currency), size=8.4)
-        canvas.text(col_total, y, _money(entry.get("line_total"), currency), size=8.4)
+        if is_packing:
+            per_carton = entry.get("case_pack") or ""
+            cartons = entry.get("cartons") or ""
+            canvas.text(col_price, y, str(per_carton), size=8.4)
+            canvas.text(col_total, y, str(cartons), size=8.4)
+        else:
+            canvas.text(
+                col_price, y, _money(entry.get("unit_price"), currency), size=8.4
+            )
+            canvas.text(
+                col_total, y, _money(entry.get("line_total"), currency), size=8.4
+            )
         y -= 16
     canvas.line(_MARGIN, y + 6, right, y + 6, color=(0.8, 0.84, 0.88))
 
@@ -158,23 +196,68 @@ def render_pdf(document: Any) -> bytes:
         canvas.text(col_total, y, value, size=8.6, bold=bold)
         y -= 14
 
-    _total_row("Subtotal", _money(document.subtotal, currency))
-    if document.freight is not None:
-        _total_row("Freight", _money(document.freight, currency))
+    if is_packing:
+        # 装箱单不谈钱,谈的是几箱、多重。**没填就印 TBC**,不假装算得出来
+        # ——报错的装箱单比没有更麻烦(清关按它核对实物)。
+        for label, value in (
+            ("Total cartons", document.carton_count),
+            ("Gross weight", document.gross_weight_kg),
+            ("Net weight", document.net_weight_kg),
+        ):
+            unit = "" if label == "Total cartons" else " kg"
+            _total_row(
+                label, f"{value}{unit}" if value is not None else "TBC"
+            )
     else:
-        canvas.text(
-            _MARGIN,
-            y + 14,
-            "Freight quoted separately.",
-            size=7.8,
-            color=_MUTED,
-        )
-    _total_row("TOTAL", _money(document.total, currency), bold=True)
+        _total_row("Subtotal", _money(document.subtotal, currency))
+        credit = getattr(document, "sample_credit", None)
+        if credit:
+            # 抵扣要**印在单子上**,不能只在后台扣掉:买家看到"你说过的样品费
+            # 真的退给我了"，比任何一句客套话都管用。
+            _total_row("Less: sample credit", f"-{_money(credit, currency)}")
+        if document.freight is not None:
+            _total_row("Freight", _money(document.freight, currency))
+        else:
+            canvas.text(
+                _MARGIN,
+                y + 14,
+                "Freight quoted separately.",
+                size=7.8,
+                color=_MUTED,
+            )
+        _total_row("TOTAL", _money(document.total, currency), bold=True)
 
     # ── 条款 + 收款信息（买家最需要的两块，放同一屏）──
     y -= 10
     canvas.line(_MARGIN, y, right, y, color=(0.8, 0.84, 0.88))
     y -= 16
+    if is_packing:
+        _block(
+            canvas,
+            _MARGIN,
+            y,
+            "Declaration",
+            [
+                "The goods described above are packed as listed.",
+                f"Country of origin: {terms.get('country_of_origin') or 'China'}.",
+                str(terms.get("legal_entity") or ""),
+            ],
+            right - _MARGIN,
+        )
+        canvas.line(_MARGIN, 44, right, 44, color=(0.8, 0.84, 0.88))
+        canvas.text(
+            _MARGIN,
+            32,
+            _fit_text(
+                f"{terms.get('legal_entity') or ''} - {document.number}",
+                7.6,
+                right - _MARGIN,
+            ),
+            size=7.6,
+            color=_MUTED,
+        )
+        return pdf.to_bytes()
+
     terms_bottom = _block(
         canvas,
         _MARGIN,

@@ -172,3 +172,12 @@
   color: rgba(198, 216, 236, 0.6);
   font-size: 0.79rem;
 }
+
+.docType {
+  background: rgba(120, 190, 255, 0.12);
+  border-radius: 999px;
+  color: #a9d5ff;
+  font-size: 0.72rem;
+  padding: 2px 9px;
+  white-space: nowrap;
+}

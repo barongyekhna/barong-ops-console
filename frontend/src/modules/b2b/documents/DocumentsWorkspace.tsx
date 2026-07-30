@@ -6,11 +6,17 @@ import styles from "./Documents.module.css";
 import {
   type B2BDocument,
   type BankingState,
+  type SampleCredit,
+  STAGES,
+  addSampleCredit,
   createDocument,
+  createShippingDoc,
   downloadDocument,
   getBanking,
   getDocuments,
+  getSampleCredits,
   saveBanking,
+  setDocumentStage,
 } from "./api";
 import { type WholesaleItem, getWholesaleItems } from "../wholesale/api";
 
@@ -21,6 +27,8 @@ export default function DocumentsWorkspace() {
   const [banking, setBanking] = useState<BankingState | null>(null);
   const [bankDraft, setBankDraft] = useState<Record<string, string>>({});
   const [documents, setDocuments] = useState<B2BDocument[]>([]);
+  const [credits, setCredits] = useState<SampleCredit[]>([]);
+  const [creditDraft, setCreditDraft] = useState({ buyer_email: "", amount: "", note: "" });
   const [items, setItems] = useState<WholesaleItem[]>([]);
   const [buyer, setBuyer] = useState({
     buyer_company: "",
@@ -37,15 +45,17 @@ export default function DocumentsWorkspace() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [bank, docs, catalogue] = await Promise.all([
+    const [bank, docs, catalogue, sampleCredits] = await Promise.all([
       getBanking(),
       getDocuments(),
       getWholesaleItems({ status: "ready" }),
+      getSampleCredits(),
     ]);
     setBanking(bank);
     setBankDraft(bank.profile);
     setDocuments(docs);
     setItems(catalogue.items ?? []);
+    setCredits(sampleCredits);
   }, []);
 
   useEffect(() => {
@@ -135,6 +145,84 @@ export default function DocumentsWorkspace() {
         >
           保存收款信息
         </button>
+      </section>
+
+      {/* ── 样品费台账：我们已经在四处承诺"全额抵扣首单"，靠脑子记到第三个
+             客户就开始虚。记一笔，开单时自动扣。 ── */}
+      <section className={styles.panel}>
+        <header className={styles.panelHead}>
+          <h2>样品费台账</h2>
+        </header>
+        <p className={styles.hint}>
+          我们在产品页小窗、批发页、图册、开发信<strong>四个地方</strong>都写了
+          「样品费全额抵扣首单」。谁付过样品费记在这里，
+          <strong>开形式发票时按邮箱自动扣掉</strong>，你不用记。
+        </p>
+        <div className={styles.buyerGrid}>
+          {(
+            [
+              ["buyer_email", "买家邮箱 *（按完整邮箱认人）"],
+              ["amount", "样品费金额 *"],
+              ["note", "备注（买了什么样品）"],
+            ] as const
+          ).map(([key, label]) => (
+            <label className={styles.field} key={key}>
+              <span>{label}</span>
+              <input
+                className={styles.input}
+                onChange={(event) =>
+                  setCreditDraft((current) => ({
+                    ...current,
+                    [key]: event.target.value,
+                  }))
+                }
+                value={creditDraft[key]}
+              />
+            </label>
+          ))}
+        </div>
+        <button
+          className={styles.primaryButton}
+          disabled={
+            busy ||
+            !creditDraft.buyer_email.trim() ||
+            !(Number(creditDraft.amount) > 0)
+          }
+          onClick={() =>
+            void withBusy(async () => {
+              await addSampleCredit({
+                buyer_email: creditDraft.buyer_email.trim(),
+                amount: Number(creditDraft.amount),
+                note: creditDraft.note.trim() || null,
+              });
+              setCreditDraft({ buyer_email: "", amount: "", note: "" });
+              return "已记一笔样品费，开单时自动抵扣。";
+            })
+          }
+          type="button"
+        >
+          记一笔样品费
+        </button>
+        {credits.length ? (
+          <ul className={styles.docList}>
+            {credits.map((credit) => (
+              <li className={styles.docRow} key={credit.id}>
+                <span className={styles.docBuyer}>{credit.buyer_email}</span>
+                <span className={styles.muted}>
+                  {credit.currency} {credit.amount} · {credit.paid_on}
+                </span>
+                <span className={styles.muted}>
+                  {credit.consumed ? "已抵扣" : "待抵扣"}
+                </span>
+                {credit.note ? (
+                  <span className={styles.muted}>{credit.note}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.empty}>还没记过样品费。</p>
+        )}
       </section>
 
       {/* ── 开一张形式发票 ── */}
@@ -288,11 +376,34 @@ export default function DocumentsWorkspace() {
             {documents.map((doc) => (
               <li className={styles.docRow} key={doc.id}>
                 <strong className={styles.docNumber}>{doc.number}</strong>
+                <span className={styles.docType}>{doc.doc_type_label}</span>
                 <span className={styles.docBuyer}>{doc.buyer_company}</span>
                 <span className={styles.muted}>
                   {doc.item_count} 个品 · {doc.currency} {doc.total}
+                  {doc.sample_credit
+                    ? `（已抵样品费 ${doc.sample_credit}）`
+                    : ""}
                 </span>
-                <span className={styles.muted}>有效至 {doc.valid_until}</span>
+                {doc.doc_type === "proforma_invoice" ? (
+                  <select
+                    className={styles.select}
+                    onChange={(event) =>
+                      void withBusy(async () => {
+                        await setDocumentStage(doc.id, event.target.value);
+                        return `${doc.number} → ${
+                          STAGES.find((s) => s.key === event.target.value)?.label ?? ""
+                        }`;
+                      })
+                    }
+                    value={doc.stage}
+                  >
+                    {STAGES.map((stage) => (
+                      <option key={stage.key} value={stage.key}>
+                        {stage.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
                 <button
                   className={styles.ghostButton}
                   onClick={() =>
@@ -306,6 +417,42 @@ export default function DocumentsWorkspace() {
                 >
                   下载 PDF
                 </button>
+                {doc.doc_type === "proforma_invoice" ? (
+                  <>
+                    <button
+                      className={styles.ghostButton}
+                      disabled={busy}
+                      onClick={() =>
+                        void withBusy(async () => {
+                          const made = await createShippingDoc(doc.id, {
+                            doc_type: "commercial_invoice",
+                          });
+                          return `已出商业发票 ${made.number}`;
+                        })
+                      }
+                      title="发货报关用。行项目原样继承这张 PI，金额必须和买家实付一致。"
+                      type="button"
+                    >
+                      出商业发票
+                    </button>
+                    <button
+                      className={styles.ghostButton}
+                      disabled={busy}
+                      onClick={() =>
+                        void withBusy(async () => {
+                          const made = await createShippingDoc(doc.id, {
+                            doc_type: "packing_list",
+                          });
+                          return `已出装箱单 ${made.number}（箱重留空处印 TBC，打包后可重开）`;
+                        })
+                      }
+                      title="箱数按箱规自动算；毛净重打包时才知道，留空会印 TBC。"
+                      type="button"
+                    >
+                      出装箱单
+                    </button>
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>

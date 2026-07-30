@@ -27,7 +27,7 @@ from ..store_types import catalog as store_type_catalog
 from ..store_types import service as store_type_service
 from ..store_types.models import B2BStoreType
 from ..wholesale.models import STATUS_READY, B2BWholesaleItem
-from . import guides, pages
+from . import guides, pages, products_live
 from .models import (
     GUIDE_CATEGORIES_KEY,
     GUIDE_COUNT_PREFIX,
@@ -287,6 +287,10 @@ def publish(db: Session) -> dict[str, Any]:
     if credentials is None:
         raise PublishError("WordPress 凭据没配置。")
 
+    # 先摘掉 Woo 上已经不在卖的产品：留着 = 批发页上挂着点过去 404 的卡片，
+    # 而且不报错。指南那边早就核实了发布状态，产品这边一直是个不对称。
+    _drop_dead_products(groups, credentials)
+
     # 每个类目段落挂它自己的指南（方案 B）。**按这一页实际有的产品连**,
     # 不按店型配置的宽前缀——否则会推销你不卖的货。
     _attach_guides(db, groups, credentials)
@@ -340,6 +344,30 @@ def publish(db: Session) -> dict[str, Any]:
         "guide_categories_mapped": len(link_map),
         "widget_policy_pushed": widget_pushed,
     }
+
+
+def _drop_dead_products(groups: list[dict], credentials: Any) -> None:
+    """摘掉 Woo 上已下架/已删的产品。核不了就原样保留——把"查不到"当成
+    "不存在"会在 WP 抖一下时清空整个批发页。"""
+    import re
+
+    ids: list[int] = []
+    for group in groups:
+        for category in group.get("categories") or []:
+            for product in category.get("products") or []:
+                match = re.search(r"[?&]p=(\d+)", str(product.get("url") or ""))
+                if match:
+                    ids.append(int(match.group(1)))
+    if not ids:
+        return
+    try:
+        live = products_live.live_product_ids(credentials, ids)
+        removed = products_live.drop_dead_products(groups, live)
+    except Exception:  # noqa: BLE001 - 核不了不该拦住发页面
+        logger.exception("B2B product liveness check failed")
+        return
+    if removed:
+        logger.warning("B2B wholesale pages dropped %s dead products", removed)
 
 
 def _guide_count(group: dict) -> int:
