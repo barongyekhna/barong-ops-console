@@ -60,6 +60,7 @@ services:
       GUNICORN_GRACEFUL_TIMEOUT: "30"
       N8N_P_UPLOAD_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-p-upload"
       N8N_GEO_PUBLISH_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-geo-publish"
+      N8N_SEO_PUBLISH_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-seo-publish"
       N8N_GEO_BACKLINK_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-geo-backlink"
       N8N_B2B_WIDGET_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-b2b-widget"
       # W-S 物流：模板/单号同步派单 + 订单 ingest 鉴权（n8n 侧工作流用同一 token）
@@ -274,6 +275,35 @@ services:
       - python
       - -m
       - backend.app.modules.geo_series.content.worker_main
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
+  seo-worker:
+    container_name: seo-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "4"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "8000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      SEO_GENERATION_CONCURRENCY: "2"
+      SEO_GENERATION_POLL_SECONDS: "3"
+    command:
+      - python
+      - -m
+      - backend.app.modules.seo_series.content.worker_main
     depends_on:
       console_postgres:
         condition: service_healthy

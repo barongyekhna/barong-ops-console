@@ -257,4 +257,383 @@ def fact_revisions(
     }
 
 
+
+
+# ============================================================ 选题（关键词雷达）
+
+
+class RadarRunIn(BaseModel):
+    extra_keywords: list[str] = Field(default_factory=list)
+
+
+@router.get("/topics")
+def list_topics(
+    request: Request,
+    status_filter: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.read")),
+) -> dict[str, Any]:
+    """选题队列。按分数倒序——分数已经把"有没有事实支撑"算进去了。"""
+    from sqlalchemy import select
+
+    from .content.models import SeoRadarRun, SeoTopic
+
+    query = select(SeoTopic)
+    if status_filter:
+        query = query.where(SeoTopic.status == status_filter)
+    rows = list(
+        db.execute(query.order_by(SeoTopic.score.desc(), SeoTopic.created_at)).scalars()
+    )
+    last_run = db.execute(
+        select(SeoRadarRun).order_by(SeoRadarRun.created_at.desc()).limit(1)
+    ).scalars().first()
+    return {
+        "topics": [
+            {
+                "id": str(t.id),
+                "keyword": t.keyword,
+                "source": t.source,
+                "audience": t.audience,
+                "destination": t.destination,
+                "category_path": t.category_path,
+                "store_type_key": t.store_type_key,
+                "craft_topic": t.craft_topic,
+                "avg_monthly_searches": t.avg_monthly_searches,
+                "attackability": t.attackability,
+                "terrain": t.terrain,
+                "fact_support": t.fact_support_json or {},
+                "score": t.score,
+                "status": t.status,
+                "geo_reason": t.geo_reason,
+            }
+            for t in rows
+        ],
+        "last_run": (
+            {
+                "status": last_run.status,
+                "seed_count": last_run.seed_count,
+                "planner_calls": last_run.planner_calls,
+                "candidate_count": last_run.candidate_count,
+                "geo_blocked_count": last_run.geo_blocked_count,
+                "notes": last_run.notes_json or {},
+                "finished_at": (
+                    last_run.finished_at.isoformat() if last_run.finished_at else None
+                ),
+            }
+            if last_run
+            else None
+        ),
+    }
+
+
+@router.post("/topics/radar")
+def run_radar_endpoint(
+    request: Request,
+    payload: RadarRunIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    from .content.topic_radar import SeoRadarError, run_radar
+
+    try:
+        run = run_radar(
+            db,
+            scope_context=_scope(request),
+            extra_keywords=payload.extra_keywords,
+            username=getattr(user, "username", None),
+        )
+    except SeoRadarError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "status": run.status,
+        "seed_count": run.seed_count,
+        "planner_calls": run.planner_calls,
+        "candidate_count": run.candidate_count,
+        "geo_blocked_count": run.geo_blocked_count,
+        "notes": run.notes_json or {},
+    }
+
+
+@router.post("/topics/{topic_id}/terrain")
+def probe_topic_terrain(
+    request: Request,
+    topic_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    """给单个选题打可攻度（一发 Serper，走 GEO 的台账）。"""
+    from .content.topic_radar import SeoRadarError, attach_terrain
+
+    try:
+        topic = attach_terrain(
+            db, topic_id=topic_id, scope_context=_scope(request), user=user
+        )
+    except SeoRadarError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "attackability": topic.attackability,
+        "terrain": topic.terrain,
+        "score": topic.score,
+    }
+
+
+class TopicPatch(BaseModel):
+    status: str
+    rejected_reason: str | None = None
+
+
+@router.patch("/topics/{topic_id}")
+def update_topic(
+    topic_id: UUID,
+    payload: TopicPatch,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.manage")),
+) -> dict[str, Any]:
+    from .content import constants as C
+    from .content.models import SeoTopic
+
+    if payload.status not in C.TOPIC_STATUSES:
+        raise HTTPException(status_code=400, detail=f"未知状态 {payload.status}。")
+    topic = db.get(SeoTopic, topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="这个选题不存在。")
+    topic.status = payload.status
+    topic.rejected_reason = payload.rejected_reason
+    if payload.status == "picked":
+        topic.picked_by_user_id = getattr(user, "id", None)
+    db.commit()
+    return {"id": str(topic.id), "status": topic.status}
+
+
+# ============================================================ 内容
+
+
+@router.post("/topics/{topic_id}/generate")
+def generate_article(
+    request: Request,
+    topic_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    """排队生成。真正的生成在 seo-worker 里跑（AI 调用一分钟起步）。"""
+    from ..k_series.product_knowledge.scope_shim import KScopeContext
+    from .content.generation_jobs import enqueue_seo_jobs
+    from .content.models import SeoTopic
+
+    topic = db.get(SeoTopic, topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="这个选题不存在。")
+    scope = _scope(request)
+    created = enqueue_seo_jobs(
+        db,
+        topic_ids=[topic_id],
+        user=user,
+        scope_context=KScopeContext(
+            workspace_key=scope.workspace_key,
+            business_context=scope.business_context,
+            scope_mode=scope.scope_mode,
+        ),
+    )
+    if topic.status == "candidate":
+        topic.status = "picked"
+    db.commit()
+    return {"queued": created}
+
+
+@router.get("/items")
+def list_items(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.read")),
+) -> dict[str, Any]:
+    from sqlalchemy import select
+
+    from .content.generation_jobs import jobs_status
+    from .content.models import SeoContentItem, SeoTopic
+
+    rows = list(
+        db.execute(
+            select(SeoContentItem).order_by(SeoContentItem.created_at.desc())
+        ).scalars()
+    )
+    topics = {
+        t.id: t for t in db.execute(select(SeoTopic)).scalars()
+    }
+    return {
+        "items": [
+            {
+                "id": str(i.id),
+                "topic": getattr(topics.get(i.topic_id), "keyword", None),
+                "item_kind": i.item_kind,
+                "destination": i.destination,
+                "title": i.title,
+                "sections": (i.body_json or {}).get("sections") or [],
+                "seo": i.seo_json or {},
+                "links": i.links_json or {},
+                "brand_audit": i.brand_audit_json or {},
+                "analysis": i.analysis_json or {},
+                "revision": i.revision_json or {},
+                "review_status": i.review_status,
+                "wp_post_id": i.wp_post_id,
+                "wp_status": i.wp_status,
+                "published_url": i.published_url,
+            }
+            for i in rows
+        ],
+        "jobs": jobs_status(db),
+    }
+
+
+class ReviewIn(BaseModel):
+    review_status: str
+
+
+@router.post("/items/{item_id}/review")
+def review_item(
+    item_id: UUID,
+    payload: ReviewIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.manage")),
+) -> dict[str, Any]:
+    from .content.models import SeoContentItem
+
+    if payload.review_status not in ("pending", "approved", "rejected"):
+        raise HTTPException(status_code=400, detail="未知审核状态。")
+    item = db.get(SeoContentItem, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="这篇不存在。")
+    audit = item.brand_audit_json or {}
+    if payload.review_status == "approved" and not audit.get("clean", True):
+        raise HTTPException(
+            status_code=409,
+            detail="这篇没过品牌/接地审查，不能批准。先按批评重写。",
+        )
+    item.review_status = payload.review_status
+    db.commit()
+    return {"id": str(item.id), "review_status": item.review_status}
+
+
+@router.post("/items/{item_id}/revise")
+def revise_item(
+    request: Request,
+    item_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    from ..k_series.product_knowledge.scope_shim import KScopeContext
+    from .content.generation_jobs import enqueue_seo_jobs
+
+    scope = _scope(request)
+    created = enqueue_seo_jobs(
+        db,
+        topic_ids=[item_id],  # revise 任务里这一列存的是 item_id
+        user=user,
+        scope_context=KScopeContext(
+            workspace_key=scope.workspace_key,
+            business_context=scope.business_context,
+            scope_mode=scope.scope_mode,
+        ),
+        job_kind="revise",
+    )
+    db.commit()
+    return {"queued": created}
+
+
+# ============================================================ 发布
+
+
+class PublishIn(BaseModel):
+    item_ids: list[UUID]
+
+
+@router.post("/publishes")
+def create_publish(
+    request: Request,
+    payload: PublishIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.manage")),
+) -> dict[str, Any]:
+    from .content.models import SeoContentItem
+    from .content.publish_jobs import create_publish_job
+
+    blockers: list[str] = []
+    for item_id in payload.item_ids:
+        item = db.get(SeoContentItem, item_id)
+        if item is None:
+            blockers.append(f"{item_id}：不存在")
+        elif item.review_status != "approved":
+            blockers.append(f"《{item.title[:30]}》：还没批准")
+        elif not (item.brand_audit_json or {}).get("clean", True):
+            blockers.append(f"《{item.title[:30]}》：没过品牌/接地审查")
+    if blockers:
+        raise HTTPException(status_code=409, detail={"ready": False, "blockers": blockers})
+
+    job = create_publish_job(
+        db,
+        item_ids=payload.item_ids,
+        scope_context=_scope(request),
+        user=user,
+        public_base=_public_base(),
+    )
+    db.commit()
+    return {"job_id": job.job_id, "status": job.status}
+
+
+@router.get("/publishes")
+def list_publishes(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.read")),
+) -> dict[str, Any]:
+    from .content.publish_jobs import jobs_recent
+
+    return {"jobs": jobs_recent(db)}
+
+
+@router.post("/factory-index")
+def rebuild_factory_index(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.manage")),
+) -> dict[str, Any]:
+    """重建 /factory/ 枢纽页，并把 factory 分类推进博客排除名单。"""
+    from .content.factory_index import upsert_factory_index
+    from .content.live_state import refresh_item_live_state_safely
+    from .content.wp_terms import sync_factory_category_exclusions
+
+    refresh_item_live_state_safely(db)
+    page_id, url = upsert_factory_index(db)
+    excluded = sync_factory_category_exclusions(db)
+    return {"page_id": page_id, "url": url, "excluded_category_ids": excluded}
+
+
+# ============================================================ 监测
+
+
+@router.get("/monitor")
+def seo_monitor(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.read")),
+) -> dict[str, Any]:
+    from .content.rank_monitor import monitor_state
+
+    return monitor_state(db)
+
+
+@router.post("/monitor/seed")
+def seo_monitor_seed(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    from .content.rank_monitor import apply_terrain_to_topics, seed_from_picked_topics
+
+    added = seed_from_picked_topics(db, scope_context=_scope(request))
+    applied = apply_terrain_to_topics(db)
+    return {"added": added, "topics_rescored": applied}
+
+
+def _public_base() -> str:
+    import os
+
+    return os.getenv("PUBLIC_BASE_URL", "https://ops.barongyekhna.com").rstrip("/")
+
+
 __all__ = ["router"]

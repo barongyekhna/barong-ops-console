@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ...content_core import n8n_publish as n8n
+
 WP_CREDENTIAL = {"id": "kaIcXMDT4cNA0GXm", "name": "Wordpress account"}
 WP_POSTS = "https://barongyekhna.com/wp-json/wp/v2/posts"
 SCHEMA_VERSION = "geo-publish-package-v1"
@@ -150,255 +152,52 @@ return [{ json: { status: 'success', published_items: published } }];
 """.strip()
 
 
-def _node(
-    *,
-    parameters: dict,
-    node_id: str,
-    name: str,
-    node_type: str,
-    type_version: float,
-    position: list[int],
-    **extra: object,
-) -> dict:
-    node = {
-        "parameters": parameters,
-        "id": node_id,
-        "name": name,
-        "type": node_type,
-        "typeVersion": type_version,
-        "position": position,
-    }
-    node.update(extra)
-    return node
+NODE_IDS = {
+    # 历史上已经装进 n8n 的那批 id。**不能改**——n8n 按 id 认节点。
+    n8n.NODE_STICKY: "be111111-1111-4111-8111-11111111111e",
+    n8n.NODE_WEBHOOK: "b1111111-1111-4111-8111-111111111111",
+    n8n.NODE_FETCH: "b2222222-2222-4222-8222-222222222222",
+    n8n.NODE_SPLIT: "b3333333-3333-4333-8333-333333333333",
+    n8n.NODE_DECIDE: "b4444444-4444-4444-8444-444444444444",
+    n8n.NODE_WRITE: "b5555555-5555-4555-8555-555555555555",
+    n8n.NODE_COLLECT: "b6666666-6666-4666-8666-666666666666",
+    n8n.NODE_IF: "bccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    n8n.NODE_BACKFILL: "b7777777-7777-4777-8777-777777777777",
+    n8n.NODE_REPORT_BUILD: "b8888888-8888-4888-8888-888888888888",
+    n8n.NODE_REPORT_SEND: "b9999999-9999-4999-8999-999999999999",
+    "if_condition": "bcccccc1-cccc-4ccc-8ccc-cccccccccccc",
+}
+
+PROJECT = {
+    "updatedAt": "2026-03-24T07:46:51.801Z",
+    "createdAt": "2026-03-24T06:44:50.688Z",
+    "id": "SjZCov4RK9CKr2EU",
+    "name": "Guangrui Sun <barongyekhna@barongyekhna.com>",
+    "type": "personal",
+    "icon": None,
+    "description": None,
+    "creatorId": "c0b4c1d1-41e4-4eaa-982f-3e1808550e7f",
+}
 
 
 def build() -> dict:
-    nodes = [
-        _node(
-            parameters={"content": STICKY, "height": 640, "width": 560, "color": 4},
-            node_id="be111111-1111-4111-8111-11111111111e",
-            name="说明便签",
-            node_type="n8n-nodes-base.stickyNote",
-            type_version=1,
-            position=[-560, 160],
-        ),
-        _node(
-            parameters={
-                "httpMethod": "POST",
-                "path": "barong-geo-publish",
-                "responseMode": "onReceived",
-                "options": {},
-            },
-            node_id="b1111111-1111-4111-8111-111111111111",
-            name="Webhook 触发",
-            node_type="n8n-nodes-base.webhook",
-            type_version=2,
-            position=[0, 300],
-            webhookId="barong-geo-publish-webhook",
-        ),
-        _node(
-            parameters={"url": "={{ $json.body.package_url }}", "options": {}},
-            node_id="b2222222-2222-4222-8222-222222222222",
-            name="取数-发布包",
-            node_type="n8n-nodes-base.httpRequest",
-            type_version=4.2,
-            position=[200, 300],
-        ),
-        _node(
-            parameters={"jsCode": BUILD_BODIES_JS},
-            node_id="b3333333-3333-4333-8333-333333333333",
-            name="拆文章",
-            node_type="n8n-nodes-base.code",
-            type_version=2,
-            position=[400, 300],
-        ),
-        _node(
-            parameters={"jsCode": DECIDE_JS},
-            node_id="b4444444-4444-4444-8444-444444444444",
-            name="决定建或更新",
-            node_type="n8n-nodes-base.code",
-            type_version=2,
-            position=[600, 300],
-        ),
-        _node(
-            parameters={
-                "method": "={{ $json.method }}",
-                "url": "={{ $json.url }}",
-                "authentication": "predefinedCredentialType",
-                "nodeCredentialType": "wordpressApi",
-                "sendBody": True,
-                "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify($json.wp_body) }}",
-                "options": {"batching": {"batch": {"batchSize": 1, "batchInterval": 2000}}},
-            },
-            node_id="b5555555-5555-4555-8555-555555555555",
-            name="建/更新文章",
-            node_type="n8n-nodes-base.httpRequest",
-            type_version=4.2,
-            position=[800, 300],
-            retryOnFail=True,
-            maxTries=3,
-            waitBetweenTries=5000,
-            credentials={"wordpressApi": WP_CREDENTIAL},
-        ),
-        _node(
-            parameters={"jsCode": COLLECT_JS},
-            node_id="b6666666-6666-4666-8666-666666666666",
-            name="收集URL并回填内链",
-            node_type="n8n-nodes-base.code",
-            type_version=2,
-            position=[1000, 300],
-        ),
-        _node(
-            parameters={
-                "conditions": {
-                    "options": {
-                        "caseSensitive": True,
-                        "leftValue": "",
-                        "typeValidation": "strict",
-                        "version": 2,
-                    },
-                    "conditions": [
-                        {
-                            "id": "bcccccc1-cccc-4ccc-8ccc-cccccccccccc",
-                            "leftValue": "={{ $json.needs_backfill === true }}",
-                            "rightValue": "",
-                            "operator": {
-                                "type": "boolean",
-                                "operation": "true",
-                                "singleValue": True,
-                            },
-                        }
-                    ],
-                    "combinator": "and",
-                },
-                "options": {},
-            },
-            node_id="bccccccc-cccc-4ccc-8ccc-cccccccccccc",
-            name="有内链要回填?",
-            node_type="n8n-nodes-base.if",
-            type_version=2.2,
-            position=[1180, 300],
-        ),
-        _node(
-            parameters={
-                "method": "POST",
-                "url": "={{ 'https://barongyekhna.com/wp-json/wp/v2/posts/' + $json.post_id }}",
-                "authentication": "predefinedCredentialType",
-                "nodeCredentialType": "wordpressApi",
-                "sendBody": True,
-                "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify({ content: $json.content }) }}",
-                "options": {"batching": {"batch": {"batchSize": 1, "batchInterval": 2000}}},
-            },
-            node_id="b7777777-7777-4777-8777-777777777777",
-            name="回填内链",
-            node_type="n8n-nodes-base.httpRequest",
-            type_version=4.2,
-            retryOnFail=True,
-            maxTries=3,
-            waitBetweenTries=5000,
-            position=[1200, 300],
-            credentials={"wordpressApi": WP_CREDENTIAL},
-            alwaysOutputData=True,
-        ),
-        _node(
-            parameters={"jsCode": REPORT_JS},
-            node_id="b8888888-8888-4888-8888-888888888888",
-            name="整理回报",
-            node_type="n8n-nodes-base.code",
-            type_version=2,
-            position=[1400, 300],
-        ),
-        _node(
-            parameters={
-                "method": "POST",
-                "url": "={{ $('Webhook 触发').item.json.body.callback_url }}",
-                "sendHeaders": True,
-                "headerParameters": {
-                    "parameters": [
-                        {
-                            "name": "X-Job-Token",
-                            "value": "={{ $('Webhook 触发').item.json.body.token }}",
-                        }
-                    ]
-                },
-                "sendBody": True,
-                "specifyBody": "json",
-                "jsonBody": "={{ JSON.stringify($json) }}",
-                "options": {},
-            },
-            node_id="b9999999-9999-4999-8999-999999999999",
-            name="回报控制台",
-            node_type="n8n-nodes-base.httpRequest",
-            type_version=4.2,
-            position=[1600, 300],
-        ),
-    ]
-
-    connections = {
-        "Webhook 触发": {"main": [[{"node": "取数-发布包", "type": "main", "index": 0}]]},
-        "取数-发布包": {"main": [[{"node": "拆文章", "type": "main", "index": 0}]]},
-        "拆文章": {"main": [[{"node": "决定建或更新", "type": "main", "index": 0}]]},
-        "决定建或更新": {"main": [[{"node": "建/更新文章", "type": "main", "index": 0}]]},
-        "建/更新文章": {
-            "main": [[{"node": "收集URL并回填内链", "type": "main", "index": 0}]]
-        },
-        "收集URL并回填内链": {
-            "main": [[{"node": "有内链要回填?", "type": "main", "index": 0}]]
-        },
-        # true 分支去回填,false 分支直接回报——两条路都必须汇到「整理回报」,
-        # 否则没有互链的簇会走到死路,控制台永远收不到回报。
-        "有内链要回填?": {
-            "main": [
-                [{"node": "回填内链", "type": "main", "index": 0}],
-                [{"node": "整理回报", "type": "main", "index": 0}],
-            ]
-        },
-        "回填内链": {"main": [[{"node": "整理回报", "type": "main", "index": 0}]]},
-        "整理回报": {"main": [[{"node": "回报控制台", "type": "main", "index": 0}]]},
-    }
-
-    return {
-        "createdAt": "2026-07-29T00:00:00.000Z",
-        "updatedAt": "2026-07-29T00:00:00.000Z",
-        "id": "barongGEOpublish001",
-        "name": "barong控制台-GEO系列-发布指南文章",
-        "description": None,
-        "active": True,
-        "isArchived": False,
-        "nodes": nodes,
-        "connections": connections,
-        "settings": {},
-        "staticData": None,
-        "meta": None,
-        "pinData": None,
-        "versionId": "9d1f4c22-0e3b-4a77-9f21-6b0c5f0a11ea",
-        "activeVersionId": "9d1f4c22-0e3b-4a77-9f21-6b0c5f0a11ea",
-        "versionCounter": 4,
-        "triggerCount": 1,
-        "tags": [],
-        "shared": [
-            {
-                "updatedAt": "2026-07-29T00:00:00.000Z",
-                "createdAt": "2026-07-29T00:00:00.000Z",
-                "role": "workflow:owner",
-                "workflowId": "barongGEOpublish001",
-                "projectId": "SjZCov4RK9CKr2EU",
-                "project": {
-                    "updatedAt": "2026-03-24T07:46:51.801Z",
-                    "createdAt": "2026-03-24T06:44:50.688Z",
-                    "id": "SjZCov4RK9CKr2EU",
-                    "name": "Guangrui Sun <barongyekhna@barongyekhna.com>",
-                    "type": "personal",
-                    "icon": None,
-                    "description": None,
-                    "creatorId": "c0b4c1d1-41e4-4eaa-982f-3e1808550e7f",
-                },
-            }
-        ],
-        "versionMetadata": {"name": None, "description": None},
-    }
+    """结构由 content_core 出,GEO 只传自己的常量。"""
+    return n8n.build_publish_workflow(
+        n8n.PublishWorkflowConfig(
+            workflow_id="barongGEOpublish001",
+            workflow_name="barong控制台-GEO系列-发布指南文章",
+            webhook_path="barong-geo-publish",
+            sticky=STICKY,
+            build_bodies_js=BUILD_BODIES_JS,
+            decide_js=DECIDE_JS,
+            collect_js=COLLECT_JS,
+            report_js=REPORT_JS,
+            node_ids=NODE_IDS,
+            wp_credential=WP_CREDENTIAL,
+            version_id="9d1f4c22-0e3b-4a77-9f21-6b0c5f0a11ea",
+            project=PROJECT,
+        )
+    )
 
 
 def main() -> None:

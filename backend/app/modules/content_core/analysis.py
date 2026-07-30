@@ -60,9 +60,15 @@ def analysis_instruction() -> str:
 
 
 def _item_payload(item: Any) -> dict[str, Any]:
+    """把一条内容行摊平成解读用的载荷。
+
+    ``item_type``(GEO)和 ``item_kind``(SEO)是同一个概念在两张表里的两个名字。
+    这里认两种——共享组件不该逼着任何一边为了复用去改自己的列名。
+    """
     body = item.body_json if isinstance(item.body_json, dict) else {}
     return {
-        "item_type": item.item_type,
+        "item_type": getattr(item, "item_type", None)
+        or getattr(item, "item_kind", None),
         "title": item.title,
         "sections": body.get("sections") or [],
         "answer_blocks": body.get("answer_blocks") or [],

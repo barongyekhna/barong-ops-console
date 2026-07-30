@@ -100,6 +100,14 @@ from ..modules.content_core.facts.models import (
     CraftFact,
     CraftFactRevision,
 )
+from ..modules.seo_series.content.models import (
+    SeoContentItem,
+    SeoGenerationJob,
+    SeoPublishJob,
+    SeoRadarRun,
+    SeoTopic,
+)
+from ..modules.seo_series.content.models_terms import SeoWpCategoryMap
 from ..modules.geo_series.monitor.models import (
     GeoMonitorQuestion,
     GeoMonitorResult,
@@ -150,6 +158,12 @@ __all__ = [
     "EventStreamRecord",
     "ContentFactUsage",
     "CraftFact",
+    "SeoContentItem",
+    "SeoGenerationJob",
+    "SeoPublishJob",
+    "SeoRadarRun",
+    "SeoTopic",
+    "SeoWpCategoryMap",
     "CraftFactRevision",
     "GeoBacklinkJob",
     "GeoMonitorQuestion",

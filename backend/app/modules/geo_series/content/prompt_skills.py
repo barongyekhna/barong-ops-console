@@ -10,6 +10,19 @@ answer so the reader can reach the PDP.
 
 from __future__ import annotations
 
+# 反垃圾家规下沉到 content_core:SEO 用的是同一批常量,所以两边**不可能漂**。
+# 改一条,GEO 和 SEO 同时生效——这正是抽出去的理由。
+from ...content_core.writing_rules import (
+    ANSWER_THE_QUESTION_EN,
+    ANSWER_THE_QUESTION_ZH,
+    ARITHMETIC_EN,
+    ARITHMETIC_ZH,
+    JUDGEMENT_STRUCTURE_EN,
+    JUDGEMENT_STRUCTURE_ZH,
+    NO_FABRICATION_ZH,
+    NO_NAME_REPETITION_ZH,
+)
+
 GEO_CONTENT_SKILL_VERSION = "geo-content-v2"
 
 
@@ -45,41 +58,14 @@ def geo_content_instruction() -> str:
         "AI can attribute and recommend it, and list its identifier in "
         "`source_products` so we can internal-link it to its product page.\n"
         "\n"
-        "ARITHMETIC IS ALLOWED — BUT SHOW YOUR WORK. You may compute a number the "
-        "facts imply (\"5 gallons at 2.11 GPM lasts about 2.4 minutes\"), and you "
-        "SHOULD when the question asks for one — but every computed number MUST be "
-        "declared in `derived_numbers` as {\"value\": \"2.4\", \"from\": "
-        "\"5 / 2.11\", \"unit\": \"minutes\"}. Each operand must come from the "
-        "product facts or from the question itself; the server re-runs the "
-        "arithmetic and rejects the piece if it does not check out. Do NOT round a "
-        "number into vagueness to avoid declaring it — precision is the point.\n"
+        + ARITHMETIC_EN
+        + 
         "\n"
-        "ANSWER THE QUESTION — DO NOT DESCRIBE THE PRODUCT. A question is answered "
-        "when a reader who has NOT made up their mind can now make it up. Reciting "
-        "the product's specifications is NOT an answer to a judgement question; it "
-        "is a product description wearing a question as a hat. Specs are evidence "
-        "FOR a judgement, never a substitute for one. If you find yourself listing "
-        "what the product has, stop and write what that means for the reader's "
-        "decision instead.\n"
+        + ANSWER_THE_QUESTION_EN
+        + 
         "\n"
-        "JUDGEMENT QUESTIONS (\"is it worth it\", \"should I\", \"do I need\", "
-        "\"is it any good\") MUST be structured as a decision, in this order:\n"
-        "  1. a direct verdict in the first sentence, conditional and honest — "
-        "\"Yes, if …\" / \"Not really, if …\";\n"
-        "  2. the conditions under which it IS worth it, each tied to a mechanism "
-        "or a verified fact (not a list of features);\n"
-        "  3. **the conditions under which it is NOT worth it** — this half is "
-        "mandatory. Naming who should not buy is what makes the page credible to a "
-        "reader and citable by an answer engine; a page that only sells gets "
-        "neither. Saying \"if your campsite already has a shower block, the value "
-        "is low\" invents nothing — it is a conditional, not a claim of fact;\n"
-        "  4. only then, where THIS product lands in that framework.\n"
-        "The \"not worth it\" part must contain NO sales language and must NOT end "
-        "by pivoting back to the product — a paragraph about who should not buy "
-        "loses all of its credibility, and therefore all of its citation value, "
-        "the moment it closes with a pitch. Keep the product's placement in step 4, "
-        "where it belongs.\n"
-        "This structure is a requirement, not a suggestion.\n"
+        + JUDGEMENT_STRUCTURE_EN
+        + 
         "\n"
         "REQUIRED QUESTIONS (when `required_questions` is non-empty): these are REAL "
         "buyer questions drawn from search demand and are SERVER-OWNED. You MUST "
@@ -204,10 +190,8 @@ def geo_revise_instruction() -> str:
         "你要**重写一篇**已经生成的站内导购内容。下面给你:这篇的现有内容、审稿模型"
         "对它的批评意见、以及这个产品**全部可用的真实事实**。\n"
         "\n"
-        "**最高铁律:绝不编造事实。**只能用给你的事实。如果某条批评要求补充一个"
-        "事实里没有的数据(例如「应说明推荐充电功率」但规格里根本没有功率),"
-        "**绝对不许瞎编一个数字或说法来满足它**——把这条批评放进 `unaddressed`,"
-        "说明缺什么数据。宁可不改,也不许造假。\n"
+        + NO_FABRICATION_ZH
+        + 
         "\n"
         "**品牌铁律**:唯一能出现的品牌是 `site_brand`,绝不提任何第三方品牌。"
         "所以「应该和其他品牌对比」这类批评**不能靠点名竞品来满足**——正确做法是"
@@ -216,27 +200,17 @@ def geo_revise_instruction() -> str:
         "可以照做的批评通常是:语气过于自夸、缺少客观性、没提适用局限、结构不利于"
         "被摘录、答案不够自足。这些请**在事实范围内**认真改。\n"
         "\n"
-        "**算术是允许的,但必须亮算式。**可以算出事实蕴含的数字(如「5 加仑按 "
-        "2.11 GPM 约 2.4 分钟」),问句要答案时**就该算**;但每个算出来的数字必须"
-        "在 `derived_numbers` 里声明 {\"value\":\"2.4\",\"from\":\"5 / 2.11\"},"
-        "每个操作数要么来自产品事实、要么来自问句本身。服务端会重算一遍,对不上"
-        "就整篇打回。**不许为了躲开声明而把数字含糊掉**——精确才是价值所在。\n"
+        + ARITHMETIC_ZH
+        + 
         "\n"
-        "**回答问句,不要介绍产品。**一个问题被回答的标准是:还没拿定主意的读者"
-        "读完能拿定主意。罗列产品参数**不构成**对判断题的回答——那是「产品介绍"
-        "戴了个问句的帽子」。参数是判断的**证据**,不是判断本身。如果原稿主要在"
-        "堆参数,这次重写必须改成讲清楚**这些参数对读者的决定意味着什么**。\n"
+        + ANSWER_THE_QUESTION_ZH
+        + 
         "\n"
-        "**判断类问句**(值不值/要不要买/好不好/该选哪个)必须写成决策结构:"
-        "①第一句给条件式结论(Yes, if… / Not really, if…);②什么情况下值得,"
-        "每条挂在机制或真实事实上;③**什么情况下不值得——这半边是强制的**;"
-        "④最后才说本产品落在这个框架的哪里。说「如果营地本来就有淋浴房则价值"
-        "不大」**没有编造任何东西**,它是条件判断不是事实主张,所以不受"
-        "「绝不编造」约束。**「不值得」那一段里不许出现推销语言、不许拐回产品"
-        "收尾**——一段专门讲别买的文字以推销结尾,就等于自毁可信度。\n"
+        + JUDGEMENT_STRUCTURE_ZH
+        + 
         "\n"
-        "**别每句话都写产品全称**。第一次点名后改用简称或代词,句句全称读起来"
-        "很生硬,也会挤掉真正有信息量的内容。\n"
+        + NO_NAME_REPETITION_ZH
+        + 
         "\n"
         "其他要求同原稿:美制英制单位、纯英文(不出现中文)、不写价格/库存/运费、"
         "问答要自足可摘录、点名产品并在 `source_products` 里给出标识。\n"

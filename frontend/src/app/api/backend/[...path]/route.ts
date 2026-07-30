@@ -994,14 +994,52 @@ function isAllowedKeyHealthPath(method: string, path: string[]) {
   return path[1] === "run" && method === "POST";
 }
 
-// SEO 内容引擎——本期只有工艺事实库（/seo/facts…）。
+// SEO 内容引擎：工艺事实库 / 关键词雷达 / 内容 / 发布 / 监测。
+// 机器端点（/seo/publishes/{job}/package|result）**刻意不在这里**——它们走
+// token 鉴权、由 n8n 直连裸挂载，前台代理不该能碰。
 function isAllowedSeoPath(method: string, path: string[]) {
-  if (path[0] !== "seo" || path[1] !== "facts") {
+  if (path[0] !== "seo") {
     return false;
   }
-  // GET（列表 + 需复核清单）/ POST（新增）/seo/facts
-  if (path.length === 2) {
-    return method === "GET" || method === "POST";
+  // ---- 工艺事实库 ----
+  if (path[1] === "facts") {
+    if (path.length === 2) {
+      return method === "GET" || method === "POST";
+    }
+    if (!isUuidPathSegment(path[2])) {
+      return false;
+    }
+    if (path.length === 3) {
+      return method === "PATCH";
+    }
+    if (path.length === 4) {
+      if (path[3] === "approve" || path[3] === "retire") {
+        return method === "POST";
+      }
+      return path[3] === "revisions" && method === "GET";
+    }
+    return false;
+  }
+  // ---- 选题（关键词雷达）----
+  if (path[1] === "topics") {
+    if (path.length === 2) {
+      return method === "GET";
+    }
+    if (path.length === 3 && path[2] === "radar") {
+      return method === "POST";
+    }
+    if (!isUuidPathSegment(path[2])) {
+      return false;
+    }
+    if (path.length === 3) {
+      return method === "PATCH";
+    }
+    if (path.length === 4) {
+      return (
+        (path[3] === "terrain" || path[3] === "generate") && method === "POST"
+      );
+    }
+    return false;
   }
   // ---- 内容 ----
   if (path[1] === "items") {
@@ -1015,14 +1053,17 @@ function isAllowedSeoPath(method: string, path: string[]) {
     }
     return false;
   }
-  // PATCH /seo/facts/{id}
-  if (path.length === 3) {
-    return method === "PATCH";
+  // ---- 发布（只放列表与派单，不放 package/result）----
+  if (path[1] === "publishes" && path.length === 2) {
+    return method === "GET" || method === "POST";
   }
-  // POST /seo/facts/{id}/approve|retire ; GET /seo/facts/{id}/revisions
-  if (path.length === 4) {
-    if (path[3] === "approve" || path[3] === "retire") {
-      return method === "POST";
+  if (path[1] === "factory-index" && path.length === 2) {
+    return method === "POST";
+  }
+  // ---- 监测 ----
+  if (path[1] === "monitor") {
+    if (path.length === 2) {
+      return method === "GET";
     }
     return path.length === 3 && path[2] === "seed" && method === "POST";
   }

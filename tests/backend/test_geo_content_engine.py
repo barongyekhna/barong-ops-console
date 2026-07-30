@@ -413,8 +413,13 @@ def test_analysis_is_fail_open_and_never_blocks_content() -> None:
     src = inspect.getsource(analysis.analyze_content)
     assert "except Exception" in src
     assert "return None" in src
-    wrapper = inspect.getsource(analysis.attach_analysis_safely)
+    # 持久化适配器已下沉 content_core(表名变成参数),GEO 侧只剩薄封装。
+    # 性质不变,断言跟着代码走。
+    from backend.app.modules.content_core import analysis_persist
+
+    wrapper = inspect.getsource(analysis_persist.attach_analysis_to)
     assert "except Exception" in wrapper
+    assert "attach_analysis_to" in inspect.getsource(analysis.attach_analysis_safely)
     # generation attaches it after content is persisted
     from backend.app.modules.geo_series.content import orchestrator as orch
 
@@ -444,10 +449,10 @@ def test_analysis_never_holds_a_transaction_across_network_calls() -> None:
     # 死规矩 (踩过两次): an outbound call must not run inside an open DB
     # transaction — the idle-in-transaction timeout kills the connection.
     # Snapshot payloads, COMMIT, then call, then write each result separately.
-    from backend.app.modules.geo_series.content import analysis
+    from backend.app.modules.content_core import analysis_persist
 
-    src = inspect.getsource(analysis.attach_analysis_safely)
-    snapshot_at = src.index("_item_payload(item)) for item in items")
+    src = inspect.getsource(analysis_persist.attach_analysis_to)
+    snapshot_at = src.index("_item_payload(item)")
     commit_at = src.index("db.commit()")
     call_at = src.index("analyze_content(")
     assert snapshot_at < commit_at < call_at, "must snapshot → commit → call"

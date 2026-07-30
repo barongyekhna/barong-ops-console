@@ -54,6 +54,12 @@ class GeoMonitorQuestion(
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # 这条监测项是谁的:GEO 的买家问句,还是 SEO 的关键词。
+    # **刻意不建第二套表**——"一个查询串的前十名是谁"这件事与它是问句还是
+    # 关键词无关,再造一套表等于把 Serper 台账和守门人识别也复制一份,迟早漂。
+    kind: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="geo_question"
+    )
     is_active: Mapped[bool] = mapped_column(
         Integer().with_variant(Integer, "postgresql"),
         nullable=False,
