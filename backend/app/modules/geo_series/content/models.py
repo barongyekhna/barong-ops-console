@@ -185,6 +185,11 @@ class GeoContentItem(
     # the publisher callback; drives update-in-place instead of duplicate posts.
     wp_post_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     published_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # 线上真实状态。**`published_url` 非空 ≠ 访客看得到**:n8n 首次建文刻意落
+    # draft 等人工发布,那一刻 published_url 就已写库;你之后在 WP 点发布,控制台
+    # 并不知道。于是产品页反链、批发页挂指南都可能链到草稿 → 访客 404。
+    # 由 content_core.wp_sync 批量刷新(一次 API 查全部),消费方只读这一列。
+    wp_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

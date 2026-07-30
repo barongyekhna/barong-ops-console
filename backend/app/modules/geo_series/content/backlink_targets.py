@@ -61,6 +61,12 @@ def collect_backlink_targets(db: Session) -> tuple[list[dict[str, Any]], list[st
     A product is skipped when it has no live Woo page yet, or when it has no
     published guides to link (nothing to add, nothing stale to remove).
     """
+    # 先把「线上真实状态」刷新一次(一次批量 API)。不刷就可能把草稿指南挂到
+    # 产品页上——published_url 在草稿期就已经写库了。
+    from .live_state import refresh_item_live_state_safely
+
+    refresh_item_live_state_safely(db)
+
     targets: list[dict[str, Any]] = []
     skipped: list[str] = []
 

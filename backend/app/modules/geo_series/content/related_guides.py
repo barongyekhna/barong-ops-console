@@ -9,6 +9,13 @@ half-linked, and every arrival on a PDP is a dead end for anyone still deciding.
 Read-only and deliberately narrow: it returns live guide URLs, nothing else. The P
 upload path calls it inside a fail-safe wrapper — a missing guide list must never
 be able to break a product upload.
+
+**"Live" means live.** It filters on ``wp_status == "publish"``, not merely on a
+non-empty ``published_url``: the publisher creates posts as drafts on first push and
+writes the URL right then, so the loose check would hand visitors a 404. Callers
+that need freshness should run ``live_state.refresh_item_live_state_safely`` once —
+in batch — before reading. This function itself never touches the network, because
+the B2B caller loops over products and would otherwise fire one request each.
 """
 
 from __future__ import annotations
@@ -69,6 +76,10 @@ def published_guides_for_product(
             GeoContentItem.cluster_id.in_(cluster_ids),
             GeoContentItem.published_url.is_not(None),
             GeoContentItem.review_status == "approved",
+            # 死规矩(2026-07-29): published_url 非空 ≠ 访客看得到。n8n 首次建文
+            # 落 draft,URL 那时就已写库;不查真实状态就会把草稿链到产品页 → 404。
+            # 这一列由 live_state.refresh_item_live_state 批量刷新维护。
+            GeoContentItem.wp_status == "publish",
         )
     ).all()
 

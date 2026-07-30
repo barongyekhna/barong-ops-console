@@ -32,7 +32,7 @@ from ..contract.publish_package import (
 from .models import GeoContentCluster, GeoContentItem
 from .product_links import product_label_map, product_link_map
 from .publish_gate import publishable_items
-from .publish_html import link_token, plain_text, render_article_html
+from ...content_core.publish_html import link_token, plain_text, render_article_html
 
 
 def _cluster_products(

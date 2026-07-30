@@ -21,7 +21,7 @@ pytestmark = pytest.mark.unit
 
 
 def test_evidence_number_corpus_extracts_spec_numbers() -> None:
-    from backend.app.modules.geo_series.content.guards import evidence_number_corpus
+    from backend.app.modules.content_core.guards import evidence_number_corpus
 
     corpus = evidence_number_corpus(
         "2.11 GPM flow", "90 minutes runtime", "6.5 ft hose", "IPX8"
@@ -32,7 +32,7 @@ def test_evidence_number_corpus_extracts_spec_numbers() -> None:
 
 
 def test_audit_passes_clean_grounded_item() -> None:
-    from backend.app.modules.geo_series.content.guards import (
+    from backend.app.modules.content_core.guards import (
         audit_content_item,
         evidence_number_corpus,
     )
@@ -50,7 +50,7 @@ def test_audit_passes_clean_grounded_item() -> None:
 
 
 def test_audit_flags_third_party_brand() -> None:
-    from backend.app.modules.geo_series.content.guards import audit_content_item
+    from backend.app.modules.content_core.guards import audit_content_item
 
     item = {"title": "The Ivation shower beats it", "sections": []}
     audit = audit_content_item(
@@ -61,7 +61,7 @@ def test_audit_flags_third_party_brand() -> None:
 
 
 def test_audit_flags_ungrounded_number() -> None:
-    from backend.app.modules.geo_series.content.guards import audit_content_item
+    from backend.app.modules.content_core.guards import audit_content_item
 
     item = {
         "title": "Spec",
@@ -75,7 +75,7 @@ def test_audit_flags_ungrounded_number() -> None:
 
 
 def test_audit_flags_cjk_leakage() -> None:
-    from backend.app.modules.geo_series.content.guards import audit_content_item
+    from backend.app.modules.content_core.guards import audit_content_item
 
     item = {"title": "含中文的标题", "sections": []}
     audit = audit_content_item(item, forbidden_terms=[], evidence_numbers=set())
@@ -399,7 +399,7 @@ def test_analysis_uses_the_cheap_flash_tier() -> None:
 
 
 def test_analysis_demands_specific_reading_not_boilerplate() -> None:
-    from backend.app.modules.geo_series.content.analysis import analysis_instruction
+    from backend.app.modules.content_core.analysis import analysis_instruction
 
     prompt = analysis_instruction()
     assert "禁止套话" in prompt
@@ -498,7 +498,7 @@ def test_unaddressed_entries_carry_the_missing_fact() -> None:
 
 
 def test_critique_collection_is_network_free() -> None:
-    from backend.app.modules.geo_series.content import critique
+    from backend.app.modules.content_core import critique
 
     for fn in (critique.collect_critiques, critique.collect_data_gaps):
         src = inspect.getsource(fn)
@@ -509,7 +509,7 @@ def test_critique_collection_is_network_free() -> None:
 def test_data_gaps_group_by_missing_fact() -> None:
     from types import SimpleNamespace
 
-    from backend.app.modules.geo_series.content.critique import collect_data_gaps
+    from backend.app.modules.content_core.critique import collect_data_gaps
 
     items = [
         SimpleNamespace(
@@ -539,7 +539,7 @@ def test_data_gaps_group_by_missing_fact() -> None:
 
 
 def test_summary_only_reports_recurring_patterns() -> None:
-    from backend.app.modules.geo_series.content.critique import (
+    from backend.app.modules.content_core.critique import (
         summarize_patterns,
         summary_instruction,
     )
@@ -663,7 +663,7 @@ def test_publish_gate_requires_approval_audit_slug_and_live_products() -> None:
 def test_intra_cluster_links_are_placeholders_until_posts_exist() -> None:
     from types import SimpleNamespace
 
-    from backend.app.modules.geo_series.content.publish_html import (
+    from backend.app.modules.content_core.publish_html import (
         render_article_html,
         resolve_link_tokens,
         unresolved_link_tokens,
@@ -838,7 +838,7 @@ def test_machine_endpoints_are_token_authenticated() -> None:
 def test_guide_html_labels_products_with_their_public_h1_never_a_uuid() -> None:
     """线上事故 2026-07-29: 正文出现「The product in this guide 33dabc7b-…」。
     产品标签必须等于产品页 H1;拿不到标题宁可不渲染,绝不退回 UUID。"""
-    from backend.app.modules.geo_series.content.publish_html import render_article_html
+    from backend.app.modules.content_core.publish_html import render_article_html
 
     pid = "33dabc7b-83ea-4409-8b92-c086e6e91c26"
 
@@ -1008,7 +1008,7 @@ def test_product_block_is_driven_by_the_cluster_not_the_frozen_copy() -> None:
     不重新生成、不重新审核、不动已批准的正文。"""
     from types import SimpleNamespace
 
-    from backend.app.modules.geo_series.content.publish_html import render_article_html
+    from backend.app.modules.content_core.publish_html import render_article_html
 
     item = SimpleNamespace(
         body_json={"sections": [{"heading": "H", "body": "B"}]},
@@ -1036,7 +1036,7 @@ def test_product_block_dedupes_when_cluster_and_copy_use_different_ids() -> None
     """簇存行 id、文案引用 product_key,同一个产品两种标识——只能出现一次。"""
     from types import SimpleNamespace
 
-    from backend.app.modules.geo_series.content.publish_html import render_article_html
+    from backend.app.modules.content_core.publish_html import render_article_html
 
     item = SimpleNamespace(
         body_json={"sections": []}, source_product_ids_json=["the-product-key"]
@@ -1532,7 +1532,7 @@ def test_prompt_forbids_spec_recitation_as_an_answer() -> None:
 
 def test_critique_flags_product_description_wearing_a_question_hat() -> None:
     """这类毛病语法全对、审查全清,正则和硬门禁抓不到,只能靠 LLM 评审员。"""
-    from backend.app.modules.geo_series.content.analysis import analysis_instruction
+    from backend.app.modules.content_core.analysis import analysis_instruction
 
     prompt = analysis_instruction()
     assert "回答问句" in prompt and "介绍产品" in prompt
@@ -1549,7 +1549,7 @@ def test_fact_gate_blocks_emptiness_but_not_low_density() -> None:
     """实测推翻了第一版设计:捏捏 5 个产品只有 0-3 个数字,却写出了具体、诚实、
     能区分五款的内容——因为事实密度的要求是分品类的(参数驱动 vs 偏好驱动)。
     所以只拦"根本没被描述过",低密度只警告。"""
-    from backend.app.modules.geo_series.content.fact_sufficiency import (
+    from backend.app.modules.content_core.fact_sufficiency import (
         fact_blockers,
         fact_warnings,
         product_fact_report,
@@ -1653,7 +1653,7 @@ def test_published_slug_is_locked_against_rewrites() -> None:
 def test_guard_used_to_punish_precision() -> None:
     """实地踩到:「约2分钟」通过(2 命中"2小时充电"),更准的「2.4分钟」被拦——
     含糊的过、精确的死。而 5÷2.11 正是这条问句的答案。"""
-    from backend.app.modules.geo_series.content.guards import audit_content_item
+    from backend.app.modules.content_core.guards import audit_content_item
 
     item = {
         "title": "How long does a 5 gallon portable shower last?",
@@ -1676,7 +1676,7 @@ def test_guard_used_to_punish_precision() -> None:
 
 def test_derivation_must_actually_compute() -> None:
     """依然 fail-closed:算错、操作数没来源、表达式不合法,一律拒。"""
-    from backend.app.modules.geo_series.content.guards import verify_derived_numbers
+    from backend.app.modules.content_core.guards import verify_derived_numbers
 
     ev, ctx = {"2.11"}, {"5"}
 
@@ -1715,7 +1715,7 @@ def test_derivation_must_actually_compute() -> None:
 
 
 def test_bad_derivation_makes_the_item_dirty() -> None:
-    from backend.app.modules.geo_series.content.guards import audit_content_item
+    from backend.app.modules.content_core.guards import audit_content_item
 
     audit = audit_content_item(
         {
@@ -1744,3 +1744,81 @@ def test_prompts_require_showing_the_work() -> None:
     rev = geo_revise_instruction()
     assert "算术是允许的,但必须亮算式" in rev
     assert "不许为了躲开声明而把数字含糊掉" in rev
+
+
+# ===================================================================
+# P0 共享底座 + 两个共用件的 bug
+# ===================================================================
+
+
+def test_shared_core_never_imports_a_content_module() -> None:
+    """依赖方向:共享底座不许反向依赖 geo/seo。抽层时我自己差点写反(wp_sync
+    第一版直接 import 了 GeoContentItem),所以钉死它。"""
+    from pathlib import Path
+
+    core = Path("backend/app/modules/content_core")
+    offenders = []
+    for path in core.glob("*.py"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith(("import ", "from ")):
+                continue  # 注释里提到文件名不算依赖
+            if "geo_series" in stripped or "seo_series" in stripped:
+                offenders.append(f"{path.name}: {stripped}")
+    assert offenders == [], offenders
+
+
+def test_index_page_upsert_never_creates_a_duplicate_on_a_blip() -> None:
+    """原缺陷:更新失败(任何原因)就新建 → WP 一超时就多出一个重复 /guides/ 页、
+    旧页变孤儿。只有真 404 才允许恢复,且恢复前先按 slug 认领。"""
+    import inspect
+
+    from backend.app.modules.content_core import wp_pages
+
+    src = inspect.getsource(wp_pages.upsert_page)
+    assert 'if result.get("status") != 404:' in src
+    assert "raise WpPageError" in src
+    # 认领必须发生在创建之前
+    assert src.index("_find_by_slug(") < src.index("_post(_PAGES_PATH)")
+
+    # guides_index 必须走它，不再自己拼创建逻辑
+    from backend.app.modules.geo_series.content import guides_index
+
+    gsrc = inspect.getsource(guides_index)
+    assert "upsert_page(" in gsrc
+    assert "recreating" not in gsrc
+
+
+def test_related_guides_requires_a_real_publish_status() -> None:
+    """published_url 非空 ≠ 线上可见。n8n 首次建文落 draft,URL 那时就写库了。"""
+    import inspect
+
+    from backend.app.modules.geo_series.content import related_guides
+
+    src = inspect.getsource(related_guides.published_guides_for_product)
+    assert 'GeoContentItem.wp_status == "publish"' in src
+    # 本函数被 B2B 逐产品循环调用,绝不能自己出网
+    assert "wp_bridge" not in src and "httpx" not in src
+
+
+def test_live_state_refresh_is_batched_and_fail_open() -> None:
+    import inspect
+
+    from backend.app.modules.content_core import wp_sync
+    from backend.app.modules.geo_series.content import live_state
+
+    # 批量:一次请求查多条,不是逐条
+    fetch = inspect.getsource(wp_sync.fetch_post_states)
+    assert '"include"' in fetch and "_BATCH" in fetch
+
+    src = inspect.getsource(live_state.refresh_item_live_state)
+    # 出网前释放事务
+    assert src.index("db.commit()") < src.index("fetch_post_states(")
+    # WP 挂了保留旧状态,绝不清空
+    assert "if not states:\n        return 0" in src
+    # 反链派单前必须先刷新
+    from backend.app.modules.geo_series.content import backlink_targets
+
+    assert "refresh_item_live_state_safely" in inspect.getsource(
+        backlink_targets.collect_backlink_targets
+    )

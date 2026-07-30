@@ -36,12 +36,12 @@ from ...k_series.product_knowledge.models import KProductKnowledgeProduct
 from ...k_series.product_knowledge.scope_shim import KScopeContext, apply_scope_filters
 from .analysis import attach_analysis_safely
 from .constants import ITEM_TYPES, REPEATABLE_ITEM_TYPES
-from .fact_sufficiency import (
+from ...content_core.fact_sufficiency import (
     fact_blockers,
     fact_warnings,
     product_fact_report,
 )
-from .guards import audit_content_item, evidence_number_corpus
+from ...content_core.guards import audit_content_item, evidence_number_corpus
 from .models import GeoContentCluster, GeoContentItem
 from .prompt_skills import (
     GEO_CONTENT_SKILL_VERSION,
@@ -686,7 +686,7 @@ class GeoContentOrchestrator:
 
 def _numbers_in_questions(questions: Any) -> set[str]:
     """Numbers the questions themselves supply — given by the asker, not invented."""
-    from .guards import numbers_in_text
+    from ...content_core.guards import numbers_in_text
 
     out: set[str] = set()
     for entry in questions if isinstance(questions, list) else []:

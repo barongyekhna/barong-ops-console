@@ -43,7 +43,7 @@ from .content.backlink_jobs import create_backlink_job
 from .content.backlink_jobs import jobs_recent as backlink_jobs_recent
 from .content.backlink_targets import collect_backlink_targets
 from .content.publish_jobs import create_publish_job, jobs_for_cluster
-from .content.critique import (
+from ...modules.content_core.critique import (
     collect_critiques,
     collect_data_gaps,
     summarize_patterns,

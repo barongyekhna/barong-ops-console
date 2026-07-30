@@ -2,10 +2,10 @@
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
   "generated_at": "2026-06-17T00:00:00Z",
   "environment": "staging",
-  "alembic_head": "20260729_07_geo_question_answer_type",
-  "expected_alembic_head": "20260729_07_geo_question_answer_type",
+  "alembic_head": "20260729_09_geo_item_wp_status",
+  "expected_alembic_head": "20260729_09_geo_item_wp_status",
   "head_locked": true,
-  "migration_count": 85,
+  "migration_count": 87,
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -91,10 +91,12 @@
     "20260729_04_b2b_outreach",
     "20260729_05_geo_monitor",
     "20260729_06_b2b_widget_jobs",
-    "20260729_07_geo_question_answer_type"
+    "20260729_07_geo_question_answer_type",
+    "20260729_08_b2b_site_settings",
+    "20260729_09_geo_item_wp_status"
   ],
-  "migration_order_checksum": "2cb1fd8dfc511e9006d7a71b3f59ca812a6d88f8c7e2ca9967f249c6beb2243f",
-  "migration_hash": "315c8c9ec0c6805f6b4fd8d1b20e7036cb690ef9d95c25e9dc3b961b87121a73",
+  "migration_order_checksum": "0555f9dbbfd218e3ce8fec5229f463bf09d106721a3bb913b6b0d54b4e8b4752",
+  "migration_hash": "2dd18d09412fd0ef099b5e0dec8b1d96f819626b79464ab7cd8a3e1925c8efdf",
   "migrations": [
     {
       "version": "f07_core_001",
@@ -689,6 +691,20 @@
       "down_revision": "20260729_06_b2b_widget_jobs",
       "path": "backend/alembic/versions/20260729_07_geo_question_answer_type.py",
       "checksum": "f895c514021a173c528aed39b7edb541b18d8e5134faebe4e14af298045cc2be",
+      "applied_at": "2026-07-29T00:00:00Z"
+    },
+    {
+      "version": "20260729_08_b2b_site_settings",
+      "down_revision": "20260729_07_geo_question_answer_type",
+      "path": "backend/alembic/versions/20260729_08_b2b_site_settings.py",
+      "checksum": "d7f344e039b877fb83fdb1cfcfc93394844b4a2430a6e4db82ed5a9c3404a1e8",
+      "applied_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "version": "20260729_09_geo_item_wp_status",
+      "down_revision": "20260729_08_b2b_site_settings",
+      "path": "backend/alembic/versions/20260729_09_geo_item_wp_status.py",
+      "checksum": "f9a4b3fff2dfdffb4c241f5469ead49c9d71b91feded0d5af700fdf102099845",
       "applied_at": "2026-07-29T00:00:00Z"
     }
   ]

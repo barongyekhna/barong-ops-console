@@ -92,9 +92,9 @@ def summarize_patterns(
     """Ask DeepSeek-flash to name the recurring patterns. Fails open to []."""
     if len(critiques) < 2:
         return []
-    from ....db.session import SessionLocal
-    from ....services.ai_provider_router import AIExecutionRouter
-    from ...k_series.product_knowledge.constants import (
+    from ...db.session import SessionLocal
+    from ...services.ai_provider_router import AIExecutionRouter
+    from ..k_series.product_knowledge.constants import (
         MODULE_KEY as K_MODULE_KEY,
         TARGET_ORGANIZATION_NAME,
     )

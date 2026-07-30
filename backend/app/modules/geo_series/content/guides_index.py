@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 GUIDES_PAGE_TITLE = "Buying Guides"
 GUIDES_PAGE_SLUG = "guides"
-_PAGES_PATH = "pages"
 _SLUG_STRIP = re.compile(r"[^a-z0-9]+")
 _SLUG_DASHES = re.compile(r"-{2,}")
 
@@ -353,44 +352,27 @@ def _refresh_guides_index(db: Session) -> str | None:
         logger.warning("GEO guides index skipped: WordPress credentials unavailable")
         return None
 
-    payload = {
-        "title": GUIDES_PAGE_TITLE,
-        "slug": GUIDES_PAGE_SLUG,
-        "content": html,
-        "status": "publish",
-    }
+    # 页面写入交给共享的 upsert：先按 id 更新 → 只有真 404 才认领/重建 →
+    # 超时或 5xx 一律放弃本次。原来这里是"任何失败都新建"，WP 抖一下就多出
+    # 一个重复 /guides/ 页、旧页变孤儿（b2b 照抄时发现并修正，现已下沉共享）。
+    from ...content_core.wp_pages import WpPageError, upsert_page
 
-    if page_id:
-        result = wp_bridge._request_json(
-            wp_bridge._api_url(credentials, f"{_PAGES_PATH}/{page_id}"),
-            credentials=credentials,
-            authenticated=True,
-            method="POST",
-            payload=payload,
+    try:
+        new_id, link = upsert_page(
+            credentials,
+            page_id=int(page_id) if page_id else None,
+            slug=GUIDES_PAGE_SLUG,
+            title=GUIDES_PAGE_TITLE,
+            content=html,
         )
-        if result.get("reachable"):
-            data = result.get("data") or {}
-            return str(data.get("link") or "") or None
-        logger.warning(
-            "GEO guides index update failed (%s); recreating", result.get("error")
-        )
-
-    created = wp_bridge._request_json(
-        wp_bridge._api_url(credentials, _PAGES_PATH),
-        credentials=credentials,
-        authenticated=True,
-        method="POST",
-        payload=payload,
-    )
-    if not created.get("reachable"):
-        logger.warning("GEO guides index create failed: %s", created.get("error"))
+    except WpPageError as exc:
+        logger.warning("GEO guides index write failed: %s", exc)
         return None
-    data = created.get("data") or {}
-    new_id = data.get("id")
-    if new_id:
+
+    if new_id and str(new_id) != str(page_id or ""):
         _set_setting(db, GUIDES_PAGE_ID_KEY, str(new_id))
         db.commit()
-    return str(data.get("link") or "") or None
+    return str(link or "") or None
 
 
 __all__ = [

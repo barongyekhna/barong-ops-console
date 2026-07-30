@@ -160,6 +160,12 @@ def geo_publish_result(
 
     # The hub page only lists live articles, so refresh it after a successful run.
     if job.status == "success":
+        # 先记下线上真实状态(草稿还是已发布)。published_url 在草稿期就写库了,
+        # 不刷这一次,产品页反链就会链到草稿。
+        from .content.live_state import refresh_item_live_state_safely
+
+        refresh_item_live_state_safely(db)
+
         # 新建过的类目要同步进"排除名单",否则指南会挤进 /posts 博客归档。
         from .content.wp_categories import sync_geo_category_exclusions_safely
 

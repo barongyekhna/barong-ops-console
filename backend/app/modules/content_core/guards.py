@@ -15,11 +15,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ...k_series.product_knowledge.brand_guard import (
+from ..k_series.product_knowledge.brand_guard import (
     SITE_BRAND,
     blacklist_violations,
 )
-from ...k_series.product_knowledge.buyer_display import contains_cjk
+from ..k_series.product_knowledge.buyer_display import contains_cjk
 
 _NUMBER = re.compile(r"(?<!\d)\d[\d,]*(?:\.\d+)?")
 # Non-spec numerics that legitimately appear in prose and never need spec backing.
