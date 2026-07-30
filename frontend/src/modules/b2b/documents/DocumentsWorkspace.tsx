@@ -41,6 +41,8 @@ export default function DocumentsWorkspace() {
   });
   const [lines, setLines] = useState<Line[]>([]);
   const [busy, setBusy] = useState(false);
+  // 默认只看未完成的：你真正要盯的是那几单，已完成的不该占地方。
+  const [onlyOpen, setOnlyOpen] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +79,54 @@ export default function DocumentsWorkspace() {
       setBusy(false);
     }
   };
+
+  // 一单三张纸（PI + 商业发票 + 装箱单）。**平铺列表到第四单就是 12 行乱序**，
+  // 得靠单号日期自己拼哪三张是一单的。CI/PL 里存了来自哪张 PI，用它归堆。
+  const { orders, orphans } = useMemo(() => {
+    const byPi = new Map<
+      string,
+      { pi: B2BDocument; papers: B2BDocument[] }
+    >();
+    for (const doc of documents) {
+      if (doc.doc_type === "proforma_invoice") {
+        const existing = byPi.get(doc.id);
+        byPi.set(doc.id, { pi: doc, papers: existing?.papers ?? [] });
+      }
+    }
+    const orphans: B2BDocument[] = [];
+    for (const doc of documents) {
+      if (doc.doc_type === "proforma_invoice") continue;
+      const bucket = byPi.get(doc.source_document_id ?? "");
+      if (bucket) {
+        bucket.papers.push(doc);
+      } else {
+        // 源单被删了的 CI/PL。**不能静默丢掉**——那是已经发给买家、
+        // 报过关的凭证，从界面上消失比留着难看得多。
+        orphans.push(doc);
+      }
+    }
+    const grouped = [...byPi.values()];
+    grouped.forEach((order) =>
+      order.papers.sort((a, b) => a.number.localeCompare(b.number)),
+    );
+    const visible = onlyOpen
+      ? grouped.filter((order) => order.pi.stage !== "closed")
+      : grouped;
+    return { orders: visible, orphans };
+  }, [documents, onlyOpen]);
+
+  const closedCount = useMemo(
+    () =>
+      documents.filter(
+        (doc) => doc.doc_type === "proforma_invoice" && doc.stage === "closed",
+      ).length,
+    [documents],
+  );
+
+  const download = (doc: B2BDocument) =>
+    downloadDocument(doc.id, doc.number).catch((caught) =>
+      setError(caught instanceof Error ? caught.message : String(caught)),
+    );
 
   const total = useMemo(() => {
     return lines.reduce((sum, line) => {
@@ -372,90 +422,153 @@ export default function DocumentsWorkspace() {
         {!documents.length ? (
           <p className={styles.empty}>还没有开过单。</p>
         ) : (
-          <ul className={styles.docList}>
-            {documents.map((doc) => (
-              <li className={styles.docRow} key={doc.id}>
-                <strong className={styles.docNumber}>{doc.number}</strong>
-                <span className={styles.docType}>{doc.doc_type_label}</span>
-                <span className={styles.docBuyer}>{doc.buyer_company}</span>
-                <span className={styles.muted}>
-                  {doc.item_count} 个品 · {doc.currency} {doc.total}
-                  {doc.sample_credit
-                    ? `（已抵样品费 ${doc.sample_credit}）`
-                    : ""}
-                </span>
-                {doc.doc_type === "proforma_invoice" ? (
-                  <select
-                    className={styles.select}
-                    onChange={(event) =>
-                      void withBusy(async () => {
-                        await setDocumentStage(doc.id, event.target.value);
-                        return `${doc.number} → ${
-                          STAGES.find((s) => s.key === event.target.value)?.label ?? ""
-                        }`;
-                      })
-                    }
-                    value={doc.stage}
-                  >
-                    {STAGES.map((stage) => (
-                      <option key={stage.key} value={stage.key}>
-                        {stage.label}
-                      </option>
+          <>
+            <label className={styles.filterLine}>
+              <input
+                checked={onlyOpen}
+                onChange={(event) => setOnlyOpen(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                只看未完成的
+                {closedCount ? `（已完成的 ${closedCount} 单收起来了）` : ""}
+              </span>
+            </label>
+            {!orders.length ? (
+              <p className={styles.empty}>没有未完成的单了。</p>
+            ) : null}
+            <ul className={styles.orderList}>
+              {orders.map((order) => (
+                <li className={styles.order} key={order.pi.id}>
+                  <div className={styles.orderHead}>
+                    <strong className={styles.docNumber}>{order.pi.number}</strong>
+                    <span className={styles.docBuyer}>{order.pi.buyer_company}</span>
+                    <span className={styles.muted}>
+                      {order.pi.item_count} 个品 · {order.pi.currency}{" "}
+                      {order.pi.total}
+                      {order.pi.sample_credit
+                        ? `（已抵样品费 ${order.pi.sample_credit}）`
+                        : ""}
+                    </span>
+                    <select
+                      className={styles.select}
+                      onChange={(event) =>
+                        void withBusy(async () => {
+                          await setDocumentStage(order.pi.id, event.target.value);
+                          return `${order.pi.number} → ${
+                            STAGES.find((s) => s.key === event.target.value)
+                              ?.label ?? ""
+                          }`;
+                        })
+                      }
+                      value={order.pi.stage}
+                    >
+                      {STAGES.map((stage) => (
+                        <option key={stage.key} value={stage.key}>
+                          {stage.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className={styles.muted}>
+                      有效至 {order.pi.valid_until}
+                    </span>
+                  </div>
+
+                  {/* 这一单的三张纸收在一起 —— 平铺列表到第四单就是 12 行乱序 */}
+                  <ul className={styles.paperList}>
+                    <li className={styles.paperRow}>
+                      <span className={styles.docType}>形式发票 PI</span>
+                      <span className={styles.paperNumber}>{order.pi.number}</span>
+                      <button
+                        className={styles.ghostButton}
+                        onClick={() => void download(order.pi)}
+                        type="button"
+                      >
+                        下载
+                      </button>
+                    </li>
+                    {order.papers.map((paper) => (
+                      <li className={styles.paperRow} key={paper.id}>
+                        <span className={styles.docType}>
+                          {paper.doc_type_label}
+                        </span>
+                        <span className={styles.paperNumber}>{paper.number}</span>
+                        <button
+                          className={styles.ghostButton}
+                          onClick={() => void download(paper)}
+                          type="button"
+                        >
+                          下载
+                        </button>
+                      </li>
                     ))}
-                  </select>
-                ) : null}
-                <button
-                  className={styles.ghostButton}
-                  onClick={() =>
-                    void downloadDocument(doc.id, doc.number).catch((caught) =>
-                      setError(
-                        caught instanceof Error ? caught.message : String(caught),
-                      ),
-                    )
-                  }
-                  type="button"
-                >
-                  下载 PDF
-                </button>
-                {doc.doc_type === "proforma_invoice" ? (
-                  <>
-                    <button
-                      className={styles.ghostButton}
-                      disabled={busy}
-                      onClick={() =>
-                        void withBusy(async () => {
-                          const made = await createShippingDoc(doc.id, {
-                            doc_type: "commercial_invoice",
-                          });
-                          return `已出商业发票 ${made.number}`;
-                        })
-                      }
-                      title="发货报关用。行项目原样继承这张 PI，金额必须和买家实付一致。"
-                      type="button"
-                    >
-                      出商业发票
-                    </button>
-                    <button
-                      className={styles.ghostButton}
-                      disabled={busy}
-                      onClick={() =>
-                        void withBusy(async () => {
-                          const made = await createShippingDoc(doc.id, {
-                            doc_type: "packing_list",
-                          });
-                          return `已出装箱单 ${made.number}（箱重留空处印 TBC，打包后可重开）`;
-                        })
-                      }
-                      title="箱数按箱规自动算；毛净重打包时才知道，留空会印 TBC。"
-                      type="button"
-                    >
-                      出装箱单
-                    </button>
-                  </>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+                  </ul>
+
+                  <div className={styles.orderActions}>
+                    {(
+                      [
+                        ["commercial_invoice", "出商业发票", "发货报关用。行项目原样继承这张 PI，金额必须和买家实付一致。"],
+                        ["packing_list", "出装箱单", "箱数按箱规自动算；毛净重打包时才知道，留空会印 TBC。"],
+                      ] as const
+                    ).map(([kind, label, tip]) => {
+                      const already = order.papers.some(
+                        (paper) => paper.doc_type === kind,
+                      );
+                      return (
+                        <button
+                          className={styles.ghostButton}
+                          disabled={busy}
+                          key={kind}
+                          onClick={() =>
+                            void withBusy(async () => {
+                              const made = await createShippingDoc(order.pi.id, {
+                                doc_type: kind,
+                              });
+                              return `已出 ${made.number}`;
+                            })
+                          }
+                          title={tip}
+                          type="button"
+                        >
+                          {/* 已经出过就说「再出一张」——重开是正常操作（改了箱重、
+                              换了银行），但要让人知道已经有一张了 */}
+                          {already ? `再出一张${label.slice(1)}` : label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {orphans.length ? (
+              <div className={styles.orphanBox}>
+                <p className={styles.warn}>
+                  下面这些单据的形式发票已经不在了（被删过），但它们可能已经发给
+                  买家、报过关，所以留在这里。
+                </p>
+                <ul className={styles.paperList}>
+                  {orphans.map((paper) => (
+                    <li className={styles.paperRow} key={paper.id}>
+                      <span className={styles.docType}>
+                        {paper.doc_type_label}
+                      </span>
+                      <span className={styles.paperNumber}>{paper.number}</span>
+                      <span className={styles.muted}>
+                        {paper.buyer_company}
+                      </span>
+                      <button
+                        className={styles.ghostButton}
+                        onClick={() => void download(paper)}
+                        type="button"
+                      >
+                        下载
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </>
         )}
       </section>
     </div>

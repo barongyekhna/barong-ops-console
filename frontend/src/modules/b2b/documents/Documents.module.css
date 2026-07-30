@@ -181,3 +181,65 @@
   padding: 2px 9px;
   white-space: nowrap;
 }
+
+/* ── 按订单分组 ───────────────────────────────────────────────
+   一单三张纸（PI + 商业发票 + 装箱单）。平铺到第四单就是 12 行乱序，
+   得靠单号日期自己拼。归堆之后一单一块，眼睛不用来回找。 */
+.filterLine {
+  align-items: center;
+  color: rgba(198, 216, 236, 0.72);
+  cursor: pointer;
+  display: flex;
+  font-size: 0.8rem;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.orderList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.order {
+  background: rgba(6, 14, 24, 0.45);
+  border: 1px solid rgba(120, 190, 255, 0.14);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.orderHead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 9px;
+}
+.paperList {
+  border-left: 2px solid rgba(120, 190, 255, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0 0 0 12px;
+}
+.paperRow {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+.paperNumber {
+  color: rgba(198, 216, 236, 0.78);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.78rem;
+}
+.orderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.orphanBox {
+  margin-top: 14px;
+}
