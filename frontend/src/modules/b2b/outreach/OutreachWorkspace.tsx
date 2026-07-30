@@ -7,6 +7,7 @@ import {
   type EmailDraft,
   type EmailTemplate,
   backfillEmails,
+  addSuppression,
   generateDrafts,
   getDrafts,
   getTemplates,
@@ -97,6 +98,21 @@ export function OutreachWorkspace() {
       return status === "sent"
         ? `已标记发出：${draft.store_name}`
         : `已跳过：${draft.store_name}`;
+    });
+
+  // 对方说"别发了"却继续收到信 = 直接被举报垃圾邮件 = barongsupply.com 报废。
+  // 按完这一下，这个**完整邮箱**永远不会再被生成草稿（不是按域名——很多小店
+  // 老板用的就是 gmail/outlook，按域名会连坐掉一大片无辜的人）。
+  const doSuppress = (draft: EmailDraft) =>
+    withBusy(async () => {
+      if (!draft.to_email) throw new Error("这封草稿没有收件地址。");
+      await addSuppression({
+        email: draft.to_email,
+        source: "reply",
+        note: draft.store_name,
+      });
+      await patchDraft(draft.id, { status: "skipped" });
+      return `已加入永不再发：${draft.to_email}`;
     });
 
   const doSaveTemplate = (template: EmailTemplate) =>
@@ -198,6 +214,17 @@ export function OutreachWorkspace() {
                   >
                     跳过
                   </button>
+                  {draft.to_email ? (
+                    <button
+                      className={styles.ghostButton}
+                      disabled={busy}
+                      onClick={() => void doSuppress(draft)}
+                      title="对方说了别再发。以后永远不会再给这个邮箱生成草稿。"
+                      type="button"
+                    >
+                      别再发了
+                    </button>
+                  ) : null}
                 </div>
               </li>
             ))}

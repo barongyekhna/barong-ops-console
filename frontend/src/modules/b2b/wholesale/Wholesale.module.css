@@ -348,3 +348,66 @@
     gap: 6px;
   }
 }
+
+/* ── 阶梯价编辑器 ───────────────────────────────────────────────
+   量大价低是批发的常识，但此前只能存不能填：图册 PDF/CSV 会渲染阶梯价，
+   而控制台没有录入口 —— 渲染做了、填的地方没做（2026-07-30 用户抓到）。
+   做成可展开行而不是表格里再塞两列：档数是可变的，塞进定宽表格会挤爆。 */
+.tierToggle {
+  background: rgba(120, 190, 255, 0.08);
+  border: 1px solid rgba(120, 190, 255, 0.35);
+  border-radius: 6px;
+  color: #cfe6ff;
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+.tierToggle:hover {
+  background: rgba(120, 190, 255, 0.18);
+}
+.tierRow > td {
+  background: rgba(10, 22, 36, 0.55);
+}
+.tierBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+}
+.tierHint {
+  color: rgba(198, 216, 236, 0.72);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  margin: 0;
+}
+.tierList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.tierItem {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tierPlus {
+  color: rgba(198, 216, 236, 0.66);
+  font-size: 0.78rem;
+}
+.tierWarn {
+  background: rgba(255, 176, 96, 0.12);
+  border-radius: 5px;
+  color: #ffc98a;
+  font-size: 0.74rem;
+  padding: 2px 7px;
+}
+.tierEmpty {
+  color: rgba(198, 216, 236, 0.55);
+  font-size: 0.8rem;
+  margin: 0;
+}

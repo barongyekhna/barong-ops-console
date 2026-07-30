@@ -144,3 +144,33 @@ export async function patchDraft(
   );
   return readJson<EmailDraft>(response);
 }
+
+export type Suppression = {
+  id: string;
+  email: string;
+  raw_email: string | null;
+  source: string;
+  note: string | null;
+};
+
+/** 「永不再发」名单。说过别发了的人，系统里再也生成不出给他的草稿。 */
+export async function getSuppressions(): Promise<Suppression[]> {
+  const response = await fetch(`${API_PROXY_BASE}/b2b/suppressions`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+  });
+  return readJson<Suppression[]>(response);
+}
+
+export async function addSuppression(payload: {
+  email: string;
+  source?: string;
+  note?: string;
+}): Promise<Suppression> {
+  const response = await fetch(`${API_PROXY_BASE}/b2b/suppressions`, {
+    method: "POST",
+    headers: buildHeaders(true),
+    body: JSON.stringify(payload),
+  });
+  return readJson<Suppression>(response);
+}

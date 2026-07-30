@@ -85,6 +85,7 @@ from ..modules.b2b.outreach.models import (
     B2BEmailDraft,
     B2BEmailTemplate,
 )
+from ..modules.b2b.outreach.suppression import B2BSuppression
 from ..modules.b2b.website.models import B2BSiteSetting
 from ..modules.b2b.widget.models import B2BWidgetJob
 from ..modules.b2b.store_types.models import (
@@ -181,6 +182,7 @@ __all__ = [
     "ModuleControlStateRecord",
     "ModuleRegistry",
     "B2BEmailDraft",
+    "B2BSuppression",
     "B2BEmailTemplate",
     "B2BProspect",
     "B2BSiteSetting",

@@ -29,6 +29,7 @@ EXPECTED_COLUMNS = [
     "Product Name",
     "Variant",
     "Wholesale Price",
+    "Volume Pricing",
     "MSRP",
     "Case Pack",
     "MOQ (units)",
@@ -185,6 +186,7 @@ def test_csv_has_exact_columns_order_and_sorted_rows() -> None:
         "Product A-1",
         "6 colors assorted",
         "12.50",
+        "",
         "25.00",
         "6",
         "12",
@@ -211,3 +213,115 @@ def test_rendering_same_request_twice_is_byte_identical(tmp_path: Path) -> None:
 
     assert render_pdf(request) == render_pdf(request)
     assert render_csv(request) == render_csv(request)
+
+
+def _tiered_item():
+    from decimal import Decimal
+
+    from backend.app.modules.b2b.linesheet.schemas import LineSheetItem
+
+    return LineSheetItem(
+        sku="ET-001",
+        name="Baozi Squishy",
+        category_path=["Toys & Games", "Executive Toys"],
+        image_path=None,
+        wholesale_price=Decimal("2.40"),
+        msrp=Decimal("7.99"),
+        case_pack=24,
+        moq_units=48,
+        lead_time_days=20,
+        variant_note=None,
+        price_tiers=[(500, Decimal("2.00")), (100, Decimal("2.20"))],
+    )
+
+
+def test_volume_pricing_reaches_the_csv() -> None:
+    """批发页承诺「图册带阶梯价」,而阶梯价此前只存不渲染——承诺了没兑现,
+    买手冲着阶梯价来要图册,拿到手发现没有。"""
+    import importlib
+
+    render_csv = importlib.import_module(
+        "backend.app.modules.b2b.linesheet.render_csv"
+    )
+
+    text = render_csv.tier_text(_tiered_item())
+    # 按起订量升序,不是按录入顺序
+    assert text == "100+ $2.20 | 500+ $2.00"
+    assert "Volume Pricing" in render_csv.CSV_COLUMNS
+
+
+def test_dirty_tiers_are_dropped_not_printed_as_zero() -> None:
+    """图册是给买手看的,宁可少一行也不能印出 `0+ $0`。"""
+    from decimal import Decimal
+
+    from backend.app.modules.b2b.wholesale.service import _tiers_for
+
+    class _Row:
+        price_tiers_json = [
+            {"min_qty": 100, "unit_price": "2.20"},
+            {"min_qty": 0, "unit_price": "1.00"},      # 起订量 0
+            {"min_qty": 50, "unit_price": "0"},        # 单价 0
+            {"min_qty": "x", "unit_price": "1.00"},    # 不是数字
+            "not-a-dict",
+            {"min_qty": 500},                           # 缺单价
+        ]
+
+    assert _tiers_for(_Row()) == [(100, Decimal("2.20"))]
+
+
+def test_pdf_card_shows_moq_and_the_best_tier() -> None:
+    """MOQ 之前只在 CSV 里有,而「要价格表」那封回复明说「MOQ 和 case pack 在
+    图册上按款列出」——PDF 卡片不印就是承诺了没兑现。
+
+    卡片上只放最划算的一档:两档以上会把这行挤爆,完整阶梯在 CSV 里。
+    """
+    import importlib
+
+    render_pdf = importlib.import_module(
+        "backend.app.modules.b2b.linesheet.render_pdf"
+    )
+
+    assert render_pdf._tier_line(_tiered_item()) == "500+ $2.00"
+    item = _tiered_item()
+    item.price_tiers = []
+    assert render_pdf._tier_line(item) == ""
+
+
+def test_tier_editing_round_trips_through_the_patch_schema() -> None:
+    """**2026-07-30 用户抓到**:图册渲染阶梯价,控制台却没有录入口——渲染做了、
+    填的地方没做。前端现在能填了,这里钉住后端那半确实收得住。
+    """
+    from decimal import Decimal
+
+    from backend.app.modules.b2b.wholesale.schemas import WholesaleItemPatch
+
+    patch = WholesaleItemPatch(
+        price_tiers=[
+            {"min_qty": 100, "unit_price": "2.20"},
+            {"min_qty": 500, "unit_price": "2.00"},
+        ]
+    )
+    assert [t.min_qty for t in patch.price_tiers or []] == [100, 500]
+    assert (patch.price_tiers or [])[1].unit_price == Decimal("2.00")
+
+
+def test_patch_rejects_unsorted_or_duplicate_tiers() -> None:
+    """乱序/重复数量必须在入口就被拒——存进去了图册会印出读着像涨价的一行。"""
+    import pytest as _pytest
+
+    from backend.app.modules.b2b.wholesale.schemas import WholesaleItemPatch
+
+    with _pytest.raises(ValueError):
+        WholesaleItemPatch(
+            price_tiers=[
+                {"min_qty": 500, "unit_price": "2.00"},
+                {"min_qty": 100, "unit_price": "2.20"},
+            ]
+        )
+    with _pytest.raises(ValueError):
+        WholesaleItemPatch(
+            price_tiers=[
+                {"min_qty": 100, "unit_price": "2.20"},
+                {"min_qty": 100, "unit_price": "2.10"},
+            ]
+        )

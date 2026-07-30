@@ -46,6 +46,10 @@ const KNOWN_UNPROXIED = new Set([
   "POST /api/app/geo/publishes/{job_id}/result",
   "GET /api/app/geo/backlinks/{job_id}/package",
   "POST /api/app/geo/backlinks/{job_id}/result",
+  // SEO 发布：n8n 拉发布包 + 回报，一单一钥 token 鉴权，走裸挂载的机器路由。
+  // 与 GEO 同规——浏览器永远不该碰到，所以刻意不进代理白名单。
+  "GET /api/app/seo/publishes/{job_id}/package",
+  "POST /api/app/seo/publishes/{job_id}/result",
   // B2B 产品页小窗：n8n 拉包 + 回报，一单一钥 token 鉴权。
   // 走裸挂载的路由，浏览器永远不该碰到——所以刻意不进代理白名单。
   "GET /api/app/b2b/widget-jobs/{job_id}/package",

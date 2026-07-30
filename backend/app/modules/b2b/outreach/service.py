@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..prospects.models import PROSPECT_STATUS_APPROVED, B2BProspect
+from . import suppression
 from . import templates_catalog as catalog
 from .email_finder import find_email_on_site
 from .models import (
@@ -276,13 +277,20 @@ def generate_drafts(
             select(B2BEmailDraft).where(B2BEmailDraft.kind == kind)
         )
     }
+    # 永不再发名单:一次取全量再在内存里比,逐条查库在 100 个候选上就是 100 次
+    # 往返。说过"别发了"的人再收到信 = 直接被举报垃圾邮件 = 域名信誉毁掉。
+    blocked = suppression.suppressed_set(db)
     products_cache: dict[str, list[dict]] = {}
     created = 0
     skipped = 0
+    suppressed = 0
 
     for prospect in rows:
         if prospect.id in existing:
             skipped += 1
+            continue
+        if suppression.normalise(prospect.email) in blocked:
+            suppressed += 1
             continue
         template = resolve_template(
             db,
@@ -318,17 +326,30 @@ def generate_drafts(
                 language=template.language,
                 to_email=prospect.email,
                 subject=render(template.subject, **context)[:255],
-                body=render(template.body, **context),
+                # 合规落款在**渲染时**追加,不写进模板——法律要求的东西不该
+                # 能被"改模板"删掉,而且旧模板不用重灌也自动带上。
+                body=catalog.with_compliance_footer(
+                    render(template.body, **context),
+                    kind=kind,
+                    language=template.language,
+                ),
             )
         )
         db.flush()
         created += 1
 
     db.commit()
+    if created:
+        message = ""
+    elif suppressed:
+        message = "没有新草稿——符合条件的都在「永不再发」名单里。"
+    else:
+        message = "没有新草稿要生成。"
     return {
         "created": created,
         "skipped": skipped,
-        "message": "" if created else "没有新草稿要生成。",
+        "suppressed": suppressed,
+        "message": message,
     }
 
 

@@ -18,6 +18,9 @@ class LineSheetItem(BaseModel):
     moq_units: int
     lead_time_days: int
     variant_note: str | None
+    # 阶梯价:[(起订量, 单价), ...]。批发页承诺「图册带阶梯价」,
+    # 而此前只存不渲染——承诺了没兑现,买手一看就露馅。
+    price_tiers: list[tuple[int, Decimal]] = []
 
 
 class LineSheetMeta(BaseModel):

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
 import styles from "./Wholesale.module.css";
 import {
@@ -14,11 +14,16 @@ import {
   getWholesaleItems,
 } from "./api";
 
+/** 编辑态的一档阶梯价。**用字符串**：输到一半的 "1" 不该被 Number 吃成 1 再回填。 */
+type DraftTier = { min_qty: string; unit_price: string };
+
 type DraftRow = {
   wholesale_price: string;
   case_pack: string;
   moq_units: string;
   lead_time_days: string;
+  /** 阶梯价：数量越大单价越低。图册 PDF/CSV 会渲染，这里是唯一录入口。 */
+  price_tiers: DraftTier[];
 };
 
 type Drafts = Record<string, DraftRow>;
@@ -28,6 +33,7 @@ const EMPTY_DRAFT: DraftRow = {
   case_pack: "",
   moq_units: "",
   lead_time_days: "",
+  price_tiers: [],
 };
 
 function draftFromItem(item: WholesaleItem): DraftRow {
@@ -36,7 +42,35 @@ function draftFromItem(item: WholesaleItem): DraftRow {
     case_pack: item.case_pack?.toString() ?? "",
     moq_units: item.moq_units?.toString() ?? "",
     lead_time_days: item.lead_time_days?.toString() ?? "",
+    price_tiers: (item.price_tiers ?? []).map((tier) => ({
+      min_qty: tier.min_qty?.toString() ?? "",
+      unit_price: tier.unit_price ?? "",
+    })),
   };
+}
+
+/** 只留填全且合法的档位，按数量升序 —— 后端要求升序且数量不重复。 */
+function cleanTiers(tiers: DraftTier[]): { min_qty: number; unit_price: number }[] {
+  const seen = new Set<number>();
+  return tiers
+    .map((tier) => ({
+      min_qty: Number(tier.min_qty),
+      unit_price: Number(tier.unit_price),
+    }))
+    .filter((tier) => {
+      if (!Number.isFinite(tier.min_qty) || tier.min_qty <= 0) return false;
+      if (!Number.isFinite(tier.unit_price) || tier.unit_price <= 0) return false;
+      if (seen.has(tier.min_qty)) return false;
+      seen.add(tier.min_qty);
+      return true;
+    })
+    .sort((a, b) => a.min_qty - b.min_qty);
+}
+
+function tiersKey(tiers: DraftTier[]): string {
+  return JSON.stringify(
+    tiers.map((tier) => [tier.min_qty.trim(), tier.unit_price.trim()]),
+  );
 }
 
 function money(value: string | null): string {
@@ -106,6 +140,52 @@ export function WholesaleWorkspace() {
     });
   };
 
+  const updateTier = (
+    id: string,
+    index: number,
+    field: keyof DraftTier,
+    value: string,
+  ) => {
+    setDrafts((current) => {
+      const item = items.find((candidate) => candidate.id === id);
+      const base = current[id] ?? (item ? draftFromItem(item) : EMPTY_DRAFT);
+      const tiers = base.price_tiers.map((tier, cursor) =>
+        cursor === index ? { ...tier, [field]: value } : tier,
+      );
+      return { ...current, [id]: { ...base, price_tiers: tiers } };
+    });
+  };
+
+  const addTier = (id: string) => {
+    setDrafts((current) => {
+      const item = items.find((candidate) => candidate.id === id);
+      const base = current[id] ?? (item ? draftFromItem(item) : EMPTY_DRAFT);
+      return {
+        ...current,
+        [id]: {
+          ...base,
+          price_tiers: [...base.price_tiers, { min_qty: "", unit_price: "" }],
+        },
+      };
+    });
+  };
+
+  const removeTier = (id: string, index: number) => {
+    setDrafts((current) => {
+      const item = items.find((candidate) => candidate.id === id);
+      const base = current[id] ?? (item ? draftFromItem(item) : EMPTY_DRAFT);
+      return {
+        ...current,
+        [id]: {
+          ...base,
+          price_tiers: base.price_tiers.filter((_, cursor) => cursor !== index),
+        },
+      };
+    });
+  };
+
+  const [openTiers, setOpenTiers] = useState<Set<string>>(new Set());
+
   const dirtyIds = useMemo(() => {
     return Object.keys(drafts).filter((id) => {
       const item = items.find((candidate) => candidate.id === id);
@@ -116,7 +196,8 @@ export function WholesaleWorkspace() {
         draft.wholesale_price !== original.wholesale_price ||
         draft.case_pack !== original.case_pack ||
         draft.moq_units !== original.moq_units ||
-        draft.lead_time_days !== original.lead_time_days
+        draft.lead_time_days !== original.lead_time_days ||
+        tiersKey(draft.price_tiers) !== tiersKey(original.price_tiers)
       );
     });
   }, [drafts, items]);
@@ -137,6 +218,14 @@ export function WholesaleWorkspace() {
         if (draft.moq_units.trim()) entry.moq_units = Number(draft.moq_units);
         if (draft.lead_time_days.trim()) {
           entry.lead_time_days = Number(draft.lead_time_days);
+        }
+        // 阶梯价整档提交：空数组 = 清空，所以只要动过就带上。
+        const original = items.find((candidate) => candidate.id === id);
+        if (
+          original &&
+          tiersKey(draft.price_tiers) !== tiersKey(draftFromItem(original).price_tiers)
+        ) {
+          entry.price_tiers = cleanTiers(draft.price_tiers);
         }
         return entry as never;
       });
@@ -324,6 +413,7 @@ export function WholesaleWorkspace() {
                   <th>箱规</th>
                   <th>起订量</th>
                   <th>交期(天)</th>
+                  <th>阶梯价</th>
                   <th>状态</th>
                 </tr>
               </thead>
@@ -333,7 +423,8 @@ export function WholesaleWorkspace() {
                   const margin = marginPercent(item, draft);
                   const dirty = dirtyIds.includes(item.id);
                   return (
-                    <tr data-dirty={dirty} key={item.id}>
+                    <Fragment key={item.id}>
+                    <tr data-dirty={dirty}>
                       <td>
                         <div className={styles.productCell}>
                           <strong className={styles.sku}>{item.sku}</strong>
@@ -413,6 +504,25 @@ export function WholesaleWorkspace() {
                         />
                       </td>
                       <td>
+                        <button
+                          className={styles.tierToggle}
+                          onClick={() =>
+                            setOpenTiers((current) => {
+                              const next = new Set(current);
+                              if (next.has(item.id)) next.delete(item.id);
+                              else next.add(item.id);
+                              return next;
+                            })
+                          }
+                          title="数量越大单价越低。填了会印进图册 PDF 和 CSV。"
+                          type="button"
+                        >
+                          {draft.price_tiers.length
+                            ? `${draft.price_tiers.length} 档`
+                            : "+ 加"}
+                        </button>
+                      </td>
+                      <td>
                         {item.status === "ready" ? (
                           <span className={styles.badgeOk}>可出图册</span>
                         ) : (
@@ -420,6 +530,107 @@ export function WholesaleWorkspace() {
                         )}
                       </td>
                     </tr>
+                    {openTiers.has(item.id) ? (
+                      <tr className={styles.tierRow}>
+                        <td colSpan={9}>
+                          <div className={styles.tierBox}>
+                            <p className={styles.tierHint}>
+                              量大价低。填了会印进图册：PDF 卡片上放最划算的一档，
+                              CSV 里列全。<strong>数量要大于起订量</strong>，
+                              单价要低于批发价，否则等于没优惠。
+                            </p>
+                            {draft.price_tiers.length ? (
+                              <ul className={styles.tierList}>
+                                {draft.price_tiers.map((tier, index) => {
+                                  const qty = Number(tier.min_qty);
+                                  const price = Number(tier.unit_price);
+                                  const base = Number(
+                                    draft.wholesale_price || item.wholesale_price || "",
+                                  );
+                                  const moq = Number(
+                                    draft.moq_units || item.moq_units || "",
+                                  );
+                                  const backwards =
+                                    Number.isFinite(price) &&
+                                    price > 0 &&
+                                    Number.isFinite(base) &&
+                                    base > 0 &&
+                                    price >= base;
+                                  const belowMoq =
+                                    Number.isFinite(qty) &&
+                                    qty > 0 &&
+                                    Number.isFinite(moq) &&
+                                    moq > 0 &&
+                                    qty <= moq;
+                                  return (
+                                    <li className={styles.tierItem} key={index}>
+                                      <input
+                                        className={styles.numInputSmall}
+                                        inputMode="numeric"
+                                        onChange={(event) =>
+                                          updateTier(
+                                            item.id,
+                                            index,
+                                            "min_qty",
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder="数量"
+                                        value={tier.min_qty}
+                                      />
+                                      <span className={styles.tierPlus}>件起</span>
+                                      <input
+                                        className={styles.numInputSmall}
+                                        inputMode="decimal"
+                                        onChange={(event) =>
+                                          updateTier(
+                                            item.id,
+                                            index,
+                                            "unit_price",
+                                            event.target.value,
+                                          )
+                                        }
+                                        placeholder="单价"
+                                        value={tier.unit_price}
+                                      />
+                                      {backwards ? (
+                                        <span className={styles.tierWarn}>
+                                          比批发价还贵
+                                        </span>
+                                      ) : null}
+                                      {belowMoq ? (
+                                        <span className={styles.tierWarn}>
+                                          没超过起订量
+                                        </span>
+                                      ) : null}
+                                      <button
+                                        className={styles.ghostButton}
+                                        onClick={() => removeTier(item.id, index)}
+                                        type="button"
+                                      >
+                                        删除
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            ) : (
+                              <p className={styles.tierEmpty}>
+                                还没有阶梯价。不填也能出图册，只是买手看不到量大的优惠。
+                              </p>
+                            )}
+                            <button
+                              className={styles.ghostButton}
+                              onClick={() => addTier(item.id)}
+                              type="button"
+                            >
+                              + 添加一档
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                    </Fragment>
                   );
                 })}
               </tbody>

@@ -244,3 +244,61 @@ def forbidden_phrase_in(text: str) -> str | None:
         if phrase in lowered:
             return phrase
     return None
+
+
+# --------------------------------------------------------------------------
+# 合规落款（CAN-SPAM）
+# --------------------------------------------------------------------------
+# 美国对商业邮件(B2B 冷开发也算)的硬要求:**真实实体地址** + **可用的退订
+# 方式**。缺了不只是法律问题——收信人找不到退订入口就直接点「举报垃圾邮件」,
+# 投诉率一高 barongsupply.com 就废了(用户红线:退信/投诉率 >3% 杀域名)。
+#
+# ⚠️ **刻意不写进模板正文,而是渲染草稿时追加**。写进模板 = 用户改模板时能把
+# 它删掉,而这段是法律要求的,不该是"可编辑的文案"。追加还有个好处:已经灌进
+# 库的旧模板不用重灌就自动带上(seed_templates 刻意不覆盖用户改过的行)。
+#
+# 退订走"回信"而不是网页链接:CAN-SPAM 认可可用的回信地址,而开一个公开的
+# 退订网页端点等于给站点多一份攻击面——和当初小窗表单复用 CS 入口同一个判断。
+FOOTER_MARKER = "-- "
+
+# 只有**冷邮件**需要。对方主动来问价再附一句"回复 unsubscribe 退订"很怪,
+# 那类是他先开的口,属于往来通信不是推销。
+KIND_REQUIRES_FOOTER = (KIND_FIRST_TOUCH, KIND_FOLLOW_UP)
+
+_OPT_OUT_EN = (
+    'Not a fit? Reply "unsubscribe" and I will take you off this list for good.'
+)
+_OPT_OUT_ES = (
+    '¿No le interesa? Responda "unsubscribe" y lo quito de esta lista '
+    "definitivamente."
+)
+
+
+def compliance_footer(language: str = "en") -> str:
+    """落款:主体 + 实体地址 + 退订说明。地址从 policies.py 取,不在这里抄第二份。"""
+    from .. import policies
+
+    opt_out = _OPT_OUT_ES if str(language).lower().startswith("es") else _OPT_OUT_EN
+    address = ", ".join(policies.ADDRESS_LINES)
+    return (
+        f"{FOOTER_MARKER}\n"
+        f"{policies.LEGAL_ENTITY}\n"
+        f"{address}\n"
+        f"{opt_out}"
+    )
+
+
+def with_compliance_footer(body: str, *, kind: str, language: str = "en") -> str:
+    """给冷邮件正文追加落款。已经有了就不重复加。"""
+    if kind not in KIND_REQUIRES_FOOTER:
+        return body
+    footer = compliance_footer(language)
+    if policy_line_present(body):
+        return body
+    return f"{body.rstrip()}\n\n{footer}"
+
+
+def policy_line_present(body: str) -> bool:
+    from .. import policies
+
+    return policies.LEGAL_ENTITY in (body or "")

@@ -374,6 +374,26 @@ def category_readiness(db: Session) -> list[CategoryReadiness]:
 # --------------------------------------------------------------------------
 # 导出 line sheet
 # --------------------------------------------------------------------------
+def _tiers_for(row: B2BWholesaleItem) -> list[tuple[int, Decimal]]:
+    """把存的阶梯价整理成 (起订量, 单价),按起订量升序。
+
+    脏数据(缺字段/负数/不是数字)一律丢掉——图册是给买手看的,宁可少一行
+    也不能印出个 `0+ : $0`。
+    """
+    out: list[tuple[int, Decimal]] = []
+    for raw in row.price_tiers_json or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            qty = int(raw.get("min_qty") or 0)
+            price = Decimal(str(raw.get("unit_price")))
+        except (TypeError, ValueError, ArithmeticError):
+            continue
+        if qty > 0 and price > 0:
+            out.append((qty, price))
+    return sorted(out)
+
+
 def build_line_sheet_request(
     db: Session,
     *,
@@ -436,6 +456,7 @@ def build_line_sheet_request(
             moq_units=row.moq_units,
             lead_time_days=row.lead_time_days,
             variant_note=row.variant_note,
+            price_tiers=_tiers_for(row),
         )
         for row in rows
     ]

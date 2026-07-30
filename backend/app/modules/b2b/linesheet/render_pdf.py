@@ -556,6 +556,19 @@ def _draw_placeholder(
     )
 
 
+def _tier_line(item: LineSheetItem) -> str:
+    """卡片上只放**最划算的那一档**——两档以上会把这行挤爆,完整阶梯在 CSV 里。
+
+    **自己排序**,不依赖上游:靠"最后一个就是量最大的"这种约定,上游哪天换个
+    写法就会挑错档位印到给买手的图册上,而且不报错。
+    """
+    tiers = sorted(item.price_tiers or [])
+    if not tiers:
+        return ""
+    qty, price = tiers[-1]
+    return f"{qty}+ ${_money(price)}"
+
+
 def _draw_product_card(
     canvas: _Canvas,
     document: _PdfDocument,
@@ -635,10 +648,24 @@ def _draw_product_card(
         ),
         size=8.3,
     )
+    # MOQ 之前只在 CSV 里有,而"要价格表"那封回复明说「MOQ 和 case pack 在
+    # 图册上按款列出」——PDF 卡片不印就是承诺了没兑现。和 case pack 并排。
+    canvas.text(
+        text_x,
+        top - 194,
+        _fit_text(
+            f"MOQ {item.moq_units} units" + (
+                f"    {_tier_line(item)}" if item.price_tiers else ""
+            ),
+            8.3,
+            text_width,
+        ),
+        size=8.3,
+    )
     if item.variant_note:
         canvas.text(
             text_x,
-            top - 194,
+            top - 208,
             _fit_text(item.variant_note, 8.3, text_width),
             size=8.3,
             color=(0.36, 0.38, 0.42),

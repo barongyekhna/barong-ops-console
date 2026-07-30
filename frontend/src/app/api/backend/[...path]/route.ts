@@ -1003,7 +1003,16 @@ function isAllowedSeoPath(method: string, path: string[]) {
   if (path.length === 2) {
     return method === "GET" || method === "POST";
   }
-  if (!isUuidPathSegment(path[2])) {
+  // ---- 内容 ----
+  if (path[1] === "items") {
+    if (path.length === 2) {
+      return method === "GET";
+    }
+    if (path.length === 4 && isUuidPathSegment(path[2])) {
+      return (
+        (path[3] === "review" || path[3] === "revise") && method === "POST"
+      );
+    }
     return false;
   }
   // PATCH /seo/facts/{id}
@@ -1015,7 +1024,7 @@ function isAllowedSeoPath(method: string, path: string[]) {
     if (path[3] === "approve" || path[3] === "retire") {
       return method === "POST";
     }
-    return path[3] === "revisions" && method === "GET";
+    return path.length === 3 && path[2] === "seed" && method === "POST";
   }
   return false;
 }
@@ -1436,6 +1445,13 @@ function isAllowedB2bPath(method: string, path: string[]) {
   if (path.length === 3 && path[1] === "email-drafts") {
     if (path[2] === "generate") return method === "POST";
     return isUuidPathSegment(path[2]) && method === "PATCH";
+  }
+  // ---- 永不再发名单（说过"别发了"的人，系统里再也生成不出给他的草稿）----
+  // GET  /b2b/suppressions   名单
+  // POST /b2b/suppressions   加进名单
+  // 刻意**没有 DELETE**：退订是对方的意思表示，不该被一次误点抹掉。
+  if (path.length === 2 && path[1] === "suppressions") {
+    return method === "GET" || method === "POST";
   }
   // POST /b2b/prospect-emails/backfill    抓官网补邮箱（免费）
   if (

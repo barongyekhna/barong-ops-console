@@ -15,7 +15,7 @@ from ..wholesale.router import (
     PERMISSION_READ,
     _require_b2b_permission,
 )
-from . import service
+from . import service, suppression
 from . import templates_catalog as catalog
 
 router = APIRouter(prefix="/b2b", tags=["b2b-outreach"])
@@ -197,3 +197,58 @@ def patch_draft(
     except service.OutreachError as error:
         raise _bad(error) from error
     return DraftRead.model_validate(row)
+
+
+# --------------------------------------------------------------------------
+# 永不再发名单
+# --------------------------------------------------------------------------
+
+
+class SuppressionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email: str
+    raw_email: str | None = None
+    source: str
+    note: str | None = None
+
+
+class SuppressionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=3, max_length=320)
+    source: str = Field(default=suppression.SOURCE_REPLY, max_length=16)
+    note: str | None = Field(default=None, max_length=500)
+
+
+@router.get("/suppressions", response_model=list[SuppressionRead])
+def list_suppressions(
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_b2b_permission(PERMISSION_READ)),
+) -> list[SuppressionRead]:
+    return [
+        SuppressionRead.model_validate(row) for row in suppression.listing(db)
+    ]
+
+
+@router.post("/suppressions", response_model=SuppressionRead)
+def add_suppression(
+    payload: SuppressionCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_b2b_permission(PERMISSION_MANAGE)),
+) -> SuppressionRead:
+    """把一个邮箱加进「永不再发」。
+
+    幂等:已在名单里就原样返回,不报错——用户在候选列表里多点两次不该弹错。
+    """
+    row = suppression.add(
+        db, email=payload.email, source=payload.source, note=payload.note
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="邮箱格式不对。",
+        )
+    db.commit()
+    return SuppressionRead.model_validate(row)

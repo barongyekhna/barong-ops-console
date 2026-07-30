@@ -15,12 +15,25 @@ CSV_COLUMNS = (
     "Product Name",
     "Variant",
     "Wholesale Price",
+    "Volume Pricing",
     "MSRP",
     "Case Pack",
     "MOQ (units)",
     "Lead Time (days)",
     "Order Qty",
 )
+
+
+def tier_text(item: LineSheetItem) -> str:
+    """`100+ $16.50 | 500+ $15.00`。没有阶梯价就留空,不写 "N/A" 之类的噪音。
+
+    **在这里再排一次序**,不依赖上游传进来是有序的:乱序印出来
+    `500+ $2.00 | 100+ $2.20` 读着像涨价,买手会当成写错了。
+    """
+    return " | ".join(
+        f"{qty}+ ${_decimal_text(price)}"
+        for qty, price in sorted(item.price_tiers or [])
+    )
 
 
 def _sorted_items(items: list[LineSheetItem]) -> list[LineSheetItem]:
@@ -50,6 +63,7 @@ def render_csv(request: LineSheetRequest) -> bytes:
                 item.name,
                 item.variant_note or "",
                 _decimal_text(item.wholesale_price),
+                tier_text(item),
                 _decimal_text(item.msrp),
                 item.case_pack,
                 item.moq_units,
