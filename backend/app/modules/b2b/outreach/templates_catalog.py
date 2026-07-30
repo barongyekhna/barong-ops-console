@@ -160,10 +160,12 @@ Attached is our current line sheet.
 Prices shown are at MOQ. If you're ordering 5x MOQ or more, tell me the \
 quantity and I'll quote you better.
 
-Two things worth knowing up front: samples are charged but credited in full \
-against your first order, and first orders over USD 500 ship free by sea \
-freight only — air couriers (UPS / DHL / FedEx) are quoted separately and \
-paid by the buyer.
+Three things worth knowing up front. Samples are charged but credited in \
+full against your first order. Freight is quoted separately and lands at \
+your door with import duty already included — no customs broker, no surprise \
+bill on arrival. And first orders over USD 500 ship free by sea freight only \
+— air couriers (UPS / DHL / FedEx) are quoted separately and paid by the \
+buyer.
 
 {sender_name}""",
         ),

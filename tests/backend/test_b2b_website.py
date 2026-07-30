@@ -539,3 +539,153 @@ def test_republish_endpoint_is_fail_closed_without_a_token() -> None:
     assert "secrets.compare_digest" in body
     assert "not expected or not supplied" in body, "密钥为空必须直接拒"
     assert "status_code=403" in body
+
+
+def test_duty_included_promise_appears_on_every_buyer_surface() -> None:
+    """到门含税是我们最强的一条(2026-07-30 用户交底:货代包税,报的运费就是全部)。
+
+    美国小零售店最怕的是"货到港了突然收到海关账单"。这条必须出现在买家看得到的
+    每一面上,漏一处那一处就还在把算税甩回给买家——而买家算不出来就不回你了。
+    """
+    from backend.app.modules.b2b import policies
+
+    surfaces = {
+        "line sheet": " ".join(policies.line_sheet_notes()),
+        "wholesale page": " ".join(
+            f"{t} {d}" for t, d in policies.wholesale_terms()
+        ),
+        "widget": " ".join(e["text"] for e in policies.widget_policies()),
+    }
+    for name, text in surfaces.items():
+        low = text.lower()
+        assert "duty" in low, f"{name} 没提关税"
+        assert "door" in low, f"{name} 没说送到门"
+
+
+def test_duty_language_never_promises_free_air_freight() -> None:
+    """到门含税这条**绝不能**把空运也包进去。
+
+    用户原话:"如果客户要走UPS红单我也给免运费那我要倾家荡产了"。
+    海运 ¥4-5/公斤,空运快递贵一个数量级。
+    """
+    from backend.app.modules.b2b import policies
+
+    for text in policies.line_sheet_notes() + tuple(
+        d for _, d in policies.wholesale_terms()
+    ):
+        low = text.lower()
+        if "free shipping" in low or "ship free" in low:
+            assert "sea freight" in low, f"免运费没锁死海运: {text}"
+
+
+def test_delivery_line_avoids_incoterm_jargon() -> None:
+    """刻意不用 DDP/FOB/EXW:买手看得懂大白话,而术语用错就是合同级口径错误。"""
+    from backend.app.modules.b2b import policies
+
+    joined = (
+        policies.DELIVERY_LINE
+        + " ".join(policies.line_sheet_notes())
+        + " ".join(d for _, d in policies.wholesale_terms())
+    ).lower()
+    for term in (" ddp", " fob", " exw", "ex works", "ex-works", " cif"):
+        assert term not in joined, f"页面上出现了 Incoterm 术语: {term}"
+
+
+def test_free_shipping_is_always_scoped_to_the_first_order() -> None:
+    """**免运费只有首单**。2026-07-30 用户抓到小窗漏了 "first"。
+
+    漏掉这个词有两层伤害:
+    1. 白送钱——读起来像每一单都免运费;
+    2. 页面/图册写 first、小窗写每单 = 口径打架,而口径打架正是 GMC 判
+       Misrepresentation 的那个病(只剩一次申诉机会)。
+    """
+    from backend.app.modules.b2b import policies
+
+    surfaces = {
+        "line sheet": policies.line_sheet_notes(),
+        "wholesale page": tuple(d for _, d in policies.wholesale_terms()),
+        "widget": tuple(e["text"] for e in policies.widget_policies()),
+    }
+    # 只匹配真正在讲免运费的句子。早先写成「含 free 且含 ship」太松,把瑕疵
+    # 条款("replace it free" + "never ship anything back")也扫中了。
+    free_shipping_phrases = ("free shipping", "ship free", "ships free")
+    seen = 0
+    for name, texts in surfaces.items():
+        for text in texts:
+            low = text.lower()
+            if not any(p in low for p in free_shipping_phrases):
+                continue
+            seen += 1
+            assert "first" in low, f"{name} 的免运费没写「首单」: {text}"
+            assert "sea freight" in low, f"{name} 的免运费没锁海运: {text}"
+    assert seen >= 3, "三个面上都该有一条免运费口径"
+
+
+def test_defect_policy_never_becomes_a_structured_return_window() -> None:
+    """瑕疵条款**只讲瑕疵**,绝不写成「X 天内可退」。
+
+    真实政策是只保缺陷、不接受"不想要了"。写成结构化退货窗口正是 GMC 判
+    Misrepresentation 的写法,而用户只剩一次申诉机会。
+    """
+    import re
+
+    from backend.app.modules.b2b import policies
+
+    text = " ".join(policies.line_sheet_notes()) + " ".join(
+        d for _, d in policies.wholesale_terms()
+    )
+    low = text.lower()
+    # 「30 天内退货」这类结构不许出现
+    assert not re.search(r"\d+\s*[- ]?day[s]?\b[^.]{0,40}\breturn", low)
+    assert not re.search(r"\breturn[^.]{0,40}\bwithin\s*\d+", low)
+    assert "money-back" not in low
+    assert "no questions asked" not in low
+
+
+def test_defect_policy_promises_replacement_without_return_shipping() -> None:
+    """不用寄回是**算出来的**,不是让利:美→中 $2/磅 vs 中→美海运 ≈$0.25-0.31/磅,
+    差约 8 倍,让客户寄回来运费比货还贵。这句必须出现在买家看得到的地方。
+    """
+    from backend.app.modules.b2b import policies
+
+    for texts in (
+        policies.line_sheet_notes(),
+        tuple(d for _, d in policies.wholesale_terms()),
+    ):
+        joined = " ".join(texts).lower()
+        assert "defective" in joined
+        assert "replace" in joined
+        assert "never ship anything back" in joined
+
+
+def test_line_sheet_states_the_change_of_mind_limit() -> None:
+    """图册是完整政策文档,「只保缺陷」要写明白;页面上不写不等于承诺了别的。"""
+    from backend.app.modules.b2b import policies
+
+    assert any(
+        "change of mind" in note.lower() for note in policies.line_sheet_notes()
+    )
+    page = " ".join(d for _, d in policies.wholesale_terms()).lower()
+    assert "change of mind" not in page, "销售页上不放负面表述"
+
+
+def test_publish_also_pushes_the_widget_copy() -> None:
+    """**回归**(2026-07-30):`widget_policies()` 以前只有测试在引用,生产代码
+    里没人把它推到 WP——小窗文案是手动推的一次性动作。
+
+    后果是 policies.py 号称「唯一真相源」对小窗不成立:改了代码线上纹丝不动,
+    线上因此挂着一句漏了 "First" 的免运费。现在挂进发布动作,不可能再脱节。
+    """
+    from pathlib import Path
+
+    import backend.app.modules.b2b.website.publisher as pub
+
+    source = Path(pub.__file__).read_text(encoding="utf-8")
+    body = source[source.index("def publish(") : source.index("def _guide_count(")]
+    assert "_push_widget_policy(credentials)" in body
+
+    push = source[source.index("def _push_widget_policy(") :]
+    # 文案必须现从 policies 派生，不许在这里再抄一份
+    assert "policies.WIDGET_HEADLINE" in push
+    assert "policies.widget_policies()" in push
+    assert "policies.B2B_CONTACT_EMAIL" in push

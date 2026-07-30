@@ -67,17 +67,50 @@ PAYMENT_TERMS = (
 )
 
 
+# 到门 + 含税。**这是我们最强的一条,不是细节**(2026-07-30 用户交底):
+# 货代把关税包进运费里,所以报给买家的运费就是全部——他不用算税、不用找报关行、
+# 不会在收货时被追加账单。美国小零售店最怕的正是"货到港了突然收到海关账单"。
+# 私人/店铺地址一样能清关,只比发 FBA 仓贵 ¥1/公斤左右。
+#
+# ⚠️ 措辞刻意**不用 Incoterm 术语**(DDP/FOB/EXW):买手看得懂大白话,而术语一旦
+# 用错就是合同层面的口径错误。说清楚"谁付什么"比说对术语重要。
+DELIVERY_LINE = (
+    "delivered to your door with import duty included - no customs broker "
+    "and no surprise bill on arrival"
+)
+
+
+# 瑕疵免费换、不用寄回(2026-07-30 用户拍板)。
+#
+# **为什么"不用寄回"不是让利,是算出来的**:美→中最便宜 $2/磅,中→美海运
+# ¥4-5/公斤(≈$0.25-0.31/磅),差约 8 倍。让客户把一个瑕疵品寄回来,运费比货本身
+# 还贵。直接补发既省钱、客户体验还更好——这是双赢,不是我们吃亏。
+#
+# **补发跟下一单走**:单独空运一件补货,运费能超过货值。跟下一单一起发是行规;
+# 客户不想等就折价退款,给他选。
+#
+# ⚠️ 死规矩:**只讲瑕疵,绝不写成"X 天内可退"那种结构化退货窗口**。真实政策
+# 就是只保缺陷、不接受"不想要了",而结构化退货窗口正是 GMC 判 Misrepresentation
+# 的写法(只剩一次申诉机会)。有测试钉着不许出现天数窗口。
+DEFECT_POLICY = (
+    "Inspect your shipment on arrival. If anything is damaged or defective, "
+    "send us photos - we replace it free with your next order, or credit it "
+    "if you would rather not wait. You never ship anything back to China."
+)
+
+
 def _free_shipping_sentence() -> str:
     """⚠️ "SEA FREIGHT ONLY" 这几个字**一个都不能删**。
 
     用户原话:"如果客户要走UPS红单我也给免运费那我要倾家荡产了"。
+    海运 ¥4-5/公斤 vs 空运快递贵一个数量级,免错了就是倾家荡产。
     有测试钉着这句话必须出现。
     """
     return (
         f"First order: free shipping on first wholesale orders of "
         f"{DEFAULT_CURRENCY} {FREE_SHIPPING_THRESHOLD:.0f} or more "
-        f"- SEA FREIGHT ONLY. Express air (UPS / DHL / FedEx) is quoted "
-        f"separately and paid by the buyer."
+        f"- SEA FREIGHT ONLY, delivered to your door. Express air "
+        f"(UPS / DHL / FedEx) is quoted separately and paid by the buyer."
     )
 
 
@@ -96,8 +129,16 @@ def line_sheet_notes() -> tuple[str, ...]:
         f"Prices shown are our minimum-order (MOQ) prices. Larger orders are "
         f"negotiable: for quantities from {VOLUME_DISCOUNT_MULTIPLE}x the "
         f"listed MOQ, contact us for a volume quotation.",
-        "Wholesale prices are exclusive of shipping and import duties.",
+        # 旧版只写 "exclusive of shipping and import duties" —— 技术上没错,
+        # 但等于把算税这件事甩回给买家,而买家算不出来就不回你了。实际是货代
+        # 包税到门,所以把话说全:价里不含运费,但运费报出来就是到门的全部。
+        f"Wholesale prices do not include freight. Freight is quoted "
+        f"separately and {DELIVERY_LINE}.",
         "Lead time starts once payment has cleared.",
+        DEFECT_POLICY,
+        # 图册是完整政策文档,把「只保缺陷」说明白;页面上不写这句(销售页上
+        # 的负面表述劝退人),但两处**不矛盾**——页面只是没提,不是承诺了别的。
+        "Wholesale orders are not returnable for change of mind.",
         f"Prices valid for {QUOTE_VALID_DAYS} days from the edition date "
         f"shown above.",
         _sample_sentence(),
@@ -133,12 +174,22 @@ def widget_policies() -> tuple[WidgetPolicy, ...]:
             ),
         },
         {
+            # ⚠️ "First" 一个字都不能少(2026-07-30 用户抓到我漏了):免运费**只有
+            # 首单**。漏掉 first 就读成"每一单都免运费"——既是白送钱,也是页面/
+            # 图册说 first、小窗说每单的口径打架,而口径打架正是 GMC 判虚假陈述
+            # 的那个病。有测试钉着。
             "key": "free_shipping",
             "text": (
-                f"Wholesale orders over {DEFAULT_CURRENCY} "
-                f"{FREE_SHIPPING_THRESHOLD:.0f} ship free "
+                f"First wholesale order over {DEFAULT_CURRENCY} "
+                f"{FREE_SHIPPING_THRESHOLD:.0f} ships free "
                 f"- sea freight only"
             ),
+        },
+        {
+            # 小窗上最能止住"从中国进货好麻烦"这个念头的一条。短句,不展开——
+            # 展开是 /wholesale/ 页面的活。
+            "key": "duty_included",
+            "text": "Delivered to your door, import duty included",
         },
         {
             # 别写 "OEM/ODM":每封中国工厂群发的垃圾邮件都是这四个字母,
@@ -250,11 +301,21 @@ def wholesale_terms() -> tuple[tuple[str, str], ...]:
             "sample shipping.",
         ),
         (
+            # 单独一条,不跟"首单免运费"挤在一起——这是买家决定要不要回你的
+            # 那个点,挤在括号里会被扫过去。
+            "Freight & duty",
+            f"freight is quoted separately and {DELIVERY_LINE}.",
+        ),
+        (
             "First order",
             f"free shipping on first wholesale orders of {DEFAULT_CURRENCY} "
             f"{FREE_SHIPPING_THRESHOLD:.0f} or more - sea freight only. "
             f"Express air (UPS / DHL / FedEx) is quoted separately and paid "
             f"by the buyer.",
+        ),
+        (
+            "Defects",
+            DEFECT_POLICY[0].lower() + DEFECT_POLICY[1:],
         ),
         (
             "Documentation",

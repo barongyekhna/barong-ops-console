@@ -43,6 +43,14 @@ _PAGES_PATH = "pages"
 SITE_BASE = "https://barongyekhna.com"
 # 插件读这个 option 给指南文章加「Buying for a store?」回链。
 GUIDE_LINKS_OPTION = "barong_b2b_guide_links"
+# 产品页小窗的文案(标题/联系方式/政策条)。
+#
+# ⚠️ 2026-07-30 抓到的真 bug:`policies.widget_policies()` **只有测试在引用**,
+# 生产代码里没有任何地方把它推到 WP——小窗文案是当初手动推上去的一次性动作。
+# 结果 policies.py 号称"唯一真相源",对小窗其实不成立:改了代码线上纹丝不动。
+# 线上因此挂着一句漏了 "First" 的免运费(读起来像每单都免,还和页面/图册打架)。
+# 现在挂进发布动作:重新生成页面的同时把小窗文案也推一遍,两者不可能再脱节。
+WIDGET_POLICY_OPTION = "barong_b2b_policy"
 # 定时重发的最小间隔。护栏针对的是"定时被误配成每分钟一次",不是正常节奏。
 MIN_REPUBLISH_INTERVAL_MINUTES = 30
 
@@ -318,6 +326,8 @@ def publish(db: Session) -> dict[str, Any]:
     # 反向那条:WP 类目 → 批发页。一次 option 写入,插件读它给指南文章加回链。
     link_map = guides.guide_link_map(db, groups)
     _push_guide_links(credentials, link_map)
+    # 小窗文案跟着一起推：同一个「重新生成」动作，页面/图册/小窗三面同步。
+    widget_pushed = _push_widget_policy(credentials)
     _set(db, GUIDE_CATEGORIES_KEY, str(len(link_map)))
     db.commit()
 
@@ -328,6 +338,7 @@ def publish(db: Session) -> dict[str, Any]:
         "groups": len(groups),
         "guides_linked": sum(_guide_count(g) for g in groups),
         "guide_categories_mapped": len(link_map),
+        "widget_policy_pushed": widget_pushed,
     }
 
 
@@ -361,6 +372,46 @@ def _attach_guides(db: Session, groups: list[dict], credentials: Any) -> None:
                     category.get("name"),
                 )
                 category["guides"] = []
+
+
+def _push_widget_policy(credentials: Any) -> bool:
+    """把产品页小窗的文案从 `policies.py` 推到站点 option。
+
+    小窗文案**从这里派生,不在别处存第二份**——这正是 policies.py 那条
+    「能从一处派生的绝不复制第二份」。以前这一步是手动的,所以脱节过。
+    """
+    import json as _json
+
+    from .. import policies
+
+    payload = {
+        "headline": policies.WIDGET_HEADLINE,
+        "subline": policies.WIDGET_SUBLINE,
+        "cta": policies.WIDGET_CTA,
+        "email": policies.B2B_CONTACT_EMAIL,
+        "whatsapp": policies.CONTACT_WHATSAPP,
+        "policies": [entry["text"] for entry in policies.widget_policies()],
+    }
+    try:
+        result = wp_bridge._request_json(  # noqa: SLF001
+            wp_bridge._api_url(credentials, "settings"),
+            credentials=credentials,
+            authenticated=True,
+            method="POST",
+            payload={
+                WIDGET_POLICY_OPTION: _json.dumps(payload, ensure_ascii=False)
+            },
+        )
+    except Exception:  # noqa: BLE001 - 小窗文案推不上去不该拦住发页面
+        logger.exception("B2B widget policy push failed")
+        return False
+    if not result.get("reachable"):
+        # 插件没装时 WP 会静默丢弃未注册的 option,所以这里要留痕。
+        logger.warning(
+            "B2B widget policy push not applied (%s)", result.get("error")
+        )
+        return False
+    return True
 
 
 def _push_guide_links(credentials: Any, link_map: dict) -> None:

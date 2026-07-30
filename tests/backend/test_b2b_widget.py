@@ -63,17 +63,21 @@ def test_widget_policies_never_mention_price_or_card_payment() -> None:
         assert banned not in text, banned
 
 
-def test_free_shipping_line_is_scoped_to_wholesale_and_sea_freight() -> None:
-    """两条都是钱的问题:
+def test_free_shipping_line_is_scoped_to_wholesale_first_order_and_sea() -> None:
+    """三条都是钱的问题:
 
     - 不带 "wholesale" 会和零售的「满 $100 免运费」撞口径 → 又一个 GMC 雷
     - 不带 "sea freight only",客户走 UPS 红单能把整单利润吃光
+    - 不带 "first",读起来就是**每一单都免运费**(2026-07-30 用户抓到我漏了):
+      既白送钱,又和页面/图册写的 first 打架
     """
     entry = next(
         e for e in policies.widget_policies() if e["key"] == "free_shipping"
     )
-    assert "Wholesale" in entry["text"]
-    assert "sea freight only" in entry["text"].lower()
+    text = entry["text"].lower()
+    assert "wholesale" in text
+    assert "sea freight only" in text
+    assert "first" in text
 
 
 def test_line_sheet_keeps_the_uppercase_sea_freight_lock() -> None:
