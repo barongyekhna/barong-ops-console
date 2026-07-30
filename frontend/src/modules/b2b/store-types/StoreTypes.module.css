@@ -1,0 +1,151 @@
+/* B2B 店型：沿用驾驶舱深色玻璃感（同 Prospects.module.css）。 */
+.workspace { display: flex; flex-direction: column; gap: 18px; }
+
+.explainer {
+  padding: 16px 18px; border-radius: 14px;
+  border: 1px solid rgba(120, 170, 255, 0.16);
+  background: rgba(8, 14, 28, 0.5);
+}
+.explainer h2 { margin: 0 0 10px; font-size: 16px; letter-spacing: 0.04em; }
+.explainer p {
+  margin: 0 0 8px; font-size: 13px; line-height: 1.7;
+  color: rgba(198, 216, 246, 0.78);
+}
+.explainer p:last-child { margin-bottom: 0; }
+.gate {
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid rgba(255, 196, 107, 0.28);
+  background: rgba(90, 62, 18, 0.28);
+  color: #ffd79a !important;
+}
+
+.error {
+  margin: 0; padding: 9px 12px; border-radius: 8px;
+  font-size: 13px; color: #ffb4b4; background: rgba(120, 30, 40, 0.28);
+}
+.notice {
+  margin: 0; padding: 9px 12px; border-radius: 8px;
+  font-size: 13px; color: #a8e9c6; background: rgba(24, 84, 60, 0.28);
+}
+.empty { margin: 0; padding: 18px 0; font-size: 13px; color: rgba(190, 208, 240, 0.6); }
+.muted { color: rgba(190, 208, 240, 0.55); }
+
+.cardList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.card {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 16px 18px; border-radius: 14px;
+  border: 1px solid rgba(120, 170, 255, 0.16);
+  background: rgba(8, 14, 28, 0.5);
+}
+.card[data-running="true"] {
+  border-color: rgba(111, 227, 165, 0.45);
+  box-shadow: 0 0 0 1px rgba(111, 227, 165, 0.12) inset;
+}
+
+.cardHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.label { font-size: 16px; font-weight: 600; }
+.key {
+  margin-left: 8px; font-size: 11px; letter-spacing: 0.05em;
+  color: rgba(190, 208, 240, 0.45);
+}
+.statusTag {
+  padding: 4px 10px; border-radius: 99px; font-size: 12px;
+  border: 1px solid rgba(120, 170, 255, 0.22);
+  color: rgba(198, 216, 246, 0.7);
+}
+.statusTag[data-status="active"] {
+  color: #6fe3a5; border-color: rgba(111, 227, 165, 0.45);
+  background: rgba(24, 84, 60, 0.28);
+}
+.statusTag[data-status="paused"] { color: #ffc46b; border-color: rgba(255, 196, 107, 0.35); }
+
+.progressRow { display: flex; flex-direction: column; gap: 7px; }
+.progressLabel { font-size: 12px; color: rgba(198, 216, 246, 0.72); }
+.unlocked { color: #6fe3a5; }
+.progressBarWrap {
+  height: 7px; border-radius: 99px; overflow: hidden;
+  background: rgba(120, 170, 255, 0.14);
+}
+.progressBar {
+  display: block; height: 100%; border-radius: 99px;
+  background: #ffc46b; transition: width 0.25s ease;
+}
+.progressBar[data-full="true"] { background: #6fe3a5; }
+
+.categories { display: flex; flex-direction: column; gap: 8px; }
+.sectionLabel {
+  font-size: 12px; letter-spacing: 0.06em;
+  color: rgba(198, 216, 246, 0.6);
+}
+.chipList { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 6px 4px 10px; border-radius: 99px; font-size: 12px;
+  border: 1px solid rgba(120, 170, 255, 0.22);
+  background: rgba(10, 18, 34, 0.7);
+}
+.chipRemove {
+  border: none; background: none; cursor: pointer; padding: 0 4px;
+  font-size: 14px; line-height: 1; color: rgba(198, 216, 246, 0.5);
+}
+.chipRemove:hover { color: #ffb4b4; }
+.chipRemove:disabled { cursor: not-allowed; opacity: 0.4; }
+
+.inlineForm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.input {
+  flex: 1 1 220px; min-width: 0;
+  height: 34px; padding: 0 10px; border-radius: 8px; font-size: 13px;
+  color: inherit; background: rgba(10, 18, 34, 0.7);
+  border: 1px solid rgba(120, 170, 255, 0.22);
+}
+
+.cardFoot {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; flex-wrap: wrap;
+  padding-top: 12px; border-top: 1px solid rgba(120, 170, 255, 0.12);
+}
+.funnel { font-size: 12px; color: rgba(198, 216, 246, 0.66); }
+
+.primaryButton, .ghostButton, .stopButton {
+  height: 34px; padding: 0 16px; border-radius: 8px;
+  font-size: 13px; cursor: pointer; border: 1px solid transparent;
+}
+.primaryButton { background: #2f6bd8; color: #fff; }
+.primaryButton:hover:not(:disabled) { background: #3a7bef; }
+.stopButton {
+  background: rgba(10, 18, 34, 0.7); color: #ffc46b;
+  border-color: rgba(255, 196, 107, 0.35);
+}
+.ghostButton {
+  background: rgba(10, 18, 34, 0.7); color: inherit;
+  border-color: rgba(120, 170, 255, 0.22);
+}
+.primaryButton:disabled, .ghostButton:disabled, .stopButton:disabled {
+  cursor: not-allowed; opacity: 0.45;
+}
+
+.panel {
+  padding: 16px 18px 20px; border-radius: 14px;
+  border: 1px solid rgba(120, 170, 255, 0.16);
+  background: rgba(8, 14, 28, 0.5);
+}
+.panel h3 { margin: 0 0 8px; font-size: 15px; letter-spacing: 0.04em; }
+.hint { margin: 0 0 12px; font-size: 12px; line-height: 1.6; color: rgba(190, 208, 240, 0.66); }
+
+@media (max-width: 720px) {
+  .cardHead { flex-direction: column; }
+}
+
+.footActions { display: inline-flex; gap: 8px; align-items: center; }
+
+.newTag {
+  margin-left: 8px; padding: 2px 7px; border-radius: 99px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: #0b1220; background: #6fe3a5;
+}
+.linkButton {
+  align-self: flex-start; margin: 0; padding: 6px 0;
+  border: none; background: none; cursor: pointer;
+  font-size: 12px; color: #7fb0ff; text-decoration: underline;
+}
+.linkButton:hover { color: #a8caff; }

@@ -1376,6 +1376,82 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="b2b.wholesale",
+        display_name="B2B 业务",
+        description=(
+            "Wholesale and OEM control plane: wholesale pricing, MOQ, case "
+            "pack, lead times, and category-grouped line sheet exports."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/b2b-wholesale",
+        api_namespace="/b2b",
+        navigation=_navigation(
+            group="Registry",
+            label="B2B 业务",
+            icon="Briefcase",
+            order=16,
+        ),
+        required_permissions=("b2b.wholesale.read",),
+        permission_manifest=(
+            _permission(
+                module_key="b2b.wholesale",
+                permission_key="b2b.wholesale.read",
+                category="business",
+                action="read",
+                label="Read wholesale catalogue",
+                description=(
+                    "View wholesale items, pricing readiness, and line sheets."
+                ),
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="b2b.wholesale",
+                permission_key="b2b.wholesale.manage",
+                category="business",
+                action="manage",
+                label="Manage wholesale catalogue",
+                description=(
+                    "Set wholesale prices, MOQ, case pack, and lead times."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="b2b.wholesale",
+                permission_key="b2b.wholesale.export",
+                category="business",
+                action="export",
+                label="Export wholesale line sheets",
+                description=(
+                    "Generate PDF or CSV line sheets for outbound buyers."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.b2b.wholesale",
+        data_boundary=_data_boundary(
+            reads=(
+                "b2b_wholesale_items",
+                "k_product_knowledge_products",
+                "p_notifications",
+            ),
+            writes=("b2b_wholesale_items", "p_notifications"),
+            blocked_objects=("cross_module_writes",),
+        ),
+    ),
+    _manifest(
         module_key="geo.content",
         display_name="GEO 内容引擎",
         description=(

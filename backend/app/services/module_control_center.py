@@ -39,6 +39,19 @@ R_ANALYSIS_MODULE_ID = "r.analysis"
 R_SERIES_MODULE_IDS = frozenset({R_WAREHOUSE_MODULE_ID, R_ANALYSIS_MODULE_ID})
 R_SERIES_ORGANIZATION_NAME = TARGET_PRODUCT_ORGANIZATION_NAME
 CS_CUSTOMER_SERVICE_MODULE_ID = "cs.customer_service"
+# 独立站/贸易业务模块只属于国际贸易公司,制造公司下不该出现
+# (2026-07-27 用户拍板一次性清理;此前只有 I/R/CS 做了限定,其余漏了)。
+B2B_WHOLESALE_MODULE_ID = "b2b.wholesale"
+TRADE_ONLY_MODULE_IDS = frozenset(
+    {
+        "b2b.wholesale",
+        "f.enrichment",
+        "h.site_health",
+        "k.product_knowledge",
+        "p.upload",
+        "w.site_ops",
+    }
+)
 
 
 def _is_r_series_module(module_id: str) -> bool:
@@ -55,6 +68,8 @@ def _module_allowed_for_organization(
     if _is_r_series_module(manifest.module_key):
         return organization_name == R_SERIES_ORGANIZATION_NAME
     if manifest.module_key == CS_CUSTOMER_SERVICE_MODULE_ID:
+        return organization_name == TARGET_PRODUCT_ORGANIZATION_NAME
+    if manifest.module_key in TRADE_ONLY_MODULE_IDS:
         return organization_name == TARGET_PRODUCT_ORGANIZATION_NAME
     return True
 

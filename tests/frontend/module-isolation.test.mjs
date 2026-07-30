@@ -292,6 +292,15 @@ const registryItems = [
     category: "business",
     denied_behavior: "show_locked",
     external_dependencies: [],
+    module_key: "b2b.wholesale",
+    required_permissions: ["b2b.wholesale.read"],
+    route_namespace: "/b2b-wholesale",
+    status: "active",
+  }),
+  manifest({
+    category: "business",
+    denied_behavior: "show_locked",
+    external_dependencies: [],
     module_key: "geo.content",
     required_permissions: ["geo.content.read"],
     route_namespace: "/geo",
@@ -614,7 +623,7 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
   assert.match(
     sidebarSource,
-    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"cs\.",\s*"geo\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
+    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"cs\.",\s*"b2b\.",\s*"geo\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
   );
   assert.match(sidebarSource, /normalized\.startsWith\("i\."\)/);
   // F/H/W 系列与产品系列同规：进组织树，且只在国际贸易组织下展示（死命令）。
@@ -1307,6 +1316,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "r.analysis",
     "f.enrichment",
     "h.site_health",
+    "b2b.wholesale",
     "geo.content",
     "w.site_ops",
     "cs.customer_service",

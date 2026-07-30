@@ -343,6 +343,42 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "b2b.wholesale.read",
+        "module_key": "b2b.wholesale",
+        "category": "business",
+        "action": "read",
+        "label": "Read wholesale catalogue",
+        "description": (
+            "View wholesale items, pricing readiness, and line sheets."
+        ),
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "b2b.wholesale.manage",
+        "module_key": "b2b.wholesale",
+        "category": "business",
+        "action": "manage",
+        "label": "Manage wholesale catalogue",
+        "description": (
+            "Set wholesale prices, MOQ, case pack, and lead times."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "b2b.wholesale.export",
+        "module_key": "b2b.wholesale",
+        "category": "business",
+        "action": "export",
+        "label": "Export wholesale line sheets",
+        "description": (
+            "Generate PDF or CSV line sheets for outbound buyers."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "geo.content.read",
         "module_key": "geo.content",
         "category": "business",

@@ -182,10 +182,23 @@ def record_result(
     job.error = error
     job.finished_at = _now()
     db.flush()
-    # 上架成功即挂进 GEO 话题簇（一类目一簇：同类目产品共享话题，绝不建重复簇）。
-    # 只建/挂簇，不生成内容——选题与生成仍要人工。包在 safely 里：
-    # GEO 侧出任何问题都不许把上架回报带崩。
+    # 上架成功即灌进 B2B 批发目录（只建待填记录，不碰人工填过的批发价）。
+    # 包在 safely 里：批发侧出任何问题都不许把上架回报带崩。
     if job.status == "success":
+        from ...b2b.wholesale.ingest_from_k import (
+            ingest_uploaded_product_safely,
+        )
+
+        woo_id: int | None = None
+        if external_product_id and external_product_id.isdigit():
+            woo_id = int(external_product_id)
+        ingest_uploaded_product_safely(
+            db,
+            k_product_id=job.product_id,
+            woo_product_id=woo_id,
+        )
+        # 上架成功即挂进 GEO 话题簇（一类目一簇：同类目产品共享话题，绝不建重复簇）。
+        # 只建/挂簇，不生成内容——选题与生成仍要人工。同样包在 safely 里。
         from ...geo_series.content.ingest_from_p import (
             ensure_geo_cluster_for_product_safely,
         )

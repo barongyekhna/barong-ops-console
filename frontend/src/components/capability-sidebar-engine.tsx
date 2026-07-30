@@ -68,6 +68,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "h.",
   "w.",
   "cs.",
+  "b2b.",
   "geo.",
   "seo.",
   "gmc.",
@@ -171,6 +172,7 @@ function isRestrictedProductModule(moduleId: string) {
     normalized.startsWith("h.") ||
     normalized.startsWith("w.") ||
     normalized.startsWith("cs.") ||
+    normalized.startsWith("b2b.") ||
     normalized.startsWith("geo.") ||
     normalized === "business.products" ||
     normalized.includes("product")

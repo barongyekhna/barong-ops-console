@@ -1,0 +1,18 @@
+.shell { display: flex; flex-direction: column; gap: 16px; }
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.tab {
+  display: flex; flex-direction: column; gap: 3px; align-items: flex-start;
+  padding: 10px 16px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(120, 170, 255, 0.2);
+  background: rgba(10, 18, 34, 0.5);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.tab[data-active="true"] {
+  border-color: rgba(111, 227, 165, 0.55);
+  background: rgba(24, 84, 60, 0.24);
+}
+.tabLabel { font-size: 14px; color: rgba(224, 236, 255, 0.95); }
+.tab[data-active="true"] .tabLabel { color: #6fe3a5; }
+.tabHint { font-size: 11px; color: rgba(190, 208, 240, 0.6); }

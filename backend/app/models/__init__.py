@@ -75,6 +75,23 @@ from ..modules.k_series.product_knowledge.models import (
     KProductKnowledgeWorkflowExecution,
 )
 from ..modules.p_series.upload.models import KCategoryWCMap, PUploadJob
+from ..modules.b2b.prospects.models import (
+    B2BProspect,
+    B2BProspectQuery,
+    B2BProspectSweep,
+    B2BTargetCity,
+)
+from ..modules.b2b.outreach.models import (
+    B2BEmailDraft,
+    B2BEmailTemplate,
+)
+from ..modules.b2b.website.models import B2BSiteSetting
+from ..modules.b2b.widget.models import B2BWidgetJob
+from ..modules.b2b.store_types.models import (
+    B2BStoreType,
+    B2BStoreTypeCategory,
+)
+from ..modules.b2b.wholesale.models import B2BWholesaleItem
 from ..modules.cs_series.models import CSMessage, CSReply
 from ..modules.w_series.shipping.models import WProductSource
 from ..modules.geo_series.monitor.models import (
@@ -155,6 +172,17 @@ __all__ = [
     "ModuleBindingRecord",
     "ModuleControlStateRecord",
     "ModuleRegistry",
+    "B2BEmailDraft",
+    "B2BEmailTemplate",
+    "B2BProspect",
+    "B2BSiteSetting",
+    "B2BProspectQuery",
+    "B2BProspectSweep",
+    "B2BStoreType",
+    "B2BStoreTypeCategory",
+    "B2BTargetCity",
+    "B2BWidgetJob",
+    "B2BWholesaleItem",
     "OperationLog",
     "OpsAlertDeliveryRecord",
     "OpsAlertRecord",

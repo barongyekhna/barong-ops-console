@@ -1,0 +1,350 @@
+/* B2B 批发目录：沿用驾驶舱皮肤的深色玻璃感，不覆盖全局样式。 */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---------- 顶部三个计数 ---------- */
+.summaryRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(120, 170, 255, 0.18);
+  border-radius: 12px;
+  background: rgba(10, 18, 34, 0.55);
+}
+
+.summaryLabel {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: rgba(198, 216, 246, 0.72);
+}
+
+.summaryValuePending,
+.summaryValueReady,
+.summaryValueReview {
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.summaryValuePending {
+  color: #ffc46b;
+}
+
+.summaryValueReady {
+  color: #6fe3a5;
+}
+
+.summaryValueReview {
+  color: #ff8f8f;
+}
+
+/* ---------- 面板 ---------- */
+.panel {
+  padding: 16px 18px 20px;
+  border: 1px solid rgba(120, 170, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(8, 14, 28, 0.5);
+}
+
+.panelHead {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.panelHead h2 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: rgba(190, 208, 240, 0.66);
+}
+
+.empty {
+  margin: 0;
+  padding: 18px 0;
+  font-size: 13px;
+  color: rgba(190, 208, 240, 0.6);
+}
+
+.error {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #ffb4b4;
+  background: rgba(120, 30, 40, 0.28);
+}
+
+.notice {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #a8e9c6;
+  background: rgba(24, 84, 60, 0.28);
+}
+
+/* ---------- 类目成熟度 ---------- */
+.catList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(90px, 1fr) 64px 92px auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(14, 24, 44, 0.55);
+}
+
+.catName {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catBarWrap {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(120, 170, 255, 0.14);
+}
+
+.catBar {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: #ffc46b;
+  transition: width 0.25s ease;
+}
+
+.catBar[data-unlocked="true"] {
+  background: #6fe3a5;
+}
+
+.catCount {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(198, 216, 246, 0.8);
+}
+
+/* ---------- 徽标 ---------- */
+.badgeOk,
+.badgeLocked,
+.badgePending {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.badgeOk {
+  color: #6fe3a5;
+  background: rgba(30, 96, 68, 0.36);
+}
+
+.badgeLocked,
+.badgePending {
+  color: #ffc46b;
+  background: rgba(112, 76, 20, 0.36);
+}
+
+/* ---------- 工具条 ---------- */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.searchInput,
+.filterSelect {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(120, 170, 255, 0.22);
+  border-radius: 8px;
+  font-size: 13px;
+  color: inherit;
+  background: rgba(10, 18, 34, 0.7);
+}
+
+.searchInput {
+  min-width: 190px;
+}
+
+.primaryButton,
+.ghostButton,
+.exportSmall {
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.primaryButton {
+  border: 1px solid rgba(111, 227, 165, 0.5);
+  color: #0b1a12;
+  background: #6fe3a5;
+}
+
+.ghostButton,
+.exportSmall {
+  border: 1px solid rgba(120, 170, 255, 0.3);
+  color: rgba(212, 228, 252, 0.9);
+  background: transparent;
+}
+
+.exportSmall {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.primaryButton:disabled,
+.ghostButton:disabled,
+.exportSmall:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* ---------- 表格 ---------- */
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(190, 208, 240, 0.66);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(120, 170, 255, 0.16);
+}
+
+.table td {
+  padding: 10px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(120, 170, 255, 0.08);
+}
+
+.table tr[data-dirty="true"] {
+  background: rgba(112, 76, 20, 0.16);
+}
+
+.productCell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 220px;
+}
+
+.sku {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: rgba(160, 200, 255, 0.95);
+}
+
+.productName {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.catPath {
+  font-size: 11px;
+  color: rgba(190, 208, 240, 0.55);
+}
+
+.reviewFlag {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #ff9f9f;
+}
+
+.msrpCell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.marginCell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 毛利低于 40% 标黄:批发常规是零售价一半左右,太低说明定价有问题。 */
+.marginCell span[data-thin="true"] {
+  color: #ffc46b;
+}
+
+.numInput,
+.numInputSmall {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(120, 170, 255, 0.24);
+  border-radius: 7px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  background: rgba(10, 18, 34, 0.75);
+}
+
+.numInput {
+  width: 96px;
+}
+
+.numInputSmall {
+  width: 72px;
+}
+
+.numInput::placeholder,
+.numInputSmall::placeholder {
+  color: rgba(255, 196, 107, 0.55);
+}
+
+@media (max-width: 900px) {
+  .summaryRow {
+    grid-template-columns: 1fr;
+  }
+
+  .catRow {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

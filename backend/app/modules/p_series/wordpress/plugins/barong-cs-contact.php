@@ -22,7 +22,9 @@ add_action( 'init', function () {
 
 /** 表单渲染:短代码 [barong_contact_form channel="retail|wholesale"] */
 add_shortcode( 'barong_contact_form', function ( $atts ) {
-	$atts    = shortcode_atts( array( 'channel' => 'retail' ), $atts );
+	// sku 由产品页 B2B 浮窗传入（[barong_contact_form channel="wholesale" sku="…"]）。
+	// 原来没在 shortcode_atts 里声明，被静默丢弃，询盘里看不出对方在看哪个产品。
+	$atts    = shortcode_atts( array( 'channel' => 'retail', 'sku' => '' ), $atts );
 	$channel = ( 'wholesale' === $atts['channel'] ) ? 'wholesale' : 'retail';
 	$uid     = 'bycs-' . wp_generate_password( 6, false, false );
 	$is_b2b  = ( 'wholesale' === $channel );

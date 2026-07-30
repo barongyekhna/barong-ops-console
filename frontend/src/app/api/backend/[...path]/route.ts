@@ -1290,6 +1290,166 @@ function isAllowedHPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedB2bPath(method: string, path: string[]) {
+  if (path[0] !== "b2b") {
+    return false;
+  }
+  // GET  /b2b/wholesale/items            列表
+  // PATCH /b2b/wholesale/items           批量填写
+  if (path.length === 3 && path[1] === "wholesale" && path[2] === "items") {
+    return method === "GET" || method === "PATCH";
+  }
+  // PATCH /b2b/wholesale/items/{id}      单条填写
+  if (
+    path.length === 4 &&
+    path[1] === "wholesale" &&
+    path[2] === "items" &&
+    isUuidPathSegment(path[3])
+  ) {
+    return method === "PATCH";
+  }
+  // GET /b2b/wholesale/category-readiness  类目 30 品挖客门禁
+  if (
+    path.length === 3 &&
+    path[1] === "wholesale" &&
+    path[2] === "category-readiness"
+  ) {
+    return method === "GET";
+  }
+  // POST /b2b/wholesale/line-sheet       导出 PDF / CSV
+  if (
+    path.length === 3 &&
+    path[1] === "wholesale" &&
+    path[2] === "line-sheet"
+  ) {
+    return method === "POST";
+  }
+  // ---- 客户挖掘 ----
+  // GET  /b2b/prospects                  候选客户列表
+  // GET  /b2b/prospect-queries           查询模板
+  // POST /b2b/prospect-queries           新增模板
+  // GET  /b2b/target-cities              城市清单
+  // GET  /b2b/prospect-quota             今日额度
+  // POST /b2b/prospect-sweep             跑一批抓取
+  if (path.length === 2) {
+    if (path[1] === "prospects" || path[1] === "target-cities") {
+      return method === "GET";
+    }
+    if (path[1] === "prospect-quota") {
+      return method === "GET";
+    }
+    if (path[1] === "prospect-queries") {
+      return method === "GET" || method === "POST";
+    }
+    if (path[1] === "prospect-sweep") {
+      return method === "POST";
+    }
+    // POST /b2b/prospect-screen        机器读官网自动筛一批
+    if (path[1] === "prospect-screen") {
+      return method === "POST";
+    }
+  }
+  // POST /b2b/prospect-config/seed       灌入默认模板和城市
+  if (
+    path.length === 3 &&
+    path[1] === "prospect-config" &&
+    path[2] === "seed"
+  ) {
+    return method === "POST";
+  }
+  // PATCH /b2b/prospects/{id}/review     人工审核
+  if (
+    path.length === 4 &&
+    path[1] === "prospects" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "review"
+  ) {
+    return method === "PATCH";
+  }
+
+  // POST /b2b/wholesale/ingest           手动补灌
+  // POST /b2b/wholesale/backfill         回灌钩子上线前就已上架的产品
+  if (
+    path.length === 3 &&
+    path[1] === "wholesale" &&
+    (path[2] === "ingest" || path[2] === "backfill")
+  ) {
+    return method === "POST";
+  }
+  // ---- 批发主页（控制台生成 /wholesale/ 与店型子页）----
+  if (path.length === 3 && path[1] === "website") {
+    if (path[2] === "publish") return method === "POST";
+    if (path[2] === "status") return method === "GET";
+  }
+  // ---- 产品页批发小窗 ----
+  // POST /b2b/widget-push    一键重推全部（政策文案改了用）
+  // GET  /b2b/widget-jobs    最近的推送记录
+  if (path.length === 2 && path[1] === "widget-push") {
+    return method === "POST";
+  }
+  if (path.length === 2 && path[1] === "widget-jobs") {
+    return method === "GET";
+  }
+  // ---- 开发信（模板库 + 草稿箱；系统永不自动发送）----
+  // GET /b2b/email-templates          模板清单
+  // GET /b2b/email-drafts             草稿箱
+  if (
+    path.length === 2 &&
+    (path[1] === "email-templates" || path[1] === "email-drafts")
+  ) {
+    return method === "GET";
+  }
+  // POST  /b2b/email-templates/seed       灌入内置模板
+  // POST  /b2b/email-drafts/generate      生成草稿
+  // PATCH /b2b/email-templates/{id}       改模板
+  // PATCH /b2b/email-drafts/{id}          改草稿 / 标记已发
+  if (path.length === 3 && path[1] === "email-templates") {
+    if (path[2] === "seed") return method === "POST";
+    return isUuidPathSegment(path[2]) && method === "PATCH";
+  }
+  if (path.length === 3 && path[1] === "email-drafts") {
+    if (path[2] === "generate") return method === "POST";
+    return isUuidPathSegment(path[2]) && method === "PATCH";
+  }
+  // POST /b2b/prospect-emails/backfill    抓官网补邮箱（免费）
+  if (
+    path.length === 3 &&
+    path[1] === "prospect-emails" &&
+    path[2] === "backfill"
+  ) {
+    return method === "POST";
+  }
+  // ---- 店型（B2B 的主键：挖客户/发信/出图册都按店型走）----
+  // GET  /b2b/store-types                店型清单 + 成熟度
+  // POST /b2b/store-types                新建店型
+  if (path.length === 2 && path[1] === "store-types") {
+    return method === "GET" || method === "POST";
+  }
+  // PATCH  /b2b/store-types/{key}        改名/开跑/停跑
+  // DELETE /b2b/store-types/{key}        删除
+  if (path.length === 3 && path[1] === "store-types") {
+    return method === "PATCH" || method === "DELETE";
+  }
+  // POST /b2b/store-types/{key}/categories   挂类目前缀
+  if (
+    path.length === 4 &&
+    path[1] === "store-types" &&
+    path[3] === "categories"
+  ) {
+    return method === "POST";
+  }
+  // DELETE /b2b/store-types/{key}/categories/{id}   摘掉类目前缀
+  if (
+    path.length === 5 &&
+    path[1] === "store-types" &&
+    path[3] === "categories" &&
+    isUuidPathSegment(path[4])
+  ) {
+    return method === "DELETE";
+  }
+  return false;
+}
+
 function isAllowedCsPath(method: string, path: string[]) {
   if (path[0] !== "cs") {
     return false;
@@ -2108,6 +2268,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedIPath(method, path) ||
     isAllowedFPath(method, path) ||
     isAllowedHPath(method, path) ||
+    isAllowedB2bPath(method, path) ||
     isAllowedCsPath(method, path) ||
     isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||

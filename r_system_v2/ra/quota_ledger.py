@@ -33,6 +33,12 @@ PROVIDER_F_1688_APP_CALLS = "f_1688_app_calls"
 # F 图搜接力台账：只记数不设闸（用户 2026-07-14 拍板——F 半年用不上两次，
 # 不限量；CPS credit 池的真正守门人是"凑够即停"early-stop）。
 PROVIDER_F_1688_IMAGE_SEARCH = "f_1688_image_search"
+# B2B 客户挖掘走 Serper 的 Places(谷歌地图)接口找实体店。独立额度桶,
+# 不和 R-A/F 抢——它们是选品链路,断了影响上品;这条是获客,可以慢慢跑。
+PROVIDER_B2B_SERPER_PLACES = "b2b_serper_places"
+# B2B 客户筛选:补官网用的 Serper 网页搜索。和 places 分桶,方便看清
+# 「抓店铺」和「筛店铺」各烧了多少。铁律:新出网付费调用当天接台账。
+PROVIDER_B2B_SERPER_ENRICH = "b2b_serper_enrich"
 # GEO 阵地监测:每条买家问句一次 Serper 自然搜索。按类目监测而非逐 SKU,
 # 所以量随类目走不随产品数涨;新出网调用当天接台账(2026-07-22 Serper 事故的死规矩)。
 PROVIDER_GEO_SERPER_MONITOR = "geo_serper_monitor"
@@ -46,6 +52,8 @@ DEFAULT_DAILY_BUDGETS = {
     PROVIDER_GOOGLE_ADS_PLANNER: 13500,
     PROVIDER_F_1688_APP_CALLS: 10000,
     PROVIDER_F_1688_IMAGE_SEARCH: 0,
+    PROVIDER_B2B_SERPER_PLACES: 1000,
+    PROVIDER_B2B_SERPER_ENRICH: 500,
     # 一个类目一轮约 10-20 条问句,每周跑一次绰绰有余;
     # 上限压得低,是因为监测永远不该成为烧钱的那一路。
     PROVIDER_GEO_SERPER_MONITOR: 200,
@@ -60,6 +68,8 @@ BUDGET_ENV_NAMES = {
     PROVIDER_GOOGLE_ADS_PLANNER: "RA_GOOGLE_ADS_PLANNER_DAILY_BUDGET",
     PROVIDER_F_1688_APP_CALLS: "F_1688_APP_CALLS_DAILY_BUDGET",
     PROVIDER_F_1688_IMAGE_SEARCH: "F_1688_IMAGE_SEARCH_DAILY_BUDGET",
+    PROVIDER_B2B_SERPER_PLACES: "B2B_SERPER_DAILY_BUDGET",
+    PROVIDER_B2B_SERPER_ENRICH: "B2B_SERPER_ENRICH_DAILY_BUDGET",
     PROVIDER_GEO_SERPER_MONITOR: "GEO_SERPER_MONITOR_DAILY_BUDGET",
 }
 

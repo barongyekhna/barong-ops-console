@@ -1,6 +1,7 @@
 import {
   Activity,
   Bot,
+  Briefcase,
   Building2,
   Boxes,
   CircleAlert,
@@ -160,6 +161,17 @@ export const navigationGroups: NavigationGroup[] = [
         module_key: "h.site_health",
         required_permission: "h.site_health.read",
         route_namespace: "/h-site-health",
+        status: "active",
+      },
+      {
+        category: "business",
+        denied_behavior: "show_locked",
+        href: "/b2b-wholesale",
+        icon: Briefcase,
+        label: "B2B 业务",
+        module_key: "b2b.wholesale",
+        required_permission: "b2b.wholesale.read",
+        route_namespace: "/b2b-wholesale",
         status: "active",
       },
       {

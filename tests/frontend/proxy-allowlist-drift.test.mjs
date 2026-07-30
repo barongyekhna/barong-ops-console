@@ -46,6 +46,13 @@ const KNOWN_UNPROXIED = new Set([
   "POST /api/app/geo/publishes/{job_id}/result",
   "GET /api/app/geo/backlinks/{job_id}/package",
   "POST /api/app/geo/backlinks/{job_id}/result",
+  // B2B 产品页小窗：n8n 拉包 + 回报，一单一钥 token 鉴权。
+  // 走裸挂载的路由，浏览器永远不该碰到——所以刻意不进代理白名单。
+  "GET /api/app/b2b/widget-jobs/{job_id}/package",
+  "POST /api/app/b2b/widget-jobs/{job_id}/result",
+  // B2B 批发页每日重发：n8n 定时打，共享密钥鉴权（H 哨兵同款）。
+  // 人要重发走 /b2b/website/publish（带会话）——这条只给机器，不进白名单。
+  "POST /api/app/b2b/website/republish",
   "GET /api/app/p/jobs/{job_id}/media/{asset_id}/file",
   // W-S sync callbacks, Woo order ingest and 17TRACK updates are server-to-server only.
   "POST /api/app/w/sync/{job_id}/result",

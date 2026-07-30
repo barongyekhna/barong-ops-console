@@ -254,6 +254,11 @@ def _process_inbound(
             return status.HTTP_503_SERVICE_UNAVAILABLE
 
         message_id = str(row.id)
+        # 批发渠道的询盘顺手落进 B2B 线索池（和 P 上架成功后灌批发目录同套路）。
+        # 包在 safely 里：B2B 出问题绝不许把客服消息带崩。
+        from ..b2b.inbound_bridge import ingest_wholesale_inquiry_safely
+
+        ingest_wholesale_inquiry_safely(db, row)
         try:
             _emit_inbound_notification(db, row)
             db.commit()

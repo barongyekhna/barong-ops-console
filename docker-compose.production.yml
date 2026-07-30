@@ -61,6 +61,7 @@ services:
       N8N_P_UPLOAD_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-p-upload"
       N8N_GEO_PUBLISH_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-geo-publish"
       N8N_GEO_BACKLINK_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-geo-backlink"
+      N8N_B2B_WIDGET_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-b2b-widget"
       # W-S 物流：模板/单号同步派单 + 订单 ingest 鉴权（n8n 侧工作流用同一 token）
       N8N_W_SYNC_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-w-shipping"
       W_ORDERS_INGEST_TOKEN: "XDDlIDdhCupSE3Fs2Bkd9tYC6Pg-YbkyuI8f7NQRsiY"
@@ -70,6 +71,10 @@ services:
       N8N_H_HEALTH_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-h-sitehealth"
       H_INGEST_TOKEN: "fzL94VyhMsEyYNlQqLYy0nXMYBeqm1KRgTC-xYlK3HA"
       H_CALLBACK_BASE: "http://console_backend:8000"
+      # B2B 批发页每日重发（n8n barongB2Brepublish001 用同一个 token）。
+      # 作用：把用户在 WP 里手动发布的新指南捞上批发页——控制台不知道那个
+      # 动作何时发生，只能定期回去核一遍。没配这个值端点就一律 403。
+      B2B_REPUBLISH_TOKEN: "SBTs5846I6NVLjpmLTjDC_ChepxGDr2rjFZEwj6nZTc"
       # Google Ads gate 状态与额度显示要和 r-a-worker 一致（设置页/额度页读这里）。
       RA_GOOGLE_ADS_BASIC_REVIEW_STATUS: "approved"
       RA_GOOGLE_ADS_ENABLE_REAL_CALLS: "true"

@@ -1,0 +1,160 @@
+/* B2B 客户挖掘：沿用驾驶舱深色玻璃感。 */
+.workspace { display: flex; flex-direction: column; gap: 18px; }
+
+.summaryRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.summaryCard {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 14px 16px; border-radius: 12px;
+  border: 1px solid rgba(120, 170, 255, 0.18);
+  background: rgba(10, 18, 34, 0.55);
+}
+.summaryLabel {
+  font-size: 12px; letter-spacing: 0.06em;
+  color: rgba(198, 216, 246, 0.72);
+}
+.valueNew, .valueOk, .valueMuted {
+  font-size: 26px; font-weight: 600; line-height: 1;
+}
+.valueNew { color: #ffc46b; }
+.valueOk { color: #6fe3a5; }
+.valueMuted { color: rgba(198, 216, 246, 0.5); }
+
+.quotaBarWrap {
+  height: 7px; border-radius: 99px; overflow: hidden;
+  background: rgba(120, 170, 255, 0.14);
+}
+.quotaBar {
+  display: block; height: 100%; border-radius: 99px;
+  background: #6fe3a5; transition: width 0.25s ease;
+}
+.quotaBar[data-hot="true"] { background: #ff8f8f; }
+
+.panel {
+  padding: 16px 18px 20px; border-radius: 14px;
+  border: 1px solid rgba(120, 170, 255, 0.16);
+  background: rgba(8, 14, 28, 0.5);
+}
+.panelHead { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.panelHead h2 { margin: 0; font-size: 16px; letter-spacing: 0.04em; }
+.hint { margin: 0; font-size: 12px; line-height: 1.6; color: rgba(190, 208, 240, 0.66); }
+.empty { margin: 0; padding: 18px 0; font-size: 13px; color: rgba(190, 208, 240, 0.6); }
+.queryCount { margin: 0; font-size: 12px; color: rgba(190, 208, 240, 0.66); }
+
+.error {
+  margin: 0 0 10px; padding: 9px 12px; border-radius: 8px;
+  font-size: 13px; color: #ffb4b4; background: rgba(120, 30, 40, 0.28);
+}
+.notice {
+  margin: 0 0 10px; padding: 9px 12px; border-radius: 8px;
+  font-size: 13px; color: #a8e9c6; background: rgba(24, 84, 60, 0.28);
+}
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.select, .numInput {
+  height: 34px; padding: 0 10px; border-radius: 8px; font-size: 13px;
+  color: inherit; background: rgba(10, 18, 34, 0.7);
+  border: 1px solid rgba(120, 170, 255, 0.22);
+}
+.numInput { width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.numLabel {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: rgba(198, 216, 246, 0.8);
+}
+
+.primaryButton, .ghostButton, .approveButton {
+  height: 34px; padding: 0 14px; border-radius: 8px;
+  font-size: 13px; cursor: pointer;
+}
+.primaryButton {
+  border: 1px solid rgba(111, 227, 165, 0.5);
+  color: #0b1a12; background: #6fe3a5;
+}
+.ghostButton {
+  border: 1px solid rgba(120, 170, 255, 0.3);
+  color: rgba(212, 228, 252, 0.9); background: transparent;
+}
+.primaryButton:disabled, .ghostButton:disabled, .approveButton:disabled {
+  cursor: not-allowed; opacity: 0.4;
+}
+
+.cardList { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.card {
+  display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
+  padding: 12px 14px; border-radius: 10px;
+  background: rgba(14, 24, 44, 0.55);
+}
+.cardMain { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.cardTop { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; }
+.storeName { font-size: 14px; }
+.place { font-size: 12px; color: rgba(190, 208, 240, 0.66); }
+.cardMeta {
+  display: flex; flex-wrap: wrap; gap: 12px;
+  font-size: 12px; color: rgba(198, 216, 246, 0.78);
+}
+.link { color: #8fc2ff; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.muted { color: rgba(190, 208, 240, 0.45); }
+.emailOk { color: #6fe3a5; }
+.tag {
+  padding: 2px 8px; border-radius: 99px; font-size: 11px;
+  color: rgba(160, 200, 255, 0.95); background: rgba(40, 74, 128, 0.45);
+}
+.rejectReason { font-size: 11px; color: #ff9f9f; }
+
+.cardActions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+.approveButton {
+  border: 1px solid rgba(111, 227, 165, 0.5);
+  color: #0b1a12; background: #6fe3a5;
+}
+.rejectSelect {
+  height: 34px; padding: 0 8px; border-radius: 8px; font-size: 13px;
+  color: rgba(212, 228, 252, 0.9); background: transparent;
+  border: 1px solid rgba(255, 143, 143, 0.4);
+}
+.statusTag {
+  flex-shrink: 0; padding: 3px 10px; border-radius: 99px; font-size: 11px;
+  color: rgba(198, 216, 246, 0.7); background: rgba(120, 170, 255, 0.12);
+}
+.statusTag[data-status="approved"] { color: #6fe3a5; background: rgba(30, 96, 68, 0.36); }
+
+@media (max-width: 900px) {
+  .summaryRow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { flex-direction: column; }
+}
+
+.chainHint {
+  align-self: flex-start;
+  padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; color: #ffc46b; background: rgba(112, 76, 20, 0.32);
+}
+.mapsLink {
+  align-self: flex-start;
+  margin-top: 2px; padding: 4px 10px; border-radius: 7px;
+  font-size: 12px; text-decoration: none;
+  color: #8fc2ff; background: rgba(40, 74, 128, 0.32);
+  border: 1px solid rgba(120, 170, 255, 0.3);
+}
+.mapsLink:hover { background: rgba(40, 74, 128, 0.5); }
+
+/* 自动筛选结论：用户只读这一块，原始数据退居次要。 */
+.screenBox {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  padding: 9px 12px; border-radius: 10px;
+  border: 1px solid rgba(120, 170, 255, 0.2);
+  background: rgba(10, 18, 34, 0.6);
+}
+.screenBox[data-verdict="fit"] {
+  border-color: rgba(111, 227, 165, 0.45); background: rgba(24, 84, 60, 0.24);
+}
+.screenBox[data-verdict="unfit"] {
+  border-color: rgba(255, 140, 140, 0.35); background: rgba(90, 26, 32, 0.24);
+}
+.screenBox[data-verdict="unsure"] {
+  border-color: rgba(255, 196, 107, 0.35); background: rgba(90, 62, 18, 0.22);
+}
+.verdictTag { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.screenReason { font-size: 13px; line-height: 1.6; color: rgba(214, 228, 250, 0.9); }
