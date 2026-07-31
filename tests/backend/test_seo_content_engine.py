@@ -362,6 +362,19 @@ def test_rank_monitoring_reuses_geo_tables_instead_of_a_second_set() -> None:
 # ---------------------------------------------------------------- 依赖方向
 
 
+def test_content_links_is_an_aggregator_above_the_series() -> None:
+    """content_core 在**下面**(被 geo/seo 依赖),content_links 在**上面**
+    (依赖 geo/seo)。方向相反,所以不能塞进同一个包——
+    2026-07-31 把链接图放进 content_core，被下面那条依赖方向测试当场抓住。"""
+    from pathlib import Path
+
+    text = Path("backend/app/modules/content_links/link_graph.py").read_text()
+    assert "geo_series" in text and "seo_series" in text  # 它就是要依赖上层
+    # 但必须**函数内**惰性导入,否则和各系列的触发点互相成环
+    assert "\nfrom ..geo_series" not in text
+    assert "\nfrom ..seo_series" not in text
+
+
 def test_content_core_never_imports_a_series() -> None:
     """共享底座反过来依赖某个系列,就不再是底座了。"""
     from pathlib import Path
@@ -697,3 +710,230 @@ def test_product_links_use_the_real_permalink() -> None:
     src = inspect.getsource(links._product_links)
     assert "latest_public_url" in src
     assert "pretty or f" in src  # 真链接优先，?p= 只是兜底
+
+
+# ===================================================================
+# 链接图（整套自动化的核心）
+# ===================================================================
+
+
+def test_link_map_is_keyed_by_post_id_not_wp_term_id() -> None:
+    """B2B 那套用 WP 分类 term id 做键，因为 GEO 指南的分类**就是**谷歌类目。
+    但 SEO 文章故意不落谷歌类目（落了会被 barong-geo-archive 连坐排除出博客归档），
+    它们拿到的是**体裁分类**（6 个）。照抄 term id 会让一个体裁下所有文章
+    拿到同一批产品卡片。"""
+    import inspect
+
+    from backend.app.modules.content_links import link_graph
+
+    src = inspect.getsource(link_graph._live_articles)
+    assert "wp_post_id" in src
+    assert "str(item.wp_post_id)" in src
+    # 只收线上真可见的
+    assert 'wp_status == "publish"' in src
+
+
+def test_link_map_is_deterministic() -> None:
+    """指纹短路（"内容没变就一个字节都不发"）只在图完全确定时才有意义。
+    任何不稳定排序都会让指纹每次都变 → 每 15 分钟往 WP 写一次，护栏形同虚设。"""
+    import inspect
+
+    from backend.app.modules.content_links import link_graph
+
+    src = inspect.getsource(link_graph.build_link_map)
+    assert "sorted(" in src
+    canon = inspect.getsource(link_graph.canonical_json)
+    assert "sort_keys=True" in canon
+    # 内部绝不放时间戳
+    assert "内部绝不放时间戳" in canon
+
+
+def test_link_map_never_carries_a_price() -> None:
+    """GMC 因为"页面价 ≠ feed 价"封过两次，只剩一次申诉。
+    文章页出现产品价格 = 又开一个价格面。契约层就不放这个字段。"""
+    import inspect
+
+    from backend.app.modules.content_links import link_graph
+
+    src = inspect.getsource(link_graph)
+    assert "绝不放价格" in src
+    built = inspect.getsource(link_graph.build_link_map)
+    for forbidden in ("price", "regular_price", "sale_price"):
+        assert f'"{forbidden}"' not in built
+
+
+def test_link_map_caps_links_per_post() -> None:
+    from backend.app.modules.content_links import link_graph
+
+    assert link_graph.MAX_PRODUCTS_PER_POST == 3
+    assert link_graph.MAX_GUIDES_PER_POST == 3
+    assert link_graph.MAX_FACTORY_PER_POST == 3
+
+
+def test_token_matched_cards_are_flagged_for_human_review() -> None:
+    """词面匹配现在变成一张带图大卡片，猜错的代价比一行小字大得多
+    （2026-07-30「包子捏捏挂到户外店批发文」）。至少要让人能扫一眼。"""
+    import inspect
+
+    from backend.app.modules.content_links import link_graph
+
+    pick = inspect.getsource(link_graph._pick_products)
+    assert "overlap >= 2" in pick  # 一个通用词的重合不构成相关
+    assert '"tokens"' in pick and '"category"' in pick
+    assert "token_matched" in inspect.getsource(link_graph.summarize)
+
+
+def test_link_map_only_normalizes_cards_that_are_actually_used() -> None:
+    """卡片只存一份，posts 里放 id 引用。这个 JSON 要塞进一个 WP option，
+    大小直接决定站点快慢。"""
+    import inspect
+
+    from backend.app.modules.content_links import link_graph
+
+    src = inspect.getsource(link_graph.build_link_map)
+    assert "used_products" in src
+    assert "别把整个目录塞进 option" in src
+
+
+def test_push_has_all_four_guardrails() -> None:
+    """指纹短路 / 15 分钟间隔 / dirty 标志 / 出网前放事务——缺一条都会出事。"""
+    import inspect
+
+    from backend.app.modules.content_links import link_push
+
+    push = inspect.getsource(link_push.push_link_map)
+    # ① 指纹短路
+    assert "new_fingerprint == _get(db, FINGERPRINT_KEY)" in push
+    assert "内容没有变化，未推送" in push
+    # ④ 出网前放掉事务
+    assert push.index("db.commit()") < push.index("_resolve_credentials")
+
+    due = inspect.getsource(link_push.refresh_if_due)
+    # ② 间隔，手动不受限
+    assert "if manual:" in due
+    assert "_waited_long_enough" in due
+    # ③ 被挡下要置 dirty
+    assert 'DIRTY_KEY, "1"' in due
+    assert "丢掉最后几个" in due
+
+    assert link_push.MIN_LINK_MAP_INTERVAL_MINUTES == 15
+
+
+def test_push_failure_marks_dirty_so_it_retries() -> None:
+    import inspect
+
+    from backend.app.modules.content_links import link_push
+
+    src = inspect.getsource(link_push.push_link_map)
+    assert src.index("推送失败") > src.index('DIRTY_KEY, "1"') or 'DIRTY_KEY, "1"' in src
+    # 挂在回报里的版本绝不许把回报带崩
+    assert "except Exception" in inspect.getsource(link_push.refresh_link_map_safely)
+
+
+# ===================================================================
+# barong-content-cta 瘦插件（本地 bywp2 已跑通九条清单）
+# ===================================================================
+
+
+def _cta_plugin_source() -> str:
+    from pathlib import Path
+
+    return Path(
+        "backend/app/modules/content_links/wordpress/plugins/barong-content-cta.php"
+    ).read_text()
+
+
+def test_cta_plugin_option_name_matches_the_console() -> None:
+    """跨文件断言。option 名一旦漂移，控制台推的东西插件读不到，
+    而且两边各自都"看起来对"——这是唯一能真正抓住这种漂移的测试。"""
+    from backend.app.modules.content_links.link_push import (
+        CTA_STYLE_OPTION,
+        LINK_MAP_OPTION,
+    )
+
+    php = _cta_plugin_source()
+    assert f"'{LINK_MAP_OPTION}'" in php
+    assert f"'{CTA_STYLE_OPTION}'" in php
+
+
+def test_cta_plugin_never_shows_a_price_or_schema() -> None:
+    """GMC 因为「页面价 ≠ feed 价」封过两次，只剩一次申诉。
+    文章页出现产品价格 = 又开一个价格面。结构化数据只能从产品页出。"""
+    import re
+
+    # 把注释剥掉再查——文件头正是在解释"绝不出现这些",别把说明当违规
+    # （2026-07-31 第一版断言就这么自己绊了自己）。
+    php = _cta_plugin_source()
+    php = re.sub(r"/\*.*?\*/", "", php, flags=re.S)
+    php = re.sub(r"^\s*//.*$", "", php, flags=re.M)
+    for forbidden in ("regular_price", "sale_price", "itemprop", "schema.org"):
+        assert forbidden not in php.lower()
+
+
+def test_cta_plugin_does_not_render_wholesale_links() -> None:
+    """b2b 插件已经在 the_content @20 渲染批发那一行。两边都渲染就出现两遍。"""
+    import re
+
+    php = _cta_plugin_source()
+    php = re.sub(r"/\*.*?\*/", "", php, flags=re.S)
+    php = re.sub(r"^\s*//.*$", "", php, flags=re.M)
+    assert "wholesale" not in php.lower()
+
+
+def test_cta_plugin_hook_priorities_avoid_the_b2b_one() -> None:
+    """阅读顺序：正文 → 产品卡片(15) → 相关内容(18) → 批发(b2b 的 20)。
+    本地 bywp2 三方实测通过。"""
+    php = _cta_plugin_source()
+    assert "'by_cta_product_card', 15" in php
+    assert "'by_cta_related_links', 18" in php
+    assert ", 20 )" not in php.replace("'by_cta_ensure_autoload_off', 20", "")
+
+
+def test_cta_plugin_guards_and_reentrancy() -> None:
+    """the_content 一个请求会被摘要 / 相关文章 / SEO 插件触发多次。"""
+    php = _cta_plugin_source()
+    assert php.count("static $done = false;") == 2  # 两个 filter 各一个闩
+    assert "static $printed = false;" in php  # 样式只输出一次
+    for guard in ("is_admin()", "REST_REQUEST", "DOING_CRON", "is_feed()",
+                  "is_singular( 'post' )", "in_the_loop()", "is_main_query()"):
+        assert guard in php
+
+
+def test_cta_plugin_turns_autoload_off_only_after_the_option_exists() -> None:
+    """option 还不存在时 wp_set_option_autoload 无事可做。这时候落闩，
+    以后控制台第一次推送创建它会带着 autoload=yes 永远关不掉——
+    几十 KB 的链接图在每个请求里被加载。2026-07-31 本地实测踩到。"""
+    php = _cta_plugin_source()
+    assert "wp_set_option_autoload" in php
+    assert "false === get_option( BY_CTA_LINKS_OPTION, false )" in php
+
+
+def test_cta_plugin_uses_the_attachment_id_for_zero_cls() -> None:
+    """附件 id 能出 srcset / width / height / loading=lazy，而且走 WP 已生成的
+    缩略图——不会把 2000px 原图塞进 300px 卡片。附件被删才降级到原始 URL。"""
+    php = _cta_plugin_source()
+    assert "wp_get_attachment_image(" in php
+    assert "wp_attachment_is_image(" in php
+    assert "loading=\"lazy\"" in php or "'loading' => 'lazy'" in php
+
+
+def test_cta_plugin_degrades_to_nothing_on_bad_data() -> None:
+    """坏 JSON / 空 option → 什么都不渲染（**不是空盒子**）。本地实测通过。"""
+    php = _cta_plugin_source()
+    assert "is_array( $parsed ) ? $text : ''" in php
+    assert "if ( '' === $html ) {" in php
+
+
+def test_cta_plugin_strips_legacy_inline_blocks() -> None:
+    """老文章正文里还留着早期直接拼进去的链接块。在渲染时摘掉，
+    不用把所有文章重发一遍（重发要过审阅状态门）。"""
+    php = _cta_plugin_source()
+    assert "barong-seo-links" in php
+    assert "preg_replace" in php
+
+
+def test_cta_plugin_has_a_sentinel_ping() -> None:
+    """插件被停用 = 全站文章的卡片一次性消失，必须能在哨兵面板看见。"""
+    php = _cta_plugin_source()
+    assert "by-cta-ping" in php
+    assert "hash_equals" in php

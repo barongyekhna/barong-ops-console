@@ -97,6 +97,7 @@ from ..modules.b2b.store_types.models import (
 from ..modules.b2b.wholesale.models import B2BWholesaleItem
 from ..modules.cs_series.models import CSMessage, CSReply
 from ..modules.w_series.shipping.models import WProductSource
+from ..modules.content_links.models import ContentLinkSetting
 from ..modules.content_core.facts.models import (
     ContentFactUsage,
     CraftFact,
@@ -160,6 +161,7 @@ __all__ = [
     "ExecutionResultRecord",
     "EventStreamRecord",
     "ContentFactUsage",
+    "ContentLinkSetting",
     "CraftFact",
     "GeoMinedQuestion",
     "SeoContentItem",

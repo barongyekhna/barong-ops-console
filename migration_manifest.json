@@ -2,10 +2,10 @@
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
   "generated_at": "2026-06-17T00:00:00Z",
   "environment": "staging",
-  "alembic_head": "20260730_01_geo_mined_questions",
-  "expected_alembic_head": "20260730_01_geo_mined_questions",
+  "alembic_head": "20260731_01_content_link_settings",
+  "expected_alembic_head": "20260731_01_content_link_settings",
   "head_locked": true,
-  "migration_count": 94,
+  "migration_count": 95,
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -100,10 +100,11 @@
     "20260729_13_b2b_suppressions",
     "20260729_14_b2b_documents",
     "20260729_15_b2b_orders_and_credits",
-    "20260730_01_geo_mined_questions"
+    "20260730_01_geo_mined_questions",
+    "20260731_01_content_link_settings"
   ],
-  "migration_order_checksum": "78c03cc780699774c41b346ebf3a90de2ee5a46416648e191bc891e4973e53cc",
-  "migration_hash": "75aef7a520a223d4cb940dcf5a5cfb5fa106993925686c8c4bacfa5bcdbdf31b",
+  "migration_order_checksum": "40d2ec88cf51525470e6e40a666964a27437e7c7e44c3ded5847bfd525e7c2e7",
+  "migration_hash": "970c2ac1260d211b582b019a73de269197ead5666b868b9444e6d4cbf5b3478a",
   "migrations": [
     {
       "version": "f07_core_001",
@@ -762,6 +763,13 @@
       "path": "backend/alembic/versions/20260730_01_geo_mined_questions.py",
       "checksum": "e3b4af1f854b86aaef3588917af25472a0cdf29fcdb93cae049b112c955c0031",
       "applied_at": "2026-07-30T00:00:00Z"
+    },
+    {
+      "version": "20260731_01_content_link_settings",
+      "down_revision": "20260730_01_geo_mined_questions",
+      "path": "backend/alembic/versions/20260731_01_content_link_settings.py",
+      "checksum": "8a546973f15a8e5b2b2570a0da0df4605e7135a7463eea28f3271a89b7191370",
+      "applied_at": "2026-07-31T00:00:00Z"
     }
   ]
 }
