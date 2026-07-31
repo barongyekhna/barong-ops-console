@@ -813,6 +813,32 @@ def _append_related_guides_section(
     return apply_guides_block(description_html, build_guides_block(guides))
 
 
+def _append_factory_section(
+    description_html: str,
+    product_id: Any,
+    product_key: str | None,
+    db: Session,
+) -> str:
+    """Rail 2b: 产品页 → 工艺文。
+
+    与 rail 2 同规——块的拼装来自 ``seo_series.content.product_backlink``,因为
+    反链派单会在**同一个线上产品**上重写这个块。两个生产者产出必须逐字一致,
+    否则每次刷新都会互相覆盖。
+    """
+    from ...seo_series.content.product_backlink import factory_block_for_product
+
+    try:
+        block = factory_block_for_product(
+            db, product_id=product_id, product_key=product_key
+        )
+    except Exception:  # noqa: BLE001 - 上架优先,工艺链接是增益
+        logger.exception("factory block build failed for product %s", product_id)
+        return description_html
+    from ...seo_series.content.product_backlink import apply_factory_block
+
+    return apply_factory_block(description_html, block)
+
+
 def assemble_upload_package(
     db: Session,
     product: Any,
@@ -885,6 +911,15 @@ def assemble_upload_package(
             product_id=getattr(product, "id", None),
             product_key=getattr(product, "product_key", None),
         ),
+    )
+    # Rail 2b (product → craft). 指南回答"这东西好不好",工艺文回答"你们凭什么做
+    # 得出来"——一个没听过的牌子从中国发货,后者常常才是真正的犹豫点。
+    # 顺序在 kp-guides 之后:指南离购买决策更近,工艺是信任兜底(见 PDP_BLOCK_ORDER)。
+    desc["html"] = _append_factory_section(
+        desc["html"],
+        getattr(product, "id", None),
+        getattr(product, "product_key", None),
+        db,
     )
     raw_faq_items = mcj.get("page_faq")
     faq_items = [

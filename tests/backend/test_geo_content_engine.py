@@ -2133,3 +2133,119 @@ def test_static_cluster_routes_are_declared_before_the_uuid_route() -> None:
     assert paths.index("/geo/clusters/overlap-check") < paths.index(
         "/geo/clusters/{cluster_id}"
     )
+
+
+# ===================================================================
+# 定界块设施（已下沉 content_core/html_blocks）
+# ===================================================================
+
+
+@pytest.mark.parametrize("block_class", ["kp-guides", "kp-factory"])
+def test_block_apply_is_idempotent_for_any_class(block_class: str) -> None:
+    """跑一百遍留下的永远是恰好一个块。这是"读改写线上 HTML"能安全重复的唯一理由。"""
+    from backend.app.modules.content_core.html_blocks import (
+        apply_block,
+        build_link_block,
+    )
+
+    block = build_link_block(
+        block_class=block_class, heading="H", links=[("T", "https://x/a/")]
+    )
+    html = '<div class="kp-desc"><p>body</p></div>'
+    once = apply_block(html, block, block_class=block_class)
+    thrice = apply_block(
+        apply_block(once, block, block_class=block_class),
+        block,
+        block_class=block_class,
+    )
+    assert once == thrice
+    assert thrice.count(block_class) == 1
+    # 空块 = 摘掉,不是留空壳
+    assert block_class not in apply_block(thrice, "", block_class=block_class)
+
+
+def test_two_blocks_coexist_without_swallowing_each_other() -> None:
+    """产品页上要同时挂指南块和工艺块。先插的绝不能吞掉后插的——
+    这靠的是"块内没有 </div>",所以第二次 rfind 找到的仍是外层 .kp-desc 的收尾。"""
+    from backend.app.modules.content_core.html_blocks import (
+        apply_blocks,
+        build_link_block,
+    )
+
+    guides = build_link_block(
+        block_class="kp-guides", heading="Learn more", links=[("G", "https://x/g/")]
+    )
+    factory = build_link_block(
+        block_class="kp-factory", heading="How we make it", links=[("F", "https://x/f/")]
+    )
+    out = apply_blocks(
+        '<div class="kp-desc"><p>body</p></div>',
+        [("kp-guides", guides), ("kp-factory", factory)],
+    )
+    assert out.count("kp-guides") == 1
+    assert out.count("kp-factory") == 1
+    # factory 不能落在 guides 的 <section>…</section> 内部
+    g_start = out.index("kp-guides")
+    g_end = out.index("</section>", g_start)
+    assert out.index("kp-factory") > g_end
+
+
+def test_block_shape_invariants_are_enforced_not_documented() -> None:
+    """这两条破了,线上页面会被切坏而且**再也替换不掉**——所以是抛异常不是写注释。"""
+    from backend.app.modules.content_core.html_blocks import (
+        BlockError,
+        assert_block_shape,
+    )
+
+    # </div> 会抢走 rfind 的定位,后插的块被塞进这个块内部
+    with pytest.raises(BlockError):
+        assert_block_shape('<section class="kp-box kp-x"><div>a</div></section>')
+    # 嵌套 <section> 会让非贪婪正则在内层截断
+    with pytest.raises(BlockError):
+        assert_block_shape(
+            '<section class="kp-box kp-x"><section>inner</section></section>'
+        )
+
+
+def test_wrong_class_raises_instead_of_appending_forever() -> None:
+    """用 A 的 class 建的块拿去替换 B,会走"无则追加"——每刷新一次多一块,线上失控。"""
+    from backend.app.modules.content_core.html_blocks import BlockError, apply_block, build_link_block
+
+    block = build_link_block(
+        block_class="kp-guides", heading="H", links=[("T", "https://x/")]
+    )
+    with pytest.raises(BlockError):
+        apply_block("<div></div>", block, block_class="kp-factory")
+
+
+def test_block_class_is_whitelisted_before_entering_a_regex() -> None:
+    from backend.app.modules.content_core.html_blocks import BlockError, block_pattern
+
+    for bad in ("kp guides", "kp.*", "KP", "", "kp/x"):
+        with pytest.raises(BlockError):
+            block_pattern(bad)
+
+
+def test_replacement_never_interprets_backslashes_in_urls() -> None:
+    """替换值直接传字符串的话,URL 里的 \\1 会被当反向引用解释。用 lambda 挡掉。"""
+    from backend.app.modules.content_core.html_blocks import apply_block, build_link_block
+
+    weird = build_link_block(
+        block_class="kp-guides", heading="H", links=[("T", r"https://x/a\1b/")]
+    )
+    out = apply_block(
+        '<div class="kp-desc"></div>', weird, block_class="kp-guides"
+    )
+    out = apply_block(out, weird, block_class="kp-guides")  # 走替换分支
+    assert r"a\1b" in out
+
+
+def test_js_regex_comes_from_the_same_source_as_python() -> None:
+    """替换逻辑原本 Python 和 n8n 的 JS 各写一遍,要手工同步。
+    让 JS 那份由 Python 生成之后,两边只有一个真相源。"""
+    from backend.app.modules.content_core.html_blocks import js_block_regex_source
+
+    src = js_block_regex_source("kp-guides")
+    assert src.startswith("/<section class=")
+    assert "kp-guides" in src
+    assert src.endswith("/i")

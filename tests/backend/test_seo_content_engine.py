@@ -583,3 +583,68 @@ def test_factory_hub_shows_empty_sections_on_purpose() -> None:
     assert "by-fac-chip" in html  # 分区筛选
     # 关掉 JS 也要能用:文章链接直接在 HTML 里
     assert 'href="#"' in html
+
+
+# ===================================================================
+# 产品页 → 工艺文（kp-factory 块）
+# ===================================================================
+
+
+def test_factory_block_walks_category_ancestors_not_descendants() -> None:
+    """工艺文讲"我们怎么做这一类东西"(防水密封、锂电组装),天然挂**上层类目**;
+    产品在叶子。按子树找会得到"这个大类底下所有细分品的工艺文"——对一个具体
+    产品全是噪音。"""
+    import inspect
+
+    from backend.app.modules.seo_series.content import product_backlink
+
+    src = inspect.getsource(product_backlink.published_factory_articles_for_product)
+    assert "category_ancestors" in src
+    assert "category_descendants" not in src
+    # 死规矩:published_url 非空 ≠ 线上可见
+    assert 'wp_status == "publish"' in src
+    # 没绑类目的工艺文 = 通用工艺,对任何产品都算数
+    assert "if category and category not in family" in src
+
+
+def test_factory_block_output_is_capped_and_deterministic() -> None:
+    """链接图要算指纹,顺序不稳定就等于每次都往 WP 写一遍。"""
+    import inspect
+
+    from backend.app.modules.seo_series.content import product_backlink
+
+    assert product_backlink.MAX_FACTORY_LINKS_ON_PRODUCT == 3
+    src = inspect.getsource(product_backlink.published_factory_articles_for_product)
+    assert "scored.sort(" in src
+
+
+def test_both_pdp_block_producers_emit_identical_bytes() -> None:
+    """P 组包和反链派单会在同一个线上产品上写同一个块。
+    两边字节不一致就会每次刷新互相覆盖。"""
+    from backend.app.modules.geo_series.content.backlink import build_guides_block
+    from backend.app.modules.seo_series.content.product_backlink import (
+        build_factory_block,
+    )
+
+    links = [("T", "https://x/a/")]
+    # 两个块各自都只有一个生产函数——P 组包和派单调的是同一个
+    import inspect
+
+    from backend.app.modules.p_series.upload import assemble
+
+    assert "factory_block_for_product" in inspect.getsource(
+        assemble._append_factory_section
+    )
+    assert "build_guides_block" in inspect.getsource(
+        assemble._append_related_guides_section
+    )
+    assert build_guides_block(links) != build_factory_block(links)  # class 不同
+    assert "kp-factory" in build_factory_block(links)
+
+
+def test_pdp_block_order_is_one_constant() -> None:
+    """三个块的先后是运营判断(指南离购买近、工艺是信任兜底),
+    改一行常量就能翻转,不该散在各处。"""
+    from backend.app.modules.content_core.html_blocks import PDP_BLOCK_ORDER
+
+    assert PDP_BLOCK_ORDER == ("kp-box", "kp-guides", "kp-factory")

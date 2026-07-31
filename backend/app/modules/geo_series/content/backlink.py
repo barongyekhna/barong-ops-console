@@ -14,26 +14,22 @@ it is a filter rather than an assertion so one bad row can never block the run.
 
 from __future__ import annotations
 
-import html as html_lib
 import logging
-import re
 from typing import Any
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
+from ...content_core.html_blocks import apply_block, block_pattern, build_link_block
 from .related_guides import published_guides_for_product_safely
 
 logger = logging.getLogger(__name__)
 
-# The block is marker-delimited so rewriting it on live HTML is a replace, never an
-# append — that is the only thing that makes read-modify-write safe to repeat.
+# 定界块的机制本身已下沉 content_core/html_blocks.py(加了 kp-factory 之后有两个
+# class、三个写入方,下沉判据成立)。这里只留 GEO 自己的常量和业务规矩。
 BLOCK_CLASS = "kp-guides"
 BLOCK_HEADING = "Learn more"
-_BLOCK_RE = re.compile(
-    r'<section class="[^"]*\bkp-guides\b[^"]*">.*?</section>',
-    re.IGNORECASE | re.DOTALL,
-)
+_BLOCK_RE = block_pattern(BLOCK_CLASS)
 
 # Paths that are indexes, not answers. The hub lives at /guides/ (see
 # guides_index.GUIDES_PAGE_SLUG); anything that resolves to it is never a target.
@@ -63,17 +59,15 @@ def article_guides_only(guides: list[tuple[str, str]]) -> list[tuple[str, str]]:
 
 
 def build_guides_block(guides: list[tuple[str, str]]) -> str:
-    """The block itself. Empty input yields an empty string — never an empty box."""
-    safe = article_guides_only(guides)
-    if not safe:
-        return ""
-    items = "".join(
-        f'<li><a href="{html_lib.escape(url)}">{html_lib.escape(title)}</a></li>'
-        for title, url in safe
-    )
-    return (
-        f'<section class="kp-box {BLOCK_CLASS}"><h2>{BLOCK_HEADING}</h2>'
-        f"<ul>{items}</ul></section>"
+    """The block itself. Empty input yields an empty string — never an empty box.
+
+    GEO 专属的那一层是 ``article_guides_only``(绝不链 /guides/ 枢纽页);拼装本身
+    已下沉。
+    """
+    return build_link_block(
+        block_class=BLOCK_CLASS,
+        heading=BLOCK_HEADING,
+        links=article_guides_only(guides),
     )
 
 
@@ -84,15 +78,7 @@ def apply_guides_block(description_html: str, block: str) -> str:
     An empty ``block`` removes the section, which is how a product whose guides were
     all unpublished gets cleaned up.
     """
-    current = str(description_html or "")
-    if _BLOCK_RE.search(current):
-        return _BLOCK_RE.sub(lambda _m: block, current, count=1)
-    if not block:
-        return current
-    closing = current.rfind("</div>")
-    if closing < 0:
-        return current + block
-    return current[:closing] + block + current[closing:]
+    return apply_block(description_html, block, block_class=BLOCK_CLASS)
 
 
 def guides_block_for_product(
