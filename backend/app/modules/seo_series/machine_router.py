@@ -10,7 +10,7 @@ import os
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -81,7 +81,10 @@ def publish_result(
     job_id: str,
     payload: PublishResultIn,
     token: str = Query(default=""),
-    x_job_token: str | None = None,
+    # 必须声明成 Header——不写 Header(...) 的话 FastAPI 会把它当 query 参数,
+    # n8n 送的 X-Job-Token 头就永远读不到,回报一律 401。
+    # (2026-07-31 实测:WP 写入其实成功了,整单卡在最后一步回报上。)
+    x_job_token: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     from .content.publish_jobs import record_result

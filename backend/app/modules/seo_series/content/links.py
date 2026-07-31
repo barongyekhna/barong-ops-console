@@ -47,8 +47,16 @@ def _tokens(text: Any) -> set[str]:
     }
 
 
+# 词面匹配至少要重合这么多个词。**1 个词太松**——2026-07-30 实测:一篇讲
+# 户外店批发的文章挂上了「包子捏捏」的链接,因为两个标题里都有 "Portable"。
+_MIN_TOKEN_OVERLAP = 2
+
+
 def _product_links(db: Session, *, category_id: str | None, hint: str) -> list[dict]:
-    """产品页。有类目就按类目,没有就按词面——但**只在真的有上架页时**才给。"""
+    """产品页。有类目就按类目,没有就按词面——但**只在真的有上架页时**才给。
+
+    没有类目时按词面**打分排序**并卡阈值,不是"沾一个词就算"。
+    """
     from ...k_series.product_knowledge.models import KProductKnowledgeProduct
     from ...p_series.upload.models import PUploadJob
 
@@ -58,13 +66,16 @@ def _product_links(db: Session, *, category_id: str | None, hint: str) -> list[d
             KProductKnowledgeProduct.google_product_category == category_id
         )
     want = _tokens(hint)
-    out: list[dict] = []
-    for product in db.execute(query.limit(20)).scalars():
+    scored: list[tuple[int, dict]] = []
+    for product in db.execute(query.limit(50)).scalars():
         title = str(getattr(product, "product_name_en", "") or "").strip()
         if not title:
             continue
-        if not category_id and want and not (want & _tokens(title)):
-            continue
+        overlap = len(want & _tokens(title)) if want else 0
+        if not category_id:
+            # 没有类目锚点时,词面得真的像,不是沾一个通用词("portable")就算。
+            if overlap < _MIN_TOKEN_OVERLAP:
+                continue
         woo_id = db.scalar(
             select(PUploadJob.external_product_id)
             .where(
@@ -77,15 +88,20 @@ def _product_links(db: Session, *, category_id: str | None, hint: str) -> list[d
         text = str(woo_id or "").strip()
         if not text.isdigit():
             continue  # 还没上架的产品不挂链——挂了就是 404
-        out.append(
-            {
-                "kind": "product",
-                "title": title,
-                "url": f"https://barongyekhna.com/?p={text}",
-                "woo_product_id": int(text),
-            }
+        scored.append(
+            (
+                overlap,
+                {
+                    "kind": "product",
+                    "title": title,
+                    "url": f"https://barongyekhna.com/?p={text}",
+                    "woo_product_id": int(text),
+                },
+            )
         )
-    return out
+    # 越像的排越前,同分按标题稳定排序。
+    scored.sort(key=lambda row: (-row[0], row[1]["title"]))
+    return [row[1] for row in scored]
 
 
 def _guide_links(db: Session, *, category_id: str | None, hint: str) -> list[dict]:

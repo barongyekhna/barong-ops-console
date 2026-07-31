@@ -518,3 +518,15 @@ def test_b_side_articles_get_the_real_purchasing_terms() -> None:
     assert 'topic.audience == C.AUDIENCE_WHOLESALE else []' in gen
     # 政策里的数字必须进接地语料,否则写 $300 会被判成编造
     assert "evidence_number_corpus(\n            craft_payload, product_payload, policy_payload\n        )" in gen
+
+
+def test_callback_token_is_read_from_the_header_not_a_query_param() -> None:
+    """FastAPI 不写 Header(...) 就会把它当 query 参数,n8n 送的 X-Job-Token
+    永远读不到,回报一律 401——而且 WP 那边其实已经写成功了,任务白白卡死。
+    2026-07-31 实测踩到。"""
+    import inspect
+
+    from backend.app.modules.seo_series import machine_router
+
+    src = inspect.getsource(machine_router.publish_result)
+    assert "x_job_token: str | None = Header(" in src
