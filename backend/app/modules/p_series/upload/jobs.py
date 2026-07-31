@@ -204,6 +204,13 @@ def record_result(
         )
 
         ensure_geo_cluster_for_product_safely(db, k_product_id=job.product_id)
+
+        # 新产品上架 → 该类目所有文章的产品卡片里立刻多一张。
+        # **一篇文章都不用碰**:控制台只重推一个 option,插件渲染时查表。
+        # 同样包在 safely 里——内链是增益,上架回报是本职。
+        from ...content_links.link_push import refresh_link_map_safely
+
+        refresh_link_map_safely(db)
     # 队列核心：这单落地了，自动放行下一单
     if public_base:
         try:

@@ -255,13 +255,20 @@ def resolve_link_intents(
 
 
 def links_block_html(links: list[dict]) -> str:
-    """文章末尾的内链区块。分组呈现——读者要的是"接下来看什么",不是一堆链接。"""
+    """文章末尾的**保底裸链**。
+
+    真正的转化件是 barong-content-cta 插件在渲染时出的带图卡片。这一段留着是
+    **保险**:插件万一被停用,文章不至于变成内链孤岛。两者角色不同——
+    卡片是转化,这里是导航。
+    """
     if not links:
         return ""
+    # **不出批发链接**:barong-b2b-widget 已经在 the_content @20 按文章实际挂的
+    # 类目渲染那一行。两边都出就会在同一篇文章末尾出现两遍
+    # (2026-07-31 设计内链网时发现)。批发那条归 b2b 管,这里只管产品和指南。
     groups = {
         "product": ("Shop the products", []),
         "guide": ("Related buying guides", []),
-        "wholesale": ("Buying for a store?", []),
     }
     for link in links:
         bucket = groups.get(link.get("kind"))

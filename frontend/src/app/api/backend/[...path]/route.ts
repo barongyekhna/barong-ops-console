@@ -1060,6 +1060,13 @@ function isAllowedSeoPath(method: string, path: string[]) {
   if (path[1] === "factory-index" && path.length === 2) {
     return method === "POST";
   }
+  // ---- 内链网 ----
+  if (path[1] === "link-net") {
+    if (path.length === 2) {
+      return method === "GET";
+    }
+    return path.length === 3 && path[2] === "refresh" && method === "POST";
+  }
   // ---- 监测 ----
   if (path[1] === "monitor") {
     if (path.length === 2) {

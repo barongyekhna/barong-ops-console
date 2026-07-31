@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { LinkNetPanel } from "../../content/LinkNetPanel";
 import {
   analyzeItem,
   generateCluster,
@@ -1179,75 +1180,17 @@ export function GeoContentDeck() {
                   </div>
                 </section>
   
-                {/* 产品页反链（轨道2）：产品页 → 对应类目的指南文章 */}
+                {/* 内链网：文章内链（自动）+ 产品页链接（人工，因为它是投放落地页）。
+                    和 SeoDeck 挂的是同一个组件——内链网本来就是跨 GEO/SEO 的一件事。 */}
                 <section style={CARD}>
                   <div style={{ ...SECTION_TOGGLE, cursor: "default" }}>
-                    <strong>产品页反链</strong>
-                    {backlink ? (
-                      <span style={COUNT_PILL}>{backlink.target_count} 个产品页</span>
-                    ) : null}
+                    <strong>内链网</strong>
                     <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.55 }}>
-                      只挂对应类目的指南文章，绝不挂 /guides/ 主页
+                      产品页 · 指南 · 工艺文 · 博文，四边互链
                     </span>
-                    <button
-                      onClick={() => void handleBacklinks()}
-                      disabled={backlinkBusy || !backlink?.ready}
-                      style={PRIMARY_BTN}
-                    >
-                      {backlinkBusy ? "派单中…" : "同步产品页反链"}
-                    </button>
                   </div>
                   <div style={SECTION_BODY}>
-                    <p style={HINT}>
-                      在产品描述最底部维护一个「Learn more」区块，指向这个类目已发布的指南。
-                      只改 description 一个字段，不碰价格、图片、类目；重复跑不会叠加。
-                    </p>
-                    {backlink && backlink.targets.length > 0 ? (
-                      <ul style={{ ...RESET_LIST, gap: 6, marginTop: 10 }}>
-                        {backlink.targets.map((t) => (
-                          <li key={t.woo_product_id} style={ROW}>
-                            <span style={{ ...BADGE, color: GREEN }}>
-                              {t.sku || t.woo_product_id}
-                            </span>
-                            <span style={{ fontSize: 13 }}>
-                              将挂 {t.guide_count} 篇指南
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {backlink && backlink.skipped.length > 0 ? (
-                      <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 12.5, opacity: 0.7 }}>
-                        {backlink.skipped.map((sk, i) => (
-                          <li key={i}>{sk}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                    {backlink && backlink.jobs.length > 0 ? (
-                      <ul style={{ ...RESET_LIST, gap: 6, marginTop: 12 }}>
-                        {backlink.jobs.slice(0, 3).map((j) => (
-                          <li key={j.job_id} style={ROW}>
-                            <span
-                              style={{
-                                ...BADGE,
-                                color:
-                                  j.status === "success"
-                                    ? GREEN
-                                    : j.status === "failed"
-                                      ? RED
-                                      : GOLD,
-                              }}
-                            >
-                              {j.status}
-                            </span>
-                            <span style={{ fontSize: 12.5, opacity: 0.75 }}>
-                              更新 {j.updated_count} 个产品页
-                              {j.error ? ` — ${j.error}` : ""}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
+                    <LinkNetPanel />
                   </div>
                 </section>
   

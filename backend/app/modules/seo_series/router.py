@@ -607,6 +607,47 @@ def rebuild_factory_index(
 # ============================================================ 监测
 
 
+# ============================================================ 内链网
+
+
+@router.get("/link-net")
+def link_net_state(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.read")),
+) -> dict[str, Any]:
+    """内链网现状。不出网。"""
+    from ..content_links.link_push import state as link_state
+    from ..geo_series.content.backlink_targets import collect_backlink_targets
+
+    payload = link_state(db)
+    # 产品页那侧:算出「有 N 个产品页的链接已过期」。零 WP 调用——
+    # 靠上次真写进去的块指纹比对(见 backlink_targets 的注释)。
+    try:
+        targets, skipped = collect_backlink_targets(db)
+    except Exception:  # noqa: BLE001 - 面板不该因为一处失败整块打不开
+        targets, skipped = [], ["产品页状态暂时算不出来"]
+    payload["product_pages"] = {
+        "stale_count": len(targets),
+        "reasons": [str(t.get("reason") or "") for t in targets],
+        "skipped": skipped[:10],
+    }
+    return payload
+
+
+@router.post("/link-net/refresh")
+def link_net_refresh(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    """手动刷新文章内链。**绕过 15 分钟间隔护栏**——人明确说了要立刻看效果。
+
+    正常情况下不用点:新文章发布、新产品上架都会自动刷。
+    """
+    from ..content_links.link_push import refresh_if_due
+
+    return refresh_if_due(db, manual=True)
+
+
 @router.get("/monitor")
 def seo_monitor(
     db: Session = Depends(get_db),

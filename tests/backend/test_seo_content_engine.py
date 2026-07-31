@@ -937,3 +937,142 @@ def test_cta_plugin_has_a_sentinel_ping() -> None:
     php = _cta_plugin_source()
     assert "by-cta-ping" in php
     assert "hash_equals" in php
+
+
+# ===================================================================
+# 自动刷新的接线
+# ===================================================================
+
+
+def test_all_three_triggers_use_the_safe_wrapper() -> None:
+    """内链是增益，上架/发布回报是本职。内链出问题绝不许把那次回报带崩。"""
+    import inspect
+
+    from backend.app.modules.geo_series.content import (
+        publish_jobs as geo_publish,
+    )
+    from backend.app.modules.p_series.upload import jobs as p_jobs
+    from backend.app.modules.seo_series.content import publish_jobs as seo_publish
+
+    for module, fn in (
+        (p_jobs, p_jobs.record_result),
+        (geo_publish, geo_publish.record_result),
+        (seo_publish, seo_publish.record_result),
+    ):
+        src = inspect.getsource(fn)
+        assert "refresh_link_map_safely" in src, module.__name__
+        # 裸调 refresh_if_due 会把异常直接抛进回报路径
+        assert "refresh_if_due(" not in src, module.__name__
+
+
+def test_daily_endpoint_is_fail_closed() -> None:
+    """密钥没配一律 403——绝不因为忘了配环境变量就变成裸端点。"""
+    import inspect
+
+    from backend.app.modules.content_links import machine_router
+
+    src = inspect.getsource(machine_router.refresh_link_map)
+    assert "compare_digest" in src
+    assert "not expected" in src
+    # 兜底那一轮必须先核线上真实发布状态,否则会把草稿挂进卡片
+    assert src.index("refresh_geo(db)") < src.index("refresh_if_due(db)")
+    assert "refresh_seo(db)" in src
+
+
+def test_daily_workflow_is_offset_from_the_b2b_one() -> None:
+    """两条流都要批量核 WordPress 状态，同时打会压 WP.com。
+    03:00 b2b / 03:20 内链网。以后加第三条要继续错开。"""
+    import json
+
+    from backend.app.modules.b2b.n8n.build_republish_workflow import (
+        build as b2b_build,
+    )
+    from backend.app.modules.content_links.n8n.build_content_links_workflow import (
+        CONTENT_LINKS_TOKEN_VALUE,
+        build,
+    )
+
+    wf, b2b = build(), b2b_build()
+    assert wf["id"] == "barongContentLinks001"
+    # n8n 按 id 认节点——撞了就是改了别人的流
+    assert not ({n["id"] for n in wf["nodes"]} & {n["id"] for n in b2b["nodes"]})
+    assert wf["versionId"] != b2b["versionId"]
+    cron = [
+        n["parameters"]["rule"]["interval"][0]["expression"]
+        for n in wf["nodes"]
+        if n["type"].endswith("scheduleTrigger")
+    ]
+    assert cron == ["20 3 * * *"]
+    # 一把钥匙开两把锁等于没锁
+    assert CONTENT_LINKS_TOKEN_VALUE not in json.dumps(b2b)
+
+
+def test_manual_refresh_bypasses_the_interval_but_not_the_fingerprint() -> None:
+    """人明确说了要立刻看效果就不该被 15 分钟挡住；
+    但"内容没变"仍然不该往 WP 写——那是浪费也是噪音。"""
+    import inspect
+
+    from backend.app.modules.seo_series.router import link_net_refresh
+
+    src = inspect.getsource(link_net_refresh)
+    assert "manual=True" in src
+
+
+def test_link_net_panel_state_costs_no_wp_calls() -> None:
+    """面板要能随时打开。产品页的"过期数"靠上次写进去的块指纹算，零 WP 调用。"""
+    import inspect
+
+    from backend.app.modules.seo_series.router import link_net_state
+
+    src = inspect.getsource(link_net_state)
+    assert "stale_count" in src
+    # 一处算不出来不该让整块面板打不开
+    assert "except Exception" in src
+
+
+def test_wholesale_link_is_rendered_in_exactly_one_place() -> None:
+    """b2b 插件已经在 the_content @20 按文章实际挂的类目渲染批发那一行。
+    文末块再出一次，同一篇文章末尾就会出现两遍。"""
+    import inspect
+
+    from backend.app.modules.seo_series.content import links
+
+    src = inspect.getsource(links.links_block_html)
+    assert '"wholesale"' not in src
+    assert "Buying for a store" not in src
+    # 解析器保留 wholesale 意图（生成提示词里写着这个 kind，改提示词会牵动
+    # 已批准内容的重生成），只是不再渲染
+    assert "wholesale" in inspect.getsource(links.resolve_link_intents)
+
+
+def test_inline_link_block_is_kept_as_a_fallback() -> None:
+    """插件停用 = 中段卡片全消失。正文里留一份裸链，文章不至于变孤岛。
+    这是我和方案 agent 唯一的分歧处——它建议全删。"""
+    import inspect
+
+    from backend.app.modules.seo_series.content import assemble, links
+
+    assert "links_block_html" in inspect.getsource(assemble.render_article_html)
+    assert "保底裸链" in inspect.getsource(links.links_block_html)
+
+
+def test_push_verifies_the_option_actually_landed() -> None:
+    """🔴 WP 只接受 register_setting 注册过的 option。插件没装时 /settings 会
+    **静默忽略**未知字段并照样返回 200。
+
+    2026-07-31 线上实测：推送报告 changed=true / 1130 字节，而 WP 那边 option
+    长度是 0——指纹却已经记下了。后果是以后装上插件，控制台因为指纹一致
+    **再也不会推**，CTA 永远不出现，而且没人知道为什么。
+
+    **外部副作用报告成功 ≠ 真的发生了。** 回读一次是唯一能分辨的办法。
+    """
+    import inspect
+
+    from backend.app.modules.content_links import link_push
+
+    src = inspect.getsource(link_push.push_link_map)
+    # 回读必须在记指纹之前
+    assert src.index("stored != payload") < src.index("_set(db, FINGERPRINT_KEY")
+    # 没存住要置 dirty 并说人话，不能默默算成功
+    assert "插件还没装" in src
+    assert src.count('_set(db, DIRTY_KEY, "1")') >= 2

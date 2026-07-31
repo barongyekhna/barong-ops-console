@@ -54,6 +54,9 @@ const KNOWN_UNPROXIED = new Set([
   // 走裸挂载的路由，浏览器永远不该碰到——所以刻意不进代理白名单。
   "GET /api/app/b2b/widget-jobs/{job_id}/package",
   "POST /api/app/b2b/widget-jobs/{job_id}/result",
+  // 内链网每日兜底：n8n 定时打（03:20），共享密钥鉴权 fail-closed。
+  // 人要立刻刷走 /seo/link-net/refresh（带会话）——这条只给机器。
+  "POST /api/app/content/link-map/refresh",
   // B2B 批发页每日重发：n8n 定时打，共享密钥鉴权（H 哨兵同款）。
   // 人要重发走 /b2b/website/publish（带会话）——这条只给机器，不进白名单。
   "POST /api/app/b2b/website/republish",

@@ -147,6 +147,35 @@ def push_link_map(db: Session, *, force: bool = False) -> dict[str, Any]:
             **stats,
         }
 
+    # 🔴 **写后必须回读。**
+    # WP 只接受 register_setting 注册过的 option;插件没装的时候,
+    # /settings 这个 POST 会**静默忽略**未知字段并照样返回 200。
+    # 2026-07-31 线上实测踩到:推送报告 changed=true / 1130 字节,
+    # 而 WP 那边 option 长度是 0——指纹却已经记下了。
+    # 后果:以后装上插件,控制台因为指纹一致**再也不会推**,CTA 永远不出现。
+    #
+    # 外部副作用报告成功 ≠ 真的发生了。回读一次是唯一能分辨的办法。
+    verify = wp_bridge._request_json(  # noqa: SLF001
+        wp_bridge._api_url(credentials, "settings"),  # noqa: SLF001
+        credentials=credentials,
+        authenticated=True,
+    )
+    stored = str((verify.get("data") or {}).get(LINK_MAP_OPTION) or "")
+    if stored != payload:
+        _set(db, DIRTY_KEY, "1")
+        db.commit()
+        return {
+            "ok": False,
+            "changed": False,
+            "reason": (
+                "WordPress 收下了请求但没有存住这个字段——"
+                "多半是 barong-content-cta 插件还没装/没启用"
+                "（option 要插件 register_setting 之后才可写）。"
+                "装好插件再点一次。"
+            ),
+            **stats,
+        }
+
     _set(db, FINGERPRINT_KEY, new_fingerprint)
     _set(db, PUSHED_AT_KEY, datetime.now(UTC).isoformat())
     _set(db, DIRTY_KEY, "0")

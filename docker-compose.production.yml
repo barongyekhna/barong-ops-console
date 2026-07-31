@@ -76,6 +76,9 @@ services:
       # 作用：把用户在 WP 里手动发布的新指南捞上批发页——控制台不知道那个
       # 动作何时发生，只能定期回去核一遍。没配这个值端点就一律 403。
       B2B_REPUBLISH_TOKEN: "SBTs5846I6NVLjpmLTjDC_ChepxGDr2rjFZEwj6nZTc"
+      # 内链网每日兜底(n8n 03:20 打)。**必须与 B2B_REPUBLISH_TOKEN 不同值**——
+      # 两条流打两扇门，一把钥匙开两把锁等于没锁。
+      CONTENT_LINKS_TOKEN: "ke_YJmVZ5SFg-K1PG7QXrathZ3yIqbV1AgOBV5kL4NU"
       # Google Ads gate 状态与额度显示要和 r-a-worker 一致（设置页/额度页读这里）。
       RA_GOOGLE_ADS_BASIC_REVIEW_STATUS: "approved"
       RA_GOOGLE_ADS_ENABLE_REAL_CALLS: "true"

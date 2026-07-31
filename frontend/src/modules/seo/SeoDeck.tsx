@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { LinkNetPanel } from "../content/LinkNetPanel";
 import { CraftFactDeck } from "./facts/CraftFactDeck";
 import {
   generateArticle,
@@ -521,6 +522,8 @@ export function SeoDeck() {
           </button>
         </div>
       </div>
+
+      <LinkNetPanel />
 
       {approvedItems.map((item) => (
         <label

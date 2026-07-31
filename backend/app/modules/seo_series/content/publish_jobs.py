@@ -170,6 +170,10 @@ def record_result(
 
     if job.status == "success":
         _record_published_items(db, published_items or [])
+        # 新工艺文/博文上线 → 相关文章的推荐里立刻多一条。
+        from ...content_links.link_push import refresh_link_map_safely
+
+        refresh_link_map_safely(db)
 
     if public_base:
         try:

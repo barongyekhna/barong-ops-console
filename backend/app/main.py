@@ -47,6 +47,7 @@ from .modules.geo_series.router import router as geo_content_router
 from .modules.geo_series.machine_router import router as geo_machine_router
 from .modules.seo_series.router import router as seo_content_router
 from .modules.seo_series.machine_router import router as seo_machine_router
+from .modules.content_links.machine_router import router as content_links_machine_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
 from .modules.w_series.router import public_router as w_siteops_public_router
 from .modules.w_series.router import router as w_siteops_router
@@ -1036,6 +1037,8 @@ app.include_router(geo_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(geo_machine_router)
 app.include_router(seo_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(seo_machine_router)
+app.include_router(content_links_machine_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(content_links_machine_router)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)
