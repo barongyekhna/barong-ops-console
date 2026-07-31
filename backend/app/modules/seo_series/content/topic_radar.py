@@ -112,6 +112,49 @@ def _craft_topic_seeds(db: Session) -> list[dict[str, Any]]:
     return out
 
 
+def _store_type_category(db: Session, store_id: Any) -> tuple[str | None, str | None]:
+    """店型的主类目 (google_id, 路径)。
+
+    店型本来就是**按谷歌类目前缀定义**的(gift_shop 吃 "Toys & Games" 等),
+    所以类目不用问、不用猜——从店型自己的前缀推出来。
+
+    有了它,B 端选题就能:
+    - 挂产品链接时按**类目子树**找,而不是靠词面猜(2026-07-31 实测:一篇讲户外店
+      批发的文章挂上了「包子捏捏」,就因为两个标题里都有 "Portable");
+    - 批发链接指向**对应的店型专页**,而不是笼统的批发主页。
+
+    取第一条前缀(sort 后稳定):一个店型吃多个类目,拿最主要的那个当锚点。
+    """
+    from sqlalchemy import text as sql_text
+
+    from ...b2b.store_types.models import B2BStoreTypeCategory
+
+    rows = list(
+        db.execute(
+            select(B2BStoreTypeCategory.category_key)
+            .where(B2BStoreTypeCategory.store_type_id == store_id)
+            .order_by(B2BStoreTypeCategory.category_key)
+        ).scalars()
+    )
+    for key in rows:
+        path = str(key or "").strip()
+        if not path:
+            continue
+        try:
+            row = db.execute(
+                sql_text(
+                    "SELECT id, full_path FROM k_category_google WHERE full_path = :p"
+                ),
+                {"p": path},
+            ).first()
+        except Exception:  # noqa: BLE001 - 类目树读不到就当没绑
+            logger.exception("store-type category lookup failed: %s", path)
+            return None, None
+        if row:
+            return str(row[0]), str(row[1])
+    return None, None
+
+
 def _store_type_seeds(db: Session) -> list[dict[str, Any]]:
     """B 端:每个已启用店型 × 采购决策问题。
 
@@ -142,6 +185,7 @@ def _store_type_seeds(db: Session) -> list[dict[str, Any]]:
         name = str(store.key or "").replace("_", " ").strip()
         if not name:
             continue
+        category_id, category_path = _store_type_category(db, store.id)
         for decision in decisions:
             out.append(
                 {
@@ -149,6 +193,8 @@ def _store_type_seeds(db: Session) -> list[dict[str, Any]]:
                     "source": C.SOURCE_STORE_TYPE,
                     "audience": C.AUDIENCE_WHOLESALE,
                     "store_type_key": store.key,
+                    "google_category_id": category_id,
+                    "category_path": category_path,
                 }
             )
     return out

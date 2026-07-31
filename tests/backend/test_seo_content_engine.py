@@ -530,3 +530,56 @@ def test_callback_token_is_read_from_the_header_not_a_query_param() -> None:
 
     src = inspect.getsource(machine_router.publish_result)
     assert "x_job_token: str | None = Header(" in src
+
+
+def test_b_side_topics_carry_their_store_type_category() -> None:
+    """店型本来就是**按谷歌类目前缀定义**的,所以类目不用问、不用猜。
+    没有它,B 端文章挂产品链接只能靠词面猜——2026-07-31 实测挂上了「包子捏捏」,
+    只因为两个标题里都有 Portable。"""
+    import inspect
+
+    from backend.app.modules.seo_series.content import topic_radar
+
+    src = inspect.getsource(topic_radar._store_type_seeds)
+    assert "_store_type_category" in src
+    assert '"google_category_id": category_id' in src
+
+    lookup = inspect.getsource(topic_radar._store_type_category)
+    assert "full_path = :p" in lookup  # 前缀字符串 → 类目 id
+
+
+def test_category_matching_walks_the_subtree_not_exact_equality() -> None:
+    """店型类目往往是 "Toys & Games" 这种上层节点,没有产品会精确等于它。"""
+    import inspect
+
+    from backend.app.modules.seo_series.content import links
+
+    products = inspect.getsource(links._product_links)
+    assert "category_descendants" in products
+    assert "google_product_category.in_(family)" in products
+
+    # 店型子页也按子树判,不是字符串包含——
+    # 包含会把 "Home & Garden > Decor" 和 "Home & Garden > Kitchen" 混为一谈
+    wholesale = inspect.getsource(links._wholesale_links)
+    assert "category_ancestors" in wholesale
+    assert "covered_paths" in wholesale
+
+
+def test_factory_hub_shows_empty_sections_on_purpose() -> None:
+    """这一页的作用是让人一眼看到我们**打算证明哪几件事**。
+    把空分区藏起来,页面就只剩"什么都没有"。"""
+    from backend.app.modules.seo_series.content.factory_index import (
+        render_factory_page,
+    )
+
+    html = render_factory_page(
+        [
+            ("craft_story", "Craft & Process", [{"title": "A", "url": "#"}]),
+            ("testing", "Testing", []),
+        ]
+    )
+    assert "Being written" in html  # 空分区照样出现
+    assert 'type="search"' in html  # 和 /guides/ 同规:搜索在最前
+    assert "by-fac-chip" in html  # 分区筛选
+    # 关掉 JS 也要能用:文章链接直接在 HTML 里
+    assert 'href="#"' in html

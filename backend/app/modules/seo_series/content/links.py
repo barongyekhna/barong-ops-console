@@ -62,8 +62,13 @@ def _product_links(db: Session, *, category_id: str | None, hint: str) -> list[d
 
     query = select(KProductKnowledgeProduct)
     if category_id:
+        # **按子树匹配,不是精确相等**:B 端选题的类目来自店型前缀,往往是
+        # "Toys & Games" 这种上层节点,没有任何产品会精确等于它。
+        from ...geo_series.content.cluster_guard import category_descendants
+
+        family = [str(category_id), *category_descendants(db, str(category_id))]
         query = query.where(
-            KProductKnowledgeProduct.google_product_category == category_id
+            KProductKnowledgeProduct.google_product_category.in_(family)
         )
     want = _tokens(hint)
     scored: list[tuple[int, dict]] = []
@@ -155,23 +160,31 @@ def _wholesale_links(db: Session, *, category_id: str | None) -> list[dict]:
     ]
     if not category_id:
         return out
-    try:
-        from ...k_series.product_knowledge.category_resolver import (
-            google_category_path,
-        )
+    # 用**类目子树**判断这个店型吃不吃这个类目,不是字符串包含——
+    # 路径包含会把 "Home & Garden > Decor" 和 "Home & Garden > Kitchen" 混为一谈。
+    from ...geo_series.content.cluster_guard import category_ancestors
 
-        path = google_category_path(db, str(category_id))
-        path_text = " > ".join(
-            str(node.get("name") if isinstance(node, dict) else node) for node in path
-        ).lower()
+    family = {str(category_id), *category_ancestors(db, str(category_id))}
+    paths_by_id: dict[str, str] = {}
+    try:
+        from sqlalchemy import text as sql_text
+
+        for cid in family:
+            row = db.execute(
+                sql_text("SELECT full_path FROM k_category_google WHERE id = :i"),
+                {"i": cid},
+            ).first()
+            if row:
+                paths_by_id[cid] = str(row[0])
     except Exception:  # noqa: BLE001
-        return out
+        logger.exception("category path lookup failed")
+    covered_paths = set(paths_by_id.values())
 
     prefixes: dict[Any, list[str]] = {}
     for row in db.execute(select(B2BStoreTypeCategory)).scalars():
-        prefixes.setdefault(row.store_type_id, []).append(str(row.category_key).lower())
+        prefixes.setdefault(row.store_type_id, []).append(str(row.category_key))
     for store in db.execute(select(B2BStoreType)).scalars():
-        if any(p and p in path_text for p in prefixes.get(store.id, [])):
+        if any(p in covered_paths for p in prefixes.get(store.id, [])):
             out.append(
                 {
                     "kind": "wholesale",
