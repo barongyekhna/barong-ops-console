@@ -242,9 +242,82 @@ WHOLESALE_INTRO_CLOSE = (
     "export-ready SKU - and why our range crosses categories. The constant "
     "is the line that builds and checks it, not the product type."
 )
+# ⚠️ 2026-07-31 更正:这里原来写 "our own facility in Guangzhou",**是错的**。
+# 广州龙杰是**销售主体**(开票、收款、GMC 账户、独立站注册主体),注册地是天河区
+# 一间写字楼;**生产全部在吉林那家电子产品制造公司**(用户是法人)。
+#
+# 原句还有一处更险的:"No trading company in between"——用户名下确实还有一家
+# 深圳贸易公司。那家既不卖货也不生产,**网站上一个字都不该提**(当初封号的
+# 真根因就是"同域名下两家公司打架")。
+#
+# **规则:谁卖货、谁收钱、谁生产,三件事各自说清楚,全站口径一致。** 多主体
+# 完全合法,封号封的是自相矛盾。收款(PayPal C 端 / WorldFirst B 端)都在龙杰,
+# 所以卖方口径本来就是一致的,只需要把"生产在哪"改对。
 WHOLESALE_INTRO_PROOF = (
-    "Everything ships from our own facility in Guangzhou. "
-    "No trading company in between."
+    "The factory is ours - products are made at our own plant in "
+    "Jilin, China."
+)
+# 卖方单独一句。买家账单上看到的就是这个名字,和网站必须一字不差。
+WHOLESALE_SELLER_LINE = (
+    "Sold and invoiced by Guangzhou Longjie E-Commerce Co., Ltd."
+)
+
+# 工厂实拍(2026-07-31 用户提供,吉林自有工厂)。**四张各答一个买手的疑问**:
+#   装配 → 真人真在做我们自己的产品     测试 → 每台都测,不是嘴上说
+#   包装 → 有零售彩盒,能直接上货架       跨品类 → 加热棒,证明不止一个品
+# 最后一张最值钱:"品类这么杂是不是贸易公司"才是买手真正在犯嘀咕的那句,
+# 而它正是页面这一段的标题。图和字互相印证。
+#
+# ⚠️ 曾经想用 AI 生成的"气派"厂房图,已弃用:配在"our own facility"旁边就是
+# 虚假陈述(GMC 只剩一次申诉机会),而且 B2B 买手一旦认出是 AI 图,结论不是
+# "这人用了 AI",是"这人不是真工厂"——比没有照片伤得多。
+FACTORY_PHOTOS: tuple[dict[str, str], ...] = (
+    {
+        "url": "https://barongyekhna.com/wp-content/uploads/2026/07/factory-assembly-tight.webp",
+        "alt": (
+            "A worker driving screws into a camping shower pump housing, "
+            "with rows of assembled housings on the bench at the Barong "
+            "Yekhna plant in Jilin, China"
+        ),
+        "caption": (
+            "Our own line in Jilin, assembling the pump housings that go "
+            "into every Barong Yekhna camping shower."
+        ),
+    },
+    {
+        "url": "https://barongyekhna.com/wp-content/uploads/2026/07/factory-testing.webp",
+        "alt": (
+            "Multimeter on the workbench next to a DC pump motor and a "
+            "lithium battery pack with its protection board"
+        ),
+        "caption": (
+            "Every motor and battery pack is checked on the bench before "
+            "it goes into a shower."
+        ),
+    },
+    {
+        "url": "https://barongyekhna.com/wp-content/uploads/2026/07/factory-packing.webp",
+        "alt": (
+            "Stacks of printed retail boxes for the Panda portable camping "
+            "shower, packed and ready to ship"
+        ),
+        "caption": (
+            "Finished goods in our own retail packaging - ready for your "
+            "shelf, not just a plain carton."
+        ),
+    },
+    {
+        "url": "https://barongyekhna.com/wp-content/uploads/2026/07/factory-range-1.webp",
+        "alt": (
+            "Rows of assembled immersion heater elements with cords and "
+            "plugs on a rack at the Barong Yekhna plant"
+        ),
+        "caption": (
+            "Not just showers - immersion heaters on the same line. The "
+            "constant is the team that builds and checks it, not the "
+            "product type."
+        ),
+    },
 )
 
 # ⚠️ 这里曾经写着 "Low minimums - most lines start at one case."

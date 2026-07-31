@@ -78,7 +78,7 @@ def _guides_block(guides: list[dict]) -> str:
     )
 
 
-def render_intro_block() -> str:
+def render_intro_block(photos: list[dict] | None = None) -> str:
     """「我们为什么能做这么多品类」。
 
     品类跨度大如果不解释就是**减分**——采购的第一反应是"这是贸易公司吧"。
@@ -87,10 +87,18 @@ def render_intro_block() -> str:
     """
     inhouse = " · ".join(_e(x) for x in policies.WHOLESALE_INHOUSE)
     partnered = " · ".join(_e(x) for x in policies.WHOLESALE_PARTNERED)
+    # 真实工厂照。**alt 描述画面里真有的东西**,不塞关键词;caption 是访客真会
+    # 看到的那行,每句替我们说一件事(自己的线 / 每台都测 / 有零售包装 / 不止一个品类)。
     photos = "".join(
-        '<div class="by-card"><span>Factory photo coming soon</span></div>'
-        for _ in range(3)
-    )
+        f'<figure class="by-card">'
+        f'<img src="{_e(photo["url"])}" alt="{_e(photo["alt"])}" '
+        f'loading="lazy" width="1400" height="1050">'
+        f'<figcaption>{_e(photo["caption"])}</figcaption>'
+        f"</figure>"
+        for photo in (photos or policies.FACTORY_PHOTOS)
+        # 缺 url 或缺 alt 的不渲染：没有 alt 的图对读屏和 SEO 都是废的
+        if photo.get("url") and photo.get("alt")
+    ) or ""
     return (
         '<section class="by-block" id="capability">'
         f"<h2>{_e(policies.WHOLESALE_INTRO_TITLE)}</h2>"
@@ -101,7 +109,12 @@ def render_intro_block() -> str:
         "</ul>"
         f"<p>{_e(policies.WHOLESALE_INTRO_CLOSE)}</p>"
         f"<p><strong>{_e(policies.WHOLESALE_INTRO_PROOF)}</strong></p>"
-        f'<div class="by-cards">{photos}</div>'
+        f'<p class="by-meta">{_e(policies.WHOLESALE_SELLER_LINE)}</p>' 
+        # `by-photo-strip`:四张工厂照排成一行(手机 2×2)。默认 `.by-cards` 是
+        # auto-fit minmax(240px),960px 的版心只放得下 3 张,第 4 张单独掉到
+        # 第二行很难看。这个修饰类只改这一处的列数和卡片留白,别处的
+        # `.by-cards` 不受影响。CSS 在 tools/wp-house-style/make_shop_css.py。
+        f'<div class="by-cards by-photo-strip">{photos}</div>'
         "</section>"
     )
 
@@ -139,7 +152,9 @@ def render_store_type_cards(groups: list[dict]) -> str:
     )
 
 
-def render_wholesale_page(groups: list[dict]) -> str:
+def render_wholesale_page(
+    groups: list[dict], photos: list[dict] | None = None
+) -> str:
     """/wholesale/ 主页全文。
 
     ⚠️ **绝不出现任何价格**。小窗、图册、这个页面三处同一条红线:GMC 会把
@@ -166,7 +181,7 @@ def render_wholesale_page(groups: list[dict]) -> str:
         " partners work factory-direct: honest pricing, consistent quality,"
         " and one accountable team from quote to delivery.</p>"
         "</section>"
-        + render_intro_block()
+        + render_intro_block(photos)
         + '<section class="by-block"><h2>Who we work with</h2>'
         f'<div class="by-cards">{who}</div></section>'
         + render_store_type_cards(groups)

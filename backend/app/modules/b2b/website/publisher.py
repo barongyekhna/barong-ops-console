@@ -53,6 +53,10 @@ GUIDE_LINKS_OPTION = "barong_b2b_guide_links"
 WIDGET_POLICY_OPTION = "barong_b2b_policy"
 # 定时重发的最小间隔。护栏针对的是"定时被误配成每分钟一次",不是正常节奏。
 MIN_REPUBLISH_INTERVAL_MINUTES = 30
+# 工厂照片列表。**放 KV 而不是写死在代码里**:用户会反复调图(取景、换新拍的),
+# 每换一张就发一次版太重。代码里的 policies.FACTORY_PHOTOS 是默认值,KV 有值
+# 就用 KV——换图 = 改一行数据 + 重新生成,不碰代码。
+FACTORY_PHOTOS_KEY = "factory_photos"
 
 
 class PublishError(RuntimeError):
@@ -320,7 +324,7 @@ def publish(db: Session) -> dict[str, Any]:
         page_id=int(main_id) if main_id else None,
         slug=pages.WHOLESALE_SLUG,
         title=pages.WHOLESALE_TITLE,
-        content=pages.render_wholesale_page(groups),
+        content=pages.render_wholesale_page(groups, _factory_photos(db)),
         status="publish",
     )
     _set(db, WHOLESALE_PAGE_ID_KEY, str(new_main_id))
@@ -368,6 +372,31 @@ def _drop_dead_products(groups: list[dict], credentials: Any) -> None:
         return
     if removed:
         logger.warning("B2B wholesale pages dropped %s dead products", removed)
+
+
+def _factory_photos(db: Session) -> list[dict] | None:
+    """KV 里存的工厂照片;没有就返回 None 让渲染器用代码默认值。
+
+    坏 JSON 一律当没有——宁可回退到默认图,也不能让一处手写错误把整段照片
+    渲染没了(那一段没照片就只是又一份自我介绍)。
+    """
+    import json as _json
+
+    raw = _get(db, FACTORY_PHOTOS_KEY)
+    if not raw:
+        return None
+    try:
+        parsed = _json.loads(raw)
+    except Exception:  # noqa: BLE001
+        logger.warning("B2B factory photos KV is not valid JSON; using defaults")
+        return None
+    if not isinstance(parsed, list) or not parsed:
+        return None
+    return [
+        item
+        for item in parsed
+        if isinstance(item, dict) and item.get("url") and item.get("alt")
+    ] or None
 
 
 def _guide_count(group: dict) -> int:

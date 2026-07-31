@@ -415,6 +415,21 @@ parts.append("@media(max-width:849px){"
     ".header-inner #logo{justify-content:center!important}"
     "}")
 
+# ============ /wholesale/ 工厂照片条(2026-07-31)============
+# 默认 .by-cards 是 auto-fit minmax(240px,1fr),960px 版心只放得下 3 张,
+# 第 4 张工厂照单独掉到第二行很难看。修饰类 .by-photo-strip 把这一处改成
+# 定死 4 列;别处的 .by-cards 不受影响。
+# ⚠️ 必须带上 BP 作用域(body:not(.home)),否则特异性输给 .by-cards 那条,
+#    写了也不生效(这条踩过)。
+# ⚠️ figure 的 UA 默认 margin 是 1em 40px,不清零卡片会缩成 132px 宽(也踩过)。
+parts.append(rule(BP,[".by-page .by-photo-strip"],"grid-template-columns:repeat(4,minmax(0,1fr));gap:12px"))
+parts.append(rule(BP,[".by-page .by-photo-strip .by-card"],"margin:0;padding:0;overflow:hidden;background:#fff;border:1px solid #ece9e4;display:flex;flex-direction:column"))
+parts.append(rule(BP,[".by-page .by-photo-strip .by-card img"],"display:block;width:100%;height:auto;aspect-ratio:4/3;object-fit:cover;margin:0;border-radius:0"))
+parts.append(rule(BP,[".by-page .by-photo-strip .by-card figcaption"],"font-size:12.5px;line-height:1.55;color:#55524e;padding:10px 12px 12px"))
+parts.append("@media(max-width:820px){"
+    + rule(BP,[".by-page .by-photo-strip"],"grid-template-columns:repeat(2,minmax(0,1fr))")
+    + "}")
+
 CSS = "".join(parts)
 open("shop_house.css", "w").write(CSS)
 # 安全自检：确保没有任何裸 body 简单选择器后面直接跟 { (会命中整个 body)

@@ -698,3 +698,131 @@ def test_publish_also_pushes_the_widget_copy() -> None:
     assert "policies.WIDGET_HEADLINE" in push
     assert "policies.widget_policies()" in push
     assert "policies.B2B_CONTACT_EMAIL" in push
+
+
+def test_pages_never_claim_manufacturing_in_guangzhou() -> None:
+    """**2026-07-31 更正的事实**:广州龙杰是**销售主体**(开票/收款/GMC 账户),
+    注册地是天河区一间写字楼;**生产全部在吉林**那家电子产品制造公司。
+
+    页面上写"广州有生产线"是可被当场证伪的——任何人查一下那个地址看到的是
+    办公楼。这正是当初封号的那个病(Misrepresentation,只剩一次申诉机会)。
+    """
+    markup = _text(pages.render_wholesale_page([_group()]))
+    lowered = markup.lower()
+    assert "jilin" in lowered, "生产地必须写吉林"
+    for banned in (
+        "facility in guangzhou",
+        "assembly floor is in guangzhou",
+        "made in guangzhou",
+        "manufactured in guangzhou",
+    ):
+        assert banned not in lowered, f"页面又在说广州有生产线: {banned}"
+
+
+def test_pages_never_mention_the_shenzhen_entity() -> None:
+    """深圳那家贸易公司既不卖货也不生产,**网站上一个字都不该提**——当初封号的
+    真根因就是「同域名下两家公司打架」。"""
+    markup = _text(pages.render_wholesale_page([_group()])).lower()
+    assert "shenzhen" not in markup
+    assert "深圳" not in markup
+
+
+def test_seller_of_record_is_stated_and_matches_the_payment_entity() -> None:
+    """买家账单上看到的名字必须和网站一致。收款(PayPal C 端 / WorldFirst B 端)
+    都在广州龙杰,所以网站必须写它,而且不能改成别家。"""
+    from backend.app.modules.b2b import policies
+
+    markup = _text(pages.render_wholesale_page([]))
+    assert policies.LEGAL_ENTITY in markup
+    assert policies.LEGAL_ENTITY in policies.WHOLESALE_SELLER_LINE
+
+
+def test_no_trading_company_phrase_is_gone() -> None:
+    """原句 "No trading company in between" 有风险:用户名下确实还有一家贸易
+    公司。改成陈述我们拥有工厂这个**事实**,而不是否认一个存在的实体。"""
+    markup = _text(pages.render_wholesale_page([_group()])).lower()
+    assert "no trading company" not in markup
+
+
+def test_factory_photos_are_real_with_alt_and_caption() -> None:
+    """**弃用了 AI 生成的"气派"厂房图**(2026-07-31):配在 "our own facility"
+    旁边就是虚假陈述,而且买手认出是 AI 图的结论不是"这人用了 AI",是"这人
+    不是真工厂"——比没有照片伤得多。
+
+    四张实拍各答一个买手的疑问,最后一张(加热棒)答的是"品类这么杂是不是
+    贸易公司"——那正是这一段的标题。
+    """
+    from backend.app.modules.b2b import policies
+
+    markup = pages.render_intro_block()
+    assert markup.count("<img") == len(policies.FACTORY_PHOTOS) == 4
+    assert "coming soon" not in markup, "占位没换掉"
+    for photo in policies.FACTORY_PHOTOS:
+        assert photo["alt"] in html_lib.unescape(markup)
+        assert photo["caption"] in html_lib.unescape(markup)
+        # 全站 WebP 死规矩
+        assert photo["url"].endswith(".webp"), photo["url"]
+    # 每张都要有 alt：读屏软件和搜索引擎都靠它
+    assert markup.count('alt="') == 4
+    # 尺寸写死防止 CLS（图加载时页面跳动）
+    assert markup.count('width="1400"') == 4
+
+
+def test_factory_photos_sit_in_one_row() -> None:
+    """默认 `.by-cards` 是 auto-fit minmax(240px,1fr),960px 的版心只放得下
+    3 张,第 4 张单独掉到第二行(用户 2026-07-31 指出难看)。修饰类
+    `by-photo-strip` 把这一处定死 4 列,手机 820px 以下退回 2×2。
+
+    两条踩过的坑钉在这里:
+    - CSS 必须带 `body:not(.home) .by-page` 作用域,否则特异性输给
+      `.by-cards` 那条,写了不生效;
+    - `<figure>` 的 UA 默认 margin 是 `1em 40px`,不清零卡片会缩成 132px。
+    """
+    from pathlib import Path
+
+    markup = pages.render_intro_block()
+    assert 'class="by-cards by-photo-strip"' in markup
+
+    css_source = Path("tools/wp-house-style/make_shop_css.py").read_text(
+        encoding="utf-8"
+    )
+    strip = [ln for ln in css_source.splitlines() if "by-photo-strip" in ln]
+    assert strip, "家规 CSS 里没有这个修饰类，页面上会退回 3+1"
+    for line in strip:
+        if line.lstrip().startswith("#"):
+            continue
+        assert '".by-page .by-photo-strip' in line, f"少了 .by-page 作用域: {line}"
+    joined = "\n".join(strip)
+    assert "repeat(4,minmax(0,1fr))" in joined, "桌面端不是 4 列"
+    assert "repeat(2,minmax(0,1fr))" in joined, "手机端没有退回 2 列"
+    assert "margin:0" in joined, "figure 默认 margin 没清零，卡片会缩水"
+
+
+def test_factory_photos_can_be_swapped_without_a_deploy() -> None:
+    """照片放 KV 而不是写死在代码里:用户会反复调图(取景、换新拍的),
+    每换一张发一次版太重。代码里的是默认值,KV 有值就用 KV。"""
+    from pathlib import Path
+
+    import backend.app.modules.b2b.website.publisher as pub
+
+    source = Path(pub.__file__).read_text(encoding="utf-8")
+    assert 'FACTORY_PHOTOS_KEY = "factory_photos"' in source
+    assert "_factory_photos(db)" in source
+    body = source[source.index("def _factory_photos(") :]
+    # 坏 JSON 一律回退默认，不能让一处手写错误把整段照片渲染没了
+    assert "except Exception" in body
+    assert "return None" in body
+
+
+def test_bad_photo_rows_are_dropped_not_rendered_broken() -> None:
+    """缺 url 或缺 alt 的行不该渲染出来——没有 alt 的图对读屏和 SEO 都是废的。"""
+    markup = pages.render_wholesale_page(
+        [],
+        [
+            {"url": "https://x/ok.webp", "alt": "good", "caption": "c"},
+            {"url": "", "alt": "no url"},
+            {"alt": ""},
+        ],
+    )
+    assert markup.count("<img") == 1
+    assert "good" in markup
