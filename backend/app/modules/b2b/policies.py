@@ -45,6 +45,16 @@ DEFAULT_MIN_ORDER_VALUE = Decimal("300.00")
 # --------------------------------------------------------------------------
 # 首单免运费门槛。**仅限海运**——UPS/DHL 红单一票就能吃掉整单利润。
 FREE_SHIPPING_THRESHOLD = Decimal("500.00")
+# 首单免运费**封顶**(用户拍板 2026-07-30)。
+#
+# **为什么必须封顶**:门槛按订单金额,而运费成本按重量/体积——两者不挂钩。
+# 按 ¥5/公斤算,$500 的花洒单运费约 $37(7%),但换成一个 $3、2kg 的品,
+# 同样 $500 就是 334 公斤 ≈ $230(46%)——**这一单白干还倒贴**。
+# 而且我们是**无固定品类工厂**,将来上什么品自己都还不知道,哪天上个又便宜
+# 又重的东西,这条承诺当场变成陷阱。海运大货还按体积计费,蓬松货更狠。
+#
+# 用金额封顶而不是限重:限重要按产品逐个调,**金额封顶跟品类无关**。
+FREE_SHIPPING_CAP = Decimal("150.00")
 # 阶梯议价起点:起订量的几倍以上可以谈。
 VOLUME_DISCOUNT_MULTIPLE = 5
 # 报价有效期(天)。只对图册有意义,小窗上不显示价格所以不提。
@@ -109,8 +119,10 @@ def _free_shipping_sentence() -> str:
     return (
         f"First order: free shipping on first wholesale orders of "
         f"{DEFAULT_CURRENCY} {FREE_SHIPPING_THRESHOLD:.0f} or more "
-        f"- SEA FREIGHT ONLY, delivered to your door. Express air "
-        f"(UPS / DHL / FedEx) is quoted separately and paid by the buyer."
+        f"- SEA FREIGHT ONLY, delivered to your door, up to "
+        f"{DEFAULT_CURRENCY} {FREE_SHIPPING_CAP:.0f} of freight; anything "
+        f"above that is billed at cost. Express air (UPS / DHL / FedEx) is "
+        f"quoted separately and paid by the buyer."
     )
 
 
@@ -182,7 +194,8 @@ def widget_policies() -> tuple[WidgetPolicy, ...]:
             "text": (
                 f"First wholesale order over {DEFAULT_CURRENCY} "
                 f"{FREE_SHIPPING_THRESHOLD:.0f} ships free "
-                f"- sea freight only"
+                f"- sea freight only, up to {DEFAULT_CURRENCY} "
+                f"{FREE_SHIPPING_CAP:.0f}"
             ),
         },
         {
@@ -234,9 +247,14 @@ WHOLESALE_INTRO_PROOF = (
     "No trading company in between."
 )
 
-# 店型卡片上的鼓励语。用户拍板:**不写 MOQ 数字**(不同产品不一样,写区间显得乱),
-# 但要有一句降低心理门槛的话。"one case" 比 "small MOQ" 具体得多。
-LOW_MINIMUM_LINE = "Low minimums - most lines start at one case."
+# ⚠️ 这里曾经写着 "Low minimums - most lines start at one case."
+# **2026-07-30 用户拍板删掉**:起订量和箱规是两个独立填的数,没有任何机制保证
+# "一箱起订"是真的。哪天某个产品填了箱规 20、起订量 200,页面还在说一箱起订,
+# 买家按一箱来问,我们说不行——那是我们自己写的字打自己的脸。
+#
+# **兑现不了的承诺就删掉那句话**,而不是加一个校验去将就它(见记忆
+# promise-needs-mechanism)。起订量本来就逐款不同,写在图册上按款列最准确。
+MOQ_LINE = "MOQ and case pack are listed per style on our line sheet."
 
 
 def who_we_work_with() -> tuple[tuple[str, str], ...]:
@@ -309,9 +327,10 @@ def wholesale_terms() -> tuple[tuple[str, str], ...]:
         (
             "First order",
             f"free shipping on first wholesale orders of {DEFAULT_CURRENCY} "
-            f"{FREE_SHIPPING_THRESHOLD:.0f} or more - sea freight only. "
-            f"Express air (UPS / DHL / FedEx) is quoted separately and paid "
-            f"by the buyer.",
+            f"{FREE_SHIPPING_THRESHOLD:.0f} or more - sea freight only, up to "
+            f"{DEFAULT_CURRENCY} {FREE_SHIPPING_CAP:.0f} of freight; anything "
+            f"above that is billed at cost. Express air (UPS / DHL / FedEx) "
+            f"is quoted separately and paid by the buyer.",
         ),
         (
             "Defects",

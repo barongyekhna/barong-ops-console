@@ -353,3 +353,141 @@ def test_unverifiable_products_are_kept_not_wiped() -> None:
     ]
     assert products_live.drop_dead_products(groups, None) == 0
     assert groups[0]["categories"][0]["products"]
+
+
+# --------------------------------------------------------------------------
+# 定金 / 尾款：PI 存在的唯一理由就是告诉买家"现在汇多少"
+# --------------------------------------------------------------------------
+
+
+def test_deposit_truncates_the_third_decimal_never_rounds_up() -> None:
+    """**用户拍板 2026-07-30:第三位小数直接舍弃,不四舍五入。**
+
+    余下的分自动落到尾款,所以**永远不会多收客户一分**。
+    `1814.01 ÷ 2 = 907.005` → 定金 907.00,尾款 907.01。
+    """
+    from backend.app.modules.b2b.documents.render_pdf import split_payment
+
+    cases = {
+        "1814.01": ("907.00", "907.01"),
+        "1850.00": ("925.00", "925.00"),
+        "100.01": ("50.00", "50.01"),
+        "0.03": ("0.01", "0.02"),
+        "999.99": ("499.99", "500.00"),
+    }
+    for total, (want_deposit, want_balance) in cases.items():
+        deposit, balance = split_payment(Decimal(total))
+        assert str(deposit) == want_deposit, total
+        assert str(balance) == want_balance, total
+        # 两笔加起来必须**永远**等于总额，一分都不能多也不能少
+        assert deposit + balance == Decimal(total), total
+        # 定金永远不超过一半
+        assert deposit <= Decimal(total) / 2, total
+
+
+def test_invoice_prints_the_amount_to_wire_now() -> None:
+    """此前单子上只有 TOTAL,买家得自己除以二——猜错一分就是来回几封邮件。"""
+    from backend.app.modules.b2b.documents.render_pdf import render_pdf
+
+    text = _pdf_text(render_pdf(_doc(total=Decimal("1814.01"))))
+    assert "Deposit due now" in text
+    assert "907.00" in text
+    assert "Balance before dispatch" in text
+    assert "907.01" in text
+
+
+def test_packing_list_has_no_deposit_lines() -> None:
+    """装箱单不谈钱。"""
+    from backend.app.modules.b2b.documents.render_pdf import render_pdf
+
+    text = _pdf_text(render_pdf(_doc(doc_type="packing_list", number="PL-1")))
+    assert "Deposit due now" not in text
+
+
+# --------------------------------------------------------------------------
+# 首单免运费：承诺写在三处，此前运费栏是纯手填
+# --------------------------------------------------------------------------
+
+
+def test_free_shipping_is_stated_on_the_invoice_when_applied() -> None:
+    """免了要**印出来**,否则买家不知道自己享受了承诺。"""
+    from backend.app.modules.b2b.documents.render_pdf import render_pdf
+
+    terms = dict(_doc().terms_json)
+    terms["free_shipping_applied"] = True
+    text = _pdf_text(render_pdf(_doc(terms_json=terms, freight=Decimal("0"))))
+    assert "FREE on this first wholesale order" in text
+    assert "sea freight" in text.lower()
+
+
+def test_first_order_check_uses_full_email_and_ignores_void() -> None:
+    """按完整邮箱认人(同退订名单/样品抵扣);作废的单不算数。
+
+    **没留邮箱时保守当成老客户**——免错了是白送钱,没免可以补,反过来不行。
+    """
+    from pathlib import Path
+
+    import backend.app.modules.b2b.documents.service as svc
+
+    source = Path(svc.__file__).read_text(encoding="utf-8")
+    body = source[source.index("def _is_first_order(") : source.index("def _next_number(")]
+    assert "normalise(" in body
+    assert "DOC_STATUS_VOID" in body
+    assert "return False" in body, "没邮箱时必须保守返回 False"
+
+
+def test_free_shipping_only_fires_when_freight_was_not_given() -> None:
+    """人明确填了运费就听人的——自动逻辑不该覆盖手工输入。"""
+    from pathlib import Path
+
+    import backend.app.modules.b2b.documents.service as svc
+
+    body = Path(svc.__file__).read_text(encoding="utf-8")
+    body = body[body.index("def create_proforma(") :]
+    assert "if freight is None and subtotal >= policies.FREE_SHIPPING_THRESHOLD" in body
+
+
+def test_free_shipping_is_capped() -> None:
+    """**门槛按订单金额,运费成本按重量/体积——两者不挂钩。**
+
+    按 ¥5/公斤算,$500 的花洒单运费约 $37(7%);换成一个 $3、2kg 的品,
+    同样 $500 就是 334 公斤 ≈ $230(46%)——这一单白干还倒贴。而我们是无固定
+    品类工厂,将来上什么品自己都还不知道。用户拍板封顶 USD 150。
+    """
+    from backend.app.modules.b2b import policies
+
+    assert policies.FREE_SHIPPING_CAP > 0
+    # 封顶必须**印在买家看得到的每一面**，否则就是隐藏条件
+    cap = f"{policies.DEFAULT_CURRENCY} {policies.FREE_SHIPPING_CAP:.0f}"
+    assert cap in " ".join(policies.line_sheet_notes())
+    assert cap in " ".join(e["text"] for e in policies.widget_policies())
+    assert cap in " ".join(d for _t, d in policies.wholesale_terms())
+
+
+def test_freight_above_the_cap_is_charged_to_the_buyer() -> None:
+    """超出封顶的部分要**算进单子**,不是我们默默吃掉。"""
+    from pathlib import Path
+
+    import backend.app.modules.b2b.documents.service as svc
+
+    body = Path(svc.__file__).read_text(encoding="utf-8")
+    body = body[body.index("def create_proforma(") :]
+    assert "policies.FREE_SHIPPING_CAP" in body
+    assert "over_cap" in body
+
+
+def test_over_cap_amount_is_printed_not_hidden() -> None:
+    """买家到货了才发现要补钱,比一开始就说清楚糟糕得多。"""
+    from backend.app.modules.b2b.documents.render_pdf import _freight_line
+
+    line = _freight_line(
+        {
+            "delivery_line": "delivered to your door",
+            "free_shipping_applied": True,
+            "free_shipping_cap": "150.00",
+            "free_shipping_over_cap": "80.00",
+        },
+        "USD",
+    )
+    assert "up to USD 150.00" in line
+    assert "USD 80.00" in line

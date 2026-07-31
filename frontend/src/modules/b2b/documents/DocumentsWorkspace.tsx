@@ -37,6 +37,7 @@ export default function DocumentsWorkspace() {
     buyer_address: "",
     ship_to: "",
     freight: "",
+    freight_quote: "",
     notes: "",
   });
   const [lines, setLines] = useState<Line[]>([]);
@@ -293,6 +294,7 @@ export default function DocumentsWorkspace() {
               ["buyer_address", "公司地址"],
               ["ship_to", "送货地址（和公司地址不同才填）"],
               ["freight", "运费（留空 = 单独另报）"],
+              ["freight_quote", "货代报价（留空即可；首单免运费按它算封顶）"],
             ] as const
           ).map(([key, label]) => (
             <label className={styles.field} key={key}>
@@ -396,6 +398,9 @@ export default function DocumentsWorkspace() {
                 buyer_address: buyer.buyer_address.trim() || null,
                 ship_to: buyer.ship_to.trim() || null,
                 freight: buyer.freight.trim() ? Number(buyer.freight) : null,
+                freight_quote: buyer.freight_quote.trim()
+                  ? Number(buyer.freight_quote)
+                  : null,
                 notes: buyer.notes.trim() || null,
                 lines: lines
                   .filter((line) => line.item_id && Number(line.qty) > 0)

@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Any
 
 from ..linesheet.render_pdf import (
@@ -24,6 +24,26 @@ from ..linesheet.render_pdf import (
 _MARGIN = 46
 _INK = (0.08, 0.25, 0.38)
 _MUTED = (0.36, 0.38, 0.42)
+
+
+def split_payment(total: Any, deposit_percent: int = 50) -> tuple[Decimal, Decimal]:
+    """定金 / 尾款。
+
+    **PI 存在的唯一理由就是告诉买家"现在汇多少"**,而此前单子上只有 TOTAL,
+    他得自己除以二——`1814.01 ÷ 2 = 907.005`,汇 907.00 还是 907.01?猜错一分
+    就是来回几封邮件。
+
+    **用户拍板(2026-07-30):第三位小数直接舍弃,不四舍五入。** 余下的那一分
+    自动落到尾款,所以**永远不会多收客户一分**;两笔加起来永远等于总额。
+    """
+    try:
+        amount = Decimal(str(total))
+    except Exception:  # noqa: BLE001
+        return Decimal("0"), Decimal("0")
+    deposit = (amount * Decimal(deposit_percent) / Decimal(100)).quantize(
+        Decimal("0.01"), rounding=ROUND_DOWN
+    )
+    return deposit, amount - deposit
 
 
 def _money(value: Any, currency: str = "USD") -> str:
@@ -57,6 +77,28 @@ _NUMBER_LABELS = {
     "commercial_invoice": "Invoice No.",
     "packing_list": "Packing List No.",
 }
+
+
+def _freight_line(terms: dict[str, Any], currency: str) -> str:
+    """运费那句。**封顶和超出部分都要印出来**——买家到货了才发现要补钱,
+    比一开始就说清楚糟糕得多。"""
+    delivery = terms.get("delivery_line") or ""
+    if not terms.get("free_shipping_applied"):
+        return f"Freight: {delivery}."
+    cap = terms.get("free_shipping_cap") or ""
+    over = terms.get("free_shipping_over_cap") or ""
+    base = (
+        "Freight: FREE on this first wholesale order - sea freight only, "
+        f"{delivery}"
+    )
+    if cap:
+        base += f", up to {currency} {cap} of freight"
+    if over:
+        base += (
+            f". Freight above that cap ({currency} {over}) is shown as a "
+            "line item above"
+        )
+    return base + "."
 
 
 def render_pdf(document: Any) -> bytes:
@@ -226,6 +268,18 @@ def render_pdf(document: Any) -> bytes:
                 color=_MUTED,
             )
         _total_row("TOTAL", _money(document.total, currency), bold=True)
+        # 买家真正要的那个数。放在 TOTAL 正下方——他视线停在这里。
+        deposit_percent = int(terms.get("deposit_percent") or 50)
+        deposit, balance = split_payment(document.total, deposit_percent)
+        y -= 4
+        _total_row(
+            f"Deposit due now ({deposit_percent}%)",
+            _money(deposit, currency),
+            bold=True,
+        )
+        _total_row(
+            "Balance before dispatch", _money(balance, currency)
+        )
 
     # ── 条款 + 收款信息（买家最需要的两块，放同一屏）──
     y -= 10
@@ -265,7 +319,7 @@ def render_pdf(document: Any) -> bytes:
         "Payment & delivery",
         [
             str(terms.get("payment_terms") or ""),
-            f"Freight: {terms.get('delivery_line') or ''}.",
+            _freight_line(terms, currency),
             str(terms.get("lead_time_note") or ""),
             f"This proforma invoice is valid until {document.valid_until:%Y-%m-%d}.",
         ],

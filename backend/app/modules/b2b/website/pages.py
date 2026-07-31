@@ -111,7 +111,8 @@ def render_store_type_cards(groups: list[dict]) -> str:
     还是这几张,只有数字变大。这就是"买家类型不跟产品数涨"。
 
     卡片上**不写 MOQ 数字**(用户拍板:不同产品不一样,写区间显得乱),
-    只放一句降低心理门槛的话。
+    只指向图册——起订量逐款不同,按款列最准确。曾经写过"most lines start at
+    one case",2026-07-30 删掉:没有任何机制保证那句话是真的。
     """
     if not groups:
         return ""
@@ -125,7 +126,7 @@ def render_store_type_cards(groups: list[dict]) -> str:
             '<div class="by-card">'
             f"<h3>{label}</h3>"
             f"<p>{count} product{'s' if count != 1 else ''} ready to ship."
-            f" {_e(policies.LOW_MINIMUM_LINE)}</p>"
+            f" {_e(policies.MOQ_LINE)}</p>"
             + (f'<div class="by-cards">{thumbs}</div>' if thumbs else "")
             + (f'<p><a class="by-btn" href="{url}">See the range</a></p>' if url else "")
             + "</div>"
@@ -210,7 +211,7 @@ def render_store_type_page(group: dict) -> str:
         '<p class="by-eyebrow2">WHOLESALE</p>'
         f'<p class="by-lead">{count} product{"s" if count != 1 else ""} '
         f"available to {label.lower()}. "
-        f"{_e(policies.LOW_MINIMUM_LINE)}</p>"
+        f"{_e(policies.MOQ_LINE)}</p>"
         "</section>"
         f'<section class="by-block"><h2>The range</h2>{body}</section>'
         '<section class="by-block"><h2>Request the line sheet</h2>'

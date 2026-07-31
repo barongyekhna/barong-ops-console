@@ -35,6 +35,30 @@ _NUMBER_PREFIX = {
 }
 
 
+def _is_first_order(db: Session, buyer_email: str | None) -> bool:
+    """这个买家以前有没有开过单。
+
+    "首单免运费"里的**首单**此前没人判断——承诺写在三个页面上,机制不存在。
+    按**完整邮箱**认人(同退订名单/样品抵扣那条死规矩:按域名会把张三的优惠
+    给李四)。作废的单不算数。
+    """
+    from ..outreach.suppression import normalise
+    from .models import DOC_STATUS_VOID
+
+    key = normalise(buyer_email or "")
+    if not key:
+        # 没留邮箱就认不出是不是首单。**保守起见当成老客户**——免错了是白送钱,
+        # 没免可以补,反过来不行。
+        return False
+    rows = db.scalars(
+        select(B2BDocument).where(B2BDocument.doc_type == DOC_TYPE_PROFORMA)
+    )
+    return not any(
+        normalise(row.buyer_email or "") == key and row.status != DOC_STATUS_VOID
+        for row in rows
+    )
+
+
 def _next_number(db: Session, issued_on: date, doc_type: str = DOC_TYPE_PROFORMA) -> str:
     """`PI-20260730-001`。带日期是为了人一眼看出新旧;序号在当天内递增。
 
@@ -89,6 +113,7 @@ def create_proforma(
     buyer_address: str | None = None,
     ship_to: str | None = None,
     freight: Decimal | None = None,
+    freight_quote: Decimal | None = None,
     notes: str | None = None,
 ) -> B2BDocument:
     company = str(buyer_company or "").strip()
@@ -129,6 +154,26 @@ def create_proforma(
     items = [_line(rows[k], qty) for k, qty in wanted.items()]
     items.sort(key=lambda entry: str(entry["sku"]))
     subtotal = sum(Decimal(str(entry["line_total"])) for entry in items)
+
+    # 首单免运费:我们在小窗/批发页/图册三处承诺了"首单满 $500 免海运",
+    # 而此前运费栏是纯手填——系统不看金额、不提醒、也不知道这是不是首单。
+    # 忙起来忘了填 0,客户拿着我们自己写的承诺来问,尴尬的是我们。
+    free_shipping = False
+    over_cap = Decimal("0")
+    if freight is None and subtotal >= policies.FREE_SHIPPING_THRESHOLD:
+        if _is_first_order(db, buyer_email):
+            free_shipping = True
+            # **封顶**:我们最多承担 FREE_SHIPPING_CAP 的海运费,超出买家自付。
+            # 门槛按订单金额,而运费成本按重量/体积——不封顶的话,一个又便宜
+            # 又重的品能让 $500 的单光运费吃掉 $230。
+            if freight_quote is not None and freight_quote > policies.FREE_SHIPPING_CAP:
+                over_cap = (
+                    Decimal(str(freight_quote)) - policies.FREE_SHIPPING_CAP
+                ).quantize(Decimal("0.01"))
+                freight = over_cap
+            else:
+                freight = Decimal("0")
+
     freight_value = Decimal(str(freight)) if freight is not None else None
     total = subtotal + (freight_value or Decimal("0"))
 
@@ -156,6 +201,13 @@ def create_proforma(
             "delivery_line": policies.DELIVERY_LINE,
             "lead_time_note": "Lead time starts once payment has cleared.",
             "country_of_origin": "China",
+            # 定金比例快照:改 policies.py 不该动已开的单。
+            "deposit_percent": policies.DEPOSIT_PERCENT,
+            # 免运费是**这一单**的事实,不是政策文本——印在单上让买家看见。
+            "free_shipping_applied": free_shipping,
+            "free_shipping_cap": str(policies.FREE_SHIPPING_CAP),
+            # 超出封顶的部分买家自付。印在单上,不让他到货了才发现。
+            "free_shipping_over_cap": str(over_cap) if over_cap else "",
             "banking": dict(profile),
         },
         currency=policies.DEFAULT_CURRENCY,

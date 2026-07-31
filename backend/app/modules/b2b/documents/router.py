@@ -40,6 +40,9 @@ class DocumentCreate(BaseModel):
     ship_to: str | None = None
     lines: list[DocumentLine] = Field(min_length=1)
     freight: Decimal | None = Field(default=None, ge=0)
+    # 货代给我们的报价。首单免运费要拿它算封顶——超出 FREE_SHIPPING_CAP
+    # 的部分买家自付。留空就按不超封顶处理。
+    freight_quote: Decimal | None = Field(default=None, ge=0)
     notes: str | None = None
 
 
@@ -156,6 +159,7 @@ def create_document(
             ship_to=payload.ship_to,
             lines=[entry.model_dump() for entry in payload.lines],
             freight=payload.freight,
+            freight_quote=payload.freight_quote,
             notes=payload.notes,
         )
     except service.DocumentError as exc:

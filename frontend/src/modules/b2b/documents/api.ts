@@ -105,6 +105,8 @@ export async function createDocument(payload: {
   ship_to?: string | null;
   lines: { item_id: string; qty: number }[];
   freight?: number | null;
+  /** 货代报价（我们的成本）。首单免运费用它算封顶。 */
+  freight_quote?: number | null;
   notes?: string | null;
 }): Promise<B2BDocument> {
   const response = await fetch(`${API_PROXY_BASE}/b2b/documents`, {

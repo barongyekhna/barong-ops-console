@@ -49,14 +49,19 @@ def test_no_page_ever_renders_a_product_price() -> None:
     """**最重要的一条。** GMC 把"页面价与 feed 价不符"判成 Misrepresentation,
     这个账号被封过两次只剩一次申诉。小窗、图册、这三处同一条红线。
 
-    唯一允许出现的金额是免运费门槛(USD 500),那是政策不是商品价。
+    允许出现的金额只有两个,而且都是**政策数字不是商品价**:
+    免运费门槛(USD 500)和免运费封顶(USD 150)。
     """
+    allowed = {
+        f"USD {policies.FREE_SHIPPING_THRESHOLD:.0f}",
+        f"USD {policies.FREE_SHIPPING_CAP:.0f}",
+    }
     for markup in (
         pages.render_wholesale_page([_group()]),
         pages.render_store_type_page(_group()),
     ):
-        money = re.findall(r"(?:USD|\$)\s?\d[\d,.]*", _text(markup))
-        assert money in ([], ["USD 500"]), money
+        money = set(re.findall(r"(?:USD|\$)\s?\d[\d,.]*", _text(markup)))
+        assert money <= allowed, money - allowed
         for banned in ("18.50", "35.99", "wholesale price", "MSRP"):
             assert banned not in markup, banned
 
@@ -134,12 +139,16 @@ def test_pages_reuse_the_existing_house_style_classes() -> None:
     assert "<style" not in markup
 
 
-def test_store_type_cards_hide_moq_numbers_but_encourage_small_orders() -> None:
-    """用户拍板:不写 MOQ 数字(不同产品不一样,写区间显得乱),
-    但要有一句降低心理门槛的话。"""
+def test_store_type_cards_point_at_the_line_sheet_for_moq() -> None:
+    """卡片不写 MOQ 数字(逐款不同,写区间显得乱),指向图册。
+
+    **2026-07-30 删掉了 "most lines start at one case"**:起订量和箱规是两个
+    独立填的数,没有任何机制保证那句话是真的。兑现不了的承诺就删掉,而不是
+    加个校验去将就它。
+    """
     markup = _text(pages.render_store_type_cards([_group()]))
-    assert "MOQ" not in markup
-    assert "one case" in markup
+    assert "one case" not in markup, "这句没有机制保证，不该再出现"
+    assert "line sheet" in markup
 
 
 def test_product_tiles_link_to_the_retail_product_page() -> None:
