@@ -1076,3 +1076,32 @@ def test_push_verifies_the_option_actually_landed() -> None:
     # 没存住要置 dirty 并说人话，不能默默算成功
     assert "插件还没装" in src
     assert src.count('_set(db, DIRTY_KEY, "1")') >= 2
+
+
+def test_fixed_failures_stop_showing_as_errors() -> None:
+    """2026-07-31 用户看到「生成失败：'SeoContentItem' object has no attribute
+    'item_type'」以为是新问题——其实是前一天的记录，bug 一分钟后就修了、
+    后面两次都成功了。
+
+    **修好的东西一直红着，比不显示更糟：它会让人对真正的报错脱敏。**
+
+    判据不是"多久以前"，而是"这个选题后来成没成"——一个三天前失败、
+    至今没成功过的任务仍然该显示。
+    """
+    import inspect
+
+    from backend.app.modules.seo_series.content import generation_jobs
+
+    src = inspect.getsource(generation_jobs.jobs_status)
+    assert "superseded" in src
+    assert "last_success" in src
+    # 按选题比对，不是按时间窗
+    assert 'r["topic_id"] in last_success' in src
+    assert "脱敏" in src
+
+    from pathlib import Path
+
+    deck = Path("frontend/src/modules/seo/SeoDeck.tsx").read_text()
+    assert "!j.superseded" in deck
+    # 仍在显示的失败要带时间，否则还是看不出新旧
+    assert "j.finished_at" in deck

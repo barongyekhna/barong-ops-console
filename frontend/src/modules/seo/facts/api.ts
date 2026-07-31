@@ -272,6 +272,9 @@ export type SeoJob = {
   job_kind: string;
   status: string;
   error: string | null;
+  /** 同一个选题后来跑成功了 —— 这条失败是历史，不该再显示成报错 */
+  superseded?: boolean;
+  finished_at?: string | null;
 };
 
 export async function listItems(): Promise<{

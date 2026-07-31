@@ -87,10 +87,22 @@ def enqueue_seo_jobs(
 
 
 def jobs_status(db: Session, *, limit: int = 50) -> list[dict[str, Any]]:
+    """最近的任务。失败的会标 ``superseded``——**同一个选题后来跑成功了**。
+
+    为什么需要这个:失败记录是历史,不该永远在面板上显示成报错。
+    2026-07-31 用户看到「生成失败：'SeoContentItem' object has no attribute
+    'item_type'」以为是新问题,其实那是前一天的记录,bug 一分钟后就修了、
+    后面两次都成功了。**修好的东西一直红着,比不显示更糟——它会让人对
+    真正的报错脱敏。**
+
+    判据不是"多久以前",而是"这个选题后来成没成"——一个三天前失败、至今
+    没成功过的任务,仍然该显示。
+    """
     rows = db.execute(
         text(
             f"""
-            SELECT id, topic_id, job_kind, status, error, started_at, finished_at
+            SELECT id, topic_id, job_kind, status, error, started_at, finished_at,
+                   created_at
             FROM {_TABLE}
             ORDER BY created_at DESC
             LIMIT :limit
@@ -98,18 +110,37 @@ def jobs_status(db: Session, *, limit: int = 50) -> list[dict[str, Any]]:
         ),
         {"limit": limit},
     ).mappings().all()
-    return [
-        {
-            "job_id": str(r["id"]),
-            "topic_id": str(r["topic_id"]),
-            "job_kind": r["job_kind"],
-            "status": r["status"],
-            "error": r["error"],
-            "started_at": r["started_at"].isoformat() if r["started_at"] else None,
-            "finished_at": r["finished_at"].isoformat() if r["finished_at"] else None,
-        }
-        for r in rows
-    ]
+
+    # 每个选题最近一次成功的时间;比它早的失败都已经被覆盖了。
+    last_success: dict[Any, Any] = {}
+    for r in rows:
+        if r["status"] == "success":
+            key = r["topic_id"]
+            if key not in last_success or (r["created_at"] or 0) > last_success[key]:
+                last_success[key] = r["created_at"]
+
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        superseded = (
+            r["status"] == "failed"
+            and r["topic_id"] in last_success
+            and (r["created_at"] or 0) < last_success[r["topic_id"]]
+        )
+        out.append(
+            {
+                "job_id": str(r["id"]),
+                "topic_id": str(r["topic_id"]),
+                "job_kind": r["job_kind"],
+                "status": r["status"],
+                "error": r["error"],
+                "superseded": superseded,
+                "started_at": r["started_at"].isoformat() if r["started_at"] else None,
+                "finished_at": (
+                    r["finished_at"].isoformat() if r["finished_at"] else None
+                ),
+            }
+        )
+    return out
 
 
 def _claim_queued(db: Session, limit: int) -> list[dict[str, Any]]:

@@ -316,8 +316,10 @@ export function SeoDeck() {
           个生成任务在跑。
         </div>
       ) : null}
+      {/* 已被后来的成功覆盖的失败不再显示——修好的东西一直红着，
+          会让人对真正的报错脱敏。 */}
       {jobs
-        .filter((j) => j.status === "failed")
+        .filter((j) => j.status === "failed" && !j.superseded)
         .slice(0, 3)
         .map((j) => (
           <div
@@ -325,6 +327,11 @@ export function SeoDeck() {
             style={{ ...card, borderColor: `${RED}66`, color: RED, fontSize: 12 }}
           >
             生成失败：{j.error}
+            {j.finished_at ? (
+              <span style={{ color: MUTED, marginLeft: 8 }}>
+                {j.finished_at.slice(0, 16).replace("T", " ")}
+              </span>
+            ) : null}
           </div>
         ))}
 
