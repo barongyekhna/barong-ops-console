@@ -1086,6 +1086,10 @@ function isAllowedGeoPath(method: string, path: string[]) {
   ) {
     return method === "POST";
   }
+  // GET /geo/clusters/overlap-check —— 现存簇里有没有父簇+子簇互相抢词
+  if (path.length === 3 && path[1] === "clusters" && path[2] === "overlap-check") {
+    return method === "GET";
+  }
   // GET /geo/clusters/{id}
   if (
     path.length === 3 &&

@@ -51,6 +51,10 @@ from ...modules.content_core.critique import (
 from .content.generation_jobs import enqueue_geo_jobs, jobs_status
 from .content.orchestrator import GeoContentError, GeoContentOrchestrator
 from .content.topic_sourcing import list_topic_candidates
+from .content.cluster_guard import (
+    ClusterOverlapError,
+    overlapping_cluster_pairs,
+)
 
 router = APIRouter(prefix="/geo", tags=["geo-content"])
 
@@ -164,16 +168,20 @@ def geo_create_cluster(
     user: User = Depends(_require_geo_permission(C.PERMISSION_EXECUTE)),
 ) -> dict[str, Any]:
     scope = _scope_context(request)
-    cluster = service.create_cluster(
-        db,
-        scope_context=scope,
-        title=payload.title,
-        topic=payload.topic,
-        google_category_id=payload.google_category_id,
-        category_path=payload.category_path,
-        seed_product_id=payload.seed_product_id,
-        user=user,
-    )
+    try:
+        cluster = service.create_cluster(
+            db,
+            scope_context=scope,
+            title=payload.title,
+            topic=payload.topic,
+            google_category_id=payload.google_category_id,
+            category_path=payload.category_path,
+            seed_product_id=payload.seed_product_id,
+            user=user,
+        )
+    except ClusterOverlapError as exc:
+        # 同一片话题两个簇 = 自己跟自己抢词。拦住并说清楚怎么办。
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     db.commit()
     return service.serialize_cluster(cluster)
 
@@ -190,10 +198,26 @@ def geo_create_cluster_from_product(
         cluster = service.create_cluster_from_product(
             db, product_id=payload.product_id, scope_context=scope, user=user
         )
+    except ClusterOverlapError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     db.commit()
     return service.serialize_cluster(cluster)
+
+
+@router.get("/clusters/overlap-check")
+def cluster_overlap_check(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_geo_permission(C.PERMISSION_READ)),
+) -> dict[str, Any]:
+    """现存的簇里有没有「父簇 + 子簇」同时存在的——它们会互相抢词。
+
+    守卫是后加的,历史数据可能已经重叠。这个清单让它显形,
+    而不是等排名被自己拖下去才发现。
+    """
+    return {"overlaps": overlapping_cluster_pairs(db, _scope_context(request))}
 
 
 @router.get("/clusters/{cluster_id}")

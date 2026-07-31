@@ -297,7 +297,13 @@ def test_one_cluster_per_category_attaches_instead_of_duplicating() -> None:
     from backend.app.modules.geo_series.content import ingest_from_p
 
     src = inspect.getsource(ingest_from_p.ensure_geo_cluster_for_product)
-    assert "google_category_id == google_id" in src
+    # 类目 → 簇的解析已下沉 cluster_guard（它还多守了祖先/后代重叠）
+    assert "resolve_cluster_for_category" in src
+    from backend.app.modules.geo_series.content import cluster_guard
+
+    assert "google_id in by_category" in inspect.getsource(
+        cluster_guard.resolve_cluster_for_category
+    )
     # attaching appends to the product list + records it as pending
     assert "product_ids_json" in src
     assert "pending_product_ids_json" in src
@@ -2005,3 +2011,125 @@ def test_mined_questions_file_themselves_under_the_right_category() -> None:
     assert "google_category_id ==" in take
     # 没有类目归属的只给发起簇
     assert "google_category_id.is_(None)" in take
+
+
+# ===================================================================
+# 簇归属守卫:保证不同产品进对簇,且簇之间不互相抢词
+# ===================================================================
+
+
+def test_cluster_membership_is_an_exact_category_match_not_a_guess() -> None:
+    """"同类目进同簇、不同类目进不同簇"是**结构保证**,不是靠谁记得:
+    产品的 google_product_category 与簇的 google_category_id 精确字符串匹配,
+    没有 AI、没有模糊匹配、没有人工判断。"""
+    from backend.app.modules.geo_series.content import ingest_from_p
+
+    src = inspect.getsource(ingest_from_p.ensure_geo_cluster_for_product)
+    assert "google_product_category" in src
+    assert "resolve_cluster_for_category" in src
+    # 没有类目就不挂簇——绝不瞎猜一个
+    assert "has no google category bound" in src
+
+
+def test_leaf_only_is_deliberately_NOT_enforced() -> None:
+    """强制"必须挂叶子"是错的:谷歌树里根本没有「捏捏」这个叶子,
+    非叶子的 Executive Toys 恰恰是最准的节点。强制叶子只会逼出错误归类
+    (把捏捏塞进 Magnet Toys)。要守的是重叠,不是层级。"""
+    from pathlib import Path
+
+    for path in (
+        Path("backend/app/modules/geo_series/content/ingest_from_p.py"),
+        Path("backend/app/modules/geo_series/content/service.py"),
+    ):
+        text = path.read_text()
+        assert "is_leaf" not in text, f"{path}: 不该按叶子卡产品类目"
+
+
+def test_ancestor_and_descendant_clusters_are_the_real_hazard() -> None:
+    """谷歌类目是树。父类目和子类目各开一簇 = 写同一片话题、抢同一批词。
+    精确匹配只认相等,漏的就是这个。"""
+    from backend.app.modules.geo_series.content import cluster_guard
+
+    resolve = inspect.getsource(cluster_guard.resolve_cluster_for_category)
+    assert '"exact"' in resolve
+    assert '"ancestor"' in resolve
+    assert '"descendant"' in resolve
+    # 祖先优先,而且要挑最近的
+    assert resolve.index('"ancestor"') < resolve.index('"descendant"')
+
+    up = inspect.getsource(cluster_guard.category_ancestors)
+    down = inspect.getsource(cluster_guard.category_descendants)
+    assert "WITH RECURSIVE" in up and "WITH RECURSIVE" in down
+
+
+def test_a_broader_cluster_absorbs_instead_of_splitting() -> None:
+    """已有祖先簇 → 挂上去。再开一个更细的簇就是把同一批词拆成两半自己打自己。
+    真要细分,等那个子类目产品够多、由人明确决定拆。"""
+    from backend.app.modules.geo_series.content import ingest_from_p
+
+    src = inspect.getsource(ingest_from_p.ensure_geo_cluster_for_product)
+    assert 'relation == "ancestor"' in src
+    # 挂到祖先簇上之后不能又往下走建新簇
+    assert src.index('relation == "ancestor"') < src.index('relation == "descendant"')
+
+
+def test_building_a_parent_cluster_over_an_existing_child_is_refused() -> None:
+    """自动合并会动到已发布内容,自动跳过又让产品无处可去——
+    两种都是代码替人做决定。拦住,说清楚,让人判。"""
+    from backend.app.modules.geo_series.content import cluster_guard
+
+    src = inspect.getsource(cluster_guard.assert_no_overlapping_cluster)
+    assert "ClusterOverlapError" in src
+    assert "抢同一批词" in src
+    assert "代码不替你选" in src
+
+    # P 自动挂簇只关心后代方向(祖先方向它是吸收,不是拒绝)
+    narrow = inspect.getsource(cluster_guard.assert_no_descendant_cluster)
+    assert 'relation != "descendant"' in narrow
+
+    # 手工建簇那条路走双向门
+    from backend.app.modules.geo_series.content import service
+
+    assert "assert_no_overlapping_cluster" in inspect.getsource(service.create_cluster)
+
+
+def test_existing_overlaps_are_surfaced_not_left_to_rot() -> None:
+    """守卫是后加的,历史数据可能已经重叠。要让它显形,
+    而不是等排名被自己拖下去才发现。"""
+    from backend.app.modules.geo_series.content import cluster_guard
+    from backend.app.modules.geo_series.router import router
+
+    assert "/geo/clusters/overlap-check" in {r.path for r in router.routes}
+    assert "父簇和子簇写同一片话题" in inspect.getsource(
+        cluster_guard.overlapping_cluster_pairs
+    )
+
+
+def test_manual_cluster_creation_refuses_both_directions() -> None:
+    """2026-07-30 实测抓到我自己的漏:原来只拦了「要建父簇、底下已有子簇」。
+    反过来「要建子簇、上面已有父簇」照样建得出来——而它一样和父簇抢同一批词。
+
+    自动挂簇(P 上架)对祖先是**吸收**;手工建簇是人明确说"我要一个新簇",
+    这时候静默改挂到别的簇上更吓人,该做的是拦住并说清楚。
+    """
+    from backend.app.modules.geo_series.content import cluster_guard, service
+
+    src = inspect.getsource(cluster_guard.assert_no_overlapping_cluster)
+    assert 'relation in ("none", "exact")' in src
+    assert "**底下**" in src  # 后代方向
+    assert "**上面**" in src  # 祖先方向
+    # 两个方向的建议不一样,不能糊成一句
+    assert "产品专属文章" in src
+
+    assert "assert_no_overlapping_cluster" in inspect.getsource(service.create_cluster)
+
+
+def test_static_cluster_routes_are_declared_before_the_uuid_route() -> None:
+    """FastAPI 按声明顺序匹配。/clusters/overlap-check 排在 /clusters/{id} 后面
+    会被当成 UUID 吃掉,返回 422(2026-07-30 线上实测踩到)。"""
+    from backend.app.modules.geo_series.router import router
+
+    paths = [r.path for r in router.routes]
+    assert paths.index("/geo/clusters/overlap-check") < paths.index(
+        "/geo/clusters/{cluster_id}"
+    )

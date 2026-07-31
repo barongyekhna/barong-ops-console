@@ -86,6 +86,14 @@ def create_cluster(
     seed_product_id: UUID | None = None,
     user: Any | None = None,
 ) -> GeoContentCluster:
+    # 同一片话题只能有一个簇——父簇和子簇并存会互相抢词(见 cluster_guard)。
+    # **两个方向都拦**:手工建簇时,祖先和后代一样是自我竞争。
+    if google_category_id:
+        from .cluster_guard import assert_no_overlapping_cluster
+
+        assert_no_overlapping_cluster(
+            db, google_category_id=google_category_id, scope_context=scope_context
+        )
     cluster = GeoContentCluster(
         workspace_key=scope_context.workspace_key,
         business_context=scope_context.business_context,

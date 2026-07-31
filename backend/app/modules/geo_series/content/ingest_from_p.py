@@ -71,18 +71,33 @@ def ensure_geo_cluster_for_product(
     scope = _scope_for_product(product)
     product_key = str(product.id)
 
-    cluster = db.execute(
-        select(GeoContentCluster)
-        .where(
-            GeoContentCluster.google_category_id == google_id,
-            GeoContentCluster.workspace_key == scope.workspace_key,
-            GeoContentCluster.business_context == scope.business_context,
-            GeoContentCluster.scope_mode == scope.scope_mode,
-            GeoContentCluster.status != "archived",
+    # 精确匹配防不住谷歌类目树的**祖先-后代**重叠:父类目和子类目会各开一簇,
+    # 写同一片话题、抢同一批词。守卫把三种关系分开处理(见 cluster_guard 文档)。
+    from .cluster_guard import ClusterOverlapError, resolve_cluster_for_category
+
+    relation, cluster = resolve_cluster_for_category(
+        db, google_category_id=google_id, scope_context=scope
+    )
+    if relation == "ancestor" and cluster is not None:
+        logger.info(
+            "GEO: product %s (%s) attached to broader cluster %s — "
+            "开一个更细的簇会和它抢同一批词",
+            k_product_id,
+            google_id,
+            cluster.id,
         )
-        .order_by(GeoContentCluster.created_at)
-        .limit(1)
-    ).scalar_one_or_none()
+    if relation == "descendant":
+        # 建父簇会和已有的子簇打架。不静默跳过、也不自动合并——两者都在替人
+        # 做决定。留一条明确的日志,产品照常上架,簇的事等人来判。
+        try:
+            from .cluster_guard import assert_no_descendant_cluster
+
+            assert_no_descendant_cluster(
+                db, google_category_id=google_id, scope_context=scope
+            )
+        except ClusterOverlapError as exc:
+            logger.warning("GEO cluster skipped for product %s: %s", k_product_id, exc)
+        return None
 
     category_path = ""
     leaf_name = ""
