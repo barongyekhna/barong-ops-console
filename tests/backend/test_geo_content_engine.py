@@ -1189,8 +1189,13 @@ def test_backlink_workflow_is_brand_new_and_writes_only_description() -> None:
         n["parameters"]["jsCode"] for n in wf["nodes"] if n["name"] == "拆产品"
     )
     assert "targets.map" in split
-    # 契约版本硬断言
-    assert "geo-backlink-package-v1" in split
+    # 契约版本硬断言,而且**从契约导入**不是写死一份
+    from backend.app.modules.geo_series.contract.backlink_package import (
+        GEO_BACKLINK_PACKAGE_VERSION,
+    )
+
+    assert GEO_BACKLINK_PACKAGE_VERSION in split
+    assert "geo-backlink-package-v2" == GEO_BACKLINK_PACKAGE_VERSION
 
 
 def test_backlink_queue_mirrors_serial_semantics() -> None:
@@ -2249,3 +2254,99 @@ def test_js_regex_comes_from_the_same_source_as_python() -> None:
     assert src.startswith("/<section class=")
     assert "kp-guides" in src
     assert src.endswith("/i")
+
+
+# ===================================================================
+# 契约 v2：一条 target 带多个块 + 指纹
+# ===================================================================
+
+
+def test_one_product_gets_exactly_one_target_with_all_its_blocks() -> None:
+    """n8n 是「GET 全部 → 合并 → PUT 全部」。同一个产品拆成两条 target 会读到
+    **同一份旧 description**，第二条 PUT 直接抹掉第一条——这就是 v1 不能沿用的原因。"""
+    from backend.app.modules.geo_series.content import backlink_targets
+
+    src = inspect.getsource(backlink_targets.collect_backlink_targets)
+    assert '"blocks": [' in src
+    # 一次循环只 append 一次
+    assert src.count("targets.append(") == 1
+    assert "第二条 PUT 抹掉第一条" in src
+
+
+def test_stale_block_is_finally_removable() -> None:
+    """契约里 block html 为空**明确定义为"摘掉块"**，但旧代码在收集目标时对空块
+    直接 continue，导致这条语义永远走不到——指南全下线后产品页上的死链摘不掉。
+    2026-07-31 查出，这是本轮优先级最高的一处 bug 修复。"""
+    from backend.app.modules.geo_series.content import backlink_targets
+
+    src = inspect.getsource(backlink_targets.collect_backlink_targets)
+    # 两块都空 **但有历史指纹** → 照样派单
+    assert "if not guides and not factory and not previous:" in src
+    assert "死链永远摘不掉" in src or "摘不掉" in src
+    # 旧的无条件跳过必须消失
+    assert "还没有已发布的指南可挂" not in src
+
+
+def test_fingerprint_short_circuits_and_is_order_stable() -> None:
+    """指纹相同就不派单（零 WP 调用算过期数）。顺序不稳定 = 每次都判过期。"""
+    from backend.app.modules.geo_series.content.backlink_targets import _fingerprint
+
+    a = _fingerprint([("kp-guides", "<g/>"), ("kp-factory", "<f/>")])
+    b = _fingerprint([("kp-factory", "<f/>"), ("kp-guides", "<g/>")])
+    assert a == b, "块的先后不该改变指纹"
+    assert a != _fingerprint([("kp-guides", "<g2/>"), ("kp-factory", "<f/>")])
+
+    src = inspect.getsource(
+        __import__(
+            "backend.app.modules.geo_series.content.backlink_targets",
+            fromlist=["collect_backlink_targets"],
+        ).collect_backlink_targets
+    )
+    assert "previous == fingerprint" in src
+    assert "已是最新" in src
+    # 产出顺序稳定,否则包的字节每次都变
+    assert "targets.sort(" in src
+
+
+def test_backlink_targets_can_be_narrowed_to_one_product() -> None:
+    """上架钩子只关心刚上的那个产品，全站扫是浪费。"""
+    import inspect as _i
+
+    from backend.app.modules.geo_series.content import backlink_targets
+
+    sig = _i.signature(backlink_targets.collect_backlink_targets)
+    assert "product_ids" in sig.parameters
+    assert "if wanted and raw_id not in wanted" in _i.getsource(
+        backlink_targets.collect_backlink_targets
+    )
+
+
+def test_n8n_merge_walks_every_block_and_shares_the_regex_with_python() -> None:
+    """替换规则原本 Python 和 JS 各写一遍要手工同步。让 JS 那份由 Python 生成之后，
+    改一处两边一起变。"""
+    from backend.app.modules.content_core.html_blocks import js_block_regex_source
+    from backend.app.modules.geo_series.n8n.build_backlink_workflow import build
+
+    wf = build()
+    merge = next(
+        n["parameters"]["jsCode"] for n in wf["nodes"] if n["name"] == "拼描述"
+    )
+    assert "row.blocks" in merge and "forEach" in merge
+    # 正则来自 Python 那一个真相源——把 JS 里的 PATTERNS 解析出来逐条比对,
+    # 不是"看着像"。改 html_blocks 而忘了重新生成 workflow,这条会红。
+    import json as _json
+
+    start = merge.index("PATTERNS = ") + len("PATTERNS = ")
+    end = merge.index(";", start)
+    patterns = _json.loads(merge[start:end])
+    for cls in ("kp-guides", "kp-factory"):
+        expected = js_block_regex_source(cls).strip("/").rsplit("/", 1)[0]
+        assert patterns[cls] == expected
+    # 替换值用函数形式——块里含 $& / $1 会被当替换模式解释
+    assert "() => block" in merge
+    # 不认识的 class 一律不动
+    assert "if (!source) { return; }" in merge
+    # 仍然只写 description
+    assert "wp_body: { description: next }" in merge
+    for forbidden in ("regular_price", "stock", "images", "categories"):
+        assert forbidden not in merge

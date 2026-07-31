@@ -648,3 +648,52 @@ def test_pdp_block_order_is_one_constant() -> None:
     from backend.app.modules.content_core.html_blocks import PDP_BLOCK_ORDER
 
     assert PDP_BLOCK_ORDER == ("kp-box", "kp-guides", "kp-factory")
+
+
+# ===================================================================
+# Woo 批量同步（产品卡片的图与真实链接）
+# ===================================================================
+
+
+def test_woo_fetch_is_batched_and_asks_for_the_attachment_id() -> None:
+    """控制台本地没有可用的公网图 URL（磁盘路径 / 要鉴权的端点 / 会过期的 job token），
+    所以带图卡片的图只能来自 Woo。一次调用拿四样：在不在线、真实地址、主图、**附件 id**。
+
+    附件 id 最值钱：插件用 wp_get_attachment_image 能出 srcset/width/height，
+    零布局抖动，而且走 WP 已生成的缩略图而不是把 2000px 原图塞进 300px 卡片。
+    """
+    import inspect
+
+    from backend.app.modules.content_core import wc_sync
+
+    assert wc_sync._BATCH == 50
+    src = inspect.getsource(wc_sync.fetch_product_states)
+    assert "include" in src and "per_page" in src
+    for field in ("permalink", "status", "images"):
+        assert field in src
+    assert '"image_id"' in src
+
+
+def test_woo_fetch_failing_returns_none_not_empty() -> None:
+    """打不通返回 None **不是空字典**——空字典会让调用方以为"这些产品全没了"，
+    一次网络抖动就能把全站产品卡片清空。"""
+    import inspect
+
+    from backend.app.modules.content_core import wc_sync
+
+    src = inspect.getsource(wc_sync.fetch_product_states)
+    assert "reached_any" in src
+    assert "return out if reached_any else None" in src
+    assert wc_sync.fetch_product_states(None, [1]) is None
+
+
+def test_product_links_use_the_real_permalink() -> None:
+    """?p=4148 靠 WP 的 301 才到得了，多一跳、难看、分享出去看不出是什么。
+    latest_public_url 不出网，优先用它。"""
+    import inspect
+
+    from backend.app.modules.seo_series.content import links
+
+    src = inspect.getsource(links._product_links)
+    assert "latest_public_url" in src
+    assert "pretty or f" in src  # 真链接优先，?p= 只是兜底

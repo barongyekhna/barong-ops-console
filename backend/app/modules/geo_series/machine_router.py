@@ -28,7 +28,6 @@ from ..k_series.product_knowledge.constants import (
 )
 from ..k_series.product_knowledge.scope_shim import KScopeContext
 from .content.assemble import assemble_guide_package, cluster_products, load_cluster_items
-from .content.backlink import BLOCK_CLASS
 from .content.backlink_jobs import record_result as backlink_record_result
 from .content.models import GeoBacklinkJob, GeoContentCluster, GeoPublishJob
 from .content.publish_gate import publish_blockers
@@ -38,6 +37,7 @@ from .contract.backlink_package import (
     GEO_BACKLINK_PACKAGE_VERSION,
     BacklinkPackage,
     BacklinkTarget,
+    BlockPatch,
 )
 from .contract.publish_package import GuidePackage
 
@@ -228,8 +228,17 @@ def geo_backlink_package(
             product_id=t["product_id"],
             sku=t.get("sku"),
             woo_product_id=int(t["woo_product_id"]),
-            block_html=str(t.get("block_html") or ""),
-            guide_count=int(t.get("guide_count") or 0),
+            # 一条 target 带这个产品的全部块——拆开会互相覆盖(契约 v2 文档)。
+            blocks=[
+                BlockPatch(
+                    block_class=str(b.get("block_class") or ""),
+                    html=str(b.get("html") or ""),
+                )
+                for b in (t.get("blocks") or [])
+                if isinstance(b, dict) and b.get("block_class")
+            ],
+            fingerprint=str(t.get("fingerprint") or ""),
+            reason=str(t.get("reason") or ""),
         )
         for t in raw_targets
         if isinstance(t, dict) and t.get("product_id") and t.get("woo_product_id")
@@ -239,7 +248,6 @@ def geo_backlink_package(
         job_id=job.job_id,
         channel="woocommerce",
         generated_at=datetime.now(UTC),
-        block_class=BLOCK_CLASS,
         targets=targets,
     )
 

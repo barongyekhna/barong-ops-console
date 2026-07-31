@@ -184,6 +184,32 @@ def record_result(
     job.error = (error or None) if job.status == "failed" else None
     job.finished_at = _now()
     db.add(job)
+
+    if job.status == "success":
+        # 落指纹:下次收集目标时零 WP 调用就能算出"哪些产品页过期了"。
+        # **updated: false 也要写**——那说明线上本来就是这个状态。
+        try:
+            from .backlink_targets import write_fingerprints
+
+            by_product = {
+                str(t.get("product_id")): str(t.get("fingerprint") or "")
+                for t in (job.targets_json or [])
+                if isinstance(t, dict) and t.get("fingerprint")
+            }
+            updates: dict[str, str] = {}
+            for row in updated_items or []:
+                if not isinstance(row, dict):
+                    continue
+                woo_id = str(row.get("woo_product_id") or "").strip()
+                fingerprint = str(row.get("fingerprint") or "") or by_product.get(
+                    str(row.get("product_id")), ""
+                )
+                if woo_id and fingerprint:
+                    updates[woo_id] = fingerprint
+            write_fingerprints(db, updates)
+        except Exception:  # noqa: BLE001 - 台账记不上不该毁掉这次回报
+            logger.exception("backlink fingerprint write failed")
+
     db.commit()
     kick_queue(db, public_base=public_base)
     return job

@@ -71,8 +71,13 @@ def _product_links(db: Session, *, category_id: str | None, hint: str) -> list[d
             KProductKnowledgeProduct.google_product_category.in_(family)
         )
     want = _tokens(hint)
+    candidates = list(db.execute(query.limit(50)).scalars())
+    from ...geo_series.content.product_links import latest_public_url
+
+    permalinks = latest_public_url(db, [p.id for p in candidates])
+
     scored: list[tuple[int, dict]] = []
-    for product in db.execute(query.limit(50)).scalars():
+    for product in candidates:
         title = str(getattr(product, "product_name_en", "") or "").strip()
         if not title:
             continue
@@ -93,13 +98,16 @@ def _product_links(db: Session, *, category_id: str | None, hint: str) -> list[d
         text = str(woo_id or "").strip()
         if not text.isdigit():
             continue  # 还没上架的产品不挂链——挂了就是 404
+        # 真实 permalink 优先。`?p=4148` 靠 WP 的 301 才能到,既难看又多一跳,
+        # 而且分享出去的链接看不出是什么。latest_public_url **不出网**。
+        pretty = permalinks.get(str(product.id), "")
         scored.append(
             (
                 overlap,
                 {
                     "kind": "product",
                     "title": title,
-                    "url": f"https://barongyekhna.com/?p={text}",
+                    "url": pretty or f"https://barongyekhna.com/?p={text}",
                     "woo_product_id": int(text),
                 },
             )

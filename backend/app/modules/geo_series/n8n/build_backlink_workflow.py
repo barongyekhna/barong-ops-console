@@ -14,10 +14,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ...content_core.html_blocks import js_block_regex_source
+from ..contract.backlink_package import GEO_BACKLINK_PACKAGE_VERSION
+
 # P 流实测:Woo 走 httpBasicAuth(不是 wooCommerceApi),凭据名就叫 WooCommerce
 WC_CREDENTIAL = {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}
 WC_PRODUCTS = "https://barongyekhna.com/wp-json/wc/v3/products"
-SCHEMA_VERSION = "geo-backlink-package-v1"
+# 从契约导入,不再写死一份——两处版本号不一致时 n8n 会当场拒绝整单,
+# 而错的那一份可能是这里。
+SCHEMA_VERSION = GEO_BACKLINK_PACKAGE_VERSION
 
 STICKY = f"""## barong控制台-GEO系列-产品页反链（barongGEObacklink001）
 
@@ -46,57 +51,77 @@ const targets = pkg.targets || [];
 if (!targets.length) {{
   throw new Error('反链包里没有要更新的产品');
 }}
-const blockClass = pkg.block_class || 'kp-guides';
 // 必须逐条 map 全部输入——只取第一条会把整批产品压成一个(GEO 发布流踩过)。
+// 一条 target 带这个产品的**全部**块:拆成多条会读到同一份旧 description,
+// 后一条 PUT 抹掉前一条(契约 v2 的由来)。
 return targets.map((t) => ({{
   json: {{
     product_id: t.product_id,
     sku: t.sku || null,
     woo_product_id: t.woo_product_id,
-    block_html: t.block_html || '',
-    block_class: blockClass,
+    blocks: t.blocks || [],
+    fingerprint: t.fingerprint || '',
     url: '{WC_PRODUCTS}/' + t.woo_product_id,
   }},
 }}));
 """.strip()
 
-MERGE_JS = """
-// 有则替换、无则追加——幂等的唯一保证。绝不在这里拼 HTML：区块内容由控制台决定。
+# 正则字面量由 Python 生成——替换规则原本这里和 html_blocks.py 各写一遍要手工同步,
+# 现在两边只有一个真相源(测试断言生成出来的 workflow JSON 里含这个函数的返回值)。
+_BLOCK_RE_JS = {
+    cls: js_block_regex_source(cls) for cls in ("kp-guides", "kp-factory")
+}
+
+MERGE_JS = (
+    """
+// 有则替换、无则追加——幂等的唯一保证。绝不在这里拼 HTML:块内容由控制台决定。
+const PATTERNS = """
+    + json.dumps(
+        {cls: src.strip("/").rsplit("/", 1)[0] for cls, src in _BLOCK_RE_JS.items()},
+        ensure_ascii=False,
+    )
+    + """;
 const rows = $('拆产品').all().map((i) => i.json);
 const current = $input.all().map((i) => i.json);
 return current.map((product, idx) => {
   const row = rows[idx] || {};
-  const block = row.block_html || '';
-  const cls = row.block_class || 'kp-guides';
   const existing = (product && product.description) || '';
-  const re = new RegExp('<section class="[^"]*\\\\b' + cls + '\\\\b[^"]*">[\\\\s\\\\S]*?</section>', 'i');
-  let next;
-  if (re.test(existing)) {
-    next = existing.replace(re, block);
-  } else if (block) {
-    const closing = existing.lastIndexOf('</div>');
-    next = closing < 0 ? existing + block : existing.slice(0, closing) + block + existing.slice(closing);
-  } else {
-    next = existing;
-  }
+  let next = existing;
+  (row.blocks || []).forEach((patch) => {
+    const cls = patch.block_class;
+    const source = PATTERNS[cls];
+    if (!source) { return; }          // 不认识的 class 一律不动,绝不瞎替换
+    const block = patch.html || '';
+    const re = new RegExp(source, 'i');
+    if (re.test(next)) {
+      // 函数形式的替换值:块里含 $& / $1 之类会被当替换模式解释。
+      next = next.replace(re, () => block);
+    } else if (block) {
+      const closing = next.lastIndexOf('</div>');
+      next = closing < 0 ? next + block : next.slice(0, closing) + block + next.slice(closing);
+    }
+  });
   return {
     json: {
       product_id: row.product_id,
       woo_product_id: row.woo_product_id,
       url: row.url,
+      fingerprint: row.fingerprint,
       changed: next !== existing,
       // 只回写 description 一个字段
       wp_body: { description: next },
     },
   };
 });
-""".strip()
+"""
+).strip()
 
 REPORT_JS = """
 const rows = $('拼描述').all().map((i) => i.json);
 const updated = rows.map((r) => ({
   product_id: r.product_id,
   woo_product_id: r.woo_product_id,
+  fingerprint: r.fingerprint,
   updated: !!r.changed,
 }));
 return [{ json: { status: 'success', updated_items: updated } }];
