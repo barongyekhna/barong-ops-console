@@ -648,6 +648,44 @@ def link_net_refresh(
     return refresh_if_due(db, manual=True)
 
 
+# ============================================================ 内容自检
+
+
+# 自检覆盖 GEO 和 SEO 两边,但只挂一个端点、挂在 seo 下——沿用
+# /seo/link-net 的既有做法(GeoContentDeck 调的也是那个)。内链网和自检
+# 本来就是跨 GEO/SEO 的东西,拆两份必然分叉。
+
+
+@router.get("/content-health")
+def content_health(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.read")),
+) -> dict[str, Any]:
+    """「标了完成却没有产物」的记录。只读,不出网。"""
+    from ..content_core.consistency import find_stranded
+
+    stranded = find_stranded(db)
+    return {"stranded": stranded, "count": len(stranded)}
+
+
+@router.post("/content-health/reset")
+def content_health_reset(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    """把卡死的记录复位,让它重新能被派单。"""
+    from ..content_core.consistency import ConsistencyError, reset_stranded
+
+    kind = str(payload.get("kind") or "").strip()
+    ids = [str(i) for i in (payload.get("ids") or [])]
+    try:
+        reset = reset_stranded(db, kind=kind, record_ids=ids)
+    except ConsistencyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"reset": reset}
+
+
 @router.get("/monitor")
 def seo_monitor(
     db: Session = Depends(get_db),

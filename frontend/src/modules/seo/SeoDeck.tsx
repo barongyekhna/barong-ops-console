@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { ContentHealthPanel } from "../content/ContentHealthPanel";
 import { LinkNetPanel } from "../content/LinkNetPanel";
 import { CraftFactDeck } from "./facts/CraftFactDeck";
 import {
@@ -530,7 +531,19 @@ export function SeoDeck() {
         </div>
       </div>
 
-      <LinkNetPanel />
+      {/* 2026-08-01：这里原来是光秃秃两张卡片，没有任何标题，用户找不到
+          「内链网在哪儿」。GEO 那边一直是有标题框的——两边要长一样。 */}
+      <div style={{ ...card, display: "grid", gap: 12 }}>
+        <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
+          <strong style={{ color: "#dfe6ef", fontSize: 14 }}>内链网</strong>
+          <span style={{ color: MUTED, fontSize: 12 }}>
+            产品页 · 指南 · 工艺文 · 博文，四边互链
+          </span>
+        </div>
+        <LinkNetPanel />
+      </div>
+
+      <ContentHealthPanel />
 
       {approvedItems.map((item) => (
         <label

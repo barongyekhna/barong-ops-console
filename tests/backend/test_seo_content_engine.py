@@ -1105,3 +1105,73 @@ def test_fixed_failures_stop_showing_as_errors() -> None:
     assert "!j.superseded" in deck
     # 仍在显示的失败要带时间，否则还是看不出新旧
     assert "j.finished_at" in deck
+
+
+def test_stranded_records_are_detected_and_resettable() -> None:
+    """「标了完成，产物却不存在」必须有东西看着。
+
+    2026-08-01 用户问「geo/seo/内链网是不是都做完了」，我一条条查库才发现
+    SEO 选题 e52c512c 被标成 written、库里一篇文章都没有——07-30 那个
+    item_type bug 的残留（文章回滚了，选题状态和 job 状态各自提交了）。
+
+    后果不是"少一篇文章"，而是**它永远不会再被派出去生成**。这种记录不报错、
+    不变红、不在任何列表里。那次的 bug 早修了，但"没人看着"才是真缺口。
+    """
+    import inspect
+
+    from backend.app.modules.content_core import consistency
+
+    kinds = {c.parent for c in consistency.CHECKS}
+    # GEO 侧是同一个形状（簇标 ready/approved 却零条目），必须一起覆盖，
+    # 否则下次在 GEO 重演一遍。
+    assert "seo_topics" in kinds
+    assert "geo_content_clusters" in kinds
+
+    seo = next(c for c in consistency.CHECKS if c.parent == "seo_topics")
+    # 复位回 picked 而不是 candidate——选题是人挑过的，别把那次决定也抹掉。
+    assert seo.reset_to == "picked"
+    assert "written" in seo.done_status
+
+    reset_src = inspect.getsource(consistency.reset_stranded)
+    # 写的时候自己再验一次，而不是信任读到的列表：否则一次误点就可能把已经
+    # 有文章的记录打回去，让人重复生成（花钱）。
+    assert "NOT EXISTS" in reset_src
+
+    find_src = inspect.getsource(consistency.find_stranded)
+    assert "NOT EXISTS" in find_src
+
+    # 表名/列名虽是代码常量，仍要过白名单——成本为零，且是前提被打破时的唯一拦网
+    import pytest
+
+    with pytest.raises(consistency.ConsistencyError):
+        consistency.ProductionCheck(
+            label="x",
+            parent="seo_topics; drop table users",
+            child="seo_content_items",
+            child_fk="topic_id",
+            done_status=("written",),
+            reset_to="picked",
+            name_column="keyword",
+        )
+
+
+def test_link_net_panel_is_findable_in_seo_deck() -> None:
+    """2026-08-01 用户原话：「我怎么没看到内链网在哪里？」
+
+    直接原因：SeoDeck 里 LinkNetPanel 是光秃秃两张卡片飘在发布页签中间，
+    **没有任何标题**；GEO 那边一直包在写着「内链网」的框里。同一个组件在
+    两个面板里长得不一样，等于在一边把它藏了起来。
+    """
+    from pathlib import Path
+
+    deck = Path("frontend/src/modules/seo/SeoDeck.tsx").read_text()
+    panel_at = deck.index("<LinkNetPanel />")
+    # 标题必须在组件之前、且离得足够近（在同一个框里）
+    title_at = deck.rindex("内链网", 0, panel_at)
+    assert panel_at - title_at < 400
+
+    for path in (
+        "frontend/src/modules/seo/SeoDeck.tsx",
+        "frontend/src/modules/geo/content/GeoContentDeck.tsx",
+    ):
+        assert "<ContentHealthPanel />" in Path(path).read_text(), path
