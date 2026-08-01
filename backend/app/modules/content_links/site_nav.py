@@ -43,6 +43,13 @@ HOME_PAGE_ID = 1446
 HOME_ANCHOR = '<section class="bywhole">'
 HOME_BLOCK_CLASS = "byhubs"
 
+# 主导航挤到几项就会换行。2026-08-01 用户实测:7 项换行,难看;摘掉
+# Privacy Policy 和 Track your order(都挪进页脚)之后 5 项一行放得下。
+# **枢纽是自动进导航的**,所以这个数必须在战报里报出来——否则哪天自动加了
+# 第三个枢纽又换行,人只会觉得"网站突然变丑了",不知道是这里干的。
+# 不做硬拦截:该有的入口不能因为排版被吃掉,该做的是让人看见并自己决定摘谁。
+HEADER_COMFORTABLE_MAX = 6
+
 
 @dataclass(frozen=True)
 class HubSpec:
@@ -230,11 +237,21 @@ def sync_primary_menu(db: Session) -> dict[str, Any]:
     missing = [h.label for h in live if h.url not in final_urls]
     lingering = [h.label for h in empty if h.url in final_urls]
     ok = not missing and not lingering
+
+    final_items = verify.get("data") or []
+    titles = [
+        str((i.get("title") or {}).get("rendered") or "").strip()
+        for i in sorted(final_items, key=lambda x: x.get("menu_order") or 0)
+    ]
+    titles = [t for t in titles if t]
     return {
         "ok": ok,
         "menu_id": menu_id,
         "added": added,
         "removed": removed,
+        "header_titles": titles,
+        "header_count": len(titles),
+        "crowded": len(titles) > HEADER_COMFORTABLE_MAX,
         "in_menu": sorted(h.label for h in live if h.url in final_urls),
         "reason": (
             ""
@@ -378,6 +395,7 @@ def sync_site_nav_safely(db: Session) -> dict[str, Any]:
 
 
 __all__ = [
+    "HEADER_COMFORTABLE_MAX",
     "HOME_BLOCK_CLASS",
     "HOME_PAGE_ID",
     "HUBS",

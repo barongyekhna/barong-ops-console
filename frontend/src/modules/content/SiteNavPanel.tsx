@@ -80,7 +80,15 @@ export function SiteNavPanel() {
         method: "POST",
       });
       const result = await readJson<{
-        menu: { ok: boolean; added?: string[]; removed?: string[]; reason?: string };
+        menu: {
+          ok: boolean;
+          added?: string[];
+          removed?: string[];
+          reason?: string;
+          header_titles?: string[];
+          header_count?: number;
+          crowded?: boolean;
+        };
         home: { ok: boolean; changed?: boolean; reason?: string };
       }>(response, "同步失败");
       const parts: string[] = [];
@@ -101,6 +109,15 @@ export function SiteNavPanel() {
         parts.push(result.home.changed ? "主页：已更新" : "主页：已经是对的");
       } else {
         parts.push(`主页失败：${result.home?.reason ?? "未知"}`);
+      }
+      const titles = result.menu?.header_titles ?? [];
+      if (titles.length) {
+        // 让人看见导航现在长什么样。枢纽是自动进来的，不报出来的话，
+        // 哪天挤到换行只会觉得「网站突然变丑了」。
+        parts.push(`主导航 ${titles.length} 项：${titles.join(" · ")}`);
+      }
+      if (result.menu?.crowded) {
+        parts.push("⚠ 项数偏多，可能会换行——考虑把次要项挪进页脚");
       }
       setNotice(parts.join("　·　"));
       await reload();

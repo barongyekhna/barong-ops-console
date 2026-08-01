@@ -1241,3 +1241,28 @@ def test_home_hub_block_is_idempotent_and_removable() -> None:
 
     # 区块里带 URL，替换值必须走 lambda，不然 \1 会被当反向引用吃掉
     assert "/guides/" in once
+
+
+def test_nav_sync_reports_header_crowding() -> None:
+    """枢纽是**自动**进主导航的，所以导航被挤到什么程度必须报出来。
+
+    2026-08-01 用户实测：7 项就换行，难看。摘掉 Privacy Policy 和
+    Track your order（都挪进页脚）之后 5 项一行放得下。以后 Factory 自动进来
+    是 6 项，再加第三个枢纽就会超。不报的话，人只会觉得「网站突然变丑了」，
+    不知道是这里干的。
+
+    **不做硬拦截**：该有的入口不能因为排版被吃掉，该做的是让人看见、自己决定摘谁。
+    """
+    import inspect
+
+    from backend.app.modules.content_links import site_nav
+
+    src = inspect.getsource(site_nav.sync_primary_menu)
+    assert "header_titles" in src and "crowded" in src
+    # 硬拦截会让"有内容就挂入口"这条规矩失效——确认没有 return/continue 把 live 吃掉
+    assert "HEADER_COMFORTABLE_MAX" not in src.split("for hub in live")[1].split("for hub in empty")[0]
+
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/SiteNavPanel.tsx").read_text()
+    assert "header_titles" in panel and "可能会换行" in panel
