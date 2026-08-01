@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ContentHealthPanel } from "../content/ContentHealthPanel";
+import { SiteNavPanel } from "../content/SiteNavPanel";
 import { LinkNetPanel } from "../content/LinkNetPanel";
 import { CraftFactDeck } from "./facts/CraftFactDeck";
 import {
@@ -543,6 +544,7 @@ export function SeoDeck() {
         <LinkNetPanel />
       </div>
 
+      <SiteNavPanel />
       <ContentHealthPanel />
 
       {approvedItems.map((item) => (

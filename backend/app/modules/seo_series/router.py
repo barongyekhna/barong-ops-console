@@ -648,6 +648,42 @@ def link_net_refresh(
     return refresh_if_due(db, manual=True)
 
 
+# ============================================================ 站内入口
+
+
+@router.get("/site-nav")
+def site_nav_state(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.read")),
+) -> dict[str, Any]:
+    """枢纽页的内容数——决定它该不该有入口。不出网。"""
+    from ..content_links.site_nav import HUBS, hub_item_counts
+
+    counts = hub_item_counts(db)
+    return {
+        "hubs": [
+            {
+                "key": h.key,
+                "label": h.label,
+                "path": h.path,
+                "count": counts.get(h.key, 0),
+            }
+            for h in HUBS
+        ]
+    }
+
+
+@router.post("/site-nav/sync")
+def site_nav_sync(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    """把主导航和主页入口区同步成枢纽的真实状态。"""
+    from ..content_links.site_nav import sync_site_nav
+
+    return sync_site_nav(db)
+
+
 # ============================================================ 内容自检
 
 

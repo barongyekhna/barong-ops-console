@@ -1,0 +1,176 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+const API_PROXY_BASE = "/api/backend";
+const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
+const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+
+const GOLD = "#d9a441";
+const GREEN = "#55bd88";
+const RED = "#dd6d63";
+const MUTED = "#8b98a8";
+
+type Hub = { key: string; label: string; path: string; count: number };
+
+function buildHeaders(json = false) {
+  const headers = new Headers({ Accept: "application/json" });
+  if (json) headers.set("Content-Type", "application/json");
+  if (typeof window !== "undefined") {
+    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+  }
+  return headers;
+}
+
+async function readJson<T>(response: Response, label: string): Promise<T> {
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+  }
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = (await response.json()) as { detail?: string };
+      detail = typeof body?.detail === "string" ? `：${body.detail}` : "";
+    } catch {
+      detail = "";
+    }
+    throw new Error(`${label}（${response.status}）${detail}`);
+  }
+  return (await response.json()) as T;
+}
+
+/**
+ * 站内入口。规矩只有一条：**枢纽页有内容就挂入口，没内容就摘掉。**
+ *
+ * 2026-08-01 之前两头都错着：/guides/ 有 5 篇指南却全站零入口，
+ * /posts/ 正文是「Nothing Found」反而挂在主导航上。
+ */
+export function SiteNavPanel() {
+  const [hubs, setHubs] = useState<Hub[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_PROXY_BASE}/seo/site-nav`, {
+        cache: "no-store",
+        headers: buildHeaders(),
+        method: "GET",
+      });
+      const data = await readJson<{ hubs: Hub[] }>(response, "站内入口加载失败");
+      setHubs(data.hubs ?? []);
+      setError(null);
+    } catch (loadError) {
+      setError((loadError as Error).message);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const sync = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`${API_PROXY_BASE}/seo/site-nav/sync`, {
+        headers: buildHeaders(true),
+        method: "POST",
+      });
+      const result = await readJson<{
+        menu: { ok: boolean; added?: string[]; removed?: string[]; reason?: string };
+        home: { ok: boolean; changed?: boolean; reason?: string };
+      }>(response, "同步失败");
+      const parts: string[] = [];
+      if (result.menu?.ok) {
+        const added = result.menu.added ?? [];
+        const removed = result.menu.removed ?? [];
+        parts.push(
+          added.length || removed.length
+            ? `导航：加了 ${added.join("、") || "无"}${
+                removed.length ? `；摘掉 ${removed.join("、")}` : ""
+              }`
+            : "导航：已经是对的",
+        );
+      } else {
+        parts.push(`导航失败：${result.menu?.reason ?? "未知"}`);
+      }
+      if (result.home?.ok) {
+        parts.push(result.home.changed ? "主页：已更新" : "主页：已经是对的");
+      } else {
+        parts.push(`主页失败：${result.home?.reason ?? "未知"}`);
+      }
+      setNotice(parts.join("　·　"));
+      await reload();
+    } catch (syncError) {
+      setError((syncError as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [reload]);
+
+  if (hubs === null && !error) return null;
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {error ? (
+        <div style={{ ...card, borderColor: `${RED}66`, color: RED }}>{error}</div>
+      ) : null}
+      {notice ? (
+        <div style={{ ...card, borderColor: `${GREEN}66`, color: GREEN }}>
+          {notice}
+        </div>
+      ) : null}
+
+      <div style={card}>
+        <div
+          style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}
+        >
+          <strong style={{ color: "#dfe6ef", fontSize: 14 }}>站内入口</strong>
+          <span style={{ color: MUTED, fontSize: 12 }}>
+            主导航与主页的枢纽入口
+          </span>
+          <span style={{ flex: 1 }} />
+          <button disabled={busy} onClick={() => void sync()} style={primary} type="button">
+            同步站内入口
+          </button>
+        </div>
+        <div style={{ color: MUTED, fontSize: 11, marginTop: 8 }}>
+          规矩只有一条：**有内容就挂入口，没内容就摘掉**。文章一发布会自动跑，
+          这个按钮只为立刻看效果。
+        </div>
+        <ul style={{ color: "#c7d0da", fontSize: 12, margin: "8px 0 0 18px" }}>
+          {(hubs ?? []).map((hub) => (
+            <li key={hub.key}>
+              {hub.label}（{hub.path}）：
+              {hub.count > 0 ? (
+                <span style={{ color: GREEN }}>{hub.count} 篇，会挂在导航上</span>
+              ) : (
+                <span style={{ color: GOLD }}>还没有已发布的文章，入口不挂</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+const card: React.CSSProperties = {
+  background: "#0d131bcc",
+  border: "1px solid #ffffff1a",
+  borderRadius: 10,
+  padding: 14,
+};
+
+const primary: React.CSSProperties = {
+  background: `${GOLD}22`,
+  border: `1px solid ${GOLD}88`,
+  borderRadius: 6,
+  color: GOLD,
+  cursor: "pointer",
+  fontSize: 12,
+  padding: "6px 14px",
+};

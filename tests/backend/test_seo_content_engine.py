@@ -1175,3 +1175,69 @@ def test_link_net_panel_is_findable_in_seo_deck() -> None:
         "frontend/src/modules/geo/content/GeoContentDeck.tsx",
     ):
         assert "<ContentHealthPanel />" in Path(path).read_text(), path
+
+
+def test_hub_entry_points_follow_real_content() -> None:
+    """2026-08-01 用户问「指南页和工厂页怎么在主页上看不到」，查下来两头都错着：
+
+    - /guides/ 有 5 篇已发布指南，**全站零入口**
+    - /posts/ 正文区写着 "Nothing Found"，**却挂在主导航上**
+
+    有内容的页面没人进得去，没内容的页面反而挂在导航上。所以规矩必须**两个
+    方向都自动**：有内容就挂，没内容就摘。只做前一半，用户下架文章之后会留一个
+    指向空页面的导航项。
+    """
+    import inspect
+
+    from backend.app.modules.content_links import site_nav
+
+    keys = {h.key for h in site_nav.HUBS}
+    assert {"guides", "factory"} <= keys
+
+    src = inspect.getsource(site_nav.sync_primary_menu)
+    # 两个方向
+    assert "for hub in live" in src and "for hub in empty" in src
+    # 写完必须回读——POST 200 不等于它真的进了菜单
+    assert "🔴 回读" in src
+    # 只碰自己的菜单项：Shop / Wholesale / Contact 是用户手排的，一个都不许动
+    assert "URL 精确相等" in src
+    # 菜单 id 不许写死（用户随时可能重建菜单）
+    assert "1451" not in src
+
+    counts_src = inspect.getsource(site_nav.hub_item_counts)
+    # published_url 非空 ≠ 线上可见，这条踩过
+    assert 'wp_status == "publish"' in counts_src
+
+    home_src = inspect.getsource(site_nav.sync_home_section)
+    # 必须 context=edit 取 raw；写回 rendered 会把主页永久改形
+    assert "context=edit" in home_src
+    assert "🔴 回读" in home_src
+
+
+def test_home_hub_block_is_idempotent_and_removable() -> None:
+    """主页区块要幂等，而且**空的时候要能摘掉**。
+
+    摘不掉的块是活的死链：枢纽文章全下线之后，主页还指着一个空页面。
+    产品页那边正是这个 bug（2026-07-31 修的），别在主页重演一遍。
+    """
+    from backend.app.modules.content_links.site_nav import (
+        HUBS,
+        apply_hub_section,
+        render_hub_section,
+    )
+
+    page = '<div id="by-home"><section class="byphil">x</section><section class="bywhole">w</section></div>'
+    block = render_hub_section(list(HUBS))
+    once = apply_hub_section(page, block)
+    twice = apply_hub_section(once, block)
+    assert once == twice, "重复应用必须字节相同"
+    assert once.index("byhubs") < once.index('class="bywhole"'), "入口区该在批发 CTA 之上"
+
+    # 全空 → 连带摘掉
+    cleared = apply_hub_section(once, "")
+    assert "byhubs" not in cleared
+    assert 'class="bywhole"' in cleared, "摘块不许伤到别的区块"
+    assert 'class="byphil"' in cleared
+
+    # 区块里带 URL，替换值必须走 lambda，不然 \1 会被当反向引用吃掉
+    assert "/guides/" in once

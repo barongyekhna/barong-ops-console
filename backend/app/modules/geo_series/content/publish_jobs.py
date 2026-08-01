@@ -189,6 +189,13 @@ def record_result(
 
         refresh_link_map_safely(db)
 
+        # 枢纽从空变成有内容那一刻，导航和主页入口自己长出来——**不用人记得去点**。
+        # 这是 2026-08-01 那笔账的根治:指南发出去了，但 /guides/、/factory/
+        # 全站零入口，有内容的页面没人进得去。
+        from ...content_links.site_nav import sync_site_nav_safely
+
+        sync_site_nav_safely(db)
+
     if public_base:
         try:
             kick_queue(db, public_base=public_base)

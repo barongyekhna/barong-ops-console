@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { ContentHealthPanel } from "../../content/ContentHealthPanel";
+import { SiteNavPanel } from "../../content/SiteNavPanel";
 import { LinkNetPanel } from "../../content/LinkNetPanel";
 import {
   analyzeItem,
@@ -1198,6 +1199,7 @@ export function GeoContentDeck() {
                 {/* 内容自检：标了完成却没有产物。全绿时几乎不占地方。 */}
                 <section style={CARD}>
                   <div style={SECTION_BODY}>
+                    <SiteNavPanel />
                     <ContentHealthPanel />
                   </div>
                 </section>

@@ -1067,6 +1067,13 @@ function isAllowedSeoPath(method: string, path: string[]) {
     }
     return path.length === 3 && path[2] === "refresh" && method === "POST";
   }
+  // ---- 站内入口（枢纽页的导航与主页区块）----
+  if (path[1] === "site-nav") {
+    if (path.length === 2) {
+      return method === "GET";
+    }
+    return path.length === 3 && path[2] === "sync" && method === "POST";
+  }
   // ---- 内容自检（标了完成却没有产物）----
   if (path[1] === "content-health") {
     if (path.length === 2) {
