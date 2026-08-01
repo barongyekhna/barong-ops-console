@@ -11,7 +11,13 @@ const GREEN = "#55bd88";
 const RED = "#dd6d63";
 const MUTED = "#8b98a8";
 
-type Hub = { key: string; label: string; path: string; count: number };
+type Hub = {
+  key: string;
+  label: string;
+  path: string;
+  count: number;
+  pinned?: boolean;
+};
 
 function buildHeaders(json = false) {
   const headers = new Headers({ Accept: "application/json" });
@@ -70,6 +76,32 @@ export function SiteNavPanel() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  const togglePin = useCallback(
+    async (hub: Hub) => {
+      setBusy(true);
+      setError(null);
+      try {
+        const response = await fetch(`${API_PROXY_BASE}/seo/site-nav/pin`, {
+          body: JSON.stringify({ key: hub.key, pinned: !hub.pinned }),
+          headers: buildHeaders(true),
+          method: "POST",
+        });
+        await readJson<unknown>(response, "设置失败");
+        setNotice(
+          hub.pinned
+            ? `${hub.label} 取消强制——它现在按内容决定挂不挂。`
+            : `${hub.label} 已强制挂上，即使还没有已发布文章。`,
+        );
+        await reload();
+      } catch (pinError) {
+        setError((pinError as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [reload],
+  );
 
   const sync = useCallback(async () => {
     setBusy(true);
@@ -160,13 +192,25 @@ export function SiteNavPanel() {
         </div>
         <ul style={{ color: "#c7d0da", fontSize: 12, margin: "8px 0 0 18px" }}>
           {(hubs ?? []).map((hub) => (
-            <li key={hub.key}>
+            <li key={hub.key} style={{ marginBottom: 4 }}>
               {hub.label}（{hub.path}）：
               {hub.count > 0 ? (
                 <span style={{ color: GREEN }}>{hub.count} 篇，会挂在导航上</span>
+              ) : hub.pinned ? (
+                <span style={{ color: GREEN }}>
+                  0 篇，但已强制挂上
+                </span>
               ) : (
                 <span style={{ color: GOLD }}>还没有已发布的文章，入口不挂</span>
               )}
+              <button
+                disabled={busy}
+                onClick={() => void togglePin(hub)}
+                style={{ ...ghost, marginLeft: 8 }}
+                type="button"
+              >
+                {hub.pinned ? "取消强制" : "强制挂上"}
+              </button>
             </li>
           ))}
         </ul>
@@ -180,6 +224,16 @@ const card: React.CSSProperties = {
   border: "1px solid #ffffff1a",
   borderRadius: 10,
   padding: 14,
+};
+
+const ghost: React.CSSProperties = {
+  background: "transparent",
+  border: "1px solid #ffffff22",
+  borderRadius: 5,
+  color: "#b9c4d1",
+  cursor: "pointer",
+  fontSize: 11,
+  padding: "2px 8px",
 };
 
 const primary: React.CSSProperties = {

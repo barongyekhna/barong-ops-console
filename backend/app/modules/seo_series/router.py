@@ -657,9 +657,10 @@ def site_nav_state(
     user: User = Depends(_require_seo_permission("seo.content.read")),
 ) -> dict[str, Any]:
     """枢纽页的内容数——决定它该不该有入口。不出网。"""
-    from ..content_links.site_nav import HUBS, hub_item_counts
+    from ..content_links.site_nav import HUBS, hub_item_counts, pinned_hubs
 
     counts = hub_item_counts(db)
+    pinned = pinned_hubs(db)
     return {
         "hubs": [
             {
@@ -667,10 +668,31 @@ def site_nav_state(
                 "label": h.label,
                 "path": h.path,
                 "count": counts.get(h.key, 0),
+                "pinned": h.key in pinned,
             }
             for h in HUBS
         ]
     }
+
+
+@router.post("/site-nav/pin")
+def site_nav_pin(
+    payload: dict[str, Any],
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_seo_permission("seo.content.execute")),
+) -> dict[str, Any]:
+    """强制挂上/取消强制。**例外也要记在册上**——手动去 WP 加菜单项会被
+    下次同步默默摘掉,用户还不知道是谁干的。"""
+    from ..content_links.site_nav import set_hub_pinned, sync_site_nav
+
+    try:
+        pinned = set_hub_pinned(
+            db, key=str(payload.get("key") or ""), pinned=bool(payload.get("pinned"))
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # 改完立刻生效，不用人再点一次同步。
+    return {"pinned": sorted(pinned), **sync_site_nav(db)}
 
 
 @router.post("/site-nav/sync")

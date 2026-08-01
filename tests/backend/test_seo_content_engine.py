@@ -1266,3 +1266,31 @@ def test_nav_sync_reports_header_crowding() -> None:
 
     panel = Path("frontend/src/modules/content/SiteNavPanel.tsx").read_text()
     assert "header_titles" in panel and "可能会换行" in panel
+
+
+def test_pinned_hub_survives_the_content_rule() -> None:
+    """「强制挂上」必须是模块认识的状态，不能靠手工去 WP 加菜单项。
+
+    2026-08-01 用户要求把 /factory/ 直接挂进导航，当时它一篇已发布文章都没有。
+    **手动加是个陷阱**：本模块下次同步会判它"没内容"然后摘掉，用户还完全不知道
+    是谁摘的——一个自动化默默撤销人的操作，比不自动化更糟。
+
+    规矩没变（默认按内容决定），变的是：例外本身也要记在册上。
+    """
+    import inspect
+
+    from backend.app.modules.content_links import site_nav
+
+    src = inspect.getsource(site_nav.desired_hubs)
+    assert "pinned" in src
+    # 强制挂上的必须真的进 live，否则同步会把它摘掉
+    assert "or h.key in pinned" in src
+
+    pin_src = inspect.getsource(site_nav.set_hub_pinned)
+    # 只认识 HUBS 里有的 key，别的一律拒绝（这个值会被拼进菜单同步）
+    assert "未知枢纽" in pin_src
+
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/SiteNavPanel.tsx").read_text()
+    assert "强制挂上" in panel and "取消强制" in panel

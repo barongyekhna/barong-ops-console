@@ -123,11 +123,48 @@ def hub_item_counts(db: Session) -> dict[str, int]:
     return counts
 
 
+# 强制挂上的枢纽(哪怕还没有已发布文章)。存 content_links 那张 KV 表。
+PINNED_KEY = "nav_pinned_hubs"
+
+
+def pinned_hubs(db: Session) -> set[str]:
+    """用户点了「强制挂上」的枢纽。
+
+    为什么要这个开关:2026-08-01 用户要求把 /factory/ 直接挂进导航,当时它
+    一篇文章都没有。**手动去 WP 加一个菜单项是个陷阱**——本模块下次同步会
+    判它"没内容"然后把它摘掉,而且用户完全不知道是谁摘的。
+
+    所以覆盖必须是**模块认识的状态**,不是绕过模块的手工操作。规矩没变:
+    默认按内容决定;要例外,例外本身也得记在册上。
+    """
+    from .link_push import _get
+
+    raw = _get(db, PINNED_KEY)
+    return {p.strip() for p in raw.split(",") if p.strip()}
+
+
+def set_hub_pinned(db: Session, *, key: str, pinned: bool) -> set[str]:
+    from .link_push import _get, _set
+
+    valid = {h.key for h in HUBS}
+    if key not in valid:
+        raise ValueError(f"未知枢纽:{key!r}")
+    current = {p.strip() for p in _get(db, PINNED_KEY).split(",") if p.strip()}
+    current = (current | {key}) if pinned else (current - {key})
+    _set(db, PINNED_KEY, ",".join(sorted(current)))
+    db.commit()
+    return current
+
+
 def desired_hubs(db: Session) -> tuple[list[HubSpec], list[HubSpec]]:
-    """(该挂入口的, 该摘掉入口的)。"""
+    """(该挂入口的, 该摘掉入口的)。
+
+    有内容 → 挂。没内容但被强制挂上 → 也挂。两者都不是 → 摘。
+    """
     counts = hub_item_counts(db)
-    live = [h for h in HUBS if counts.get(h.key, 0) > 0]
-    empty = [h for h in HUBS if counts.get(h.key, 0) <= 0]
+    pinned = pinned_hubs(db)
+    live = [h for h in HUBS if counts.get(h.key, 0) > 0 or h.key in pinned]
+    empty = [h for h in HUBS if h not in live]
     return live, empty
 
 
