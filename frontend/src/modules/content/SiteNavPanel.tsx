@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+import { API_PROXY_BASE, buildHeaders, readJson } from "./api-base";
 
 const GOLD = "#d9a441";
 const GREEN = "#55bd88";
@@ -18,33 +16,6 @@ type Hub = {
   count: number;
   pinned?: boolean;
 };
-
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) headers.set("Content-Type", "application/json");
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response, label: string): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = typeof body?.detail === "string" ? `：${body.detail}` : "";
-    } catch {
-      detail = "";
-    }
-    throw new Error(`${label}（${response.status}）${detail}`);
-  }
-  return (await response.json()) as T;
-}
 
 /**
  * 站内入口。规矩只有一条：**枢纽页有内容就挂入口，没内容就摘掉。**

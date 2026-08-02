@@ -1,0 +1,96 @@
+/* 通用浮窗。视觉照 modules/r/analysis/DetailModal.module.css，
+   行为在 overlay-modal.tsx 里照 modules/notifications/NotificationOverlay.tsx。
+
+   z-index 3600：刻意夹在 DetailModal(3000) 和 NotificationOverlay(4300) 之间——
+   通知驾驶舱要能盖在任何东西上面，而这个要能盖在页面级弹层上面。 */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3600;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 4vh 16px;
+  overflow-y: auto;
+  background: rgb(2 6 12 / 74%);
+  backdrop-filter: blur(4px);
+}
+
+.modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(860px, 100%);
+  max-height: 92vh;
+  overflow: hidden;
+  border: 1px solid rgb(120 200 255 / 25%);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgb(10 18 30 / 97%), rgb(6 12 22 / 97%));
+  color: #d6e8f6;
+  box-shadow: 0 30px 90px rgb(0 0 0 / 60%);
+  animation: modal-in 0.25s ease;
+}
+
+.modal:focus-visible {
+  outline: 2px solid rgb(120 200 255 / 55%);
+  outline-offset: 2px;
+}
+
+@keyframes modal-in {
+  from {
+    transform: translateY(18px) scale(0.98);
+    opacity: 0;
+  }
+}
+
+.closeButton {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgb(120 200 255 / 25%);
+  border-radius: 8px;
+  background: rgb(10 20 34 / 70%);
+  color: #7d95ae;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.closeButton:hover {
+  border-color: rgb(255 107 138 / 55%);
+  color: #ff6b8a;
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid rgb(120 200 255 / 55%);
+  outline-offset: 2px;
+}
+
+@media (max-width: 760px) {
+  .overlay {
+    padding: 0;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal {
+    animation: none;
+  }
+}

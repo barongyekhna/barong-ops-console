@@ -1,0 +1,432 @@
+/* 内容台。页面级 deck 在本仓一律用 module.css（F/H/K/R/P/W/I/B2B 全是）；
+   用内联 style 的只有嵌在别人页面里的小面板，以及 GeoContentDeck(1537 行、
+   117 处内联 style) 和 SeoDeck —— 那两个正是这一页要取代的，别继承它们的做法。 */
+
+.stack {
+  display: grid;
+  gap: 14px;
+}
+
+/* ---------- 四步导轨 ---------- */
+
+.rail {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  overflow: hidden;
+  border: 1px solid rgb(120 160 200 / 18%);
+  border-radius: 12px;
+  background: rgb(11 18 26 / 62%);
+}
+
+.step {
+  position: relative;
+  padding: 15px 16px;
+  border-right: 1px solid rgb(120 160 200 / 18%);
+}
+
+.step:last-child {
+  border-right: 0;
+}
+
+.stepIndex {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #7d8b9b;
+}
+
+.stepTitle {
+  margin-top: 3px;
+  font-size: 14.5px;
+  color: #dfe6ef;
+}
+
+.stepValue {
+  margin-top: 6px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: #a8b4c2;
+}
+
+.stepWho {
+  margin-top: 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7d8b9b;
+}
+
+.stepHere {
+  background: linear-gradient(180deg, rgb(217 164 65 / 14%), transparent);
+}
+
+.stepHere::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: #d9a441;
+}
+
+.stepHere .stepTitle,
+.stepHere .stepWho {
+  color: #d9a441;
+}
+
+.stepDone .stepValue {
+  color: #55bd88;
+}
+
+/* ---------- 待办 ---------- */
+
+.sectionLabel {
+  margin: 16px 0 2px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #7d8b9b;
+}
+
+.card {
+  border: 1px solid rgb(120 160 200 / 18%);
+  border-radius: 10px;
+  background: rgb(11 18 26 / 62%);
+  padding: 15px 17px;
+}
+
+.todoRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.todoRow.actionable {
+  border-color: rgb(217 164 65 / 42%);
+}
+
+.bead {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d9a441;
+}
+
+.todoMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.todoLead {
+  font-size: 14.5px;
+  color: #dfe6ef;
+}
+
+.todoNote {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: #7d8b9b;
+}
+
+.count {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  color: #d9a441;
+}
+
+/* ---------- 机器在跑 ---------- */
+
+.machine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  padding: 14px 17px;
+  border: 1px solid rgb(85 189 136 / 20%);
+  border-radius: 10px;
+  background: rgb(85 189 136 / 5%);
+  font-size: 13px;
+  color: #a8b4c2;
+}
+
+.machineWarn {
+  border-color: rgb(217 164 65 / 32%);
+  background: rgb(217 164 65 / 5%);
+}
+
+.ok {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  color: #55bd88;
+}
+
+.warn {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  color: #d9a441;
+}
+
+/* ---------- 按钮 ---------- */
+
+.btn {
+  flex: none;
+  padding: 7px 15px;
+  border: 1px solid rgb(217 164 65 / 50%);
+  border-radius: 7px;
+  background: rgb(217 164 65 / 13%);
+  color: #d9a441;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: rgb(217 164 65 / 22%);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn:focus-visible {
+  outline: 2px solid #d9a441;
+  outline-offset: 2px;
+}
+
+.btnQuiet {
+  border-color: rgb(120 160 200 / 30%);
+  background: transparent;
+  color: #b9c4d1;
+}
+
+.btnQuiet:hover:not(:disabled) {
+  background: rgb(120 160 200 / 10%);
+}
+
+.btnGo {
+  border-color: rgb(85 189 136 / 50%);
+  background: rgb(85 189 136 / 14%);
+  color: #55bd88;
+}
+
+.btnGo:hover:not(:disabled) {
+  background: rgb(85 189 136 / 24%);
+}
+
+.btnTiny {
+  padding: 2px 9px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+
+/* ---------- 浮窗内容 ---------- */
+
+.modalHead {
+  flex: none;
+  display: flex;
+  gap: 14px;
+  padding: 18px 56px 16px 22px;
+  border-bottom: 1px solid rgb(120 160 200 / 18%);
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-wrap: balance;
+  color: #dfe6ef;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.chip {
+  padding: 3px 10px;
+  border: 1px solid rgb(120 160 200 / 30%);
+  border-radius: 20px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: #7d8b9b;
+}
+
+.chipOk {
+  border-color: rgb(85 189 136 / 42%);
+  color: #55bd88;
+}
+
+.chipBad {
+  border-color: rgb(221 109 99 / 45%);
+  color: #dd6d63;
+}
+
+.modalBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px;
+}
+
+.modalFoot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 22px;
+  border-top: 1px solid rgb(120 160 200 / 18%);
+}
+
+.footHint {
+  flex: 1;
+  font-size: 12px;
+  color: #7d8b9b;
+}
+
+/* ---------- 正文 ---------- */
+
+.articleHeading {
+  margin: 20px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #d9a441;
+}
+
+.articleHeading:first-child {
+  margin-top: 0;
+}
+
+.articleBody {
+  margin: 0;
+  /* 正文宽度贴近 65 字符：整段英文读起来才不费劲 */
+  max-width: 68ch;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #c7d0da;
+}
+
+.question {
+  margin: 20px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #dfe6ef;
+}
+
+.blockLabel {
+  margin: 22px 0 8px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: #7d8b9b;
+}
+
+/* ---------- 解读 / 审查 ---------- */
+
+.panel {
+  margin-top: 18px;
+  padding: 15px 16px;
+  border: 1px solid rgb(120 160 200 / 18%);
+  border-radius: 10px;
+  background: rgb(6 12 20 / 55%);
+}
+
+.panelRow + .panelRow {
+  margin-top: 14px;
+}
+
+.panelLabel {
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: #7d8b9b;
+}
+
+.panelText {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #c7d0da;
+}
+
+.panelList {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #c7d0da;
+}
+
+.good {
+  color: #55bd88;
+}
+
+.risk {
+  color: #d9a441;
+}
+
+.finding {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgb(120 160 200 / 10%);
+  font-size: 13px;
+  color: #c7d0da;
+}
+
+.finding:last-child {
+  border-bottom: 0;
+}
+
+.findingIgnored {
+  opacity: 0.5;
+}
+
+.surface {
+  flex: none;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  color: #7d8b9b;
+}
+
+.findingMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.empty {
+  font-size: 13px;
+  color: #7d8b9b;
+}
+
+.error {
+  border-color: rgb(221 109 99 / 42%);
+  color: #dd6d63;
+}
+
+.notice {
+  border-color: rgb(85 189 136 / 42%);
+  color: #55bd88;
+}
+
+@media (max-width: 720px) {
+  .rail {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .step:nth-child(2) {
+    border-right: 0;
+  }
+
+  .step:nth-child(-n + 2) {
+    border-bottom: 1px solid rgb(120 160 200 / 18%);
+  }
+}

@@ -253,3 +253,99 @@ def test_missing_brand_audit_is_not_clean() -> None:
         "ignored_findings",
     ):
         assert normalize_audit({})[key] == []
+
+
+def test_modal_reuses_the_shared_overlay_and_does_not_reinvent_it() -> None:
+    """浮窗行为只写一处。
+
+    仓库里原本一个通用浮窗都没有，四处各造一半：NotificationOverlay 行为最全
+    但视觉是通知专用的；R 的 DetailModal 视觉能用但**没有** portal / focus trap /
+    滚动锁 / Esc。内容台把两边合起来放进 components/overlay-modal，
+    desk 目录里不许再出现第五份。
+    """
+    from pathlib import Path
+
+    desk = Path("frontend/src/modules/content/desk")
+    modal = (desk / "ArticleModal.tsx").read_text()
+    assert 'from "@/components/overlay-modal"' in modal
+
+    for path in desk.glob("*.tsx"):
+        src = path.read_text()
+        assert "createPortal" not in src, path
+        assert "FOCUSABLE_SELECTOR" not in src, path
+        # 滚动锁也不许自己写
+        assert "body.style.overflow" not in src, path
+
+
+def test_arrow_keys_yield_to_text_inputs() -> None:
+    """←/→ 翻篇是本仓第一处方向键导航（非游戏的 keydown 只有 5 处 Esc）。
+
+    现有代码都没覆盖的坑：焦点在输入框里时方向键属于光标，不属于浮窗。
+    抢走它，用户就没法在输入框里移动光标了。
+    """
+    from pathlib import Path
+
+    overlay = Path("frontend/src/components/overlay-modal.tsx").read_text()
+    assert "isTypingTarget" in overlay
+    assert "isContentEditable" in overlay
+    for tag in ("INPUT", "TEXTAREA"):
+        assert tag in overlay
+
+    modal = Path("frontend/src/modules/content/desk/ArticleModal.tsx").read_text()
+    # 翻页前先让路
+    assert modal.index("isTypingTarget") < modal.index("ArrowLeft")
+
+
+def test_analysis_panel_renders_all_seven_keys() -> None:
+    """DeepSeek 七项，前端一项不藏。
+
+    SEO 面板现在只渲染 risks，把 translation / geo_role / why_written_this_way /
+    strengths / model 全藏了——类型定义里明明都有。用户点名要「必须显示完整」。
+    """
+    from pathlib import Path
+
+    from backend.app.modules.content_desk.dto import ANALYSIS_KEYS
+
+    panel = Path(
+        "frontend/src/modules/content/desk/AnalysisPanel.tsx"
+    ).read_text()
+    for key in ANALYSIS_KEYS:
+        assert key in panel, key
+    # 没解读时不静默隐藏——安静地少一块信息，人根本不会发现
+    assert "跑一次解读" in panel
+
+    types = Path("frontend/src/modules/content/desk/types.ts").read_text()
+    for key in ANALYSIS_KEYS:
+        assert key in types, key
+
+
+def test_bad_derivations_have_no_release_button() -> None:
+    """算错的数**永远**不能人工放行。
+
+    它不是误报族——校验器真的把算式算过一遍，对不上才报的。放行它 = 主动把一个
+    算错的数字发到面向美国买家的页面上。
+    """
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/desk/AuditPanel.tsx").read_text()
+    # 锚到 JSX 那一处区块标题。裸文本 "算错的数字" 在模块 docstring 里也有，
+    # bad_derivations.length 也出现两次——两个都会切错地方。
+    tail = panel[panel.index("blockLabel}>算错的数字"):]
+    assert "误报，放行" not in tail
+    assert "算错的数不能放行" in panel
+    # 已放行的不隐藏——放行清单不自动清理，藏起来人就忘了自己放过什么
+    assert "已放行" in panel
+
+
+def test_fetch_boilerplate_is_defined_once() -> None:
+    """buildHeaders/readJson 原来在三个面板里各复制一份。内容台是第四个用到
+    它们的地方——再抄一遍就是四份，四份必然分叉。"""
+    from pathlib import Path
+
+    root = Path("frontend/src/modules/content")
+    definitions = [
+        path
+        for path in root.rglob("*.ts*")
+        if "function buildHeaders" in path.read_text()
+    ]
+    assert [p.name for p in definitions] == ["api-base.ts"], definitions
