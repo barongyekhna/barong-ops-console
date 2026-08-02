@@ -10,7 +10,7 @@ GEO 和 SEO 是两台**独立演化过**的引擎,不对称是历史事实,不�
 正文形状      sections + answer_blocks    只有 sections
 review 权限   ``geo.content.execute``     ``seo.content.manage``
 review 品牌门 无(发布时才拦)              有(409)
-重写          同步 30s+                   排队
+重写          同步 30s+                   同步 30s+(原为排队,那条路有外键 bug)
 手动解读      有                          **无**(本模块补上)
 发布粒度      整簇                        选中的 item_ids
 ============  ==========================  ==========================
@@ -64,7 +64,10 @@ class ContentSource:
     # -- 行为的不对称 --------------------------------------------------------
     # review 时就拦品牌门(SEO),还是发布时才拦(GEO)
     review_requires_clean: bool
-    # "sync" = 点了卡住等;"queued" = 排队后轮询
+    # "sync" = 点了卡住等;"queued" = 排队后轮询。
+    # **目前两边都是 sync**:SEO 那条排队路有个真实的外键 bug(见 revise_fn),
+    # 而且两边一致之后浮窗只需要一个「重写中…」。留着这个字段是给以后
+    # 真的有排队式来源时用的。
     revise_mode: str
     # "parent" = 整簇发;"items" = 发选中的几篇
     publish_unit: str
@@ -80,6 +83,10 @@ class ContentSource:
     # -- 延迟导入的模型与函数 ------------------------------------------------
     item_model_fn: Callable[[], Any]
     parent_model_fn: Callable[[], Any]
+    # (db, item_id, scope, user) -> None。**两边都是同步的**:SEO 的队列那条路
+    # 有个真实的外键 bug(topic_id 指向 seo_topics,而 revise 塞的是 item_id),
+    # 一按就 ForeignKeyViolation。同步调既绕开它又让两边行为一致。
+    revise_fn: Callable[[Any, Any, Any, Any], None]
 
     @property
     def is_sync_revise(self) -> bool:
@@ -96,6 +103,20 @@ def _geo_parent_model() -> Any:
     from ..geo_series.content.models import GeoContentCluster
 
     return GeoContentCluster
+
+
+def _geo_revise(db: Any, item_id: Any, scope: Any, user: Any) -> None:
+    from ..geo_series.content.orchestrator import GeoContentOrchestrator
+
+    GeoContentOrchestrator(db).revise_item(
+        item_id=item_id, scope_context=scope, user=user
+    )
+
+
+def _seo_revise(db: Any, item_id: Any, scope: Any, user: Any) -> None:
+    from ..seo_series.content.orchestrator import SeoContentOrchestrator
+
+    SeoContentOrchestrator(db).revise(item_id=item_id, scope_context=scope, user=user)
 
 
 def _seo_item_model() -> Any:
@@ -138,6 +159,7 @@ SOURCES: tuple[ContentSource, ...] = (
         resolves_product_labels=True,
         item_model_fn=_geo_item_model,
         parent_model_fn=_geo_parent_model,
+        revise_fn=_geo_revise,
     ),
     ContentSource(
         key="seo",
@@ -159,12 +181,13 @@ SOURCES: tuple[ContentSource, ...] = (
         execute_permission="seo.content.execute",
         manage_permission="seo.content.manage",
         review_requires_clean=True,
-        revise_mode="queued",
+        revise_mode="sync",
         publish_unit="items",
         extra_columns=(("destination", "destination"), ("links", "links_json")),
         resolves_product_labels=False,
         item_model_fn=_seo_item_model,
         parent_model_fn=_seo_parent_model,
+        revise_fn=_seo_revise,
     ),
 )
 

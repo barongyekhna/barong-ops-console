@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
@@ -26,7 +27,7 @@ from ..k_series.product_knowledge.constants import (
     DEFAULT_WORKSPACE_KEY,
 )
 from ..k_series.product_knowledge.scope_shim import KScopeContext
-from .sources import UnknownSource
+from .sources import ContentSource, UnknownSource
 
 router = APIRouter(prefix="/content-desk", tags=["content-desk"])
 
@@ -123,6 +124,208 @@ def article_detail(
     if article is None:
         raise HTTPException(status_code=404, detail="这篇文章不存在。")
     return article
+
+
+def _require_source_permission(
+    request: Request,
+    db: Session,
+    user: User,
+    source: ContentSource,
+    permission_key: str,
+) -> None:
+    """**第二把钥匙:来源引擎自己的权限。**
+
+    只认 ``content.desk.*`` 等于开一条权限洗白通道——只有内容台权限的人
+    可以做他在 ``/geo/*`` 上被 403 拦住的事。owner / super_admin 直通。
+    """
+    permissions = resolve_current_user_permission_info(db, user, request=request)
+    if permissions.is_owner_full_access or is_super_admin_role(
+        getattr(user, "role", None)
+    ):
+        return
+    # manage 蕴含 execute 蕴含 read,与两个引擎自己的判定同规。
+    implied = {
+        permission_key,
+        permission_key.rsplit(".", 1)[0] + ".manage",
+    }
+    if permission_key.endswith(".read"):
+        implied.add(permission_key.rsplit(".", 1)[0] + ".execute")
+    if not implied.intersection(permissions.permission_keys):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"缺少来源模块权限 {permission_key}。",
+        )
+
+
+def _load(
+    db: Session, request: Request, source_key: str, item_id: str
+) -> tuple[Any, Any, ContentSource]:
+    from . import queries
+
+    try:
+        ref = queries.article_ref(
+            db, source_key=source_key, item_id=item_id, scope=_scope(request)
+        )
+    except UnknownSource as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if ref is None:
+        raise HTTPException(status_code=404, detail="这篇文章不存在。")
+    return ref
+
+
+def _detail(db: Session, request: Request, source_key: str, item_id: str) -> dict[str, Any]:
+    from . import queries
+
+    article = queries.article_detail(
+        db, source_key=source_key, item_id=item_id, scope=_scope(request)
+    )
+    if article is None:
+        raise HTTPException(status_code=404, detail="这篇文章不存在。")
+    return article
+
+
+class ReviewIn(BaseModel):
+    review_status: str
+
+
+@router.post("/articles/{source_key}/{item_id}/review")
+def review_article(
+    source_key: str,
+    item_id: str,
+    payload: ReviewIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.execute")),
+) -> dict[str, Any]:
+    """批准 / 驳回。返回**完整 DTO**——GEO 老的 review 端点只返回裸 UUID 的
+    product labels,前端做字段级 merge 会把 SKU 变成 UUID。"""
+    from . import actions
+
+    item, _parent, source = _load(db, request, source_key, item_id)
+    _require_source_permission(request, db, user, source, source.review_permission)
+    try:
+        actions.set_review(
+            db,
+            item=item,
+            source=source,
+            review_status=payload.review_status,
+            user=user,
+        )
+    except actions.DeskActionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    db.commit()
+    return _detail(db, request, source_key, item_id)
+
+
+@router.post("/articles/{source_key}/{item_id}/revise")
+def revise_article(
+    source_key: str,
+    item_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.execute")),
+) -> dict[str, Any]:
+    """按批评重写。**同步**,两边都是。"""
+    from . import actions
+
+    item, _parent, source = _load(db, request, source_key, item_id)
+    _require_source_permission(request, db, user, source, source.execute_permission)
+    try:
+        actions.revise(
+            db, item=item, source=source, scope=_scope(request), user=user
+        )
+    except actions.DeskActionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
+    # orchestrator 内部出网前 commit 过,但 attach_analysis_to 有「快照全空就
+    # 早退不 commit」的分支;而且 commit 会 expire 对象,所以要重新查。
+    db.commit()
+    return _detail(db, request, source_key, item_id)
+
+
+@router.post("/articles/{source_key}/{item_id}/analyze")
+def analyze_article(
+    source_key: str,
+    item_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.execute")),
+) -> dict[str, Any]:
+    """(重新)跑 DeepSeek 解读。**同时补上 SEO 侧根本没有的入口**——
+    没有它,解读失败的 SEO 文章就死锁了(重写要求 risks 非空)。"""
+    from . import actions
+
+    item, parent, source = _load(db, request, source_key, item_id)
+    _require_source_permission(request, db, user, source, source.execute_permission)
+    if not actions.analyze(db, item=item, source=source, parent=parent, user=user):
+        raise HTTPException(
+            status_code=502, detail="内容解读暂时不可用（DeepSeek 没返回可用结果）。"
+        )
+    return _detail(db, request, source_key, item_id)
+
+
+class IgnoreIn(BaseModel):
+    kind: str
+    ignored: bool = True
+    surface: str | None = None
+    term: str | None = None
+    number: str | None = None
+
+
+@router.post("/articles/{source_key}/{item_id}/audit/ignore")
+def ignore_finding(
+    source_key: str,
+    item_id: str,
+    payload: IgnoreIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.manage")),
+) -> dict[str, Any]:
+    """把一条审查发现标成误报放行(或撤销),按放行后重算 clean。
+
+    **前端传原始 finding 字段,指纹由后端算** —— 指纹不进网络,客户端伪造不了
+    一个任意指纹把门禁绕过去(照 K 的做法)。放行要 manage,比批准高一档:
+    放行是推翻门禁。
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from ..content_core.guards import (
+        UnignorableFinding,
+        assert_ignorable,
+        content_finding_fingerprint,
+        recompute_audit_clean,
+    )
+
+    item, _parent, source = _load(db, request, source_key, item_id)
+    _require_source_permission(request, db, user, source, source.manage_permission)
+    try:
+        assert_ignorable(payload.kind)
+    except UnignorableFinding as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    fingerprint = content_finding_fingerprint(
+        payload.kind,
+        {"surface": payload.surface, "term": payload.term, "number": payload.number},
+    )
+    # dict(...) 复制 + flag_modified:JSON 列原地改 SQLAlchemy 检测不到(K 踩过)。
+    audit = (
+        dict(item.brand_audit_json)
+        if isinstance(item.brand_audit_json, dict)
+        else {}
+    )
+    if not audit:
+        raise HTTPException(status_code=409, detail="这篇还没有审查记录，没有可放行的发现。")
+    ignore_set = {str(fp) for fp in audit.get("ignored_findings") or []}
+    if payload.ignored:
+        ignore_set.add(fingerprint)
+    else:
+        ignore_set.discard(fingerprint)
+    audit["ignored_findings"] = sorted(ignore_set)
+    recompute_audit_clean(audit)
+    item.brand_audit_json = audit
+    flag_modified(item, "brand_audit_json")
+    db.add(item)
+    db.commit()
+    return _detail(db, request, source_key, item_id)
 
 
 @router.get("/overview")

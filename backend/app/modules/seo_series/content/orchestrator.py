@@ -360,6 +360,8 @@ class SeoContentOrchestrator:
 
         audit = audit_content_item(
             revised,
+            # 重写会从零重算 audit——人工放行清单必须结转。
+            previous_audit=item.brand_audit_json,
             forbidden_terms=forbidden_terms,
             evidence_numbers=evidence_numbers,
             context_numbers=None,

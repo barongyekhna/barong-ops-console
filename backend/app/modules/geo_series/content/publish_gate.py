@@ -21,6 +21,8 @@ made while building this module:
 
 from __future__ import annotations
 
+from ...content_core.guards import audit_is_clean
+
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -86,7 +88,7 @@ def publish_blockers(
 
     blockers.extend(category_blockers(db, cluster=cluster))
 
-    dirty = [i for i in ready if not (i.brand_audit_json or {}).get("clean")]
+    dirty = [i for i in ready if not audit_is_clean(i.brand_audit_json)]
     if dirty:
         titles = "、".join(str(i.title)[:24] for i in dirty[:3])
         blockers.append(f"有 {len(dirty)} 篇未通过自动审查：{titles}")

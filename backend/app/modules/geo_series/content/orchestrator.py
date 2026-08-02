@@ -440,6 +440,9 @@ class GeoContentOrchestrator:
             revised,
             forbidden_terms=forbidden_terms,
             evidence_numbers=evidence_numbers,
+            # 重写会从零重算 audit——人工放行清单必须结转,否则上一轮放行过的
+            # 误报下一轮又把文章拦住,而且人不知道为什么。
+            previous_audit=item.brand_audit_json,
             context_numbers=_numbers_in_questions(
                 [{"question": item.title}]
                 + [

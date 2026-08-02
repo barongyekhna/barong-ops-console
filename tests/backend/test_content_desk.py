@@ -179,7 +179,10 @@ def test_source_table_captures_every_known_asymmetry() -> None:
     # SEO 在 review 时就拦品牌门（409），GEO 到发布才拦
     assert seo.review_requires_clean is True
     assert geo.review_requires_clean is False
-    assert (geo.revise_mode, seo.revise_mode) == ("sync", "queued")
+    # 重写曾经是「GEO 同步 / SEO 排队」。SEO 那条排队路有个真实的外键 bug
+    # （topic_id 指向 seo_topics，而 revise 塞的是 item_id），2026-08-02 改成
+    # 两边都同步——所以这里现在是一致的，不是漏改。
+    assert (geo.revise_mode, seo.revise_mode) == ("sync", "sync")
     assert (geo.publish_unit, seo.publish_unit) == ("parent", "items")
 
 
@@ -349,3 +352,160 @@ def test_fetch_boilerplate_is_defined_once() -> None:
         if "function buildHeaders" in path.read_text()
     ]
     assert [p.name for p in definitions] == ["api-base.ts"], definitions
+
+
+def test_revise_is_synchronous_on_both_engines() -> None:
+    """两边的「按批评重写」都走同步 orchestrator，**绝不用 SEO 那个队列**。
+
+    seo_generation_jobs.topic_id 上有真实外键 REFERENCES seo_topics(id)，而 SEO 的
+    revise 往这一列塞的是 SeoContentItem.id —— 一按就 ForeignKeyViolation。生产库
+    里 4 条任务全是 generate、revise 零条，所以这个雷从来没炸过（2026-08-02 做
+    内容台时才发现）。同步调既绕开它，又让浮窗只需要一个「重写中…」。
+    """
+    from backend.app.modules.content_desk import actions
+    from backend.app.modules.content_desk.sources import SOURCES
+
+    assert {s.revise_mode for s in SOURCES} == {"sync"}
+    src = inspect.getsource(actions)
+    assert "enqueue_seo_jobs" not in src
+    # 引擎判别也不许写死——走来源表里的 revise_fn
+    assert "revise_fn" in inspect.getsource(actions.revise)
+
+    # SEO 老页面那个按钮也修了（用户已批）
+    seo_router = (REPO / "backend/app/modules/seo_series/router.py").read_text()
+    revise_endpoint = seo_router[seo_router.index('@router.post("/items/{item_id}/revise")') :]
+    revise_endpoint = revise_endpoint[: revise_endpoint.index("@router.", 10)]
+    assert "enqueue_seo_jobs" not in revise_endpoint
+    assert "SeoContentOrchestrator" in revise_endpoint
+
+
+def test_analyze_releases_the_transaction_before_going_out() -> None:
+    """出网前必须 db.commit()。
+
+    GEO 现有的 /geo/items/{id}/analyze 是**带着读事务**做 30 秒 DeepSeek 往返的
+    —— 8 秒的 idle-in-transaction 收割器会把连接掐掉。这条测试确保内容台没有
+    照抄它。
+    """
+    from backend.app.modules.content_desk import actions
+
+    src = inspect.getsource(actions.analyze)
+    commit_at = src.index("db.commit()")
+    call_at = src.index("analyze_item(item")
+    assert commit_at < call_at, "出网调用跑在了 commit 前面"
+
+
+def test_clean_is_decided_in_exactly_one_place() -> None:
+    """全仓库只有一处决定 clean 是什么。
+
+    原来 audit_content_item 里有一行内联计算，四个门禁各自 .get("clean")——
+    其中 SEO 两处写的是 .get("clean", True)（缺审查记录 = 放行），和 GEO 正好
+    相反。同一个概念两个默认值，收敛成一处之后这类分叉不可能再发生。
+    """
+    from backend.app.modules.content_core import guards
+
+    body = _function_body_source(guards.audit_content_item)
+    assert "recompute_audit_clean" in body
+    assert '"clean":' not in body, "audit_content_item 又自己拼 clean 了"
+
+    for path in (
+        "backend/app/modules/geo_series/content/publish_gate.py",
+        "backend/app/modules/seo_series/router.py",
+    ):
+        src = (REPO / path).read_text()
+        code = "\n".join(
+            line for line in src.splitlines() if not line.strip().startswith("#")
+        )
+        assert '.get("clean"' not in code, path
+
+
+def test_missing_audit_is_fail_closed_everywhere() -> None:
+    """没审过 ≠ 审过了。SEO 原来是 fail-open，一篇从没审过的文章能直接批准发布。"""
+    from backend.app.modules.content_core.guards import audit_is_clean
+
+    assert audit_is_clean({}) is False
+    assert audit_is_clean(None) is False
+    assert audit_is_clean({"clean": False}) is False
+    assert audit_is_clean({"clean": True}) is True
+
+
+def test_bad_derivations_can_never_be_ignored() -> None:
+    """算错的数不是误报族——校验器真的把算式算过一遍。
+
+    放行它 = 主动把一个算错的数字发到面向美国买家的页面上。所以：既不能通过
+    assert_ignorable，也不计入「放行后就 clean 了」的那份指纹清单。
+    """
+    from backend.app.modules.content_core import guards
+
+    with pytest.raises(guards.UnignorableFinding):
+        guards.assert_ignorable("derivation")
+    with pytest.raises(guards.UnignorableFinding):
+        guards.assert_ignorable("whatever")
+    for kind in ("brand", "cjk", "number"):
+        guards.assert_ignorable(kind)
+
+    audit = {
+        "bad_derivations": [{"value": "2.4", "from": "5 / 2.11", "reason": "算错了"}],
+        "ignored_findings": [],
+    }
+    # 就算把全部可放行指纹都放行，算错的数仍然让它不 clean
+    audit["ignored_findings"] = guards.audit_finding_fingerprints(audit)
+    guards.recompute_audit_clean(audit)
+    assert audit["clean"] is False
+
+
+def test_ignored_findings_carry_over_a_rewrite() -> None:
+    """重写会从零重算 audit——放行清单必须结转。
+
+    不结转的话，上一轮放行过的误报下一轮又把文章拦住，而且人不知道为什么。
+    刻意**不**自动清理失配的旧指纹（与 K 一致）：自动清理会让同一条误报原样
+    重现时被静默重新拦住。
+    """
+    from backend.app.modules.content_core.guards import audit_content_item
+
+    carried = audit_content_item(
+        {"title": "clean text"},
+        forbidden_terms=[],
+        evidence_numbers=set(),
+        previous_audit={"ignored_findings": ["brand::title::coleman"]},
+    )
+    assert carried["ignored_findings"] == ["brand::title::coleman"]
+
+    for path in (
+        "backend/app/modules/geo_series/content/orchestrator.py",
+        "backend/app/modules/seo_series/content/orchestrator.py",
+    ):
+        src = (REPO / path).read_text()
+        assert "previous_audit=item.brand_audit_json" in src, path
+
+
+def test_fingerprints_normalize_case_and_whitespace() -> None:
+    """跨审查重跑要认得出是同一条，照 K 的契约。"""
+    from backend.app.modules.content_core.guards import content_finding_fingerprint
+
+    a = content_finding_fingerprint("brand", {"surface": "Section[0].Body", "term": " Coleman  Pro "})
+    b = content_finding_fingerprint("brand", {"surface": "section[0].body", "term": "coleman pro"})
+    assert a == b == "brand::section[0].body::coleman pro"
+
+
+def test_desk_writes_need_the_source_engine_permission_too() -> None:
+    """进门看自己的键，动手看来源的键。
+
+    只认 content.desk.* 等于开一条**权限洗白通道**——只有内容台权限的人可以做
+    他在 /geo/* 上被 403 拦住的事。放行要 manage，比批准高一档：放行是推翻门禁。
+    """
+    from backend.app.modules.content_desk import router as desk_router
+    from backend.app.modules.content_desk.sources import SOURCE_BY_KEY
+
+    src = inspect.getsource(desk_router)
+    for endpoint in ("review_article", "revise_article", "analyze_article", "ignore_finding"):
+        assert f"def {endpoint}" in src
+    assert "_require_source_permission" in src
+    # 放行端点用的是 manage_permission，不是 review_permission
+    ignore_src = inspect.getsource(desk_router.ignore_finding)
+    assert "manage_permission" in ignore_src
+
+    geo, seo = SOURCE_BY_KEY["geo"], SOURCE_BY_KEY["seo"]
+    # 不对称是故意的：GEO 能批准但不能放行
+    assert geo.review_permission == "geo.content.execute"
+    assert geo.manage_permission == "geo.content.manage"
+    assert seo.review_permission == "seo.content.manage"

@@ -1022,7 +1022,9 @@ function isAllowedContentDeskPath(method: string, path: string[]) {
     if (path.length === 5) {
       return (
         method === "POST" &&
-        ["review", "revise", "analyze", "recheck"].includes(path[4])
+        // 刻意没有 recheck：真正的「重跑审查」在语义上做不成——它会用今天的
+        // 事实去复查当初的文章，可能把当初判脏的洗白（fail-open）。
+        ["review", "revise", "analyze"].includes(path[4])
       );
     }
     if (path.length === 6) {

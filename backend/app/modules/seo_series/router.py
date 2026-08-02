@@ -501,8 +501,13 @@ def review_item(
     item = db.get(SeoContentItem, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="这篇不存在。")
-    audit = item.brand_audit_json or {}
-    if payload.review_status == "approved" and not audit.get("clean", True):
+    # 缺审查记录一律当作**不通过**。这里原来是 `.get("clean", True)`——
+    # 没审过等于放行,而 GEO 的发布门恰好相反。同一个概念两个默认值。
+    from ..content_core.guards import audit_is_clean
+
+    if payload.review_status == "approved" and not audit_is_clean(
+        item.brand_audit_json
+    ):
         raise HTTPException(
             status_code=409,
             detail="这篇没过品牌/接地审查，不能批准。先按批评重写。",
@@ -519,23 +524,24 @@ def revise_item(
     db: Session = Depends(get_db),
     user: User = Depends(_require_seo_permission("seo.content.execute")),
 ) -> dict[str, Any]:
-    from ..k_series.product_knowledge.scope_shim import KScopeContext
-    from .content.generation_jobs import enqueue_seo_jobs
+    """按批评重写。**同步**——排队那条路是坏的。
 
-    scope = _scope(request)
-    created = enqueue_seo_jobs(
-        db,
-        topic_ids=[item_id],  # revise 任务里这一列存的是 item_id
-        user=user,
-        scope_context=KScopeContext(
-            workspace_key=scope.workspace_key,
-            business_context=scope.business_context,
-            scope_mode=scope.scope_mode,
-        ),
-        job_kind="revise",
-    )
+    ``seo_generation_jobs.topic_id`` 上有真实外键 ``REFERENCES seo_topics(id)``,
+    而这里要传的是 ``SeoContentItem.id``:一按就 ForeignKeyViolation。生产库里
+    revise 任务零条,所以这个雷从来没炸过(2026-08-02 做内容台时才发现)。
+    同步调 orchestrator 既绕开它,又和 GEO 行为一致。代价是这个请求会卡 30 秒+,
+    但它现在是「秒回一个 500」,卡着能用胜过秒回不能用。
+    """
+    from .content.orchestrator import SeoContentError, SeoContentOrchestrator
+
+    try:
+        item = SeoContentOrchestrator(db).revise(
+            item_id=item_id, scope_context=_scope(request), user=user
+        )
+    except SeoContentError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message) from exc
     db.commit()
-    return {"queued": created}
+    return {"id": str(item.id), "review_status": item.review_status}
 
 
 # ============================================================ 发布
@@ -562,7 +568,7 @@ def create_publish(
             blockers.append(f"{item_id}：不存在")
         elif item.review_status != "approved":
             blockers.append(f"《{item.title[:30]}》：还没批准")
-        elif not (item.brand_audit_json or {}).get("clean", True):
+        elif not audit_is_clean(item.brand_audit_json):
             blockers.append(f"《{item.title[:30]}》：没过品牌/接地审查")
     if blockers:
         raise HTTPException(status_code=409, detail={"ready": False, "blockers": blockers})

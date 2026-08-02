@@ -184,6 +184,7 @@ def audit_content_item(
     forbidden_terms: list[str],
     evidence_numbers: set[str],
     context_numbers: set[str] | None = None,
+    previous_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Fail-closed audit of one generated content item.
 
@@ -209,21 +210,148 @@ def audit_content_item(
         for token in _numbers_in(text) - allowed:
             ungrounded.append({"surface": label, "number": token})
 
-    clean = not brand and not cjk_surfaces and not ungrounded and not derived_rejected
-    return {
-        "clean": clean,
+    audit = {
         "site_brand": SITE_BRAND,
         "brand_violations": brand,
         "cjk_surfaces": cjk_surfaces,
         "ungrounded_numbers": ungrounded,
         "bad_derivations": derived_rejected,
+        # 人工放行清单跨重写**结转**:重写会从零重算这份 audit,不带过来的话
+        # 上一轮放行过的误报下一轮又把文章拦住,而且人不知道为什么。
+        "ignored_findings": sorted(
+            {
+                str(fp)
+                for fp in (previous_audit or {}).get("ignored_findings") or []
+                if str(fp).strip()
+            }
+        ),
     }
+    # `clean` 只在这一个地方被决定(见 recompute_audit_clean 的 docstring)。
+    return recompute_audit_clean(audit)
+
+
+# ---------------------------------------------------------------- 人工放行
+
+# 能被人工放行的三族。**``bad_derivations`` 不在里面,而且永远不该在。**
+IGNORABLE_KINDS: tuple[str, ...] = ("brand", "cjk", "number")
+DERIVATION_KIND = "derivation"
+
+
+class UnignorableFinding(ValueError):
+    """试图放行一条不允许放行的发现。"""
+
+
+def _norm(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
+def content_finding_fingerprint(kind: str, finding: Any) -> str:
+    """一条发现的稳定指纹,跨审查重跑保持一致。格式照 K 的
+    ``brand_guard.brand_finding_fingerprint``,只是内容侧有四族而不是两族。
+
+    ``surface`` 用 ``item_text_surfaces`` 生成的标签(``section[0].heading``
+    / ``answer[2].answer`` / ``seo.title`` / ``title``)。
+    """
+    data = finding if isinstance(finding, dict) else {"surface": finding}
+    if kind == "brand":
+        return f"brand::{_norm(data.get('surface'))}::{_norm(data.get('term'))}"
+    if kind == "cjk":
+        return f"cjk::{_norm(data.get('surface'))}"
+    if kind == "number":
+        return f"number::{_norm(data.get('surface'))}::{_norm(data.get('number'))}"
+    if kind == DERIVATION_KIND:
+        # 有指纹是为了能在日志/诊断里指认它,**不代表它可以被放行**。
+        return f"derivation::{_norm(data.get('value'))}::{_norm(data.get('from'))}"
+    return f"{kind}::{_norm(data)}"
+
+
+def assert_ignorable(kind: str) -> None:
+    """``bad_derivations`` 永远不能人工放行。
+
+    它不是误报族。``verify_derived_numbers`` **真的把算式算了一遍** —— 落进
+    ``bad_derivations`` 意味着模型声明的算式和它写出来的数字对不上,或者操作数
+    根本没有来源。放行它 = 主动把一个算错的数字发到面向美国买家的页面上。
+    要么改数,要么重写。
+    """
+    if kind not in IGNORABLE_KINDS:
+        raise UnignorableFinding(
+            "算错的数字不能人工放行——校验器真的算过一遍。改数或者重写。"
+            if kind == DERIVATION_KIND
+            else f"未知的发现类型：{kind!r}"
+        )
+
+
+def audit_finding_fingerprints(audit: Any) -> list[str]:
+    """这份 audit 里全部**可放行**发现的指纹。
+
+    ``bad_derivations`` **不计入** —— 它不可放行,所以永远算作未解决,
+    否则「放行完就 clean 了」会把一个算错的数字放上线。
+    """
+    data = audit if isinstance(audit, dict) else {}
+    out = [
+        content_finding_fingerprint("brand", v)
+        for v in data.get("brand_violations") or []
+    ]
+    out += [
+        content_finding_fingerprint("cjk", {"surface": s})
+        for s in data.get("cjk_surfaces") or []
+    ]
+    out += [
+        content_finding_fingerprint("number", v)
+        for v in data.get("ungrounded_numbers") or []
+    ]
+    return out
+
+
+def audit_unresolved(audit: Any) -> list[str]:
+    """扣掉放行清单之后仍未解决的发现。"""
+    data = audit if isinstance(audit, dict) else {}
+    ignored = {str(fp) for fp in data.get("ignored_findings") or []}
+    unresolved = [fp for fp in audit_finding_fingerprints(data) if fp not in ignored]
+    # 算错的数永不可忽略,直接计入未解决。
+    unresolved += [
+        content_finding_fingerprint(DERIVATION_KIND, row)
+        for row in data.get("bad_derivations") or []
+    ]
+    return unresolved
+
+
+def recompute_audit_clean(audit: dict[str, Any]) -> dict[str, Any]:
+    """按放行清单重算 ``clean``,原地写回并返回同一个 dict。
+
+    **全仓库只有这一个地方决定 clean 是什么。** 原来 ``audit_content_item``
+    里有一行内联的 `clean = not brand and not cjk and ...`,而四个门禁各自
+    ``.get("clean")`` —— 其中 SEO 两处还写的是 ``.get("clean", True)``
+    (缺审查记录 = 放行),和 GEO 正好相反。收敛成一处之后这类分叉不可能再发生。
+    """
+    unresolved = audit_unresolved(audit)
+    audit["unresolved_count"] = len(unresolved)
+    audit["clean"] = not unresolved
+    return audit
+
+
+def audit_is_clean(audit: Any) -> bool:
+    """门禁统一读这个。**缺审查记录一律当作不通过**(fail-closed)。
+
+    没审过不等于审过了。SEO 原来两处是 fail-open,一篇从没审过的文章可以直接
+    批准并发布出去。
+    """
+    return bool(isinstance(audit, dict) and audit and audit.get("clean"))
 
 
 __all__ = [
-    "numbers_in_text",
-    "verify_derived_numbers",
+    "DERIVATION_KIND",
+    "IGNORABLE_KINDS",
+    "UnignorableFinding",
+    "assert_ignorable",
+    "audit_content_item",
+    "audit_finding_fingerprints",
+    "audit_is_clean",
+    "audit_unresolved",
+    "content_finding_fingerprint",
     "evidence_number_corpus",
     "item_text_surfaces",
-    "audit_content_item",
+    "numbers_in_text",
+    "recompute_audit_clean",
+    "verify_derived_numbers",
 ]

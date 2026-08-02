@@ -34,3 +34,47 @@ export async function fetchArticle(
   });
   return readJson<Article>(response, "文章加载失败");
 }
+
+async function post<T>(path: string, body: unknown, label: string): Promise<T> {
+  const response = await fetch(`${BASE}${path}`, {
+    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<T>(response, label);
+}
+
+export function reviewArticle(
+  source: string,
+  id: string,
+  reviewStatus: "approved" | "rejected" | "pending",
+): Promise<Article> {
+  return post(
+    `/articles/${source}/${id}/review`,
+    { review_status: reviewStatus },
+    reviewStatus === "approved" ? "批准失败" : "驳回失败",
+  );
+}
+
+/** 同步：两边都要等 AI 写完（约 30 秒）。 */
+export function reviseArticle(source: string, id: string): Promise<Article> {
+  return post(`/articles/${source}/${id}/revise`, {}, "重写失败");
+}
+
+export function analyzeArticle(source: string, id: string): Promise<Article> {
+  return post(`/articles/${source}/${id}/analyze`, {}, "解读失败");
+}
+
+/** 放行/撤销一条审查发现。**指纹由后端算**——前端只传原始字段。 */
+export function ignoreFinding(
+  source: string,
+  id: string,
+  payload: Record<string, unknown>,
+  ignored: boolean,
+): Promise<Article> {
+  return post(
+    `/articles/${source}/${id}/audit/ignore`,
+    { ...payload, ignored },
+    ignored ? "放行失败" : "撤销放行失败",
+  );
+}

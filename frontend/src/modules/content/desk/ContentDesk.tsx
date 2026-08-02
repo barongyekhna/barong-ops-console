@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ArticleModal } from "./ArticleModal";
 import styles from "./ContentDesk.module.css";
-import { fetchQueue } from "./api";
+import type { IgnorePayload } from "./AuditPanel";
+import {
+  analyzeArticle,
+  fetchQueue,
+  ignoreFinding,
+  reviewArticle,
+  reviseArticle,
+} from "./api";
 import type { Article } from "./types";
 
 /**
@@ -17,6 +24,8 @@ export function ContentDesk() {
   const [queue, setQueue] = useState<Article[] | null>(null);
   const [index, setIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -57,6 +66,52 @@ export function ContentDesk() {
   }, [queue]);
 
   const current = index !== null ? (queue?.[index] ?? null) : null;
+
+  /** 用响应的**完整 DTO 整体替换**当前条，不做字段级 merge——
+   *  GEO 老 review 端点返回裸 UUID 的 product labels，merge 会把 SKU 变 UUID。 */
+  const replaceCurrent = useCallback((article: Article) => {
+    setQueue((rows) =>
+      rows
+        ? rows.map((row) =>
+            row.id === article.id && row.source === article.source ? article : row,
+          )
+        : rows,
+    );
+  }, []);
+
+  const run = useCallback(
+    async (tag: string, action: () => Promise<Article>, done?: string) => {
+      setBusy(tag);
+      setError(null);
+      setNotice(null);
+      try {
+        replaceCurrent(await action());
+        if (done) setNotice(done);
+        return true;
+      } catch (actionError) {
+        setError((actionError as Error).message);
+        return false;
+      } finally {
+        setBusy(null);
+      }
+    },
+    [replaceCurrent],
+  );
+
+  const approveAndAdvance = useCallback(async () => {
+    if (!current) return;
+    const ok = await run("approve", () =>
+      reviewArticle(current.source, current.id, "approved"),
+    );
+    if (!ok) return;
+    // 批准完直接跳下一篇——8 篇要能一口气过完，不回列表。
+    if ((index ?? 0) + 1 < total) {
+      setIndex((value) => (value === null ? null : value + 1));
+    } else {
+      setIndex(null);
+      await reload();
+    }
+  }, [current, index, reload, run, total]);
 
   return (
     <div className={styles.stack}>
@@ -109,17 +164,43 @@ export function ContentDesk() {
       {current ? (
         <ArticleModal
           action={{
-            busy: null,
-            onAnalyze: () => undefined,
-            onApprove: () => undefined,
-            onReject: () => undefined,
-            onRevise: () => undefined,
-            onToggleIgnore: () => undefined,
+            busy,
+            onAnalyze: () =>
+              void run(
+                "analyze",
+                () => analyzeArticle(current.source, current.id),
+                "解读好了。",
+              ),
+            onApprove: () => void approveAndAdvance(),
+            onReject: () =>
+              void run(
+                "reject",
+                () => reviewArticle(current.source, current.id, "rejected"),
+                "已驳回。",
+              ),
+            onRevise: () =>
+              void run(
+                "revise",
+                () => reviseArticle(current.source, current.id),
+                "已按批评重写——改不了的会在下面如实说明。",
+              ),
+            onToggleIgnore: (payload: IgnorePayload, ignored: boolean) =>
+              void run(
+                "ignore",
+                () =>
+                  ignoreFinding(
+                    current.source,
+                    current.id,
+                    payload as unknown as Record<string, unknown>,
+                    ignored,
+                  ),
+                ignored ? "已放行这一条。" : "已撤销放行。",
+              ),
           }}
           article={current}
-          error={null}
+          error={error}
           index={index ?? 0}
-          notice="步 2 只做「读」——批准、重写、放行下一步接上。"
+          notice={notice}
           onClose={closeModal}
           onNext={goNext}
           onPrev={goPrev}
