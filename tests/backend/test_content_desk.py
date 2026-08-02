@@ -644,3 +644,21 @@ def publishing_module():  # noqa: D103 - 测试辅助
     from backend.app.modules.content_desk import publishing
 
     return publishing
+
+
+def test_topic_backlog_does_not_hijack_the_rail() -> None:
+    """选题有存货是**常态**，不是卡住。
+
+    关键词雷达天天在跑，候选池永远不空。如果按「第一个有待办的步骤」算，导轨会
+    **永远指着①选题**，「现在卡在哪」这个信号当场作废——而这一页存在的全部理由
+    就是这个信号。2026-08-02 上线时实测就踩到了：9 篇文章等着审，导轨却指着选题。
+
+    所以选题类待办标 blocking=False：出现在清单里，但不抢导轨。
+    """
+    from backend.app.modules.content_desk import workflow
+
+    src = _function_body_source(workflow.build_overview)
+    assert "blocking" in src
+    # 挡路集合和「有待办」集合是两个东西
+    assert "blocking = {" in src or "blocking =" in src
+    assert "'blocking'" in src or '"blocking"' in src

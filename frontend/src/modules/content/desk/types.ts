@@ -85,6 +85,8 @@ export type Todo = {
   lead: string;
   note: string;
   action: "review" | "publish" | "engines";
+  /** 挡路的（审/发/生成失败）才抢导轨；选题类是建议，出现在清单里但不抢。 */
+  blocking?: boolean;
 };
 
 export type MachineLane = {

@@ -1,7 +1,7 @@
 """四步导轨 + 待办清单。
 
-**「卡在哪一步」是算出来的,不是手画的** —— 从①往④走,第一个待办数 > 0 的
-步骤亮。判据写成一张声明式的表,加一条待办就是加一行。
+**「卡在哪一步」是算出来的,不是手画的** —— 从①往④走,第一个**挡路的**待办
+所在的步骤亮。「挡路」这个限定很关键,见 ``build_overview`` 里的注释。
 
 用户原话:「我经常不知道自己下一步该干嘛了」。所以这里的每条待办都得是
 **一句人话 + 一个动作**,不是一个状态码。
@@ -139,6 +139,7 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 "lead": f"{pending} 篇文章等你审",
                 "note": "审完才能发。浮窗里能一口气过完。",
                 "action": "review",
+                "blocking": True,
             }
         )
     if to_publish:
@@ -149,6 +150,7 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 "lead": f"{to_publish} 篇已批准，还没发出去",
                 "note": "发布前会先列出这次到底会发哪几篇。",
                 "action": "publish",
+                "blocking": True,
             }
         )
     if failures:
@@ -159,6 +161,7 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 "lead": f"{len(failures)} 个生成任务失败了",
                 "note": (failures[0].get("error") or "")[:80],
                 "action": "engines",
+                "blocking": True,
             }
         )
     if unpicked:
@@ -169,6 +172,8 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 "lead": f"{unpicked} 个高分选题还没挑",
                 "note": "去 SEO 引擎的关键词雷达挑。GEO 够得到的题已经排除了。",
                 "action": "engines",
+                # **不算挡路**:选题有存货是常态。见下面 here 的注释。
+                "blocking": False,
             }
         )
     if no_questions:
@@ -180,12 +185,23 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 # 空问句**不阻塞**生成,只是退化成按产品规格写。别写成「不能生成」。
                 "note": "挑了才会回答真实买家问题；不挑也能写，但只能按规格写。",
                 "action": "engines",
+                "blocking": False,
             }
         )
 
-    # 卡在哪一步 = 从①往④第一个有待办的。都没有就停在①(等机器挑新题)。
-    with_todo = {todo["step"] for todo in todos}
-    here = next((s.key for s in STEPS if s.key in with_todo), STEP_PICK)
+    # 卡在哪一步 = 从①往④第一个**挡路的**待办。
+    #
+    # 关键是「挡路」这个限定。选题有存货是**常态**——雷达天天在跑,候选池永远
+    # 不空。按「第一个有待办的」算,导轨会永远指着①,「现在卡在哪」这个信号当场
+    # 作废。而这一页存在的全部理由就是这个信号。
+    # 所以选题类待办标成建议(blocking=False):它出现在待办清单里,但不抢导轨。
+    with_todo = {t["step"] for t in todos}
+    blocking = {t["step"] for t in todos if t.get("blocking")}
+    here = next(
+        (s.key for s in STEPS if s.key in blocking),
+        # 没有任何挡路的 → 停在最后一步:该做的都做完了。
+        STEP_PUBLISH,
+    )
 
     values = {
         STEP_PICK: f"{unpicked + no_questions} 件待挑",
