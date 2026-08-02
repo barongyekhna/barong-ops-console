@@ -235,6 +235,9 @@ function candidateValues(paramName) {
   if (name === "entry_key") return ["modules.example.entry"];
   if (name === "module_id") return ["k.product_knowledge", UUID_SAMPLE, "12"];
   if (name === "game_id") return ["snake"];
+  // 内容台的 source 只有两个合法值，代理层就把它卡死（别的段一律 404 在代理）。
+  // 灌通用样本的话，严格的白名单会正确地拒绝它，然后这条漂移测试会误报。
+  if (name === "source_key") return ["geo", "seo"];
   if (name.endsWith("_id")) return [UUID_SAMPLE, "12"];
   return PARAM_CANDIDATES.default;
 }

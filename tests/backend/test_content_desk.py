@@ -118,3 +118,138 @@ def test_sidebar_prefix_is_in_both_hardcoded_tables() -> None:
     assert '"content."' in prefixes
     restricted = src.split("function isRestrictedProductModule")[1].split("}")[0]
     assert 'startsWith("content.")' in restricted
+
+
+def _function_body_source(func: object) -> str:
+    """函数体源码，**去掉 docstring**。
+
+    直接 inspect.getsource 会把 docstring 也算进去，于是「文件里不许出现
+    "geo" 字面量」这条规矩自己写在注释里就会把自己的测试搞红。
+    """
+    import ast
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(func)))
+    node = tree.body[0]
+    body = node.body[1:] if ast.get_docstring(node) else node.body  # type: ignore[attr-defined]
+    return "\n".join(ast.unparse(stmt) for stmt in body)
+
+
+def test_queries_never_hardcode_an_engine_name() -> None:
+    """两台引擎的不对称写在**一张声明式的表**里，不散在 if source == "geo" 里。
+
+    判据（照 content_core/consistency.py 的 ProductionCheck 先例）：加第三个
+    内容源应该只在 SOURCES 里加一行，不改任何逻辑。这条测试就是那个"不改逻辑"
+    的守卫——一旦有人在查询层写死引擎名，规矩当场破功而没人会发现。
+    """
+    from backend.app.modules.content_desk import dto, queries
+
+    for func in (
+        queries.list_articles,
+        queries.review_queue,
+        queries.article_ref,
+        queries.article_detail,
+        queries.step_counts,
+        queries._product_labels,
+        dto.to_article,
+    ):
+        body = _function_body_source(func)
+        assert '"geo"' not in body, func.__name__
+        assert '"seo"' not in body, func.__name__
+
+
+def test_source_table_captures_every_known_asymmetry() -> None:
+    """GEO/SEO 的不对称是历史事实，不是设计失误。全部进表，一处不漏。"""
+    from backend.app.modules.content_desk.sources import SOURCE_BY_KEY
+
+    geo = SOURCE_BY_KEY["geo"]
+    seo = SOURCE_BY_KEY["seo"]
+
+    assert (geo.kind_column, seo.kind_column) == ("item_type", "item_kind")
+    assert (geo.parent_fk, seo.parent_fk) == ("cluster_id", "topic_id")
+    # GEO 的正文有 answer_blocks，SEO 没有
+    assert "answer_blocks" in geo.body_keys and "answer_blocks" not in seo.body_keys
+    # review 权限两边不一样：GEO 是 execute，SEO 是 manage。**这是故意的**
+    assert geo.review_permission == "geo.content.execute"
+    assert seo.review_permission == "seo.content.manage"
+    # 放行一律要 manage —— 放行是推翻门禁，比批准一篇更重。
+    # GEO 因此「能批准但不能放行」，这不是笔误。
+    assert geo.manage_permission == "geo.content.manage"
+    assert geo.review_permission != geo.manage_permission
+    # SEO 在 review 时就拦品牌门（409），GEO 到发布才拦
+    assert seo.review_requires_clean is True
+    assert geo.review_requires_clean is False
+    assert (geo.revise_mode, seo.revise_mode) == ("sync", "queued")
+    assert (geo.publish_unit, seo.publish_unit) == ("parent", "items")
+
+
+def test_unknown_source_is_rejected() -> None:
+    """source 会被拼进查询和权限判断，只认表里有的。"""
+    from backend.app.modules.content_desk.sources import UnknownSource, source_for
+
+    with pytest.raises(UnknownSource):
+        source_for("wordpress")
+    with pytest.raises(UnknownSource):
+        source_for("")
+
+
+def test_dto_exposes_all_seven_deepseek_keys() -> None:
+    """DeepSeek 解读七项，后端一个不砍、前端一个不藏。
+
+    SEO 面板现在**只渲染 risks**，把翻译 / GEO 作用 / 为什么这么写 / 优点 /
+    模型 全藏了——类型定义里明明都有。显示层自己挑字段就会这样，所以归一化层
+    原样透传。用户点名要「DeepSeek 检查审阅必须在浮窗里显示完整」。
+    """
+    from backend.app.modules.content_desk.dto import ANALYSIS_KEYS, normalize_analysis
+
+    assert set(ANALYSIS_KEYS) == {
+        "translation",
+        "geo_role",
+        "why_written_this_way",
+        "strengths",
+        "risks",
+        "model",
+        "skill_version",
+    }
+    # 只给一个键，其余六个补 None —— **不是省略**（省略和"值为空"在前端是
+    # 两条不同的代码路径）
+    out = normalize_analysis({"risks": ["x"]})
+    assert out is not None
+    assert set(out) == set(ANALYSIS_KEYS)
+    assert out["translation"] is None
+    # 整个为空才返回 None，前端据此显示「还没解读」而不是七个空框
+    assert normalize_analysis({}) is None
+    assert normalize_analysis(None) is None
+
+
+def test_dto_body_always_has_both_keys() -> None:
+    """SEO 没有 answer_blocks，给 [] 而不是不给——前端只写一套渲染。"""
+    from backend.app.modules.content_desk.dto import normalize_body
+
+    seo_like = normalize_body({"sections": [{"heading": "h", "body": "b"}]})
+    assert seo_like["answer_blocks"] == []
+    assert len(seo_like["sections"]) == 1
+    assert normalize_body(None) == {"sections": [], "answer_blocks": []}
+
+
+def test_missing_brand_audit_is_not_clean() -> None:
+    """没有审查记录 ≠ 审查通过。
+
+    SEO 路由现在两处写的是 .get("clean", True)（缺记录=放行），GEO 是
+    .get("clean")（缺记录=拦住）——同一个概念两个相反的默认值。内容台一律
+    fail-closed，步 4 会把那两处也统一过来。
+    """
+    from backend.app.modules.content_desk.dto import normalize_audit
+
+    assert normalize_audit({})["clean"] is False
+    assert normalize_audit(None)["clean"] is False
+    assert normalize_audit({"clean": True})["clean"] is True
+    # 四族 finding 恒存在
+    for key in (
+        "brand_violations",
+        "cjk_surfaces",
+        "ungrounded_numbers",
+        "bad_derivations",
+        "ignored_findings",
+    ):
+        assert normalize_audit({})[key] == []

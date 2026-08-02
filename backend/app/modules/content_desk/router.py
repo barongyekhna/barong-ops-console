@@ -21,6 +21,12 @@ from ...core.roles import is_super_admin_role
 from ...db.session import get_db
 from ...models.user import User
 from ...services.permission_service import resolve_current_user_permission_info
+from ..k_series.product_knowledge.constants import (
+    DEFAULT_BUSINESS_CONTEXT,
+    DEFAULT_WORKSPACE_KEY,
+)
+from ..k_series.product_knowledge.scope_shim import KScopeContext
+from .sources import UnknownSource
 
 router = APIRouter(prefix="/content-desk", tags=["content-desk"])
 
@@ -64,10 +70,69 @@ def require_desk_permission(permission_key: str):
     return dependency
 
 
-@router.get("/overview")
-def overview(
+def _scope(request: Request | None) -> KScopeContext:
+    """与 GEO/SEO 同一套 scope 推导,好让三个入口看到同一批行。"""
+    org_id = None
+    if request is not None:
+        org_id = getattr(request.state, "org_id", None)
+        if org_id is None:
+            org_context = getattr(request.state, "org_context", None)
+            org_id = getattr(org_context, "org_id", None)
+    return KScopeContext(
+        workspace_key=str(org_id).strip() if org_id else DEFAULT_WORKSPACE_KEY,
+        business_context=DEFAULT_BUSINESS_CONTEXT,
+        scope_mode="production",
+    )
+
+
+@router.get("/articles")
+def list_articles(
+    request: Request,
+    queue: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_desk_permission("content.desk.read")),
 ) -> dict[str, Any]:
-    """一次画完整页:四步导轨 + 待办 + 机器状态。步 5 填真实载荷。"""
-    return {"steps": [], "todos": [], "machine": [], "ready": False}
+    """归一化的文章列表。``?queue=review`` 拿**有序**待审队列——浮窗
+    「批准，下一篇 →」靠顺序稳定,否则人会以为自己漏了一篇。"""
+    from . import queries
+
+    scope = _scope(request)
+    if queue == "review":
+        articles = queries.review_queue(db, scope=scope)
+    else:
+        articles = queries.list_articles(db, scope=scope)
+    return {"articles": articles, "count": len(articles)}
+
+
+@router.get("/articles/{source_key}/{item_id}")
+def article_detail(
+    source_key: str,
+    item_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.read")),
+) -> dict[str, Any]:
+    from . import queries
+
+    try:
+        article = queries.article_detail(
+            db, source_key=source_key, item_id=item_id, scope=_scope(request)
+        )
+    except UnknownSource as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if article is None:
+        raise HTTPException(status_code=404, detail="这篇文章不存在。")
+    return article
+
+
+@router.get("/overview")
+def overview(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.read")),
+) -> dict[str, Any]:
+    """一次画完整页:四步导轨 + 待办 + 机器状态。步 5 填导轨与绿条。"""
+    from . import queries
+
+    counts = queries.step_counts(db, scope=_scope(request))
+    return {"steps": [], "todos": [], "machine": [], "counts": counts, "ready": False}
