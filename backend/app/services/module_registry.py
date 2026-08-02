@@ -67,7 +67,15 @@ CS_CUSTOMER_SERVICE_MODULE_KEYS = frozenset({"cs.customer_service"})
 # 死命令（2026-07-12）：独立站系列模块（F/W/H，后续视觉同规）只属于国际贸易
 # 一个组织——非该组织成员（owner 除外）在模块清单里直接看不到。
 INTL_TRADE_ONLY_MODULE_KEYS = R_SERIES_MODULE_KEYS | frozenset(
-    {"f.enrichment", "w.site_ops", "h.site_health", "b2b.wholesale", "geo.content", "seo.content"}
+    {
+        "f.enrichment",
+        "w.site_ops",
+        "h.site_health",
+        "b2b.wholesale",
+        "geo.content",
+        "seo.content",
+        "content.desk",
+    }
 )
 INTL_TRADE_ONLY_MODULE_KEYS |= CS_CUSTOMER_SERVICE_MODULE_KEYS
 

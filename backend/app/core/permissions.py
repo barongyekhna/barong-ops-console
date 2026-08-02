@@ -443,6 +443,42 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "content.desk.read",
+        "module_key": "content.desk",
+        "category": "business",
+        "action": "read",
+        "label": "Read content desk",
+        "description": "View the unified review queue across GEO and SEO.",
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "content.desk.execute",
+        "module_key": "content.desk",
+        "category": "business",
+        "action": "execute",
+        "label": "Act in content desk",
+        "description": (
+            "Approve, reject, re-analyse and rewrite articles from the desk. "
+            "Also requires the source engine's own permission."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "content.desk.manage",
+        "module_key": "content.desk",
+        "category": "business",
+        "action": "manage",
+        "label": "Manage content desk",
+        "description": (
+            "Override brand-audit findings and dispatch publishing. "
+            "Also requires the source engine's own permission."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "cs.customer_service.read",
         "module_key": "cs.customer_service",
         "category": "business",

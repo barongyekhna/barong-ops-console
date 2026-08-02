@@ -29,7 +29,7 @@ def test_wc_category_map_migration_is_the_only_head() -> None:
 
     # 这条断言的真正意义是"迁移图永远只有一个 head"——追加迁移时把它
     # 移到新 head 即可,但绝不允许出现第二个 head(并行开工炸过库)。
-    assert scripts.get_heads() == ["20260731_01_content_link_settings"]
+    assert scripts.get_heads() == ["20260802_01_content_desk_permissions"]
     revision = scripts.get_revision("20260716_01_p_wc_category_map")
     assert revision is not None
     assert revision.down_revision == "20260715_01_h_site_health"

@@ -47,6 +47,7 @@ from .modules.geo_series.router import router as geo_content_router
 from .modules.geo_series.machine_router import router as geo_machine_router
 from .modules.seo_series.router import router as seo_content_router
 from .modules.seo_series.machine_router import router as seo_machine_router
+from .modules.content_desk.router import router as content_desk_router
 from .modules.content_links.machine_router import router as content_links_machine_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
 from .modules.w_series.router import public_router as w_siteops_public_router
@@ -312,6 +313,9 @@ def _p_publish_gate_conflict_detail_for_production(
         # blockers must stay readable in production or the operator cannot tell
         # why a cluster refused to publish.
         f"{APPLICATION_API_PREFIX}/geo/",
+        # 内容台把两边的 publish blockers 原样透出来。被消毒成「Request failed.」
+        # 等于把「为什么发不出去」这句唯一有用的话吃掉。
+        f"{APPLICATION_API_PREFIX}/content-desk/",
     )
     if (
         status_code != status.HTTP_409_CONFLICT
@@ -1037,6 +1041,8 @@ app.include_router(geo_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(geo_machine_router)
 app.include_router(seo_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(seo_machine_router)
+# 内容台全是人用的端点,**只挂 /api/app 一次**——没有 n8n 会打它,不裸挂。
+app.include_router(content_desk_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(content_links_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(content_links_machine_router)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)

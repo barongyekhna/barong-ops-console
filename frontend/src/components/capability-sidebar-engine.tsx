@@ -72,6 +72,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "geo.",
   "seo.",
   "gmc.",
+  "content.",
 ] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
@@ -175,6 +176,7 @@ function isRestrictedProductModule(moduleId: string) {
     normalized.startsWith("b2b.") ||
     normalized.startsWith("geo.") ||
     normalized.startsWith("seo.") ||
+    normalized.startsWith("content.") ||
     normalized === "business.products" ||
     normalized.includes("product")
   );

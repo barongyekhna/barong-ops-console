@@ -177,6 +177,17 @@ export const navigationGroups: NavigationGroup[] = [
       {
         category: "business",
         denied_behavior: "show_locked",
+        href: "/content-desk",
+        icon: ClipboardCheck,
+        label: "内容台",
+        module_key: "content.desk",
+        required_permission: "content.desk.read",
+        route_namespace: "/content-desk",
+        status: "active",
+      },
+      {
+        category: "business",
+        denied_behavior: "show_locked",
         href: "/geo",
         icon: Sparkles,
         label: "GEO 内容引擎",

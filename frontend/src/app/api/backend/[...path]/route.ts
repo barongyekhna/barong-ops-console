@@ -997,6 +997,48 @@ function isAllowedKeyHealthPath(method: string, path: string[]) {
 // SEO 内容引擎：工艺事实库 / 关键词雷达 / 内容 / 发布 / 监测。
 // 机器端点（/seo/publishes/{job}/package|result）**刻意不在这里**——它们走
 // token 鉴权、由 n8n 直连裸挂载，前台代理不该能碰。
+function isAllowedContentDeskPath(method: string, path: string[]) {
+  if (path[0] !== "content-desk") {
+    return false;
+  }
+  if (path.length === 2 && path[1] === "overview") {
+    return method === "GET";
+  }
+  if (path[1] === "articles") {
+    if (path.length === 2) {
+      return method === "GET";
+    }
+    // /articles/{source}/{item_id}[/action] —— source 只认两个引擎，
+    // item_id 必须是 UUID。代理层就把形状卡死，别让乱七八糟的段打到后端。
+    if (path[2] !== "geo" && path[2] !== "seo") {
+      return false;
+    }
+    if (!isUuidPathSegment(path[3])) {
+      return false;
+    }
+    if (path.length === 4) {
+      return method === "GET";
+    }
+    if (path.length === 5) {
+      return (
+        method === "POST" &&
+        ["review", "revise", "analyze", "recheck"].includes(path[4])
+      );
+    }
+    if (path.length === 6) {
+      return method === "POST" && path[4] === "audit" && path[5] === "ignore";
+    }
+    return false;
+  }
+  if (path.length === 2 && path[1] === "publish-preview") {
+    return method === "GET";
+  }
+  if (path.length === 2 && path[1] === "publish") {
+    return method === "POST";
+  }
+  return false;
+}
+
 function isAllowedSeoPath(method: string, path: string[]) {
   if (path[0] !== "seo") {
     return false;
@@ -2418,6 +2460,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedNotificationsPath(method, path) ||
     isAllowedGeoPath(method, path) ||
     isAllowedSeoPath(method, path) ||
+    isAllowedContentDeskPath(method, path) ||
     isAllowedPPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);

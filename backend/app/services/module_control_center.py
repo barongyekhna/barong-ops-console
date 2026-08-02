@@ -45,6 +45,7 @@ B2B_WHOLESALE_MODULE_ID = "b2b.wholesale"
 TRADE_ONLY_MODULE_IDS = frozenset(
     {
         "b2b.wholesale",
+        "content.desk",
         "f.enrichment",
         "h.site_health",
         "k.product_knowledge",

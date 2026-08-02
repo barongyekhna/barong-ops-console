@@ -1612,6 +1612,102 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="content.desk",
+        display_name="内容台",
+        description=(
+            "Content desk — the single daily surface over the GEO and SEO "
+            "content engines. It generates nothing and owns no state of its "
+            "own: it normalises both engines into one article shape, derives "
+            "what the operator has to do next, and puts the whole review "
+            "(article, DeepSeek critique, brand audit) into one modal so a "
+            "queue can be cleared without leaving it. The engine pages stay "
+            "as the full toolbox."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/content-desk",
+        api_namespace="/content-desk",
+        navigation=_navigation(
+            group="Registry",
+            label="内容台",
+            icon="ClipboardCheck",
+            order=11,
+        ),
+        required_permissions=("content.desk.read",),
+        permission_manifest=(
+            _permission(
+                module_key="content.desk",
+                permission_key="content.desk.read",
+                category="business",
+                action="read",
+                label="Read content desk",
+                description=(
+                    "View the unified review queue across the GEO and SEO "
+                    "content engines."
+                ),
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="content.desk",
+                permission_key="content.desk.execute",
+                category="business",
+                action="execute",
+                label="Act in content desk",
+                description=(
+                    "Approve, reject, re-analyse and rewrite articles from the "
+                    "desk. Also requires the source engine's own permission."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="content.desk",
+                permission_key="content.desk.manage",
+                category="business",
+                action="manage",
+                label="Manage content desk",
+                description=(
+                    "Override brand-audit findings and dispatch publishing. "
+                    "Also requires the source engine's own permission."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.content.desk",
+        data_boundary=_data_boundary(
+            reads=(
+                "geo_content_items",
+                "geo_content_clusters",
+                "seo_content_items",
+                "seo_topics",
+                "seo_generation_jobs",
+            ),
+            writes=(
+                "geo_content_items",
+                "seo_content_items",
+                "geo_publish_jobs",
+                "seo_publish_jobs",
+                "seo_generation_jobs",
+            ),
+            # **刻意不写 cross_module_writes**:内容台的全部意义就是跨 GEO/SEO
+            # 两个模块写同一批文章。照抄 seo 那一行会让这份声明变成谎话——
+            # data_boundary 现在不做运行时强制,它唯一的作用就是给人看,
+            # 所以它必须是真的。
+            blocked_objects=("server_local_config", "external_provider_config"),
+        ),
+    ),
+    _manifest(
         module_key="cs.customer_service",
         display_name="客服中心",
         description=(
