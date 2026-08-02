@@ -558,18 +558,11 @@ def create_publish(
     db: Session = Depends(get_db),
     user: User = Depends(_require_seo_permission("seo.content.manage")),
 ) -> dict[str, Any]:
-    from .content.models import SeoContentItem
+    from .content.publish_gate import publish_blockers
     from .content.publish_jobs import create_publish_job
 
-    blockers: list[str] = []
-    for item_id in payload.item_ids:
-        item = db.get(SeoContentItem, item_id)
-        if item is None:
-            blockers.append(f"{item_id}：不存在")
-        elif item.review_status != "approved":
-            blockers.append(f"《{item.title[:30]}》：还没批准")
-        elif not audit_is_clean(item.brand_audit_json):
-            blockers.append(f"《{item.title[:30]}》：没过品牌/接地审查")
+    # 判据抽进 publish_gate:内容台也要用同一套,抄第二份必然分叉。
+    blockers = publish_blockers(db, item_ids=payload.item_ids)
     if blockers:
         raise HTTPException(status_code=409, detail={"ready": False, "blockers": blockers})
 

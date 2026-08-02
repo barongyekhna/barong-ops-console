@@ -328,14 +328,71 @@ def ignore_finding(
     return _detail(db, request, source_key, item_id)
 
 
+@router.get("/publish-preview")
+def publish_preview(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.read")),
+) -> dict[str, Any]:
+    """每个发布单元会发哪几篇 + 被什么挡着。
+
+    **逐篇列出来是硬要求**:GEO 一单是整簇,点一篇会把同簇另外几篇一起发出去。
+    不列出来就是骗人。
+    """
+    from . import publishing
+
+    return {"units": publishing.preview(db, scope=_scope(request))}
+
+
+class PublishIn(BaseModel):
+    source: str
+    unit_id: str
+
+
+@router.post("/publish")
+def publish_unit(
+    payload: PublishIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.manage")),
+) -> dict[str, Any]:
+    from . import publishing
+    from .sources import source_for
+
+    try:
+        source = source_for(payload.source)
+    except UnknownSource as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _require_source_permission(request, db, user, source, source.manage_permission)
+
+    scope = _scope(request)
+    units = {
+        (u["source"], u["unit_id"]): u
+        for u in publishing.preview(db, scope=scope)
+    }
+    unit = units.get((payload.source, payload.unit_id))
+    if unit is None:
+        raise HTTPException(status_code=404, detail="这个发布单元不存在，或者已经没有待发的文章了。")
+    if unit["blockers"]:
+        raise HTTPException(
+            status_code=409, detail={"ready": False, "blockers": unit["blockers"]}
+        )
+    result = publishing.dispatch(
+        db, source=source, unit_id=payload.unit_id, scope=scope, user=user
+    )
+    return {**result, "titles": unit["titles"]}
+
+
 @router.get("/overview")
 def overview(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_desk_permission("content.desk.read")),
 ) -> dict[str, Any]:
-    """一次画完整页:四步导轨 + 待办 + 机器状态。步 5 填导轨与绿条。"""
-    from . import queries
+    """一次画完整页:四步导轨 + 待办 + 机器状态。全程不出网。"""
 
-    counts = queries.step_counts(db, scope=_scope(request))
-    return {"steps": [], "todos": [], "machine": [], "counts": counts, "ready": False}
+    from . import machine_strip, workflow
+
+    payload = workflow.build_overview(db, scope=_scope(request))
+    payload["machine"] = machine_strip.machine_lanes(db)
+    return payload

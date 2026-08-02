@@ -1,5 +1,5 @@
 import { API_PROXY_BASE, buildHeaders, readJson } from "../api-base";
-import type { Article } from "./types";
+import type { Article, Overview, PublishUnit } from "./types";
 
 const BASE = `${API_PROXY_BASE}/content-desk`;
 
@@ -77,4 +77,30 @@ export function ignoreFinding(
     { ...payload, ignored },
     ignored ? "放行失败" : "撤销放行失败",
   );
+}
+
+export async function fetchOverview(): Promise<Overview> {
+  const response = await fetch(`${BASE}/overview`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson<Overview>(response, "内容台加载失败");
+}
+
+export async function fetchPublishPreview(): Promise<PublishUnit[]> {
+  const response = await fetch(`${BASE}/publish-preview`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  const data = await readJson<{ units: PublishUnit[] }>(response, "发布预览加载失败");
+  return data.units ?? [];
+}
+
+export function publishUnit(
+  source: string,
+  unitId: string,
+): Promise<{ job_id: string; status: string; titles: string[] }> {
+  return post(`/publish`, { source, unit_id: unitId }, "发布失败");
 }

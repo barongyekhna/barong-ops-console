@@ -291,11 +291,18 @@ def test_publish_queue_commits_before_dispatch() -> None:
 
 
 def test_only_approved_and_clean_articles_can_be_published() -> None:
+    """判据 2026-08-02 从路由内联搬进 content/publish_gate.py —— 内容台也要用
+    同一套，抄第二份必然分叉。路由现在只是调用方。"""
+    from backend.app.modules.seo_series.content.publish_gate import publish_blockers
     from backend.app.modules.seo_series.router import create_publish
 
-    src = inspect.getsource(create_publish)
-    assert 'review_status != "approved"' in src
-    assert "没过品牌/接地审查" in src
+    gate = inspect.getsource(publish_blockers)
+    assert 'review_status != "approved"' in gate
+    assert "没过品牌/接地审查" in gate
+    # 缺审查记录一律当没过（原来是 .get("clean", True)，缺记录等于放行）
+    assert "audit_is_clean" in gate
+
+    assert "publish_blockers" in inspect.getsource(create_publish)
 
 
 # ---------------------------------------------------------------- n8n

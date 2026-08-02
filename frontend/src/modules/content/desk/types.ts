@@ -69,3 +69,44 @@ export type Article = {
   extra: Record<string, unknown>;
   permissions: ArticlePermissions;
 };
+
+export type Step = {
+  key: string;
+  title: string;
+  who: string;
+  value: string;
+  here: boolean;
+  done: boolean;
+};
+
+export type Todo = {
+  step: string;
+  count: number;
+  lead: string;
+  note: string;
+  action: "review" | "publish" | "engines";
+};
+
+export type MachineLane = {
+  key: string;
+  label: string;
+  ok: boolean;
+  text: string;
+};
+
+export type Overview = {
+  steps: Step[];
+  todos: Todo[];
+  machine: MachineLane[];
+  counts: Record<string, number>;
+};
+
+/** 一个发布单元。**titles 必须显示出来**——GEO 一单是整簇，
+ *  不列出来就会「点一篇发四篇」还不吭声。 */
+export type PublishUnit = {
+  source: string;
+  unit_id: string;
+  label: string;
+  titles: string[];
+  blockers: string[];
+};

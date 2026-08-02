@@ -4,15 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ArticleModal } from "./ArticleModal";
 import styles from "./ContentDesk.module.css";
+import { MachineStrip } from "./MachineStrip";
+import { PublishPanel } from "./PublishPanel";
+import { StepRail } from "./StepRail";
 import type { IgnorePayload } from "./AuditPanel";
 import {
   analyzeArticle,
+  fetchOverview,
+  fetchPublishPreview,
   fetchQueue,
   ignoreFinding,
+  publishUnit,
   reviewArticle,
   reviseArticle,
 } from "./api";
-import type { Article } from "./types";
+import type { Article, Overview, PublishUnit } from "./types";
 
 /**
  * 内容台。**不是第三台引擎**——不生成内容、不发明状态，只把 GEO/SEO 合成一页：
@@ -26,15 +32,48 @@ export function ContentDesk() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [units, setUnits] = useState<PublishUnit[]>([]);
+  const [pageBusy, setPageBusy] = useState<string | null>(null);
+  const [pageNotice, setPageNotice] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      setQueue(await fetchQueue());
+      const [nextQueue, nextOverview, nextUnits] = await Promise.all([
+        fetchQueue(),
+        fetchOverview(),
+        fetchPublishPreview(),
+      ]);
+      setQueue(nextQueue);
+      setOverview(nextOverview);
+      setUnits(nextUnits);
       setError(null);
     } catch (loadError) {
       setError((loadError as Error).message);
     }
   }, []);
+
+  const publish = useCallback(
+    async (unit: PublishUnit) => {
+      const key = `${unit.source}:${unit.unit_id}`;
+      setPageBusy(key);
+      setError(null);
+      setPageNotice(null);
+      try {
+        const result = await publishUnit(unit.source, unit.unit_id);
+        setPageNotice(
+          `已派单（${result.status}）：${result.titles.length} 篇。` +
+            "n8n 会在站点上建草稿，最后一步由你在 WordPress 里点发布。",
+        );
+        await reload();
+      } catch (publishError) {
+        setError((publishError as Error).message);
+      } finally {
+        setPageBusy(null);
+      }
+    },
+    [reload],
+  );
 
   useEffect(() => {
     void reload();
@@ -116,6 +155,11 @@ export function ContentDesk() {
   return (
     <div className={styles.stack}>
       {error ? <div className={`${styles.card} ${styles.error}`}>{error}</div> : null}
+      {pageNotice ? (
+        <div className={`${styles.card} ${styles.notice}`}>{pageNotice}</div>
+      ) : null}
+
+      {overview ? <StepRail steps={overview.steps} /> : null}
 
       <div className={styles.sectionLabel}>现在该你做的</div>
 
@@ -160,6 +204,21 @@ export function ContentDesk() {
           );
         })
       )}
+
+      <PublishPanel busy={pageBusy} onPublish={(u) => void publish(u)} units={units} />
+
+      {overview ? <MachineStrip lanes={overview.machine} /> : null}
+
+      <div className={styles.sectionLabel}>要调细节</div>
+      <div className={styles.card}>
+        <span className={styles.empty}>
+          选题、生成、事实库、阵地监测这些在两个引擎页面里：
+          <a href="/geo" style={{ color: "#d9a441" }}>GEO 内容引擎</a>
+          {" · "}
+          <a href="/seo" style={{ color: "#d9a441" }}>SEO 内容引擎</a>
+          。平时不用开。
+        </span>
+      </div>
 
       {current ? (
         <ArticleModal

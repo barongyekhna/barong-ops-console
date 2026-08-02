@@ -509,3 +509,138 @@ def test_desk_writes_need_the_source_engine_permission_too() -> None:
     assert geo.review_permission == "geo.content.execute"
     assert geo.manage_permission == "geo.content.manage"
     assert seo.review_permission == "seo.content.manage"
+
+
+def test_step_rail_is_computed_not_hardcoded() -> None:
+    """「卡在哪一步」由后端从待办算出来（从①往④第一个有待办的）。
+
+    手画的迟早和真实状态对不上，而这一页存在的全部理由就是告诉用户
+    「现在该干嘛」——它说错一次，这一页就没有价值了。
+    """
+    from backend.app.modules.content_desk import workflow
+
+    src = _function_body_source(workflow.build_overview)
+    assert "with_todo" in src and "here" in src
+    assert [s.key for s in workflow.STEPS] == ["pick", "generate", "review", "publish"]
+
+
+def test_topic_todo_excludes_geo_reachable() -> None:
+    """GEO 够得到的题不该催 SEO 写。
+
+    两篇自家文章抢同一个查询 = 自我竞争，权重对半分。这道去重门本来就在
+    seo_topics.geo_reachable 上，待办清单必须尊重它。
+    """
+    from backend.app.modules.content_desk import workflow
+
+    src = _function_body_source(workflow._pick_counts)
+    assert "geo_reachable = false" in src
+    # 0 分 = 零事实支撑，催人写只会写出空话
+    assert workflow.PICK_SCORE_FLOOR > 0
+    assert "score >=" in src
+
+
+def test_geo_failures_get_a_superseded_rule_too() -> None:
+    """SEO 的 jobs_status 自带 superseded，GEO 没有——一个三天前修好的 GEO 失败
+    会一直红着。「修好的东西一直红着，比不显示更糟：它会让人对真正的报错脱敏。」
+    """
+    from backend.app.modules.content_desk import workflow
+
+    src = _function_body_source(workflow.failed_jobs)
+    assert "superseded" in src          # SEO 侧直接用它给的
+    assert "last_success" in src        # GEO 侧自己算一遍
+    # 两边的状态词不一样，别抄错
+    # ast.unparse 会把字符串统一成单引号，别按双引号断言
+    assert "completed" in src and "failed" in src
+
+
+def test_machine_strip_never_goes_out_to_the_network() -> None:
+    """绿条是「看一眼没事」，不该为它打一次 WordPress。
+
+    /seo/link-net 那个端点会顺带调 collect_backlink_targets（出网），而且要
+    seo.content.read——内容台调它等于绕过自己的模块边界。所以直接调底层函数。
+    """
+    import inspect as _inspect
+    import re as _re
+
+    from backend.app.modules.content_desk import machine_strip
+
+    # 剥掉 docstring 和注释再查——那些名字正是在解释「为什么不调它们」
+    raw = _inspect.getsource(machine_strip)
+    src = "\n".join(
+        line
+        for line in raw.splitlines()
+        if not line.strip().startswith("#") and not line.strip().startswith('"""')
+    )
+    src = _re.sub(r'"""[\s\S]*?"""', "", raw)
+    src = "\n".join(
+        line for line in src.splitlines() if not line.strip().startswith("#")
+    )
+    for forbidden in (
+        "collect_backlink_targets",
+        "refresh_item_live_state",
+        "sync_site_nav",
+        "push_link_map",
+        "API_PROXY_BASE",
+    ):
+        assert forbidden not in src, forbidden
+    # 三条 lane 各自 try/except：一条坏掉不让整条窄条空白
+    assert src.count("except Exception") >= 1
+    assert "for probe in" in src
+
+
+def test_machine_strip_has_no_buttons() -> None:
+    """**零按钮。** 要处理去老页面——在这里加按钮等于把那 39 个搬一部分回来，
+    而这一页存在的全部理由就是别让用户面对那 39 个。"""
+    from pathlib import Path
+
+    strip = Path("frontend/src/modules/content/desk/MachineStrip.tsx").read_text()
+    assert "<button" not in strip
+    assert "onClick" not in strip
+
+
+def test_publish_operates_on_units_and_always_lists_the_titles() -> None:
+    """GEO 一次发**整簇**。做成「每篇一个发布按钮」必然骗人：点一篇，同簇另外
+    三篇会跟着出去而界面上什么都没说。
+
+    所以：后端按发布单元派单，preview 逐篇给标题，前端必须把标题显示出来。
+    """
+    from backend.app.modules.content_desk import publishing
+    from backend.app.modules.content_desk.sources import SOURCE_BY_KEY
+
+    assert SOURCE_BY_KEY["geo"].publish_unit == "parent"
+    assert SOURCE_BY_KEY["seo"].publish_unit == "items"
+
+    preview_src = _function_body_source(publishing.preview)
+    assert "titles" in preview_src
+    assert "blockers" in preview_src
+
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/desk/PublishPanel.tsx").read_text()
+    assert "这次会发这" in panel
+    assert "unit.titles" in panel
+
+
+def test_seo_publish_blockers_are_shared_not_copied() -> None:
+    """SEO 的发布判据抽进了 publish_gate，路由和内容台调同一个。
+
+    刻意**不**和 GEO 的合并成一个函数：GEO 还要查谷歌类目、url_slug、引用的
+    产品有没有公开页，SEO 一样都不查。硬合并会把 GEO 的三道闸悄悄加到 SEO 上，
+    或者反过来把 GEO 的闸拆掉。
+    """
+    from backend.app.modules.seo_series.content import publish_gate
+
+    assert hasattr(publish_gate, "publish_blockers")
+    router_src = (REPO / "backend/app/modules/seo_series/router.py").read_text()
+    assert "from .content.publish_gate import publish_blockers" in router_src
+    # 内联那份没了
+    assert '：还没批准"' not in router_src
+
+    desk_src = inspect.getsource(publishing_module())
+    assert "publish_blockers" in desk_src
+
+
+def publishing_module():  # noqa: D103 - 测试辅助
+    from backend.app.modules.content_desk import publishing
+
+    return publishing
