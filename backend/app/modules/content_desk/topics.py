@@ -140,10 +140,7 @@ def cluster_questions(
     """候选买家问句 + 已挑的。**不出新网** —— 复用 K 的 FAQ 研究、F 的关键词、
     以及 geo_mined_questions 这张已经挖好的表。"""
     from ..geo_series.content import service
-    from ..geo_series.content.rank_monitor import (
-        normalize_question,
-        terrain_by_question,
-    )
+    from ..geo_series.monitor.probe import normalize_question, terrain_by_question
     from ..geo_series.content.topic_sourcing import list_topic_candidates
 
     cluster = service.get_cluster(db, cluster_id=cluster_id, scope_context=scope)

@@ -1034,3 +1034,43 @@ def test_topic_shelf_shows_every_cluster_not_just_untouched_ones() -> None:
     panel = Path("frontend/src/modules/content/desk/TopicPanel.tsx").read_text()
     assert "库里还有" in panel
     assert "深耕靠的就是这批存货" in panel
+
+
+def test_every_lazy_import_actually_resolves() -> None:
+    """写在函数体里的 import，只有真跑到那一行才会炸。
+
+    2026-08-03：「挑问句」按钮点下去 500，因为
+    `from ..geo_series.content.rank_monitor import ...` —— 那个模块在
+    `geo_series/monitor/probe.py`，路径我写错了。**单元测试、类型检查、启动
+    自检全都抓不到**，它一路上了生产，用户点了才发现。
+
+    内容台是聚合层，为了不在 import 期把两个引擎拖进来，**大量使用惰性
+    import**——那是刻意的设计，代价就是这一类错误。所以补一道门：把这些模块里
+    所有的相对 import 都真的解析一遍。
+
+    （同一类的第二次：早先 `from ..services import wp_bridge` 在 modules/ 下会
+    解析成 app.modules.services，也是靠运气发现的。）
+    """
+    import ast
+    import importlib
+    from pathlib import Path
+
+    package = "backend.app.modules.content_desk"
+    root = REPO / "backend/app/modules/content_desk"
+    problems: list[str] = []
+
+    for path in sorted(root.glob("*.py")):
+        tree = ast.parse(path.read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not node.level:
+                continue
+            # 相对 import：level 个点从 content_desk 往上数
+            parts = package.split(".")
+            base = parts[: len(parts) - node.level + 1]
+            target = ".".join([*base, node.module]) if node.module else ".".join(base)
+            try:
+                importlib.import_module(target)
+            except Exception as exc:  # noqa: BLE001
+                problems.append(f"{path.name}: {target} → {type(exc).__name__}: {exc}")
+
+    assert not problems, "\n".join(problems)
