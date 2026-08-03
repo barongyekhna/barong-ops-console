@@ -708,3 +708,60 @@ def test_blockers_never_show_a_bare_uuid() -> None:
 
     gate = inspect.getsource(publish_gate.publish_blockers)
     assert "_readable_product" in gate
+
+
+def test_model_cited_product_ids_are_validated_server_side() -> None:
+    """模型回抄 36 位 UUID 会拼串。
+
+    2026-08-02 实际发生：提示词让模型在 source_products 里回抄 product_key，
+    而 product_key 是个 UUID。模型把两个产品的 UUID 拼在一起——
+
+        ET-001 的 key   9200c9f5-8d39-490f-a5fb-6a38a1e34153
+        ET-005 的 key   f8bc0ef5-390e-4fba-96b3-8abbc27cc501
+        模型给出的      9200c9f5-390e-4fba-96b3-8abbc27cc501   ← 前段+后段
+
+    发布门禁于是正确地拦住了整簇（引用解析不到 = 死链），而用户对着一串十六进制
+    完全看不出发生了什么。
+
+    **不做模糊修复**：那个坏值的前缀精确匹配 ET-001、后缀精确匹配 ET-005，
+    任何「猜最像的」规则都会在这里选错，而选错的后果是文章链到另一个产品——
+    比不链更糟。丢掉 + 记日志。
+    """
+    from backend.app.modules.geo_series.content.orchestrator import (
+        GeoContentOrchestrator,
+    )
+
+    class _P:
+        def __init__(self, pid: str, key: str, sku: str) -> None:
+            self.id, self.product_key, self.sku = pid, key, sku
+
+    products = [
+        _P("4c2271da", "9200c9f5-8d39-490f-a5fb-6a38a1e34153", "ET-001"),
+        _P("aa4df26d", "f8bc0ef5-390e-4fba-96b3-8abbc27cc501", "ET-005"),
+    ]
+    out = GeoContentOrchestrator._resolve_source_products(
+        products,
+        [
+            "9200c9f5-8d39-490f-a5fb-6a38a1e34153",   # 真的
+            "9200c9f5-390e-4fba-96b3-8abbc27cc501",   # 拼串出来的
+            "ET-005",                                  # 按 SKU 引用也认
+        ],
+    )
+    assert "9200c9f5-390e-4fba-96b3-8abbc27cc501" not in out
+    assert set(out) == {
+        "9200c9f5-8d39-490f-a5fb-6a38a1e34153",
+        "f8bc0ef5-390e-4fba-96b3-8abbc27cc501",
+    }
+    # 全认不出时退回服务端确知的名单，而不是留空
+    assert GeoContentOrchestrator._resolve_source_products(products, ["garbage"])
+    assert GeoContentOrchestrator._resolve_source_products(products, None)
+
+
+def test_prompt_asks_for_sku_not_the_uuid_product_key() -> None:
+    """治本的另一半：**别让模型抄 UUID**。SKU 只有 6 个字符，抄不错。"""
+    from pathlib import Path
+
+    prompts = Path(
+        "backend/app/modules/geo_series/content/prompt_skills.py"
+    ).read_text()
+    assert prompts.count("never copy the long product_key") == 2

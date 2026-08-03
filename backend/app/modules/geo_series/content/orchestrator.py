@@ -194,6 +194,7 @@ class GeoContentOrchestrator:
             )
 
         self._replace_items(
+            products=products,
             cluster_id=cluster.id,
             scope_context=scope_context,
             raw_items=raw_items,
@@ -662,6 +663,62 @@ class GeoContentOrchestrator:
 
         return rows, payload, evidence_number_corpus(*grounding_texts(rows))
 
+    @staticmethod
+    def _resolve_source_products(
+        products: list[KProductKnowledgeProduct], raw: Any
+    ) -> list[str]:
+        """把模型给回的产品标识过一遍别名表。**认不出的直接丢掉,绝不猜。**
+
+        2026-08-02 实际发生:提示词让模型在 ``source_products`` 里回抄
+        ``product_key``,而 product_key 是个 **36 位 UUID**。模型把两个产品的
+        UUID 拼串了 —— 前半段抄 ET-001、后半段抄 ET-005,拼出一个谁都不是的值。
+        发布门禁于是正确地拦住了整簇(引用解析不到 = 死链),而人对着一串十六进制
+        完全看不出发生了什么。
+
+        **为什么不做模糊修复**:那个坏值的前缀精确匹配 ET-001、后缀精确匹配
+        ET-005。任何"猜最像的那个"的规则都会在这里选错,而选错的后果是文章链到
+        另一个产品 —— 比不链更糟。丢掉 + 记日志,让它在门禁里显形。
+
+        全丢光时退回本簇全部产品:提示词要求每篇至少引用一个,与其留空,不如
+        用服务端**确知**的那份名单。
+        """
+        alias: dict[str, str] = {}
+        for product in products:
+            canonical = str(getattr(product, "product_key", "") or product.id)
+            for candidate in (
+                product.id,
+                getattr(product, "product_key", None),
+                getattr(product, "sku", None),
+            ):
+                text = str(candidate or "").strip()
+                if text:
+                    alias[text] = canonical
+                    alias[text.lower()] = canonical
+
+        resolved: list[str] = []
+        dropped: list[str] = []
+        for value in raw if isinstance(raw, list) else []:
+            text = str(value or "").strip()
+            if not text:
+                continue
+            hit = alias.get(text) or alias.get(text.lower())
+            if hit is None:
+                dropped.append(text)
+                continue
+            if hit not in resolved:
+                resolved.append(hit)
+        if dropped:
+            logger.warning(
+                "source_products 里有 %d 个认不出的标识,已丢弃:%s",
+                len(dropped),
+                dropped[:5],
+            )
+        if not resolved:
+            resolved = [
+                str(getattr(p, "product_key", "") or p.id) for p in products
+            ]
+        return resolved
+
     def _product_facts(
         self, product: KProductKnowledgeProduct
     ) -> tuple[dict[str, Any], set[str]]:
@@ -716,6 +773,9 @@ class GeoContentOrchestrator:
         cluster_id: UUID,
         scope_context: KScopeContext,
         raw_items: list[Any],
+        # 服务端**确知**的本簇产品名单。模型给回的引用值要拿它过一遍——
+        # 提示词让它回抄 36 位 UUID,它拼串过(见 _resolve_source_products)。
+        products: list[KProductKnowledgeProduct],
         forbidden_terms: list[str],
         evidence_numbers: set[str],
         picked_norm: set[str],
@@ -780,7 +840,9 @@ class GeoContentOrchestrator:
                     title=title,
                     body_json=body_json,
                     seo_json=raw.get("seo") if isinstance(raw.get("seo"), dict) else None,
-                    source_product_ids_json=raw.get("source_products") or [],
+                    source_product_ids_json=self._resolve_source_products(
+                        products, raw.get("source_products")
+                    ),
                     schema_type="FAQPage" if item_type == "qa" else "Article",
                     brand_audit_json=audit,
                     generation_status="generated",

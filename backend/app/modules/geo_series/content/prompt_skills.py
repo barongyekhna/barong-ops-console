@@ -113,8 +113,8 @@ def geo_content_instruction() -> str:
         '      "seo": {"title": "<keyword-rich phrase | ' " " '<=60 chars>", '
         '"meta_description": "<natural sentence <=160 chars>", "url_slug": '
         '"<lowercase-hyphenated-3-6-words>"},\n'
-        '      "source_products": ["<the product_key/sku values this piece names '
-        'and should link to>"],\n'
+        '      "source_products": ["<the **sku** values this piece names, e.g. '
+        'ET-001 — never copy the long product_key>"],\n'
         '      "derived_numbers": [{"value": "2.4", "from": "5 / 2.11", "unit": '
         '"minutes"}]\n'
         "    }\n"
@@ -169,7 +169,8 @@ def geo_product_spotlight_instruction() -> str:
         'variant>", "answer": "<self-contained 2-4 sentence grounded answer>"}],\n'
         '      "seo": {"title": "<keyword-rich | <=60 chars>", "meta_description": '
         '"<<=160 chars>", "url_slug": "<lowercase-hyphenated-3-6-words>"},\n'
-        '      "source_products": ["<this product\'s key/sku>"]\n'
+        '      "source_products": ["<this product\'s **sku**, e.g. ET-001 — '
+        'never copy the long product_key>"]\n'
         "    }\n"
         "  ]\n"
         "}\n"
