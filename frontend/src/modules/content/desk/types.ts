@@ -118,6 +118,8 @@ export type InFlight = {
   unit_id: string;
   job_id: string;
   status: string;
+  /** 派单时刻。转圈不给时间 = 没有边界的承诺。 */
+  since: string | null;
 };
 
 /** 已经发到站上的文章。**草稿 ≠ 读者能看到** —— n8n 刻意落草稿等人工发布。 */

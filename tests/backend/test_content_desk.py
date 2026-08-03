@@ -871,3 +871,43 @@ def test_publish_reports_all_the_way_to_reader_visible() -> None:
     assert "还是草稿" in panel        # 草稿段
     assert "已经在线上" in panel      # 线上段带链接
     assert "wp-admin/post.php" in panel  # 直接点到 WP 编辑页
+
+
+def test_desk_polls_so_transient_states_do_not_freeze_on_screen() -> None:
+    """一个瞬时状态被冻在屏幕上，比不显示它更糟——它会让人以为系统卡死了。
+
+    2026-08-03 用户报「n8n 已经发布成功了，控制台还显示派单中」。后端一切正常
+    （任务 success、0 个在飞），是这一页**根本没有轮询**：点完发布那一刻刷了
+    一次（那时任务刚派出去、状态确实是 dispatched），然后就再也不刷了。
+
+    方案里本来写了「忙/闲双档轮询」，做的时候漏了。
+    """
+    from pathlib import Path
+
+    deck = Path("frontend/src/modules/content/desk/ContentDesk.tsx").read_text()
+    assert "setInterval" in deck
+    assert "BUSY_POLL_MS" in deck and "IDLE_POLL_MS" in deck
+    # 忙的时候要更勤：n8n 一趟约 30 秒
+    assert "in_flight.length > 0" in deck
+    # 清理不能漏，否则每次 render 叠一个定时器
+    assert "clearInterval" in deck
+
+
+def test_in_flight_shows_how_long_it_has_been_flying() -> None:
+    """**转圈不给时间就是没有边界的承诺。**
+
+    n8n 的回报丢了的话，一单会一直「在飞」到 15 分钟的收割器兜底。人在屏幕前
+    完全不知道该等还是该急——所以要报出已经飞了多久，超过 3 分钟直接说
+    「没回报」。
+    """
+    import inspect as _inspect
+
+    from backend.app.modules.content_desk import publishing
+
+    assert '"since"' in _inspect.getsource(publishing.in_flight)
+
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/desk/PublishPanel.tsx").read_text()
+    assert "flyingLabel" in panel
+    assert "没回报" in panel

@@ -24,9 +24,19 @@ export function PublishPanel({
   busy: string | null;
   onPublish: (unit: PublishUnit) => void;
 }) {
-  const flying = new Set(
-    state.in_flight.map((job) => `${job.source}:${job.unit_id}`),
+  const flying = new Map(
+    state.in_flight.map((job) => [`${job.source}:${job.unit_id}`, job]),
   );
+
+  /** 「派单中…（已 2 分钟）」。n8n 一趟约半分钟；超过 3 分钟多半是回报丢了，
+   *  说出来，别让人对着一个永远转的圈猜。 */
+  function flyingLabel(since: string | null): string {
+    if (!since) return "派单中…";
+    const mins = Math.floor((Date.now() - new Date(since).getTime()) / 60000);
+    if (mins < 1) return "派单中…";
+    if (mins < 3) return `派单中…（已 ${mins} 分钟）`;
+    return `已 ${mins} 分钟没回报`;
+  }
   const nothing =
     !state.units.length && !state.drafts.length && !state.live.length;
   if (nothing) return null;
@@ -38,7 +48,7 @@ export function PublishPanel({
           <div className={styles.sectionLabel}>可以发布的</div>
           {state.units.map((unit) => {
             const key = `${unit.source}:${unit.unit_id}`;
-            const inFlight = flying.has(key);
+            const job = flying.get(key);
             const blocked = unit.blockers.length > 0;
             return (
               <div className={styles.card} key={key}>
@@ -52,7 +62,7 @@ export function PublishPanel({
                   </div>
                   <button
                     className={styles.btn}
-                    disabled={busy !== null || blocked || inFlight}
+                    disabled={busy !== null || blocked || job !== undefined}
                     onClick={() => onPublish(unit)}
                     title={
                       blocked
@@ -61,8 +71,8 @@ export function PublishPanel({
                     }
                     type="button"
                   >
-                    {inFlight
-                      ? "派单中…"
+                    {job
+                      ? flyingLabel(job.since)
                       : busy === key
                         ? "派单中…"
                         : "发布"}

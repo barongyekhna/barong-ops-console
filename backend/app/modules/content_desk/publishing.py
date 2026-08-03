@@ -23,6 +23,10 @@ from .sources import SOURCES, ContentSource
 logger = logging.getLogger(__name__)
 
 
+def _iso(value: Any) -> str | None:
+    return value.isoformat() if value is not None and hasattr(value, "isoformat") else None
+
+
 def _public_base() -> str:
     return os.getenv("PUBLIC_API_BASE_URL", "").strip()
 
@@ -159,6 +163,9 @@ def in_flight(db: Session) -> list[dict[str, Any]]:
     派单到 n8n 回报之间有 ~30 秒窗口。这段时间文章还没有 wp_post_id,所以它
     仍然出现在待发列表里 —— 用户会以为「点了没反应」。把在飞的报出来,前端据此
     把按钮换成「派单中…」并置灰。
+
+    带上 ``since``:**转圈不给时间就是没有边界的承诺**。n8n 回报丢了的话,
+    这一单会一直"在飞"到 15 分钟的收割器兜底,人在屏幕前完全不知道该等还是该急。
     """
     out: list[dict[str, Any]] = []
     try:
@@ -173,6 +180,7 @@ def in_flight(db: Session) -> list[dict[str, Any]]:
                     "unit_id": str(job.cluster_id),
                     "job_id": job.job_id,
                     "status": job.status,
+                    "since": _iso(job.created_at),
                 }
             )
     except Exception:  # noqa: BLE001
@@ -189,6 +197,7 @@ def in_flight(db: Session) -> list[dict[str, Any]]:
                     "unit_id": SOURCES[1].key,
                     "job_id": job.job_id,
                     "status": job.status,
+                    "since": _iso(job.created_at),
                 }
             )
     except Exception:  # noqa: BLE001

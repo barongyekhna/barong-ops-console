@@ -20,6 +20,10 @@ import {
 } from "./api";
 import type { Article, Overview, PublishState, PublishUnit } from "./types";
 
+// 派单在飞时 5 秒一刷（n8n 一趟约 30 秒），闲着 30 秒一刷。
+const BUSY_POLL_MS = 5000;
+const IDLE_POLL_MS = 30000;
+
 /**
  * 内容台。**不是第三台引擎**——不生成内容、不发明状态，只把 GEO/SEO 合成一页：
  * 现在卡在哪一步、该你做什么、机器有没有在跑。
@@ -84,6 +88,21 @@ export function ContentDesk() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // 有派单在飞的时候快刷，闲着的时候慢刷（照 EnrichmentDeck 的忙/闲双档）。
+  //
+  // 2026-08-03 用户报「n8n 已经发布成功了，控制台还显示派单中」——后端一切正常，
+  // 是这一页**根本没有轮询**：点完发布那一刻刷了一次（那时任务刚派出去、状态
+  // 确实是 dispatched），然后就再也不刷了。**一个瞬时状态被冻在屏幕上，
+  // 比不显示它更糟**——它会让人以为系统卡死了。
+  const busyPipeline = publishState.in_flight.length > 0;
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => void reload(),
+      busyPipeline ? BUSY_POLL_MS : IDLE_POLL_MS,
+    );
+    return () => window.clearInterval(timer);
+  }, [busyPipeline, reload]);
 
   // OverlayModal 的 onClose 进 effect 依赖，必须 useCallback——
   // 否则每次 render 都重挂滚动锁，scrollbarWidth 会算成 0 把 padding 弄错。
