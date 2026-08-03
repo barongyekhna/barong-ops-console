@@ -16,10 +16,30 @@ import {
   type HealthRunTrigger,
 } from "./api";
 import styles from "./HealthDeck.module.css";
+import { isInternalUrl, toRedirectPath } from "./redirect-hint";
+import type { RedirectHandoff } from "./SiteHealthWorkspace";
 
 const RUN_POLL_MS = 5000;
 
 type ActiveTab = "open" | "acknowledged" | "runs";
+
+/**
+ * 这条死链能不能用「设跳转」修。
+ *
+ * 跳转表由站上的 barong-redirects 插件执行，**只在本站 404 时生效**，所以：
+ * - 站外死链给不了跳转（要么改内容要么删链接）
+ * - 慢页/首页异常/sitemap 异常也不是跳转能解决的
+ *
+ * 注意这里**不排除任何状态码**：一条死链无论是 404 还是连不上，
+ * 只要是本站地址，设个跳转都是合理的处置。
+ */
+function canRedirect(finding: HealthFinding): boolean {
+  return (
+    finding.finding_type === "broken_link" &&
+    isInternalUrl(finding.url) &&
+    toRedirectPath(finding.url) !== null
+  );
+}
 
 function findingTypeLabel(findingType: HealthFindingType) {
   switch (findingType) {
@@ -74,7 +94,12 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "—";
 }
 
-export function HealthDeck() {
+export function HealthDeck({
+  onCreateRedirect,
+}: {
+  /** 点「设跳转」时把这条死链交给「跳转管理」面板 */
+  onCreateRedirect?: (handoff: RedirectHandoff) => void;
+} = {}) {
   const [activeTab, setActiveTab] = useState<ActiveTab>("open");
   const [runs, setRuns] = useState<HealthRun[]>([]);
   const [openFindings, setOpenFindings] = useState<HealthFinding[]>([]);
@@ -249,7 +274,7 @@ export function HealthDeck() {
           role="tab"
           type="button"
         >
-          已确认{" "}
+          已忽略{" "}
           <span className={styles.tabCount}>{acknowledgedFindings.length}</span>
         </button>
         <button
@@ -265,7 +290,7 @@ export function HealthDeck() {
       {activeTab === "open" || activeTab === "acknowledged" ? (
         <section
           className={styles.panel}
-          aria-label={activeTab === "open" ? "待处理" : "已确认"}
+          aria-label={activeTab === "open" ? "待处理" : "已忽略"}
         >
           {loading ? (
             <div className={styles.state}>
@@ -279,7 +304,7 @@ export function HealthDeck() {
             <div className={styles.tableScroll}>
               <table
                 className={styles.table}
-                aria-label={activeTab === "open" ? "待处理" : "已确认"}
+                aria-label={activeTab === "open" ? "待处理" : "已忽略"}
               >
                 <tbody>
                   {activeFindings.map((finding) => (
@@ -315,6 +340,25 @@ export function HealthDeck() {
                       </td>
                       <td>
                         <div className={styles.actionRow}>
+                          {onCreateRedirect && canRedirect(finding) ? (
+                            <button
+                              className="secondary-button"
+                              disabled={busy !== null}
+                              onClick={() => {
+                                const path = toRedirectPath(finding.url);
+                                if (!path) return;
+                                onCreateRedirect({
+                                  path,
+                                  findingId: finding.id,
+                                  url: finding.url,
+                                });
+                              }}
+                              title="到「跳转管理」为这个地址建一条 301，访客和谷歌就不会再撞 404"
+                              type="button"
+                            >
+                              设跳转
+                            </button>
+                          ) : null}
                           {activeTab === "open" ? (
                             <button
                               className="secondary-button"
@@ -322,21 +366,12 @@ export function HealthDeck() {
                               onClick={() =>
                                 void handleFindingAction(finding, "acknowledge")
                               }
+                              title="知道了，但不打算修——挪到「已忽略」，不再占着待办"
                               type="button"
                             >
-                              确认
+                              忽略
                             </button>
                           ) : null}
-                          <button
-                            className="secondary-button"
-                            disabled={busy !== null}
-                            onClick={() =>
-                              void handleFindingAction(finding, "resolve")
-                            }
-                            type="button"
-                          >
-                            已解决
-                          </button>
                           {activeTab === "acknowledged" ? (
                             <button
                               className="secondary-button"
@@ -344,9 +379,10 @@ export function HealthDeck() {
                               onClick={() =>
                                 void handleFindingAction(finding, "reopen")
                               }
+                              title="挪回「待处理」，重新当成要办的事"
                               type="button"
                             >
-                              重开
+                              放回待办
                             </button>
                           ) : null}
                         </div>

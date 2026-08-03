@@ -8,6 +8,15 @@ import { PluginSentinel, RedirectManager } from "./WpBridgePanels";
 
 type WorkspaceTab = "health" | "redirects" | "sentinel";
 
+/** 从「巡检中心」的一条死链，带着它的路径跳到「跳转管理」去建规则。 */
+export type RedirectHandoff = {
+  path: string;
+  /** 跳转保存并**验证生效**后，用它把这条死链标成已解决 */
+  findingId: string;
+  /** 原始死链地址，只用于显示 */
+  url: string;
+};
+
 const tabs: Array<{ id: WorkspaceTab; label: string }> = [
   { id: "health", label: "巡检中心" },
   { id: "redirects", label: "跳转管理" },
@@ -16,6 +25,7 @@ const tabs: Array<{ id: WorkspaceTab; label: string }> = [
 
 export function SiteHealthWorkspace() {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("health");
+  const [handoff, setHandoff] = useState<RedirectHandoff | null>(null);
 
   return (
     <div className={styles.workspace}>
@@ -35,8 +45,20 @@ export function SiteHealthWorkspace() {
       </div>
 
       <div role="tabpanel">
-        {activeTab === "health" ? <HealthDeck /> : null}
-        {activeTab === "redirects" ? <RedirectManager /> : null}
+        {activeTab === "health" ? (
+          <HealthDeck
+            onCreateRedirect={(next) => {
+              setHandoff(next);
+              setActiveTab("redirects");
+            }}
+          />
+        ) : null}
+        {activeTab === "redirects" ? (
+          <RedirectManager
+            handoff={handoff}
+            onHandoffConsumed={() => setHandoff(null)}
+          />
+        ) : null}
         {activeTab === "sentinel" ? <PluginSentinel /> : null}
       </div>
     </div>

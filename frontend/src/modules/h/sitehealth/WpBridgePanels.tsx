@@ -9,13 +9,14 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   getWpRedirects,
   getWpSentinel,
   runWpSmtpCheck,
   saveWpRedirects,
+  updateHealthFinding,
   verifyWpRedirect,
   type RedirectRule,
   type RedirectVerification,
@@ -23,6 +24,8 @@ import {
   type WpSentinel,
 } from "./api";
 import styles from "./HealthDeck.module.css";
+import { suggestRedirectTarget, toRedirectPath } from "./redirect-hint";
+import type { RedirectHandoff } from "./SiteHealthWorkspace";
 
 type EditorRule = RedirectRule & { id: number };
 
@@ -53,7 +56,14 @@ function verificationText(result: RedirectVerification) {
   };
 }
 
-export function RedirectManager() {
+export function RedirectManager({
+  handoff,
+  onHandoffConsumed,
+}: {
+  /** 从「巡检中心」某条死链点「设跳转」带过来的 */
+  handoff?: RedirectHandoff | null;
+  onHandoffConsumed?: () => void;
+} = {}) {
   const [rules, setRules] = useState<EditorRule[]>([]);
   const [reachable, setReachable] = useState<boolean | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -62,6 +72,9 @@ export function RedirectManager() {
   const [busy, setBusy] = useState(false);
   const [nextId, setNextId] = useState(1);
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
+  // WordPress 那边**实际存着**的路径集合。用来区分「规则没生效」和「规则还没保存」——
+  // 后者去验证只会拿到原样的 404，看着像出错，其实只是还没提交。
+  const [savedPaths, setSavedPaths] = useState<Set<string>>(new Set());
   const [verifications, setVerifications] = useState<
     Record<number, { ok: boolean; text: string }>
   >({});
@@ -75,6 +88,9 @@ export function RedirectManager() {
       const loaded = data.rules.map((rule, index) => ({ ...rule, id: index + 1 }));
       setRules(loaded);
       setNextId(loaded.length + 1);
+      setSavedPaths(
+        new Set(loaded.map((rule) => toRedirectPath(rule.from) ?? "")),
+      );
       setVerifications({});
     } catch (loadError) {
       setError(errorMessage(loadError));
@@ -85,6 +101,48 @@ export function RedirectManager() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // ---- 从死链「设跳转」过来的一次性交接 ----
+  // 待结掉的那条死链：跳转保存**并实测生效后**才用它标记已解决。
+  const [pendingFinding, setPendingFinding] = useState<
+    { findingId: string; path: string; url: string } | null
+  >(null);
+  // 被预填/定位的那一行，界面上高亮它，让人一眼看到该确认哪行
+  const [focusRuleId, setFocusRuleId] = useState<number | null>(null);
+  // effect 里要读最新 rules，又不能把 rules 放进依赖（会重复触发交接）
+  const rulesRef = useRef<EditorRule[]>([]);
+  useEffect(() => {
+    rulesRef.current = rules;
+  }, [rules]);
+
+  useEffect(() => {
+    if (!handoff || reachable !== true) return; // 等跳转表读回来再填，否则会被 load() 覆盖
+    const current = rulesRef.current;
+    const existing = current.find(
+      (rule) => toRedirectPath(rule.from) === handoff.path,
+    );
+    if (existing) {
+      // 已经有同路径规则了，不重复加，直接定位过去
+      setFocusRuleId(existing.id);
+    } else {
+      const id = current.reduce((max, rule) => Math.max(max, rule.id), 0) + 1;
+      setRules((cur) => [
+        ...cur,
+        { id, from: handoff.path, to: suggestRedirectTarget(handoff.path) },
+      ]);
+      setNextId((cur) => Math.max(cur, id + 1));
+      setFocusRuleId(id);
+    }
+    setPendingFinding({
+      findingId: handoff.findingId,
+      path: handoff.path,
+      url: handoff.url,
+    });
+    setNotice(null);
+    onHandoffConsumed?.();
+    // onHandoffConsumed 每次渲染都是新函数，放进依赖会反复触发交接
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoff, reachable]);
 
   const updateRule = (id: number, field: keyof RedirectRule, value: string) => {
     setRules((current) =>
@@ -110,8 +168,32 @@ export function RedirectManager() {
       const saved = result.rules.map((rule, index) => ({ ...rule, id: index + 1 }));
       setRules(saved);
       setNextId(saved.length + 1);
+      setSavedPaths(
+        new Set(saved.map((rule) => toRedirectPath(rule.from) ?? "")),
+      );
       setParseError(null);
+      setFocusRuleId(null);
       setNotice(`已保存 ${saved.length} 条跳转规则`);
+
+      // 从死链过来的：**实测一次真的 301 了**，才把那条死链标成已解决。
+      // 不实测就标记 = 报告成功但可能什么都没发生（本仓库栽过，见记忆 external-side-effect-verify）。
+      if (pendingFinding) {
+        const verdict = verificationText(
+          await verifyWpRedirect(pendingFinding.path),
+        );
+        if (verdict.ok) {
+          await updateHealthFinding(pendingFinding.findingId, "resolve");
+          setPendingFinding(null);
+          setNotice(
+            `跳转已生效（${verdict.text}），${pendingFinding.url} 这条死链已标记为已解决`,
+          );
+        } else {
+          setError(
+            `跳转规则已保存，但实测没生效（${verdict.text}）——这条死链**没有**标记为已解决。` +
+              `检查一下目标地址是否可访问，或者该路径其实还能打开（插件只在 404 时才跳转）。`,
+          );
+        }
+      }
     } catch (saveError) {
       setError(errorMessage(saveError));
     } finally {
@@ -120,6 +202,18 @@ export function RedirectManager() {
   };
 
   const handleVerify = async (rule: EditorRule) => {
+    // 没保存就验证，拿到的必然是原样的 404 —— 那不是"规则有问题"，是"规则还没上去"。
+    // 直接说清楚，别让人对着一个 404 猜半天（2026-08-02 用户就在这卡住了）。
+    if (!savedPaths.has(toRedirectPath(rule.from) ?? "")) {
+      setVerifications((current) => ({
+        ...current,
+        [rule.id]: {
+          ok: false,
+          text: "这条还没保存，先点上面的「保存」再验证",
+        },
+      }));
+      return;
+    }
     setVerifyingId(rule.id);
     setError(null);
     try {
@@ -200,6 +294,14 @@ export function RedirectManager() {
       ) : null}
       {error ? <div className={styles.inlineError} role="alert">{error}</div> : null}
       {notice ? <div className={styles.saveToast} role="status">{notice}</div> : null}
+      {pendingFinding ? (
+        <div className={styles.parseWarning} role="status">
+          <ShieldCheck aria-hidden="true" size={17} />
+          正在为死链 <strong>{pendingFinding.url}</strong> 建跳转。
+          下面高亮那行的目标是**按路径规律猜的**，确认或改掉再保存；
+          保存后会实测一次，确实跳通了才把这条死链标为已解决。
+        </div>
+      ) : null}
 
       <section className={styles.panel} aria-label="WordPress 跳转规则">
         {rules.length === 0 ? (
@@ -218,8 +320,21 @@ export function RedirectManager() {
               <tbody>
                 {rules.map((rule) => {
                   const verification = verifications[rule.id];
+                  const focused = focusRuleId === rule.id;
                   return (
-                    <tr key={rule.id}>
+                    <tr
+                      data-focus={focused ? "on" : undefined}
+                      key={rule.id}
+                      ref={
+                        focused
+                          ? (node) =>
+                              node?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                              })
+                          : undefined
+                      }
+                    >
                       <td>
                         <input
                           aria-label="旧路径"
