@@ -111,6 +111,7 @@ def selling_points_skill_context() -> dict[str, Any]:
             "Avoid unsupported superlatives, medical/legal/safety promises, trademark misuse, and absolute guarantees.",
             "Every bullet carries exactly one evidence reference: spec:<field>, verified_feature:<id>, or operator_fact.",
             "Every number in a bullet must appear verbatim in that one cited evidence snapshot; the package item count is the sole exception for a matching N-piece claim.",
+            "Do not introduce a topic the cited evidence does not itself state — safety, waterproofing, runtime, weight, size, material, certification. A battery-capacity spec supports a capacity claim, not a runtime claim; write only what that one snapshot proves.",
             "Mention a concrete component such as kettle, pot, pan, or bowl only when it appears in package_includes or a component-specific structured-spec key.",
             "Use an N-piece claim only when package_includes exists and its list length is exactly N; otherwise describe it simply as a set.",
             "If no supplied evidence supports a proposed claim, omit it or mark it unverified for operator review; never phrase it as a product fact.",

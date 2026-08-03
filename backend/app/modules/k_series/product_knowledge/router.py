@@ -1573,12 +1573,18 @@ def _structured_spec_evidence_snapshot(
             if isinstance(current, dict)
             else None
         ) or (parent.get("unit") if isinstance(parent, dict) else None)
+        label_en = ""
+        value_en: Any = None
         if isinstance(current, dict):
             raw_value = current.get("raw_value")
             value = current.get("value")
             if raw_value in (None, "") and value in (None, "", [], {}):
                 return None
             label = str(current.get("source_label") or cleaned).strip()
+            # 运营用中文录规格,英文对照就在同一条记录上。快照必须一起带走,
+            # 否则下游只能看见中文,英文文案永远「找不到证据」(2026-08-03 修复)。
+            label_en = str(current.get("label_en") or "").strip()
+            value_en = current.get("value_en")
             value_text = _evidence_value_text(
                 raw_value if raw_value not in (None, "") else value,
                 unit,
@@ -1593,7 +1599,9 @@ def _structured_spec_evidence_snapshot(
             "kind": "spec",
             "path": cleaned,
             "label": label,
+            "label_en": label_en,
             "value": value,
+            "value_en": value_en,
             "raw_value": raw_value,
             "unit": unit,
             "value_text": value_text,
@@ -1641,7 +1649,9 @@ def _structured_spec_evidence_snapshot(
             "kind": "spec",
             "path": str(item.get("key") or cleaned),
             "label": str(item.get("label") or item.get("key") or cleaned),
+            "label_en": str(item.get("label_en") or "").strip(),
             "value": value,
+            "value_en": item.get("value_en"),
             "raw_value": raw_value,
             "unit": item.get("unit"),
             "value_text": value_text,
@@ -1888,17 +1898,77 @@ def _selling_point_evidence_error(
     return error
 
 
-_EVIDENCE_TOPIC_TERMS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("wind", ("wind", "windproof", "wind-resistant", "wind resistant")),
-    ("water", ("waterproof", "water-resistant", "water resistant", "ip65", "ip67")),
-    ("indoor", ("indoor", "indoors", "home use")),
-    ("safety", ("safe", "safety", "hazard-free")),
-    ("runtime", ("runtime", "run time", "battery life", "hours", "hour")),
-    ("ignition", ("ignition", "ignite", "piezo", "lighter-free")),
-    ("weight", ("lightweight", "weight", "weighs", "lb", "kg")),
-    ("size", ("compact", "dimensions", "dimension", "folded", "inch", "cm")),
-    ("material", ("material", "steel", "aluminum", "aluminium", "abs")),
-    ("certification", ("certified", "certification", "ce", "rohs", "ul")),
+# IPX0-8 / IP65 / IP67 / IP68 …… 枚举写不全,一律走正则(旧表只有 ip65/ip67,
+# IPX8 这种铁证反而被判「不支持防水」)。
+_IP_RATING_PATTERN = re.compile(r"\bip(?:x\d|\d[x\d])\b")
+# CE / RoHS / UL 这类认证与 IP 防护等级,本身就是「安全」主题的证据。
+_SAFETY_EVIDENCE_PATTERN = re.compile(
+    r"\b(?:ce|rohs|ul|etl|fcc|un38\s?3|ipx?\d)\b|认证|防水等级|安规|3c"
+)
+
+# 证据的 label 常是运营录入的中文,卖点是英文写的 —— 词表必须双语,
+# 否则「续航」撑不起 runtime、「防水等级」撑不起 waterproof。
+# 每一项可以是字面词,也可以是正则(正则直接在归一化文本上匹配)。
+_EVIDENCE_TOPIC_TERMS: tuple[tuple[str, tuple[Any, ...]], ...] = (
+    (
+        "wind",
+        ("wind", "windproof", "wind-resistant", "wind resistant", "防风", "抗风"),
+    ),
+    (
+        "water",
+        (
+            "waterproof",
+            "water-resistant",
+            "water resistant",
+            # 不收 "submersible":那是泵的类型(潜水泵),不是防水声称,
+            # 收了会把「Submersible pump draws water from…」这种句子误杀。
+            "防水",
+            "防泼水",
+            "浸没",
+            "潜水",
+            _IP_RATING_PATTERN,
+        ),
+    ),
+    ("indoor", ("indoor", "indoors", "home use", "室内", "家用")),
+    ("safety", ("safe", "safety", "hazard-free", "安全", "安规")),
+    (
+        "runtime",
+        (
+            "runtime",
+            "run time",
+            "battery life",
+            "hours",
+            "hour",
+            "续航",
+            "工作时间",
+            "使用时间",
+            "运行时间",
+        ),
+    ),
+    ("ignition", ("ignition", "ignite", "piezo", "lighter-free", "点火")),
+    ("weight", ("lightweight", "weight", "weighs", "lb", "kg", "重量", "净重")),
+    (
+        "size",
+        (
+            "compact",
+            "dimensions",
+            "dimension",
+            "folded",
+            "inch",
+            "cm",
+            "尺寸",
+            "规格",
+            "折叠",
+        ),
+    ),
+    (
+        "material",
+        ("material", "steel", "aluminum", "aluminium", "abs", "材质", "材料"),
+    ),
+    (
+        "certification",
+        ("certified", "certification", "ce", "rohs", "ul", "认证"),
+    ),
 )
 
 _MEASUREMENT_NUMBER_PATTERN = (
@@ -1977,12 +2047,72 @@ def _measurement_pairs(value: Any) -> set[tuple[str, str]]:
     return pairs
 
 
+_STRUCTURED_MEASUREMENT_KEYS = frozenset(
+    {
+        "value",
+        "width",
+        "height",
+        "length",
+        "depth",
+        "diameter",
+        "thickness",
+        "capacity",
+    }
+)
+
+
+def _structured_measurement_pairs(
+    value: Any,
+    *,
+    default_unit: Any = None,
+) -> set[tuple[str, str]]:
+    """结构化数值里的「数字+单位」配对。
+
+    verified_feature 的重量/尺寸存成嵌套字典
+    (``{"unit": "lb", "value": 2.67, "source": {"unit": "g", "value": 1211}}``),
+    只靠正则扫 JSON 文本永远配不出「2.67 lb」—— 凡是带单位的重量/尺寸卖点
+    都会被判「证据里没有这个数字+单位」(2026-08-03 修复)。
+    每个数字只跟它所在那一层声明的单位绑定,不放宽门禁。
+    """
+
+    pairs: set[tuple[str, str]] = set()
+    if isinstance(value, list):
+        for item in value:
+            pairs.update(
+                _structured_measurement_pairs(item, default_unit=default_unit)
+            )
+        return pairs
+    if not isinstance(value, dict):
+        return pairs
+    local_unit = _canonical_measurement_unit(value.get("unit") or default_unit)
+    for key, item in value.items():
+        if isinstance(item, (dict, list)):
+            pairs.update(_structured_measurement_pairs(item, default_unit=local_unit))
+            continue
+        if key not in _STRUCTURED_MEASUREMENT_KEYS:
+            continue
+        if isinstance(item, bool) or not isinstance(item, (int, float, str)):
+            continue
+        if local_unit not in _MEASUREMENT_UNIT_DIMENSIONS:
+            continue
+        pairs.update(
+            (number, local_unit) for number in evidence_number_tokens(item)
+        )
+    return pairs
+
+
 def _supported_measurement_pairs(snapshot: dict[str, Any]) -> set[tuple[str, str]]:
     """Bind factual and buyer-display numbers to their verified units."""
 
     explicit_pairs: set[tuple[str, str]] = set()
     for key in ("value", "raw_value", "value_text"):
         explicit_pairs.update(_measurement_pairs(snapshot.get(key)))
+    for key in ("value", "raw_value"):
+        explicit_pairs.update(
+            _structured_measurement_pairs(
+                snapshot.get(key), default_unit=snapshot.get("unit")
+            )
+        )
 
     source_unit = _canonical_measurement_unit(snapshot.get("unit"))
     if source_unit not in _CONVERTIBLE_MEASUREMENT_UNITS:
@@ -2041,12 +2171,17 @@ def _normalized_evidence_text(value: Any) -> str:
     return re.sub(r"[^a-z0-9一-鿿]+", " ", str(value or "").casefold()).strip()
 
 
-def _contains_evidence_phrase(haystack: str, phrase: str) -> bool:
+def _contains_evidence_phrase(haystack: str, phrase: Any) -> bool:
+    # 正则项(如 IP 防护等级)直接在归一化文本上匹配。
+    if isinstance(phrase, re.Pattern):
+        return bool(phrase.search(haystack))
     needle = _normalized_evidence_text(phrase)
-    return bool(
-        needle
-        and re.search(rf"(?:^|\s){re.escape(needle)}(?:$|\s)", haystack)
-    )
+    if not needle:
+        return False
+    # 中文不分词,词边界永远匹配不上(「防水等级」里找不到「防水」),按子串比。
+    if contains_cjk(needle):
+        return needle in haystack
+    return bool(re.search(rf"(?:^|\s){re.escape(needle)}(?:$|\s)", haystack))
 
 
 def _enrich_selling_points_chinese(
@@ -2126,10 +2261,19 @@ def _selling_point_support_error(
     structured_specs: dict[str, Any] | None = None,
 ) -> str | None:
     claim = _normalized_evidence_text(bullet.text)
+    # 中文 label 与英文对照(label_en/value_en/买家展示行)一起进证据文本,
+    # 中文规格才撑得住英文卖点。
+    buyer_display = snapshot.get("buyer_display")
+    if not isinstance(buyer_display, dict):
+        buyer_display = {}
     fact = _normalized_evidence_text(
         " ".join(
-            str(snapshot.get(key) or "")
-            for key in ("path", "label", "key", "value_text")
+            str(source.get(key) or "")
+            for source, keys in (
+                (snapshot, ("path", "label", "label_en", "key", "value_text", "value_en")),
+                (buyer_display, ("label", "display_value", "display_unit")),
+            )
+            for key in keys
         )
     )
     operator_bridge = (
@@ -2187,10 +2331,15 @@ def _selling_point_support_error(
             claim_has_topic = any(
                 _contains_evidence_phrase(claim, term) for term in terms
             )
-            if claim_has_topic and not any(
-                _contains_evidence_phrase(support, term) for term in terms
-            ):
-                return f"Evidence does not support the claim topic '{topic}'."
+            if not claim_has_topic:
+                continue
+            if any(_contains_evidence_phrase(support, term) for term in terms):
+                continue
+            # 防护等级与认证(IPX8 / CE / RoHS / UL)本身就是安全证据,
+            # 不必在证据文本里再出现「安全」二字(用户 2026-08-03 拍板)。
+            if topic == "safety" and _SAFETY_EVIDENCE_PATTERN.search(support):
+                continue
+            return f"Evidence does not support the claim topic '{topic}'."
 
     if snapshot.get("kind") == "operator_fact" and not operator_bridge:
         return "operator_fact requires a concrete evidence_excerpt."
@@ -2202,6 +2351,111 @@ def _selling_point_support_error(
     if package_error:
         return package_error
     return None
+
+
+_EVIDENCE_TOPIC_LABELS_ZH = {
+    "wind": "防风",
+    "water": "防水",
+    "indoor": "室内使用",
+    "safety": "安全",
+    "runtime": "续航",
+    "ignition": "点火",
+    "weight": "重量",
+    "size": "尺寸",
+    "material": "材质",
+    "certification": "认证",
+}
+
+
+def _humanize_selling_point_error(error: str) -> str:
+    """把门禁的英文判词翻成运营看得懂、能照着改的中文。
+
+    判词本体保持英文不动(既有测试逐字断言),中文化只发生在返回给人看的这一层。
+    """
+
+    value = str(error or "").strip()
+    topic = re.match(r"Evidence does not support the claim topic '(.+)'\.$", value)
+    if topic:
+        name = _EVIDENCE_TOPIC_LABELS_ZH.get(topic.group(1), topic.group(1))
+        return (
+            f"文案里说了「{name}」,但绑的这条证据跟{name}无关。"
+            f"请改绑一条能证明{name}的规格,或把{name}的说法从文案里去掉。"
+        )
+    numbers = re.match(
+        r"Claim contains numbers absent from the current evidence: (.+)$", value
+    )
+    if numbers:
+        return f"文案里的数字 {numbers.group(1)} 在这条证据里找不到,请改数字或换证据。"
+    pairs = re.match(
+        r"Claim contains number/unit pairs absent from the current evidence: (.+)$",
+        value,
+    )
+    if pairs:
+        return (
+            f"文案里的「{pairs.group(1)}」在这条证据里找不到(数字或单位对不上),"
+            "请改文案或换证据。"
+        )
+    if value == "operator_fact requires a concrete evidence_excerpt.":
+        return "选了「运营自证」就必须填一段具体的证据摘录(工厂原话/资料原文)。"
+    missing_spec = re.match(
+        r"Structured specification evidence was not found: (.+)$", value
+    )
+    if missing_spec:
+        return f"找不到这条规格字段:{missing_spec.group(1)},请重新选一条证据。"
+    missing_feature = re.match(
+        r"Verified feature evidence was not found: (.+)$", value
+    )
+    if missing_feature:
+        return f"找不到这条已验证属性:{missing_feature.group(1)},请重新选一条证据。"
+    if value.startswith("Evidence must be spec:"):
+        return (
+            "证据格式不对,只能填 spec:<规格字段>、verified_feature:<属性 ID> "
+            "或 operator_fact。"
+        )
+    if value == "Every candidate must be approved, edited, or rejected.":
+        return "这条还没做决定,请选通过 / 编辑后通过 / 拒绝。"
+    duplicate = re.match(r"Duplicate selling-point id: (.+)$", value)
+    if duplicate:
+        return f"卖点 id 重复了:{duplicate.group(1)}。"
+    components = re.match(r"Unsupported package component\(s\): (.+)$", value)
+    if components:
+        return (
+            f"文案提到了配件 {components.group(1)},但包装清单里没有,"
+            "请补进包装清单或从文案里去掉。"
+        )
+    piece = re.match(r"(\d+)-piece claim requires a verified piece_count\.$", value)
+    if piece:
+        return f"写了「{piece.group(1)} 件套」,但包装清单没有可核对的件数。"
+    mismatch = re.match(
+        r"(\d+)-piece claim does not match verified piece count \((\d+)\)\.$", value
+    )
+    if mismatch:
+        return (
+            f"写了「{mismatch.group(1)} 件套」,但包装清单实际是 "
+            f"{mismatch.group(2)} 件。"
+        )
+    return value
+
+
+def _selling_point_review_error_message(
+    review_errors: list[dict[str, Any]],
+    *,
+    limit: int = 5,
+) -> str:
+    """一次把问题说全 —— 只报第一条会让人反复提交反复撞墙。"""
+
+    lines = [f"卖点证据审批未通过(共 {len(review_errors)} 条问题):"]
+    for item in review_errors[:limit]:
+        text = str(item.get("text") or "").strip()
+        if len(text) > 40:
+            text = text[:40] + "…"
+        head = f"第 {int(item.get('index', 0)) + 1} 条"
+        if text:
+            head = f"{head}「{text}」"
+        lines.append(f"{head}:{_humanize_selling_point_error(str(item.get('error')))}")
+    if len(review_errors) > limit:
+        lines.append(f"另有 {len(review_errors) - limit} 条问题未列出。")
+    return "\n".join(lines)
 
 
 def _mark_selling_point_evidence_status(
@@ -4704,16 +4958,12 @@ def approve_product_selling_points(
             )
         )
     if review_errors:
-        first = review_errors[0]
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=_structured_execution_error_detail(
                 reason="invalid_state",
                 code="SELLING_POINT_EVIDENCE_REQUIRED",
-                message=(
-                    f"卖点证据审批未通过(共 {len(review_errors)} 条问题)。"
-                    f"第 {first['index'] + 1} 条:{first['error']}"
-                ),
+                message=_selling_point_review_error_message(review_errors),
                 module_id=MODULE_KEY,
                 extra={"items": review_errors},
             ),
