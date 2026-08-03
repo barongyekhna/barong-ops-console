@@ -21,7 +21,40 @@
 .step {
   position: relative;
   padding: 15px 16px;
+  border: 0;
   border-right: 1px solid rgb(120 160 200 / 18%);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step:hover {
+  background: rgb(120 160 200 / 7%);
+}
+
+.step:focus-visible {
+  outline: 2px solid #d9a441;
+  outline-offset: -2px;
+}
+
+/* 当前打开的那一步。和「卡在这」是两回事：卡在哪是系统算的，
+   打开哪一步是你自己点的。 */
+.stepActive {
+  background: rgb(120 160 200 / 12%);
+}
+
+.stepActive .stepTitle {
+  color: #fff;
+}
+
+.stepActive::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: rgb(120 160 200 / 55%);
 }
 
 .step:last-child {

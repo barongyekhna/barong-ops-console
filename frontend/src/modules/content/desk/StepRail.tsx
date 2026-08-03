@@ -10,21 +10,34 @@ import type { Step } from "./types";
  * 每一步下面标「谁干」：用户原话「我经常不知道自己下一步该干嘛了」，
  * 那句话的一半答案是「这一步根本不用你干」。
  */
-export function StepRail({ steps }: { steps: Step[] }) {
+export function StepRail({
+  steps,
+  active,
+  onSelect,
+}: {
+  steps: Step[];
+  active: string;
+  onSelect: (key: string) => void;
+}) {
   return (
     <div className={styles.rail}>
       {steps.map((step, i) => (
-        <div
+        <button
           className={`${styles.step}${step.here ? ` ${styles.stepHere}` : ""}${
             step.done ? ` ${styles.stepDone}` : ""
-          }`}
+          }${step.key === active ? ` ${styles.stepActive}` : ""}`}
           key={step.key}
+          onClick={() => onSelect(step.key)}
+          type="button"
         >
-          <div className={styles.stepIndex}>{String(i + 1).padStart(2, "0")}</div>
+          <div className={styles.stepIndex}>
+            {String(i + 1).padStart(2, "0")}
+            {step.here ? " ◀ 卡在这" : ""}
+          </div>
           <div className={styles.stepTitle}>{step.title}</div>
           <div className={styles.stepValue}>{step.value}</div>
           <div className={styles.stepWho}>{step.who}</div>
-        </div>
+        </button>
       ))}
     </div>
   );

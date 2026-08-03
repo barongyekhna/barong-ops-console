@@ -972,3 +972,34 @@ def test_question_picking_is_advice_not_a_gate() -> None:
     assert "不挑也能生成" in picker
     # 候选带阵地读数：挑的时候就看得见打不打得动
     assert "可攻" in picker
+
+
+def test_each_step_shows_only_its_own_content() -> None:
+    """四步画在导轨上，就得点哪一步看哪一步。
+
+    2026-08-03 用户原话：「你这些全都显示在发布页面上去了呀……现在前三个都不能点，
+    然后所有东西都显示在发布下面」。
+
+    在那之前导轨只是**装饰**：四步并排画着，底下却是一张从选题堆到发布的流水账。
+    画了分步却不分，比不画更糟——它承诺了一个结构然后不兑现。
+
+    另外：默认打开哪一步跟着系统算出来的瓶颈走，但**一旦你手动点过，就以你点的
+    为准**——不能在人看着的时候把页面抢走。
+    """
+    from pathlib import Path
+
+    desk = Path("frontend/src/modules/content/desk/ContentDesk.tsx").read_text()
+    for step in ("pick", "generate", "review", "publish"):
+        assert f'activeStep === "{step}"' in desk, step
+    # 手动点过之后不被自动切走
+    assert "tab ?? steps.find" in desk
+
+    rail = Path("frontend/src/modules/content/desk/StepRail.tsx").read_text()
+    assert "onSelect" in rail
+    assert "<button" in rail, "导轨得能点"
+
+    # 每一步各有自己的面板，不再堆在一起
+    for panel in ("TopicPanel", "GeneratePanel", "ReviewPanel", "PublishPanel"):
+        assert (
+            Path(f"frontend/src/modules/content/desk/{panel}.tsx").exists()
+        ), panel

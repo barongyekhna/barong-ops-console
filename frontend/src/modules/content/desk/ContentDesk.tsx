@@ -4,9 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ArticleModal } from "./ArticleModal";
 import styles from "./ContentDesk.module.css";
+import { GeneratePanel } from "./GeneratePanel";
 import { MachineStrip } from "./MachineStrip";
 import { PublishPanel } from "./PublishPanel";
 import { QuestionPicker } from "./QuestionPicker";
+import { ReviewPanel } from "./ReviewPanel";
 import { TopicPanel } from "./TopicPanel";
 import { StepRail } from "./StepRail";
 import type { IgnorePayload } from "./AuditPanel";
@@ -63,6 +65,9 @@ export function ContentDesk() {
     seo_candidates: [],
   });
   const [pickingFor, setPickingFor] = useState<string | null>(null);
+  // 当前打开哪一步。**null = 还没手动点过**，那就跟着系统算出来的瓶颈走；
+  // 一旦你自己点了，就以你点的为准，别在你看着的时候把页面抢走。
+  const [tab, setTab] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -160,13 +165,13 @@ export function ContentDesk() {
     );
   }, [total]);
 
-  const bySource = useMemo(() => {
-    const groups = new Map<string, Article[]>();
-    for (const article of queue ?? []) {
-      groups.set(article.source, [...(groups.get(article.source) ?? []), article]);
-    }
-    return [...groups.entries()];
-  }, [queue]);
+  const steps = overview?.steps ?? [];
+  const activeStep =
+    tab ?? steps.find((s) => s.here)?.key ?? steps[0]?.key ?? "review";
+  const stepTodos = useMemo(
+    () => (overview?.todos ?? []).filter((t) => t.step === activeStep),
+    [activeStep, overview],
+  );
 
   const current = index !== null ? (queue?.[index] ?? null) : null;
 
@@ -223,79 +228,71 @@ export function ContentDesk() {
         <div className={`${styles.card} ${styles.notice}`}>{pageNotice}</div>
       ) : null}
 
-      {overview ? <StepRail steps={overview.steps} /> : null}
+      {steps.length ? (
+        <StepRail active={activeStep} onSelect={setTab} steps={steps} />
+      ) : null}
 
-      <div className={styles.sectionLabel}>现在该你做的</div>
-
-      {queue === null ? (
-        <div className={styles.card}>
-          <span className={styles.empty}>读取中…</span>
+      {/* 只显示当前这一步的东西。四步画在导轨上却把内容堆成一张流水账，
+          等于没分步——用户 2026-08-03 原话：「所有东西都显示在发布下面」。 */}
+      {stepTodos.length ? (
+        <div className={styles.sectionLabel}>这一步该你做的</div>
+      ) : null}
+      {stepTodos.map((todo) => (
+        <div className={styles.card} key={todo.lead}>
+          <div className={styles.todoLead}>{todo.lead}</div>
+          <div className={styles.todoNote}>{todo.note}</div>
         </div>
-      ) : total === 0 ? (
-        <div className={styles.card}>
-          <span className={styles.empty}>没有待办。机器写完了会出现在这里。</span>
-        </div>
-      ) : (
-        bySource.map(([source, articles]) => {
-          const first = queue.findIndex((a) => a.source === source);
-          return (
-            <div
-              className={`${styles.card} ${styles.todoRow} ${styles.actionable}`}
-              key={source}
-            >
-              <span className={styles.bead} />
-              <div className={styles.todoMain}>
-                <div className={styles.todoLead}>
-                  {articles.length} 篇{articles[0].source_label}等你审
-                </div>
-                <div className={styles.todoNote}>
-                  {articles
-                    .slice(0, 2)
-                    .map((a) => a.title)
-                    .join(" · ")}
-                  {articles.length > 2 ? " …" : ""}
-                </div>
-              </div>
-              <span className={styles.count}>{articles.length}</span>
-              <button
-                className={styles.btn}
-                onClick={() => setIndex(first)}
-                type="button"
-              >
-                打开第一篇
-              </button>
-            </div>
-          );
-        })
-      )}
+      ))}
 
-      <TopicPanel
-        busy={pageBusy}
-        onGenerate={(ids) =>
-          void topicAction("generate", async () => {
-            const r = await generateTopics(ids);
-            return `已排队 ${r.queued} 篇。AI 写一篇一分钟起步，写完会出现在「等你审」。`;
-          })
-        }
-        onGenerateCluster={(id) =>
-          void topicAction(`cluster:${id}`, async () => {
-            const r = await generateCluster(id);
-            return `已排队 ${r.queued} 个任务。已批准的文章不会被动。`;
-          })
-        }
-        onPick={(id, status) =>
-          void topicAction(`pick:${id}`, async () => {
-            await pickTopic(id, status);
-            return status === "picked"
-              ? "挑中了，可以生成了。"
-              : "已标为不写。";
-          })
-        }
-        onPickQuestions={(id) => setPickingFor(id)}
-        state={topicState}
-      />
+      {activeStep === "pick" ? (
+        <TopicPanel
+          busy={pageBusy}
+          onGenerateCluster={(id) =>
+            void topicAction(`cluster:${id}`, async () => {
+              const r = await generateCluster(id);
+              return `已排队 ${r.queued} 个任务。已批准的文章不会被动。`;
+            })
+          }
+          onPick={(id, status) =>
+            void topicAction(`pick:${id}`, async () => {
+              await pickTopic(id, status);
+              return status === "picked"
+                ? "挑中了。去「生成」那一步派单。"
+                : "已标为不写。";
+            })
+          }
+          onPickQuestions={(id) => setPickingFor(id)}
+          state={topicState}
+        />
+      ) : null}
 
-      <PublishPanel busy={pageBusy} onPublish={(u) => void publish(u)} state={publishState} />
+      {activeStep === "generate" ? (
+        <GeneratePanel
+          busy={pageBusy}
+          failures={(overview?.todos ?? []).filter(
+            (t) => t.step === "generate" && t.lead.includes("失败"),
+          )}
+          onGenerate={(ids) =>
+            void topicAction("generate", async () => {
+              const r = await generateTopics(ids);
+              return `已排队 ${r.queued} 篇。写完会出现在「你审」。`;
+            })
+          }
+          state={topicState}
+        />
+      ) : null}
+
+      {activeStep === "review" ? (
+        <ReviewPanel onOpen={(i) => setIndex(i)} queue={queue} />
+      ) : null}
+
+      {activeStep === "publish" ? (
+        <PublishPanel
+          busy={pageBusy}
+          onPublish={(u) => void publish(u)}
+          state={publishState}
+        />
+      ) : null}
 
       {overview ? <MachineStrip lanes={overview.machine} /> : null}
 

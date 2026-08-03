@@ -22,50 +22,28 @@ export function TopicPanel({
   state,
   busy,
   onPick,
-  onGenerate,
   onPickQuestions,
   onGenerateCluster,
 }: {
   state: TopicState;
   busy: string | null;
   onPick: (id: string, status: "picked" | "rejected") => void;
-  onGenerate: (ids: string[]) => void;
   onPickQuestions: (clusterId: string) => void;
   onGenerateCluster: (clusterId: string) => void;
 }) {
   const { seo_candidates: candidates, clusters_needing_questions: clusters } = state;
-  const awaiting = state.awaiting_generation;
-  if (!candidates.length && !clusters.length && !awaiting.length) return null;
+  if (!candidates.length && !clusters.length) {
+    return (
+      <div className={styles.card}>
+        <span className={styles.empty}>
+          没有待挑的选题。关键词雷达跑出新候选时会出现在这里。
+        </span>
+      </div>
+    );
+  }
 
   return (
     <>
-      {awaiting.length ? (
-        <>
-          <div className={styles.sectionLabel}>挑好了，等着写</div>
-          <div className={`${styles.card} ${styles.todoRow} ${styles.actionable}`}>
-            <span className={styles.bead} />
-            <div className={styles.todoMain}>
-              <div className={styles.todoLead}>
-                {awaiting.length} 个选题已挑中，还没写
-              </div>
-              <div className={styles.todoNote}>
-                {awaiting.slice(0, 3).map((t) => t.keyword).join(" · ")}
-                {awaiting.length > 3 ? " …" : ""}
-              </div>
-            </div>
-            <span className={styles.count}>{awaiting.length}</span>
-            <button
-              className={styles.btn}
-              disabled={busy !== null}
-              onClick={() => onGenerate(awaiting.map((t) => t.id))}
-              type="button"
-            >
-              {busy === "generate" ? "派单中…" : "全部生成"}
-            </button>
-          </div>
-        </>
-      ) : null}
-
       {clusters.length ? (
         <>
           <div className={styles.sectionLabel}>还没挑买家问句的话题簇</div>
