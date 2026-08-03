@@ -1,5 +1,5 @@
 import { API_PROXY_BASE, buildHeaders, readJson } from "../api-base";
-import type { Article, Overview, PublishUnit } from "./types";
+import type { Article, Overview, PublishState } from "./types";
 
 const BASE = `${API_PROXY_BASE}/content-desk`;
 
@@ -88,14 +88,19 @@ export async function fetchOverview(): Promise<Overview> {
   return readJson<Overview>(response, "内容台加载失败");
 }
 
-export async function fetchPublishPreview(): Promise<PublishUnit[]> {
+export async function fetchPublishState(): Promise<PublishState> {
   const response = await fetch(`${BASE}/publish-preview`, {
     cache: "no-store",
     headers: buildHeaders(),
     method: "GET",
   });
-  const data = await readJson<{ units: PublishUnit[] }>(response, "发布预览加载失败");
-  return data.units ?? [];
+  const data = await readJson<PublishState>(response, "发布状态加载失败");
+  return {
+    drafts: data.drafts ?? [],
+    in_flight: data.in_flight ?? [],
+    live: data.live ?? [],
+    units: data.units ?? [],
+  };
 }
 
 export function publishUnit(

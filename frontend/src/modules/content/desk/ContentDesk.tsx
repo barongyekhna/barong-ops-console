@@ -11,14 +11,14 @@ import type { IgnorePayload } from "./AuditPanel";
 import {
   analyzeArticle,
   fetchOverview,
-  fetchPublishPreview,
+  fetchPublishState,
   fetchQueue,
   ignoreFinding,
   publishUnit,
   reviewArticle,
   reviseArticle,
 } from "./api";
-import type { Article, Overview, PublishUnit } from "./types";
+import type { Article, Overview, PublishState, PublishUnit } from "./types";
 
 /**
  * 内容台。**不是第三台引擎**——不生成内容、不发明状态，只把 GEO/SEO 合成一页：
@@ -33,7 +33,12 @@ export function ContentDesk() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
-  const [units, setUnits] = useState<PublishUnit[]>([]);
+  const [publishState, setPublishState] = useState<PublishState>({
+    drafts: [],
+    in_flight: [],
+    live: [],
+    units: [],
+  });
   const [pageBusy, setPageBusy] = useState<string | null>(null);
   const [pageNotice, setPageNotice] = useState<string | null>(null);
 
@@ -42,11 +47,11 @@ export function ContentDesk() {
       const [nextQueue, nextOverview, nextUnits] = await Promise.all([
         fetchQueue(),
         fetchOverview(),
-        fetchPublishPreview(),
+        fetchPublishState(),
       ]);
       setQueue(nextQueue);
       setOverview(nextOverview);
-      setUnits(nextUnits);
+      setPublishState(nextUnits);
       setError(null);
     } catch (loadError) {
       setError((loadError as Error).message);
@@ -63,7 +68,8 @@ export function ContentDesk() {
         const result = await publishUnit(unit.source, unit.unit_id);
         setPageNotice(
           `已派单（${result.status}）：${result.titles.length} 篇。` +
-            "n8n 会在站点上建草稿，最后一步由你在 WordPress 里点发布。",
+            "n8n 正在建草稿，约半分钟。**建好之后还要你去 WordPress 点发布**——" +
+            "在那之前读者看到的是 404。刷新这一页就能看到进度。",
         );
         await reload();
       } catch (publishError) {
@@ -205,7 +211,7 @@ export function ContentDesk() {
         })
       )}
 
-      <PublishPanel busy={pageBusy} onPublish={(u) => void publish(u)} units={units} />
+      <PublishPanel busy={pageBusy} onPublish={(u) => void publish(u)} state={publishState} />
 
       {overview ? <MachineStrip lanes={overview.machine} /> : null}
 

@@ -75,7 +75,9 @@ def test_permission_migration_exists_and_chains_from_the_previous_head() -> None
     assert "user_permission_assignments" in src
 
     manifest = json.loads((REPO / "migration_manifest.json").read_text())
-    assert manifest["alembic_head"] == "20260802_01_content_desk_permissions"
+    # 断言这条迁移进了清单,而不是断言它恰好是队尾 —— 后者会被任何一条
+    # 后续迁移打破,而"是不是最新"从来不是这个测试要守的东西。
+    assert "20260802_01_content_desk_permissions" in manifest["migration_order"]
     assert manifest["head_locked"] is True
 
 
@@ -826,3 +828,46 @@ def test_newest_same_category_product_gets_into_old_articles() -> None:
 
     picked = _pick_products({"t": "Category Overview", "c": "CAT", "p": []}, cards, {"CAT"})
     assert "4999" in [woo for woo, _by in picked], picked
+
+
+def test_publish_reports_all_the_way_to_reader_visible() -> None:
+    """派单成功 ≠ 读者能看到。
+
+    2026-08-03 用户发了两篇指南：n8n 任务 success、wp_post_id 和地址都回填了，
+    但**匿名访问是 404**——因为 n8n **刻意**把文章落成草稿等人工发布（P 系列同规）。
+    内容台从没告诉过他还有「去 WordPress 点发布」这一步。
+
+    **战报只说到派单、不说到读者能不能看见，那就是报了个假成功。**
+
+    另外：派单到回报之间有 ~30 秒窗口，这期间文章还没有 wp_post_id，单元仍在
+    待发列表里——不标出来，用户会以为「点了没反应」（他确实这么以为了）。
+    """
+    from backend.app.modules.content_desk import publishing, workflow
+
+    # 三段都要有
+    assert hasattr(publishing, "in_flight")
+    assert hasattr(publishing, "landed")
+    landed_src = inspect.getsource(publishing.landed)
+    assert "drafts" in landed_src and "live" in landed_src
+
+    # 用户在 WP 后台点发布，控制台不会自动知道——必须回读
+    router_src = inspect.getsource(
+        __import__(
+            "backend.app.modules.content_desk.router",
+            fromlist=["publish_preview"],
+        ).publish_preview
+    )
+    assert "refresh_live_state_safely" in router_src
+
+    # 「草稿躺在 WP 里」必须是一条挡路的待办，不是安静地过去
+    todo_src = _function_body_source(workflow.build_overview)
+    assert "还是草稿" in todo_src
+    assert "404" in todo_src
+
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/desk/PublishPanel.tsx").read_text()
+    assert "派单中" in panel          # 在飞时按钮置灰
+    assert "还是草稿" in panel        # 草稿段
+    assert "已经在线上" in panel      # 线上段带链接
+    assert "wp-admin/post.php" in panel  # 直接点到 WP 编辑页

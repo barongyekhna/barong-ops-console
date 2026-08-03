@@ -341,7 +341,14 @@ def publish_preview(
     """
     from . import publishing
 
-    return {"units": publishing.preview(db, scope=_scope(request))}
+    scope = _scope(request)
+    # 回读一次:用户在 WordPress 后台点了发布,控制台不会自动知道。
+    publishing.refresh_live_state_safely(db)
+    return {
+        "units": publishing.preview(db, scope=scope),
+        "in_flight": publishing.in_flight(db),
+        **publishing.landed(db, scope=scope),
+    }
 
 
 class PublishIn(BaseModel):

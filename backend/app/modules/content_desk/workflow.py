@@ -153,6 +153,29 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 "blocking": True,
             }
         )
+    # n8n **刻意**把文章落成草稿等人工发布。派单成功 ≠ 读者能看到 ——
+    # 2026-08-03 用户发了两篇,任务 success、地址也有,匿名访问却是 404。
+    # 发布的战报只说到派单、不说到读者能不能看见,那就是报了个假成功。
+    drafts = _scalar(
+        db,
+        "SELECT count(*) FROM geo_content_items WHERE wp_post_id IS NOT NULL "
+        "AND coalesce(wp_status,'') <> 'publish'",
+    ) + _scalar(
+        db,
+        "SELECT count(*) FROM seo_content_items WHERE wp_post_id IS NOT NULL "
+        "AND coalesce(wp_status,'') <> 'publish'",
+    )
+    if drafts:
+        todos.append(
+            {
+                "step": STEP_PUBLISH,
+                "count": drafts,
+                "lead": f"{drafts} 篇已经在 WordPress 里，还是草稿",
+                "note": "最后一步是你在 WP 后台点发布——在那之前读者看到的是 404。",
+                "action": "publish",
+                "blocking": True,
+            }
+        )
     if failures:
         todos.append(
             {
@@ -207,7 +230,11 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
         STEP_PICK: f"{unpicked + no_questions} 件待挑",
         STEP_GENERATE: f"{counts['generated']} 篇已写",
         STEP_REVIEW: f"{pending} 篇在等" if pending else "都审完了",
-        STEP_PUBLISH: f"{to_publish} 篇待发" if to_publish else f"{counts['live']} 篇在线上",
+        STEP_PUBLISH: (
+            f"{to_publish} 篇待发"
+            if to_publish
+            else (f"{drafts} 篇草稿待你发" if drafts else f"{counts['live']} 篇在线上")
+        ),
     }
     return {
         "steps": [

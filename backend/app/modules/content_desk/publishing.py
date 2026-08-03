@@ -153,4 +153,98 @@ def dispatch(
     return {"job_id": job.job_id, "status": job.status}
 
 
-__all__ = ["dispatch", "preview"]
+def in_flight(db: Session) -> list[dict[str, Any]]:
+    """还在飞的派单。
+
+    派单到 n8n 回报之间有 ~30 秒窗口。这段时间文章还没有 wp_post_id,所以它
+    仍然出现在待发列表里 —— 用户会以为「点了没反应」。把在飞的报出来,前端据此
+    把按钮换成「派单中…」并置灰。
+    """
+    out: list[dict[str, Any]] = []
+    try:
+        from ..geo_series.content.models import GeoPublishJob
+
+        for job in db.execute(
+            select(GeoPublishJob).where(GeoPublishJob.status.in_(("queued", "dispatched")))
+        ).scalars():
+            out.append(
+                {
+                    "source": SOURCES[0].key,
+                    "unit_id": str(job.cluster_id),
+                    "job_id": job.job_id,
+                    "status": job.status,
+                }
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("geo in-flight probe failed")
+    try:
+        from ..seo_series.content.models import SeoPublishJob
+
+        for job in db.execute(
+            select(SeoPublishJob).where(SeoPublishJob.status.in_(("queued", "dispatched")))
+        ).scalars():
+            out.append(
+                {
+                    "source": SOURCES[1].key,
+                    "unit_id": SOURCES[1].key,
+                    "job_id": job.job_id,
+                    "status": job.status,
+                }
+            )
+    except Exception:  # noqa: BLE001
+        logger.exception("seo in-flight probe failed")
+    return out
+
+
+def landed(db: Session, *, scope: KScopeContext | None = None) -> dict[str, list[dict[str, Any]]]:
+    """已经发到站上的文章,按「还是草稿」和「真的在线上」分开。
+
+    **这一段原本完全不存在,是最要命的缺口。** n8n **刻意**把文章落成草稿等人工
+    发布(P 系列同规),所以派单成功 ≠ 读者能看到。2026-08-03 用户发了两篇指南,
+    任务 success、地址也有,但匿名访问是 404 —— 而内容台从没告诉过他还有
+    「去 WordPress 点发布」这一步。
+
+    发布成功的战报只说到派单,不说到读者能不能看见,那就是**报了个假成功**。
+    """
+    drafts: list[dict[str, Any]] = []
+    live: list[dict[str, Any]] = []
+    for source in SOURCES:
+        model = source.item_model_fn()
+        query = apply_scope_filters(select(model), model, scope).where(
+            model.wp_post_id.is_not(None)
+        )
+        for item in db.execute(query).scalars():
+            row = {
+                "source": source.key,
+                "id": str(item.id),
+                "title": str(item.title or ""),
+                "wp_post_id": item.wp_post_id,
+                "wp_status": item.wp_status,
+                "url": item.published_url,
+            }
+            (live if item.wp_status == "publish" else drafts).append(row)
+    drafts.sort(key=lambda r: r["title"])
+    live.sort(key=lambda r: r["title"])
+    return {"drafts": drafts, "live": live}
+
+
+def refresh_live_state_safely(db: Session) -> None:
+    """回读文章在 WP 上的真实状态。
+
+    用户在 WordPress 后台点发布,控制台**永远不会自动知道** —— 除非回来看一眼。
+    (和产品地址那条是同一类问题,同一天连着栽了两次。)
+    """
+    for label, fn in (
+        ("geo", "geo_series.content.live_state"),
+        ("seo", "seo_series.content.live_state"),
+    ):
+        try:
+            module = __import__(
+                f"backend.app.modules.{fn}", fromlist=["refresh_item_live_state_safely"]
+            )
+            module.refresh_item_live_state_safely(db)
+        except Exception:  # noqa: BLE001 - 回读失败不该让整页打不开
+            logger.exception("%s live-state refresh failed", label)
+
+
+__all__ = ["dispatch", "in_flight", "landed", "preview", "refresh_live_state_safely"]

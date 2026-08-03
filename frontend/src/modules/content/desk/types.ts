@@ -112,3 +112,27 @@ export type PublishUnit = {
   titles: string[];
   blockers: string[];
 };
+
+export type InFlight = {
+  source: string;
+  unit_id: string;
+  job_id: string;
+  status: string;
+};
+
+/** 已经发到站上的文章。**草稿 ≠ 读者能看到** —— n8n 刻意落草稿等人工发布。 */
+export type Landed = {
+  source: string;
+  id: string;
+  title: string;
+  wp_post_id: number | null;
+  wp_status: string | null;
+  url: string | null;
+};
+
+export type PublishState = {
+  units: PublishUnit[];
+  in_flight: InFlight[];
+  drafts: Landed[];
+  live: Landed[];
+};
