@@ -38,7 +38,18 @@ def _approved(db: Session, source: ContentSource, scope: KScopeContext | None) -
 
 
 def preview(db: Session, *, scope: KScopeContext | None = None) -> list[dict[str, Any]]:
-    """每个发布单元:会发哪几篇、被什么挡着。不出网。"""
+    """每个发布单元:会发哪几篇、被什么挡着。
+
+    **开头会回读一次产品在 Woo 上的当前地址**(10 分钟内不重复)。原因:P 首次
+    上架故意落草稿,存的是草稿期的丑地址;用户后来在 WP 后台点了发布,没有任何
+    东西回来更新过。2026-08-02 用户五个捏捏全发布了,这里却还在说「产品还没有
+    公开的产品页」——**陈旧数据造成的误报,比没有检查更糟**:它让人怀疑一个
+    其实是对的门禁。
+    """
+    from ..content_links.product_state import refresh_product_permalinks_safely
+
+    refresh_product_permalinks_safely(db)
+
     units: list[dict[str, Any]] = []
     for source in SOURCES:
         items = _approved(db, source, scope)

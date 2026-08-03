@@ -662,3 +662,49 @@ def test_topic_backlog_does_not_hijack_the_rail() -> None:
     # 挡路集合和「有待办」集合是两个东西
     assert "blocking = {" in src or "blocking =" in src
     assert "'blocking'" in src or '"blocking"' in src
+
+
+def test_stale_permalinks_get_reread_before_blocking_publish() -> None:
+    """「产品还没有公开的产品页」曾经是**陈旧数据造成的误报**。
+
+    2026-08-02：用户把五个捏捏在 WooCommerce 里全发布了，内容台却仍然拦着。
+    根因是 P 首次上架**故意落草稿**，存下来的是草稿期的丑地址
+    `?post_type=product&p=4025`；用户后来在 WP 后台点了发布，地址变成
+    `/product/…/`，但**没有任何东西回来更新过**。
+
+    这是「外部副作用要回读验证」的镜像面：那条管「我写出去的成没成」，这条管
+    「我写出去之后外面又变成什么样了」。人在 WP 后台的操作，控制台永远不会自动
+    知道——除非回来看一眼。
+
+    **误报的门禁比没有门禁更糟**：它让人怀疑一个其实是对的检查。
+    """
+    from backend.app.modules.content_desk import publishing
+    from backend.app.modules.content_links import product_state
+
+    assert "refresh_product_permalinks_safely" in inspect.getsource(publishing.preview)
+    # GEO 自己的发布按钮也不该被陈数据挡住
+    geo_router = (REPO / "backend/app/modules/geo_series/router.py").read_text()
+    assert "refresh_product_permalinks_safely" in geo_router
+
+    src = inspect.getsource(product_state.refresh_product_permalinks)
+    # 只往好的方向改：Woo 打不通一律保留现状，绝不因一次抖动把真草稿放出去
+    assert "states is None" in src
+    assert 'state.get("status") != "publish"' in src
+    # 出网前放掉事务
+    assert src.index("db.commit()") < src.index("fetch_product_states_safely")
+
+
+def test_blockers_never_show_a_bare_uuid() -> None:
+    """用户原话：「这里不能显示 uuid 因为我没办法分辨」。
+
+    source_product_ids_json 里存的就是 UUID，直接拼进消息等于让人对着一串
+    十六进制猜是哪个产品。优先 SKU，其次产品名。
+    """
+    from backend.app.modules.geo_series.content import publish_gate
+
+    assert hasattr(publish_gate, "_readable_product")
+    resolver = inspect.getsource(publish_gate._readable_product)
+    assert "sku" in resolver and "product_name_en" in resolver
+
+    gate = inspect.getsource(publish_gate.publish_blockers)
+    assert "_readable_product" in gate

@@ -21,7 +21,11 @@ made while building this module:
 
 from __future__ import annotations
 
+import logging
+
 from ...content_core.guards import audit_is_clean
+
+logger = logging.getLogger(__name__)
 
 from typing import Any
 
@@ -67,6 +71,37 @@ def publishable_items(items: list[Any]) -> list[Any]:
         if item.review_status == "approved"
         and item.generation_status == "generated"
     ]
+
+
+def _readable_product(db: Session, products: list[Any], ident: str) -> str:
+    """把内容里引用的标识符翻译成人能认的名字:优先 SKU,其次产品名。
+
+    ``ident`` 可能是 product_key、SKU,也可能是裸 UUID(生成时给模型的就是 UUID)。
+    先在本簇的产品里找;找不到再去 K 里捞一次 —— 产品可能已经被移出这个簇,
+    但文章里还引着它,那正是最需要说清楚是谁的时候。
+    """
+    text = str(ident or "").strip()
+    for product in products:
+        for alias in (product.id, getattr(product, "product_key", None), getattr(product, "sku", None)):
+            if str(alias or "").strip() == text:
+                sku = str(getattr(product, "sku", "") or "").strip()
+                name = str(getattr(product, "product_name_en", "") or "").strip()
+                if sku and name:
+                    return f"{sku}（{name[:28]}）"
+                return sku or name or text
+    try:
+        from ...k_series.product_knowledge.models import KProductKnowledgeProduct
+
+        row = db.get(KProductKnowledgeProduct, text)
+        if row is not None:
+            sku = str(getattr(row, "sku", "") or "").strip()
+            name = str(getattr(row, "product_name_en", "") or "").strip()
+            if sku and name:
+                return f"{sku}（{name[:28]}）"
+            return sku or name or text
+    except Exception:  # noqa: BLE001 - 捞不到就退回原文,总比崩了强
+        logger.exception("product label lookup failed for %s", text)
+    return text
 
 
 def publish_blockers(
@@ -117,7 +152,11 @@ def publish_blockers(
         # A cited identifier that resolves to nothing is equally a dead link.
         unresolved = sorted(c for c in cited if c not in links)
         if cited_unlinkable or unresolved:
-            names = "、".join(sorted(set(cited_unlinkable) | set(unresolved))[:3])
+            raw = sorted(set(cited_unlinkable) | set(unresolved))[:3]
+            # **绝不把裸 UUID 摆给人看。** 2026-08-02 用户原话:「这里不能显示
+            # uuid 因为我没办法分辨」。source_product_ids_json 里存的就是 UUID,
+            # 直接拼进消息等于让人对着一串十六进制猜是哪个产品。
+            names = "、".join(_readable_product(db, products, ident) for ident in raw)
             blockers.append(
                 f"内容里引用的产品还没有公开的产品页（不能链到 404）：{names}。"
                 "先把产品在 WooCommerce 后台发布（草稿不算），再来发布指南。"

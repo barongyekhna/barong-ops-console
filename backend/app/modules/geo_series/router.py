@@ -409,6 +409,11 @@ def geo_publish_cluster(
     cluster = service.get_cluster(db, cluster_id=cluster_id, scope_context=scope)
     if cluster is None:
         raise HTTPException(status_code=404, detail="Cluster not found.")
+    # 先回读一次产品在 Woo 上的当前地址:存的可能还是草稿期的丑地址,
+    # 而人早就在 WP 后台点了发布(2026-08-02 实际发生过,造成误报拦截)。
+    from ..content_links.product_state import refresh_product_permalinks_safely
+
+    refresh_product_permalinks_safely(db)
     items = load_cluster_items(db, cluster_id=cluster_id, scope_context=scope)
     products = cluster_products(db, cluster=cluster, scope_context=scope)
     blockers = publish_blockers(db, cluster=cluster, items=items, products=products)
