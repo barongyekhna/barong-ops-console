@@ -66,10 +66,12 @@ def _pick_counts(db: Session) -> tuple[int, int]:
         f"WHERE status = 'candidate' AND score >= {PICK_SCORE_FLOOR} "
         "AND geo_reachable = false",
     )
+    # **不限 status='draft'**:簇生成过之后变成 needs_review,原来那个条件会让它
+    # 再也不出现——哪怕一条问句都没挑(2026-08-03 捏捏簇就是这么消失的)。
     no_questions = _scalar(
         db,
         "SELECT count(*) FROM geo_content_clusters "
-        "WHERE status = 'draft' AND (picked_questions_json IS NULL "
+        "WHERE status <> 'archived' AND (picked_questions_json IS NULL "
         "OR picked_questions_json::text IN ('[]', 'null'))",
     )
     return unpicked, no_questions
@@ -193,7 +195,7 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 "step": STEP_PICK,
                 "count": unpicked,
                 "lead": f"{unpicked} 个高分选题还没挑",
-                "note": "去 SEO 引擎的关键词雷达挑。GEO 够得到的题已经排除了。",
+                "note": "在下面的清单里挑。GEO 够得到的题已经排除了（那是 GEO 的地盘）。",
                 "action": "engines",
                 # **不算挡路**:选题有存货是常态。见下面 here 的注释。
                 "blocking": False,
@@ -206,7 +208,7 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
                 "count": no_questions,
                 "lead": f"{no_questions} 个话题簇还没挑买家问句",
                 # 空问句**不阻塞**生成,只是退化成按产品规格写。别写成「不能生成」。
-                "note": "挑了才会回答真实买家问题；不挑也能写，但只能按规格写。",
+                "note": "挑了才会回答真实买家问题；不挑也能写，但只能按规格写。候选早就挖好了。",
                 "action": "engines",
                 "blocking": False,
             }

@@ -153,17 +153,21 @@ export type SeoCandidate = {
   missing: string[];
 };
 
-export type ClusterNeedingQuestions = {
+export type Cluster = {
   id: string;
   title: string;
   topic: string | null;
   category_path: string | null;
   product_count: number;
+  /** 已挑几条买家问句。 */
+  picked_count: number;
+  /** 已经挖出来躺在库里的候选。**这就是深耕的存货**。 */
+  mined_count: number;
 };
 
 export type TopicState = {
   seo_candidates: SeoCandidate[];
-  clusters_needing_questions: ClusterNeedingQuestions[];
+  clusters: Cluster[];
   awaiting_generation: { id: string; keyword: string; audience: string }[];
 };
 

@@ -354,7 +354,7 @@ def list_topics(
 
     return {
         "seo_candidates": topics.seo_candidates(db),
-        "clusters_needing_questions": topics.geo_clusters_needing_questions(db),
+        "clusters": topics.geo_clusters(db),
         "awaiting_generation": topics.picked_awaiting_generation(db),
     }
 

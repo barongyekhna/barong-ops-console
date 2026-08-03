@@ -61,7 +61,7 @@ export function ContentDesk() {
   const [pageNotice, setPageNotice] = useState<string | null>(null);
   const [topicState, setTopicState] = useState<TopicState>({
     awaiting_generation: [],
-    clusters_needing_questions: [],
+    clusters: [],
     seo_candidates: [],
   });
   const [pickingFor, setPickingFor] = useState<string | null>(null);

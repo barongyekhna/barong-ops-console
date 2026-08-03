@@ -125,7 +125,7 @@ export async function fetchTopics(): Promise<TopicState> {
   const data = await readJson<TopicState>(response, "选题清单加载失败");
   return {
     awaiting_generation: data.awaiting_generation ?? [],
-    clusters_needing_questions: data.clusters_needing_questions ?? [],
+    clusters: data.clusters ?? [],
     seo_candidates: data.seo_candidates ?? [],
   };
 }

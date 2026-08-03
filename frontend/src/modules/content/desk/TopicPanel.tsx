@@ -31,7 +31,7 @@ export function TopicPanel({
   onPickQuestions: (clusterId: string) => void;
   onGenerateCluster: (clusterId: string) => void;
 }) {
-  const { seo_candidates: candidates, clusters_needing_questions: clusters } = state;
+  const { seo_candidates: candidates, clusters } = state;
   if (!candidates.length && !clusters.length) {
     return (
       <div className={styles.card}>
@@ -46,16 +46,20 @@ export function TopicPanel({
     <>
       {clusters.length ? (
         <>
-          <div className={styles.sectionLabel}>还没挑买家问句的话题簇</div>
+          <div className={styles.sectionLabel}>
+            话题簇（买家问句的货架）
+          </div>
           {clusters.map((cluster) => (
             <div className={styles.card} key={cluster.id}>
               <div className={styles.todoRow}>
                 <div className={styles.todoMain}>
                   <div className={styles.todoLead}>{cluster.title}</div>
                   <div className={styles.todoNote}>
-                    {cluster.product_count} 个产品 ·{" "}
-                    {cluster.category_path ?? "未挂类目"}　挑了才会回答真实买家
-                    问题；不挑也能写，但只能按规格写。
+                    已挑 {cluster.picked_count} 条 · 库里还有{" "}
+                    {cluster.mined_count} 条候选 · {cluster.product_count} 个产品
+                    {cluster.picked_count === 0
+                      ? "　一条都没挑——不挑也能写，但只能按产品规格写。"
+                      : "　随时能再挑几条：深耕靠的就是这批存货。"}
                   </div>
                 </div>
                 <button

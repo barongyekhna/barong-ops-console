@@ -1003,3 +1003,34 @@ def test_each_step_shows_only_its_own_content() -> None:
         assert (
             Path(f"frontend/src/modules/content/desk/{panel}.tsx").exists()
         ), panel
+
+
+def test_topic_shelf_shows_every_cluster_not_just_untouched_ones() -> None:
+    """**选题不是一次性的门槛，是一直在的货架。**
+
+    2026-08-03 用户问：「那次选题出来 60 多个，内容台选题里怎么看不到？」
+    库里 63 条挖好的问句都在，两个簇却一个都不显示。两个 bug 叠在一起：
+
+    1. 只列 status == 'draft' 的簇。簇一旦生成过就变成 needs_review，于是
+       **再也不出现**——哪怕它一条问句都没挑（捏捏簇就是这么消失的）。
+    2. 只列「一条都没挑的」。挑了 2 条、库里还躺着 61 条候选的簇被当成「做完了」
+       藏起来——而那 61 条正是深耕的存货。
+    """
+    from backend.app.modules.content_desk import topics, workflow
+
+    src = _function_body_source(topics.geo_clusters)
+    # 不按 draft 过滤；只排除归档
+    assert 'status == "draft"' not in src
+    assert "archived" in src
+    # 把存货摆出来
+    assert "mined_count" in src and "picked_count" in src
+
+    # 待办那条判据也不能再卡 draft
+    pick_src = _function_body_source(workflow._pick_counts)
+    assert "status = 'draft'" not in pick_src
+
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/desk/TopicPanel.tsx").read_text()
+    assert "库里还有" in panel
+    assert "深耕靠的就是这批存货" in panel

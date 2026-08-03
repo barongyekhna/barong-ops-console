@@ -69,17 +69,35 @@ def seo_candidates(db: Session, *, limit: int = MAX_CANDIDATES) -> list[dict[str
     return out
 
 
-def geo_clusters_needing_questions(db: Session) -> list[dict[str, Any]]:
-    """还没挑买家问句的簇。"""
-    from ..geo_series.content.models import GeoContentCluster
+def geo_clusters(db: Session) -> list[dict[str, Any]]:
+    """**所有**话题簇 + 各自挑了几条 / 还有多少候选。
 
+    2026-08-03 用户问:「那次选题出来 60 多个,内容台选题里怎么看不到?」
+    两个真 bug 叠在一起:
+
+    1. 原来只列 ``status == 'draft'`` 的簇。簇一旦生成过就变成 ``needs_review``,
+       于是**再也不出现** —— 哪怕它一条问句都没挑。
+    2. 原来只列「一条都没挑的」。挑了 2 条、库里还躺着 61 条候选的簇被当成
+       「做完了」藏起来 —— 而那 61 条正是深耕的存货。
+
+    **选题不是一次性的门槛,是一直在的货架。** 所以这里列全部,把「已挑 N /
+    候选 M」摆出来,随时能进去再挑几条。
+    """
+    from sqlalchemy import func
+
+    from ..geo_series.content.models import GeoContentCluster, GeoMinedQuestion
+
+    mined = dict(
+        db.execute(
+            select(GeoMinedQuestion.cluster_id, func.count())
+            .group_by(GeoMinedQuestion.cluster_id)
+        ).all()
+    )
     out = []
-    for cluster in db.execute(
-        select(GeoContentCluster).where(GeoContentCluster.status == "draft")
-    ).scalars():
-        picked = cluster.picked_questions_json or []
-        if picked:
+    for cluster in db.execute(select(GeoContentCluster)).scalars():
+        if cluster.status == "archived":
             continue
+        picked = len(cluster.picked_questions_json or [])
         out.append(
             {
                 "id": str(cluster.id),
@@ -87,8 +105,13 @@ def geo_clusters_needing_questions(db: Session) -> list[dict[str, Any]]:
                 "topic": cluster.topic,
                 "category_path": cluster.category_path,
                 "product_count": len(cluster.product_ids_json or []),
+                "picked_count": picked,
+                # 已经挖出来、躺在库里的候选。**这就是深耕的存货**。
+                "mined_count": int(mined.get(cluster.id, 0)),
             }
         )
+    # 存货多、挑得少的排前面 —— 那是最值得再挑几条的。
+    out.sort(key=lambda c: (c["picked_count"], -c["mined_count"]))
     return out
 
 
@@ -211,7 +234,7 @@ __all__ = [
     "cluster_questions",
     "generate_geo",
     "generate_seo",
-    "geo_clusters_needing_questions",
+    "geo_clusters",
     "picked_awaiting_generation",
     "save_cluster_questions",
     "seo_candidates",
