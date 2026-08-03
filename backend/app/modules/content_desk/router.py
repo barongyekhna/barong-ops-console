@@ -328,6 +328,157 @@ def ignore_finding(
     return _detail(db, request, source_key, item_id)
 
 
+# ============================================================ 选题与生成
+
+
+def _seo_source() -> Any:
+    from .sources import source_for
+
+    return source_for("seo")
+
+
+def _geo_source() -> Any:
+    from .sources import source_for
+
+    return source_for("geo")
+
+
+@router.get("/topics")
+def list_topics(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.read")),
+) -> dict[str, Any]:
+    """第①②步的清单:待挑的选题、还没挑问句的簇、挑了但还没写的。不出网。"""
+    from . import topics
+
+    return {
+        "seo_candidates": topics.seo_candidates(db),
+        "clusters_needing_questions": topics.geo_clusters_needing_questions(db),
+        "awaiting_generation": topics.picked_awaiting_generation(db),
+    }
+
+
+class TopicPickIn(BaseModel):
+    status: str
+
+
+@router.post("/topics/{topic_id}/pick")
+def pick_topic(
+    topic_id: str,
+    payload: TopicPickIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.execute")),
+) -> dict[str, Any]:
+    """挑中 / 不写。SEO 侧改选题状态要 manage(与老页面同规)。"""
+    from . import topics
+
+    source = _seo_source()
+    _require_source_permission(request, db, user, source, source.manage_permission)
+    try:
+        result = topics.set_seo_topic_status(
+            db, topic_id=topic_id, status=payload.status, user=user
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return result
+
+
+class GenerateIn(BaseModel):
+    topic_ids: list[str] = []
+
+
+@router.post("/topics/generate")
+def generate_topics(
+    payload: GenerateIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.execute")),
+) -> dict[str, Any]:
+    """派 SEO 生成。排队,worker 里跑。"""
+    from . import topics
+
+    source = _seo_source()
+    _require_source_permission(request, db, user, source, source.execute_permission)
+    if not payload.topic_ids:
+        raise HTTPException(status_code=400, detail="没有选中任何选题。")
+    queued = topics.generate_seo(
+        db, topic_ids=payload.topic_ids, scope=_scope(request), user=user
+    )
+    db.commit()
+    return {"queued": queued}
+
+
+@router.get("/clusters/{cluster_id}/questions")
+def cluster_questions(
+    cluster_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.read")),
+) -> dict[str, Any]:
+    from . import topics
+
+    try:
+        return topics.cluster_questions(
+            db, cluster_id=cluster_id, scope=_scope(request)
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class QuestionsIn(BaseModel):
+    questions: list[dict[str, Any]] = []
+
+
+@router.post("/clusters/{cluster_id}/questions")
+def save_questions(
+    cluster_id: str,
+    payload: QuestionsIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.execute")),
+) -> dict[str, Any]:
+    from . import topics
+
+    source = _geo_source()
+    _require_source_permission(request, db, user, source, source.execute_permission)
+    try:
+        topics.save_cluster_questions(
+            db,
+            cluster_id=cluster_id,
+            questions=payload.questions,
+            scope=_scope(request),
+            user=user,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    db.commit()
+    return {"picked": len(payload.questions)}
+
+
+@router.post("/clusters/{cluster_id}/generate")
+def generate_cluster(
+    cluster_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_desk_permission("content.desk.execute")),
+) -> dict[str, Any]:
+    """派 GEO 整簇生成。已批准的文章不会被动 —— 那是引擎自己的保护。"""
+    from . import topics
+
+    source = _geo_source()
+    _require_source_permission(request, db, user, source, source.execute_permission)
+    queued = topics.generate_geo(
+        db, cluster_id=cluster_id, scope=_scope(request), user=user
+    )
+    db.commit()
+    return {"queued": queued}
+
+
 @router.get("/publish-preview")
 def publish_preview(
     request: Request,

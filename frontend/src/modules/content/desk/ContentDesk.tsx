@@ -6,19 +6,31 @@ import { ArticleModal } from "./ArticleModal";
 import styles from "./ContentDesk.module.css";
 import { MachineStrip } from "./MachineStrip";
 import { PublishPanel } from "./PublishPanel";
+import { QuestionPicker } from "./QuestionPicker";
+import { TopicPanel } from "./TopicPanel";
 import { StepRail } from "./StepRail";
 import type { IgnorePayload } from "./AuditPanel";
 import {
   analyzeArticle,
   fetchOverview,
   fetchPublishState,
+  fetchTopics,
+  generateCluster,
+  generateTopics,
+  pickTopic,
   fetchQueue,
   ignoreFinding,
   publishUnit,
   reviewArticle,
   reviseArticle,
 } from "./api";
-import type { Article, Overview, PublishState, PublishUnit } from "./types";
+import type {
+  Article,
+  Overview,
+  PublishState,
+  PublishUnit,
+  TopicState,
+} from "./types";
 
 // 派单在飞时 5 秒一刷（n8n 一趟约 30 秒），闲着 30 秒一刷。
 const BUSY_POLL_MS = 5000;
@@ -45,22 +57,48 @@ export function ContentDesk() {
   });
   const [pageBusy, setPageBusy] = useState<string | null>(null);
   const [pageNotice, setPageNotice] = useState<string | null>(null);
+  const [topicState, setTopicState] = useState<TopicState>({
+    awaiting_generation: [],
+    clusters_needing_questions: [],
+    seo_candidates: [],
+  });
+  const [pickingFor, setPickingFor] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const [nextQueue, nextOverview, nextUnits] = await Promise.all([
+      const [nextQueue, nextOverview, nextUnits, nextTopics] = await Promise.all([
         fetchQueue(),
         fetchOverview(),
         fetchPublishState(),
+        fetchTopics(),
       ]);
       setQueue(nextQueue);
       setOverview(nextOverview);
       setPublishState(nextUnits);
+      setTopicState(nextTopics);
       setError(null);
     } catch (loadError) {
       setError((loadError as Error).message);
     }
   }, []);
+
+  /** 选题类动作长得都一样：置忙 → 调一次 → 报一句人话 → 整页刷新。 */
+  const topicAction = useCallback(
+    async (tag: string, action: () => Promise<string>) => {
+      setPageBusy(tag);
+      setError(null);
+      setPageNotice(null);
+      try {
+        setPageNotice(await action());
+        await reload();
+      } catch (actionError) {
+        setError((actionError as Error).message);
+      } finally {
+        setPageBusy(null);
+      }
+    },
+    [reload],
+  );
 
   const publish = useCallback(
     async (unit: PublishUnit) => {
@@ -107,6 +145,7 @@ export function ContentDesk() {
   // OverlayModal 的 onClose 进 effect 依赖，必须 useCallback——
   // 否则每次 render 都重挂滚动锁，scrollbarWidth 会算成 0 把 padding 弄错。
   const closeModal = useCallback(() => setIndex(null), []);
+  const closePicker = useCallback(() => setPickingFor(null), []);
   const total = queue?.length ?? 0;
 
   const goPrev = useCallback(() => {
@@ -230,6 +269,32 @@ export function ContentDesk() {
         })
       )}
 
+      <TopicPanel
+        busy={pageBusy}
+        onGenerate={(ids) =>
+          void topicAction("generate", async () => {
+            const r = await generateTopics(ids);
+            return `已排队 ${r.queued} 篇。AI 写一篇一分钟起步，写完会出现在「等你审」。`;
+          })
+        }
+        onGenerateCluster={(id) =>
+          void topicAction(`cluster:${id}`, async () => {
+            const r = await generateCluster(id);
+            return `已排队 ${r.queued} 个任务。已批准的文章不会被动。`;
+          })
+        }
+        onPick={(id, status) =>
+          void topicAction(`pick:${id}`, async () => {
+            await pickTopic(id, status);
+            return status === "picked"
+              ? "挑中了，可以生成了。"
+              : "已标为不写。";
+          })
+        }
+        onPickQuestions={(id) => setPickingFor(id)}
+        state={topicState}
+      />
+
       <PublishPanel busy={pageBusy} onPublish={(u) => void publish(u)} state={publishState} />
 
       {overview ? <MachineStrip lanes={overview.machine} /> : null}
@@ -244,6 +309,17 @@ export function ContentDesk() {
           。平时不用开。
         </span>
       </div>
+
+      {pickingFor ? (
+        <QuestionPicker
+          clusterId={pickingFor}
+          onClose={closePicker}
+          onSaved={(count) => {
+            setPageNotice(`挑了 ${count} 条买家问句，现在可以生成了。`);
+            void reload();
+          }}
+        />
+      ) : null}
 
       {current ? (
         <ArticleModal

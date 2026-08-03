@@ -138,3 +138,44 @@ export type PublishState = {
   drafts: Landed[];
   live: Landed[];
 };
+
+export type SeoCandidate = {
+  id: string;
+  keyword: string;
+  audience: string;
+  destination: string;
+  score: number | null;
+  searches: number | null;
+  attackability: number | null;
+  terrain: string | null;
+  category_path: string | null;
+  supported: string[];
+  missing: string[];
+};
+
+export type ClusterNeedingQuestions = {
+  id: string;
+  title: string;
+  topic: string | null;
+  category_path: string | null;
+  product_count: number;
+};
+
+export type TopicState = {
+  seo_candidates: SeoCandidate[];
+  clusters_needing_questions: ClusterNeedingQuestions[];
+  awaiting_generation: { id: string; keyword: string; audience: string }[];
+};
+
+export type QuestionCandidate = {
+  question: string;
+  intent?: string;
+  source?: string;
+  terrain?: { attackability?: number; terrain?: string } | null;
+};
+
+export type ClusterQuestions = {
+  cluster: { id: string; title: string };
+  candidates: QuestionCandidate[];
+  picked: { question: string; intent?: string }[];
+};

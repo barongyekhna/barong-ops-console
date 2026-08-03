@@ -1,5 +1,11 @@
 import { API_PROXY_BASE, buildHeaders, readJson } from "../api-base";
-import type { Article, Overview, PublishState } from "./types";
+import type {
+  Article,
+  ClusterQuestions,
+  Overview,
+  PublishState,
+  TopicState,
+} from "./types";
 
 const BASE = `${API_PROXY_BASE}/content-desk`;
 
@@ -108,4 +114,51 @@ export function publishUnit(
   unitId: string,
 ): Promise<{ job_id: string; status: string; titles: string[] }> {
   return post(`/publish`, { source, unit_id: unitId }, "发布失败");
+}
+
+export async function fetchTopics(): Promise<TopicState> {
+  const response = await fetch(`${BASE}/topics`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  const data = await readJson<TopicState>(response, "选题清单加载失败");
+  return {
+    awaiting_generation: data.awaiting_generation ?? [],
+    clusters_needing_questions: data.clusters_needing_questions ?? [],
+    seo_candidates: data.seo_candidates ?? [],
+  };
+}
+
+export function pickTopic(
+  topicId: string,
+  status: "picked" | "rejected",
+): Promise<{ id: string; status: string }> {
+  return post(`/topics/${topicId}/pick`, { status }, "操作失败");
+}
+
+export function generateTopics(topicIds: string[]): Promise<{ queued: number }> {
+  return post(`/topics/generate`, { topic_ids: topicIds }, "派单失败");
+}
+
+export async function fetchClusterQuestions(
+  clusterId: string,
+): Promise<ClusterQuestions> {
+  const response = await fetch(`${BASE}/clusters/${clusterId}/questions`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson<ClusterQuestions>(response, "候选问句加载失败");
+}
+
+export function saveClusterQuestions(
+  clusterId: string,
+  questions: { question: string; intent?: string }[],
+): Promise<{ picked: number }> {
+  return post(`/clusters/${clusterId}/questions`, { questions }, "保存失败");
+}
+
+export function generateCluster(clusterId: string): Promise<{ queued: number }> {
+  return post(`/clusters/${clusterId}/generate`, {}, "派单失败");
 }

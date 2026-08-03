@@ -911,3 +911,64 @@ def test_in_flight_shows_how_long_it_has_been_flying() -> None:
     panel = Path("frontend/src/modules/content/desk/PublishPanel.tsx").read_text()
     assert "flyingLabel" in panel
     assert "没回报" in panel
+
+
+def test_desk_can_do_the_whole_loop_not_just_publish() -> None:
+    """①选题 ②生成 也要能在这一页做。
+
+    2026-08-03 用户原话：「那现在上面的挑选题啥的，也不让我点啊……这些都要在
+    内容台操作啊，现在只能看到一个发布页面」。
+
+    在那之前，待办只显示一个数字「11 个高分选题还没挑」然后让人自己走开——
+    **那等于把「你不知道下一步该干嘛」原样退还给用户**，而这一页存在的全部
+    理由就是回答这个问题。
+    """
+    from backend.app.main import app
+
+    paths = {
+        f"{sorted(r.methods - {'HEAD', 'OPTIONS'})[0]} {r.path}"
+        for r in app.routes
+        if "content-desk" in getattr(r, "path", "")
+    }
+    for needed in (
+        "GET /api/app/content-desk/topics",
+        "POST /api/app/content-desk/topics/{topic_id}/pick",
+        "POST /api/app/content-desk/topics/generate",
+        "GET /api/app/content-desk/clusters/{cluster_id}/questions",
+        "POST /api/app/content-desk/clusters/{cluster_id}/questions",
+        "POST /api/app/content-desk/clusters/{cluster_id}/generate",
+    ):
+        assert needed in paths, needed
+
+
+def test_topic_list_respects_the_geo_seo_deduplication_gate() -> None:
+    """GEO 够得到的题不进 SEO 的待挑清单。
+
+    两篇自家文章抢同一个查询 = 自我竞争，权重对半分。这道门本来就在
+    seo_topics.geo_reachable 上，选题清单必须尊重它——否则这一页会亲手
+    催出重复内容。
+    """
+    from backend.app.modules.content_desk import topics
+
+    src = _function_body_source(topics.seo_candidates)
+    assert "geo_reachable" in src
+    assert "PICK_SCORE_FLOOR" in src
+    # 挑之前就要看见有料/缺料，不然挑完才发现没东西写
+    assert "supported" in src and "missing" in src
+
+
+def test_question_picking_is_advice_not_a_gate() -> None:
+    """空问句**不阻塞**生成，只是退化成按产品规格写。
+
+    把建议写成阻塞，人会以为系统坏了；而且这里确实有「直接生成」这条路。
+    """
+    from pathlib import Path
+
+    panel = Path("frontend/src/modules/content/desk/TopicPanel.tsx").read_text()
+    assert "不挑也能写" in panel
+    assert "直接生成" in panel
+
+    picker = Path("frontend/src/modules/content/desk/QuestionPicker.tsx").read_text()
+    assert "不挑也能生成" in picker
+    # 候选带阵地读数：挑的时候就看得见打不打得动
+    assert "可攻" in picker

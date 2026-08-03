@@ -1032,6 +1032,29 @@ function isAllowedContentDeskPath(method: string, path: string[]) {
     }
     return false;
   }
+  if (path[1] === "topics") {
+    if (path.length === 2) {
+      return method === "GET";
+    }
+    if (path.length === 3 && path[2] === "generate") {
+      return method === "POST";
+    }
+    return (
+      path.length === 4 &&
+      isUuidPathSegment(path[2]) &&
+      path[3] === "pick" &&
+      method === "POST"
+    );
+  }
+  if (path[1] === "clusters") {
+    if (!isUuidPathSegment(path[2]) || path.length !== 4) {
+      return false;
+    }
+    if (path[3] === "questions") {
+      return method === "GET" || method === "POST";
+    }
+    return path[3] === "generate" && method === "POST";
+  }
   if (path.length === 2 && path[1] === "publish-preview") {
     return method === "GET";
   }
