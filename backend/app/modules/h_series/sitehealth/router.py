@@ -134,6 +134,13 @@ class IngestRequest(BaseModel):
     error: str | None = None
     summary: IngestSummary
     findings: list[IngestFinding] = Field(default_factory=list)
+    # 本轮**确实访问过**的地址清单，用来自动关掉已经修好的问题。
+    #
+    # 为什么必须由执行面报上来，而不是后端拿「这次没报 = 修好了」去推断：
+    # 一轮巡检可能因为限速、时间预算截断而**没检查到**一部分地址，那些地址上
+    # 的老问题这次自然不会出现在 findings 里。靠"没报"推断就会把它们一并
+    # 判成已修复——那比不关更糟，因为人会以为没事了。
+    checked_urls: list[str] = Field(default_factory=list, max_length=4000)
 
 
 class IngestResponse(BaseModel):
@@ -484,6 +491,7 @@ def h_ingest(
                 item.model_dump(mode="python", exclude_unset=True)
                 for item in payload.findings
             ],
+            checked_urls=payload.checked_urls,
         )
     except service.HHealthNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

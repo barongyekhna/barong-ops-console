@@ -173,6 +173,54 @@ def _lock_finding_keys(
         db.execute(select(func.pg_advisory_xact_lock(lock_id)))
 
 
+def _auto_resolve_fixed(
+    db: Session,
+    *,
+    reported_keys: set[tuple[str, str]],
+    checked_urls: list[str] | None,
+    now: datetime,
+) -> int:
+    """本轮**确实访问过**、却没再报出来的 open 问题 —— 自动关掉。
+
+    没有这一步，清单只进不出:2026-08-02 那批限速误报和已修好的死链全是人手动
+    从库里删的。人越清越烦，最后就不看这个清单了。
+
+    **只认执行面报上来的 `checked_urls`**，绝不用「这次没报」去推断:一轮巡检
+    可能因限速或时间预算截断而漏掉一部分地址，那些地址上的老问题这次自然不会
+    出现在 findings 里。靠"没报"推断会把它们一并判成已修复——那比不关更糟，
+    因为人会以为没事了。
+
+    只动 `open` 的。`acknowledged` 是人主动做的分类("我知道，不打算修")，
+    系统不去改它。
+    """
+    if not checked_urls:
+        return 0
+    visited = {
+        url.strip() for url in checked_urls if isinstance(url, str) and url.strip()
+    }
+    if not visited:
+        return 0
+
+    rows = db.scalars(
+        select(HHealthFinding)
+        .where(
+            HHealthFinding.status == "open",
+            HHealthFinding.url.in_(visited),
+        )
+        .with_for_update()
+    ).all()
+
+    closed = 0
+    for row in rows:
+        if (row.finding_type, row.url) in reported_keys:
+            continue  # 这轮还在报，问题没走
+        row.status = "resolved"
+        row.updated_at = now
+        row.detail = f"{row.detail or ''} ｜ 复检时已消失，自动关闭".strip()
+        closed += 1
+    return closed
+
+
 def ingest_run(
     db: Session,
     *,
@@ -181,6 +229,7 @@ def ingest_run(
     error: str | None,
     summary: dict[str, Any],
     findings: list[dict[str, Any]],
+    checked_urls: list[str] | None = None,
 ) -> tuple[HHealthRun, bool]:
     """Apply one n8n result atomically, deduplicating findings and alerts."""
 
@@ -257,6 +306,15 @@ def ingest_run(
                 detail=item.get("detail"),
                 status="open",
             )
+        )
+
+    # 失败的轮次不作数——它的 checked_urls 不代表"检查过且没问题"
+    if result_status == "completed":
+        _auto_resolve_fixed(
+            db,
+            reported_keys=set(unique_findings),
+            checked_urls=checked_urls,
+            now=now,
         )
 
     should_alert = (

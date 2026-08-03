@@ -500,3 +500,137 @@ def test_h_human_endpoints_require_permission(
         ).status_code
         == 403
     )
+
+
+def _run_payload(
+    *,
+    findings: list[dict[str, object]],
+    checked_urls: list[str],
+    status: str = "completed",
+) -> dict[str, object]:
+    """一轮巡检回报。checked_urls = 本轮**确实访问过**的地址。"""
+    return {
+        "run_id": None,
+        "status": status,
+        "error": None,
+        "summary": {
+            "urls_total": len(checked_urls),
+            "urls_ok": max(0, len(checked_urls) - len(findings)),
+            "urls_broken": sum(
+                1 for f in findings if f["finding_type"] == "broken_link"
+            ),
+            "urls_slow": sum(1 for f in findings if f["finding_type"] == "slow_page"),
+            "avg_response_ms": 400,
+            "p95_response_ms": 1200,
+            "sitemap_ok": True,
+            "homepage_ok": True,
+        },
+        "findings": findings,
+        "checked_urls": checked_urls,
+    }
+
+
+def _finding(url: str, *, kind: str = "broken_link") -> dict[str, object]:
+    return {
+        "finding_type": kind,
+        "url": url,
+        "status_code": 404,
+        "response_ms": 120,
+        "detail": "fixture",
+    }
+
+
+_A = "https://barongyekhna.com/gone-a"
+_B = "https://barongyekhna.com/gone-b"
+_C = "https://barongyekhna.com/not-visited-this-round"
+
+
+def test_fixed_problems_close_themselves_next_round(h_env: TestClient) -> None:
+    """修好的问题下一轮自己关掉——否则清单只进不出，人越清越烦，最后就不看了。
+
+    但**只关本轮确实访问过的**。一轮巡检可能因限速或时间预算截断而漏掉一部分
+    地址，那些地址上的老问题这次自然不会出现在 findings 里；靠"没报"去推断
+    就会把它们一并判成已修复——那比不关更糟，因为人会以为没事了。
+    """
+    first = h_env.post(
+        "/api/app/h/ingest",
+        headers={"X-H-Ingest-Token": _TOKEN},
+        json=_run_payload(
+            findings=[_finding(_A), _finding(_B), _finding(_C)],
+            checked_urls=[_A, _B, _C],
+        ),
+    )
+    assert first.status_code == 200, first.text
+
+    with SessionLocal() as db:
+        assert (
+            db.scalar(
+                select(func.count())
+                .select_from(HHealthFinding)
+                .where(HHealthFinding.status == "open")
+            )
+            == 3
+        )
+
+    # 第二轮：A 还坏着；B 修好了；C 这轮**压根没访问**（不在 checked_urls 里）
+    second = h_env.post(
+        "/api/app/h/ingest",
+        headers={"X-H-Ingest-Token": _TOKEN},
+        json=_run_payload(findings=[_finding(_A)], checked_urls=[_A, _B]),
+    )
+    assert second.status_code == 200, second.text
+
+    with SessionLocal() as db:
+        rows = {
+            row.url: row
+            for row in db.scalars(select(HHealthFinding)).all()
+        }
+        assert rows[_A].status == "open", "还在报的问题不能被关掉"
+        assert rows[_B].status == "resolved", "访问过且不再报 = 修好了，该自动关"
+        assert "自动关闭" in (rows[_B].detail or ""), "要留下自动关闭的痕迹"
+        assert rows[_C].status == "open", (
+            "本轮没访问到的地址绝不能judged为已修复——"
+            "限速/截断导致的漏检会把真问题静默关掉"
+        )
+
+
+def test_auto_close_never_touches_ignored_or_failed_runs(h_env: TestClient) -> None:
+    """两条边界：人手动「忽略」的不许系统改；失败的轮次不作数。"""
+    h_env.post(
+        "/api/app/h/ingest",
+        headers={"X-H-Ingest-Token": _TOKEN},
+        json=_run_payload(findings=[_finding(_A), _finding(_B)], checked_urls=[_A, _B]),
+    )
+    with SessionLocal() as db:
+        target = db.scalars(
+            select(HHealthFinding).where(HHealthFinding.url == _A)
+        ).one()
+        finding_id = str(target.id)
+
+    # 人把 A 标成「忽略」——那是他主动做的分类，系统不该替他改
+    acted = h_env.post(
+        f"/api/app/h/findings/{finding_id}", json={"action": "acknowledge"}
+    )
+    assert acted.status_code == 200, acted.text
+
+    # 失败的轮次即使带 checked_urls 也不作数：它没检查完，不代表"查过且没问题"
+    h_env.post(
+        "/api/app/h/ingest",
+        headers={"X-H-Ingest-Token": _TOKEN},
+        json=_run_payload(findings=[], checked_urls=[_A, _B], status="failed"),
+    )
+    with SessionLocal() as db:
+        rows = {row.url: row.status for row in db.scalars(select(HHealthFinding)).all()}
+        assert rows[_A] == "acknowledged", "已忽略的不许被系统改成已解决"
+        assert rows[_B] == "open", "失败轮次不能关掉任何问题"
+
+    # 成功的轮次才关
+    h_env.post(
+        "/api/app/h/ingest",
+        headers={"X-H-Ingest-Token": _TOKEN},
+        json=_run_payload(findings=[], checked_urls=[_A, _B]),
+    )
+    with SessionLocal() as db:
+        rows = {row.url: row.status for row in db.scalars(select(HHealthFinding)).all()}
+        assert rows[_A] == "acknowledged", "已忽略的依然不动"
+        assert rows[_B] == "resolved"
