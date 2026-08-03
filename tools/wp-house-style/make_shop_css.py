@@ -48,8 +48,11 @@ parts.append(".absolute-footer,.absolute-footer.dark{background-color:#141312!im
 parts.append(".absolute-footer a,.absolute-footer .menu-item a{color:#a49f98!important}")
 parts.append(".absolute-footer a:hover{color:#faf9f6!important}")
 parts.append(".footer-wrapper .footer,.footer-widgets{background-color:#141312!important}")
-# 5b) 主题演示遗留的社交图标全部指向占位符 http://url(死链)——开真号前全站隐藏
-parts.append('a.icon[href="http://url"],a[href="http://url"]{display:none!important}')
+# 5b) 【已移除,勿加回】曾用 display:none 藏主题演示遗留的 http://url 社交图标。
+#     那是假修复:CSS 只骗人眼,链接照样留在 HTML 里被谷歌当死链抓,而且隐藏链接
+#     本身就是 SEO 负面信号。2026-08-01 已在 Customizer → Header Builder 里把
+#     social-icons 元素(桌面+移动两处)整个移除,链接不再进 HTML。
+#     将来页头若再冒出占位链接,正确做法仍是去 Header Builder 移除,不要用 CSS 盖。
 # 6) 表单控件全站统一圆角浅边
 parts.append(rule(NH, ["#main input[type=text]", "#main input[type=email]", "#main textarea"],
     "border:1px solid #d9d7d3!important;border-radius:10px!important;background:#fff!important"))
@@ -429,6 +432,23 @@ parts.append(rule(BP,[".by-page .by-photo-strip .by-card figcaption"],"font-size
 parts.append("@media(max-width:820px){"
     + rule(BP,[".by-page .by-photo-strip"],"grid-template-columns:repeat(2,minmax(0,1fr))")
     + "}")
+
+# ============ GEO 指南阅读版式(行宽 78ch + 四周留白)============
+# ⚠️ 必须是全文件最后一段:它要覆盖上面第 7)条给 article.post 的卡片化样式,
+#    CSS 后来居上,放中间就被盖掉了(2026-08-01 实测过位置差异)。
+# ⚠️ 这段原本只手工追加在线上 option 里、源码没有,2026-08-01 我拿源码重新生成
+#    推送时把它整段冲掉了(已回滚)。补进源码 = 源码与线上一致,以后再跑不会冲掉。
+parts.append("/*BEGIN:geo-reading-gutter*/")
+parts.append(rule(NH, ["#main article.post .entry-header",
+                       "#main article.post .entry-content",
+                       "#main article.post .entry-summary"],
+    "padding-left:clamp(18px,4vw,44px)!important;padding-right:clamp(18px,4vw,44px)!important"))
+parts.append(rule(NH, ["#main article.post .entry-header"],
+    "padding-top:clamp(18px,3vw,32px)!important"))
+parts.append(rule(NH, ["#main article.post .entry-content"],
+    "padding-bottom:clamp(24px,4vw,44px)!important"))
+parts.append(rule(NH, ["#main article.post .entry-content .geo-article"], "max-width:78ch"))
+parts.append("/*END:geo-reading-gutter*/")
 
 CSS = "".join(parts)
 open("shop_house.css", "w").write(CSS)

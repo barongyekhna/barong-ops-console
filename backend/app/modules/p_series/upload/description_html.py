@@ -64,7 +64,14 @@ def _figure_html(image: dict[str, Any]) -> str:
     img = f'<img src="{token}" alt="{alt}"'
     if title:
         img += f' title="{title}"'
-    img += ' loading="lazy">'
+    # `loading="lazy"` 是浏览器原生懒加载,本身就够了。
+    # `no-lazyload`(Smush) + `skip-lazy`(WP 核心/主题通用约定) 是在告诉那些插件
+    # **别再往这张图上插一脚**。
+    # ⚠️ 2026-08-02 实测教训:Flatsome 主题的懒加载(class=lazy-load)和 Smush 的
+    #    懒加载(class=lazyload)同时改写同一张图,把 1x1 占位图的 `data:` 前缀弄丢,
+    #    变成 src="image/svg+xml;base64,..."。浏览器于是当相对路径去服务器要,
+    #    露营花洒产品页当场多出 5 个真 404(H 哨兵报出来的)。三家抢一张图必翻车。
+    img += ' class="no-lazyload skip-lazy" loading="lazy">'
     caption_html = (
         f"<figcaption>{escape(caption)}</figcaption>" if caption else ""
     )
