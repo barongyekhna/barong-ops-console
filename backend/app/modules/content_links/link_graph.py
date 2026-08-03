@@ -133,6 +133,21 @@ def _live_products(db: Session) -> dict[str, dict[str, Any]]:
             "s": state.get("image_src") or "",
             "c": str(getattr(product, "google_product_category", "") or ""),
             "k": product_key,
+            # 这个产品可能被文章用哪些标识点名(id / product_key / sku)。
+            "a": sorted(
+                {
+                    str(x).strip()
+                    for x in (
+                        product.id,
+                        getattr(product, "product_key", None),
+                        getattr(product, "sku", None),
+                    )
+                    if str(x or "").strip()
+                }
+            ),
+            # 上架时间(Woo id 越大越晚)。同级候选按它倒序 —— **新品优先**:
+            # 新上的同类目产品最需要曝光,却是唯一没被任何老文章点过名的。
+            "w": int(woo_id),
             # 绝不放价格(GMC 红线,见模块文档)。
         }
     return out
@@ -165,6 +180,12 @@ def _live_articles(db: Session) -> tuple[dict[str, dict], dict[str, dict]]:
             "t": title[:200],
             "u": url,
             "c": cluster_category.get(item.cluster_id, ""),
+            # 文章自己声明的产品。**这是最强的相关信号**,而它一直没被用。
+            "p": [
+                str(x).strip()
+                for x in (item.source_product_ids_json or [])
+                if str(x or "").strip()
+            ],
         }
 
     topic_category = {
@@ -203,21 +224,46 @@ def _pick_products(
     products: dict[str, dict[str, Any]],
     family: set[str],
 ) -> list[tuple[str, str]]:
-    """[(woo_id, 匹配依据)]。类目命中优先,词面只是兜底。"""
-    picked: list[tuple[int, str, str]] = []
+    """[(woo_id, 匹配依据)]。**分层**,不是「同类目一律同级」。
+
+    为什么要分层(2026-08-02 用户提的问题):谷歌那个叶类目就叫
+    ``Portable Showers & Privacy Enclosures`` —— **淋浴器和隐私帐篷被谷歌塞进
+    了同一个叶子**。同类目一律同级的话,帐篷会挂到淋浴器的文章上,反之亦然。
+    这不是我们的数据错,是谷歌分类本身粗,所以「同类目」这个信号不够。
+
+    四层,越靠前越优先:
+
+    0. **文章自己点名的产品**(``source_product_ids_json``)。最强信号,
+       而且一直摆在那儿没被用过。
+    1. 同类目 + 产品名与标题词面重合 ≥2。淋浴器文章配淋浴器,帐篷配帐篷。
+    2. 同类目但词面对不上。**按上架时间倒序** —— 新上的同类目产品最需要曝光,
+       却是唯一没被任何老文章点过名的;它靠这一层进场。
+    3. 跨类目但词面重合 ≥2(原有兜底)。
+
+    同层内一律**新品在前**:一篇最多 3 张卡,先到先占坑会让新品永远进不来。
+    """
+    picked: list[tuple[int, int, str, str]] = []
     want = _tokens(post.get("t"))
+    named = {str(x).strip() for x in (post.get("p") or []) if str(x or "").strip()}
+
     for woo_id, card in products.items():
-        category = str(card.get("c") or "")
-        if category and category in family:
-            picked.append((0, woo_id, "category"))
+        newest_first = -int(card.get("w") or 0)
+        if named and named.intersection(card.get("a") or []):
+            picked.append((0, newest_first, woo_id, "named"))
             continue
+        in_family = bool(card.get("c")) and str(card.get("c")) in family
         overlap = len(want & _tokens(card.get("n")))
-        # 词面兜底至少要重合两个词。**一个通用词的重合不构成相关**——
-        # 2026-07-30 「包子捏捏挂到户外店批发文」就是只重合了 "Portable"。
-        if overlap >= 2:
-            picked.append((10 - min(overlap, 9), woo_id, "tokens"))
-    picked.sort(key=lambda row: (row[0], row[1]))
-    return [(woo_id, by) for _rank, woo_id, by in picked[:MAX_PRODUCTS_PER_POST]]
+        if in_family and overlap >= 2:
+            picked.append((1, newest_first, woo_id, "category+name"))
+        elif in_family:
+            picked.append((2, newest_first, woo_id, "category"))
+        elif overlap >= 2:
+            # 词面兜底至少要重合两个词。**一个通用词的重合不构成相关**——
+            # 2026-07-30 「包子捏捏挂到户外店批发文」就是只重合了 "Portable"。
+            picked.append((3, newest_first, woo_id, "tokens"))
+
+    picked.sort(key=lambda row: (row[0], row[1], row[2]))
+    return [(woo_id, by) for _rank, _new, woo_id, by in picked[:MAX_PRODUCTS_PER_POST]]
 
 
 def build_link_map(db: Session, *, scope_context: Any = None) -> dict[str, Any]:

@@ -765,3 +765,64 @@ def test_prompt_asks_for_sku_not_the_uuid_product_key() -> None:
         "backend/app/modules/geo_series/content/prompt_skills.py"
     ).read_text()
     assert prompts.count("never copy the long product_key") == 2
+
+
+def test_product_cards_rank_by_what_the_article_names_not_just_category() -> None:
+    """谷歌那个叶类目就叫 `Portable Showers & Privacy Enclosures` ——
+    **淋浴器和隐私帐篷被谷歌塞进了同一个叶子**。
+
+    2026-08-02 用户问：怎么确保淋浴器不串进帐篷的文章？按「同类目一律同级」
+    的老规则，防不住。而且**词面匹配在这里根本不管用**：帐篷的名字就叫
+    "Outdoor Shower Privacy Tent"，它本来就含 shower——这两类产品的名字
+    天生共享词，靠词分不开。
+
+    唯一可靠的信号是**文章自己点名的产品**（source_product_ids_json），
+    而它一直摆在那儿没被用过。现在它是第 0 层。
+
+    用户拍板（不做硬排除）：点名的排前，剩下的空位给同类目新品——那是上一条
+    需求（后上的产品要能进老文章）。所以帐篷仍可能出现在淋浴器文章的第二/三位，
+    但**第一张永远是文章点名的那个**。
+    """
+    from backend.app.modules.content_links.link_graph import _pick_products
+
+    cards = {
+        "4148": {"n": "Portable Battery-Powered Outdoor Camping Shower",
+                 "c": "CAT", "a": ["pk-shower"], "w": 4148},
+        "4200": {"n": "Outdoor Shower Privacy Tent Enclosure",
+                 "c": "CAT", "a": ["pk-tent"], "w": 4200},
+        "4300": {"n": "Panda Outdoor Shower", "c": "CAT", "a": ["pk-panda"], "w": 4300},
+    }
+    family = {"CAT"}
+
+    shower = _pick_products(
+        {"t": "How Does a Portable Camping Shower Work?", "c": "CAT", "p": ["pk-shower"]},
+        cards, family,
+    )
+    assert shower[0] == ("4148", "named"), shower
+
+    tent = _pick_products(
+        {"t": "Do You Need a Shower Privacy Tent?", "c": "CAT", "p": ["pk-tent"]},
+        cards, family,
+    )
+    assert tent[0] == ("4200", "named"), tent
+
+
+def test_newest_same_category_product_gets_into_old_articles() -> None:
+    """后上的同类目产品必须能进老文章。
+
+    2026-08-02 用户原话：「隔段时间我又上了一个同类目产品……必须得确保这个
+    后上的产品能正确地进入对应的文章」。
+
+    难点：一篇最多 3 张卡，而**新产品是唯一没被任何老文章点过名的**——按
+    先到先占坑，它永远进不来。所以同层内一律按上架时间倒序（Woo id 越大越新）。
+    """
+    from backend.app.modules.content_links.link_graph import _pick_products
+
+    cards = {
+        str(4000 + i): {"n": f"Old Product {i}", "c": "CAT", "a": [f"pk-{i}"], "w": 4000 + i}
+        for i in range(5)
+    }
+    cards["4999"] = {"n": "Brand New Product", "c": "CAT", "a": ["pk-new"], "w": 4999}
+
+    picked = _pick_products({"t": "Category Overview", "c": "CAT", "p": []}, cards, {"CAT"})
+    assert "4999" in [woo for woo, _by in picked], picked
