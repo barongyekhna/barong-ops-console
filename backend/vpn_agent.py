@@ -19,13 +19,13 @@ from typing import Any, Optional
 from urllib.parse import urlsplit
 
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 BIND_HOST = "127.0.0.1"
 BIND_PORT = 8765
 INTERFACE = "awg0"
 SERVICE = "awg-quick@awg0.service"
-EXPECTED_PORT = 443
-DEFAULT_ENDPOINT = "45.76.173.147:443"
+EXPECTED_PORT = 62000
+DEFAULT_ENDPOINT = "45.76.173.147:62000"
 DEFAULT_DNS = "1.1.1.1"
 DEFAULT_STATE_PATH = Path("/var/lib/barong-vpn-agent/devices.json")
 DEFAULT_RUNTIME_DIR = Path("/run/barong-vpn-agent")
