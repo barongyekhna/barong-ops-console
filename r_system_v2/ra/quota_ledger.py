@@ -47,6 +47,14 @@ PROVIDER_GEO_SERPER_MONITOR = "geo_serper_monitor"
 # 死规矩(Serper 烧光 5 万次那次换来的):新增出网付费调用**当天**接台账。
 PROVIDER_GEO_SERPER_TOPICS = "geo_serper_topics"
 
+# 数字员工(白苏婉)在 C19 通讯里的每次 DeepSeek 调用。常驻聊天没有天然的
+# 调用次数上界——人聊多久就烧多久,所以照死规矩当天接台账。先只记数不设闸
+# (预算 0 = 不限量),看两周真实用量再决定要不要封顶;现在就设一个拍脑袋的
+# 上限,只会在老板正问话时把她掐哑,那比多花几块钱糟得多。
+PROVIDER_AGENT_CHAT = "agent_chat_deepseek"
+# 霓旌(制造库管员)的聊天调用,同上:单独一桶,先只记数。
+PROVIDER_AGENT_CHAT_NIJING = "agent_chat_nijing_deepseek"
+
 DEFAULT_DAILY_BUDGETS = {
     PROVIDER_1688_IMAGE_SEARCH: 330,
     PROVIDER_1688_CPS_IMAGE_SEARCH: 2600,
@@ -62,6 +70,8 @@ DEFAULT_DAILY_BUDGETS = {
     # 上限压得低,是因为监测永远不该成为烧钱的那一路。
     PROVIDER_GEO_SERPER_MONITOR: 200,
     PROVIDER_GEO_SERPER_TOPICS: 300,
+    PROVIDER_AGENT_CHAT: 0,
+    PROVIDER_AGENT_CHAT_NIJING: 0,
 }
 
 BUDGET_ENV_NAMES = {
@@ -77,6 +87,8 @@ BUDGET_ENV_NAMES = {
     PROVIDER_B2B_SERPER_ENRICH: "B2B_SERPER_ENRICH_DAILY_BUDGET",
     PROVIDER_GEO_SERPER_MONITOR: "GEO_SERPER_MONITOR_DAILY_BUDGET",
     PROVIDER_GEO_SERPER_TOPICS: "GEO_SERPER_TOPICS_DAILY_BUDGET",
+    PROVIDER_AGENT_CHAT: "AGENT_CHAT_DAILY_BUDGET",
+    PROVIDER_AGENT_CHAT_NIJING: "NIJING_CHAT_DAILY_BUDGET",
 }
 
 
@@ -105,6 +117,10 @@ def provider_label(provider: str) -> str:
         PROVIDER_GOOGLE_ADS_PLANNER: "Google Ads 关键词规划",
         PROVIDER_GEO_SERPER_MONITOR: "GEO 阵地监测",
         PROVIDER_GEO_SERPER_TOPICS: "GEO 选题深挖",
+        PROVIDER_B2B_SERPER_PLACES: "B2B 客户挖掘",
+        PROVIDER_B2B_SERPER_ENRICH: "B2B 客户筛选",
+        PROVIDER_AGENT_CHAT: "白苏婉对话",
+        PROVIDER_AGENT_CHAT_NIJING: "霓旌对话",
     }.get(provider, provider)
 
 
