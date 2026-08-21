@@ -273,3 +273,38 @@ def test_duplicate_code_and_archive(db, ctx) -> None:
     assert any(i.code == "OLD" for i in service.list_items(db, ctx, include_archived=True))
     with pytest.raises(service.MfgNotFound):
         service.patch_item(db, ctx, uuid4(), S.ItemPatch(name="x"))
+
+
+def test_shared_part_is_deducted_by_every_product_using_it(db, ctx) -> None:
+    """餐桌 A 和餐桌 B 用同一种桌腿、不同桌面:物料是共享的,谁生产谁扣。"""
+    leg = _item(db, ctx, "part", "LEG", "条")
+    top_a = _item(db, ctx, "part", "TOP-A")
+    top_b = _item(db, ctx, "part", "TOP-B")
+    table_a = _item(db, ctx, "product", "TABLE-A", "套")
+    table_b = _item(db, ctx, "product", "TABLE-B", "套")
+    for product, top in ((table_a, top_a), (table_b, top_b)):
+        service.replace_bom(
+            db, ctx, product.id,
+            S.BomReplace(lines=[
+                S.BomLineInput(part_id=top.id, mode="per_unit", qty=D("1")),
+                S.BomLineInput(part_id=leg.id, mode="per_unit", qty=D("4")),
+            ]),
+        )
+    service.receipt(
+        db, ctx, user=_owner(),
+        payload=S.ReceiptCreate(lines=[
+            S.ReceiptLine(item_id=leg.id, qty=D("100")),
+            S.ReceiptLine(item_id=top_a.id, qty=D("50")),
+            S.ReceiptLine(item_id=top_b.id, qty=D("50")),
+        ]),
+    )
+    service.production(db, ctx, user=_owner(), payload=S.ProductionCreate(product_id=table_a.id, qty=D("10")))
+    service.production(db, ctx, user=_owner(), payload=S.ProductionCreate(product_id=table_b.id, qty=D("10")))
+    assert _stock(db, ctx, leg, top_a, top_b, table_a, table_b) == [D("20"), D("40"), D("40"), D("10"), D("10")]
+    # 桌腿只剩 20 条 = 5 套;B 要生产 6 套被共享的桌腿拦住,哪怕 B 自己的桌面够
+    with pytest.raises(service.InsufficientStock) as exc:
+        service.production(db, ctx, user=_owner(), payload=S.ProductionCreate(product_id=table_b.id, qty=D("6")))
+    assert [r.code for r in exc.value.shortages] == ["LEG"]
+    # 发货只扣成品,不再碰桌腿
+    service.shipment(db, ctx, user=_owner(), payload=S.ShipmentCreate(product_id=table_a.id, qty=D("10")))
+    assert _stock(db, ctx, leg, table_a) == [D("20"), D("0")]
