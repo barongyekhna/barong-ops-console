@@ -1,0 +1,364 @@
+/* M 系列 · 库存：沿用驾驶舱皮肤的深色玻璃感，不覆盖全局样式。 */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.factory {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: rgba(198, 216, 246, 0.72);
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(120, 170, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(10, 18, 34, 0.55);
+}
+
+.tab {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(198, 216, 246, 0.78);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab[data-active="true"] {
+  background: rgba(120, 170, 255, 0.22);
+  color: #eaf2ff;
+}
+
+.panel {
+  padding: 16px 18px 20px;
+  border: 1px solid rgba(120, 170, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(8, 14, 28, 0.5);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #eaf2ff;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn {
+  padding: 7px 14px;
+  border: 1px solid rgba(120, 170, 255, 0.3);
+  border-radius: 8px;
+  background: rgba(120, 170, 255, 0.12);
+  color: #eaf2ff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: rgba(120, 170, 255, 0.22);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  composes: btn;
+  border-color: rgba(111, 227, 165, 0.45);
+  background: rgba(111, 227, 165, 0.16);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: rgba(111, 227, 165, 0.28);
+}
+
+.btnDanger {
+  composes: btn;
+  border-color: rgba(255, 143, 143, 0.4);
+  background: rgba(255, 143, 143, 0.12);
+}
+
+.btnGhost {
+  composes: btn;
+  border-color: transparent;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.error {
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 143, 143, 0.4);
+  border-radius: 10px;
+  background: rgba(255, 143, 143, 0.1);
+  color: #ffb3b3;
+  font-size: 13px;
+}
+
+.notice {
+  padding: 10px 12px;
+  border: 1px solid rgba(111, 227, 165, 0.35);
+  border-radius: 10px;
+  background: rgba(111, 227, 165, 0.1);
+  color: #bdf5d6;
+  font-size: 13px;
+}
+
+.muted {
+  color: rgba(198, 216, 246, 0.6);
+  font-size: 12px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(120, 170, 255, 0.2);
+  text-align: left;
+  font-weight: 500;
+  color: rgba(198, 216, 246, 0.72);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(120, 170, 255, 0.08);
+  color: #dde8fb;
+  vertical-align: middle;
+}
+
+.table tr[data-clickable="true"] {
+  cursor: pointer;
+}
+
+.table tr[data-clickable="true"]:hover td {
+  background: rgba(120, 170, 255, 0.06);
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pos {
+  color: #6fe3a5;
+}
+
+.neg {
+  color: #ff8f8f;
+}
+
+.zero {
+  color: #ffc46b;
+}
+
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: rgba(198, 216, 246, 0.85);
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: rgba(120, 170, 255, 0.16);
+  color: #cfe0ff;
+}
+
+.tagWarn {
+  composes: tag;
+  background: rgba(255, 196, 107, 0.16);
+  color: #ffd89a;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.input,
+.select,
+.textarea {
+  padding: 7px 10px;
+  border: 1px solid rgba(120, 170, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(4, 8, 18, 0.6);
+  color: #eaf2ff;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 1px solid rgba(120, 170, 255, 0.6);
+}
+
+.inputSm {
+  composes: input;
+  width: 110px;
+  text-align: right;
+}
+
+.textarea {
+  width: 100%;
+  min-height: 64px;
+  resize: vertical;
+}
+
+/* ---------- 弹层 ---------- */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px;
+  background: rgba(2, 6, 14, 0.72);
+  backdrop-filter: blur(4px);
+  overflow-y: auto;
+}
+
+.dialog {
+  width: min(760px, 100%);
+  padding: 18px 20px 20px;
+  border: 1px solid rgba(120, 170, 255, 0.26);
+  border-radius: 14px;
+  background: rgba(8, 14, 28, 0.96);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dialogHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #eaf2ff;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.label {
+  font-size: 12px;
+  color: rgba(198, 216, 246, 0.72);
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.lineList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) 130px 110px 60px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.hint {
+  font-size: 12px;
+  color: rgba(198, 216, 246, 0.55);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 4px 10px;
+  font-size: 13px;
+}
+
+.kv dt {
+  color: rgba(198, 216, 246, 0.6);
+}
+
+.kv dd {
+  margin: 0;
+  color: #eaf2ff;
+}
+
+.empty {
+  padding: 26px 0;
+  text-align: center;
+  color: rgba(198, 216, 246, 0.55);
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .line {
+    grid-template-columns: 1fr 1fr;
+  }
+}

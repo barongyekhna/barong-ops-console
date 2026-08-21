@@ -6,6 +6,12 @@
 
 ### Added
 
+- M 系列(制造库存)`mfg.inventory` 上线:物料/成品共用一本只增不删的
+  流水账,生产按配件清单自动扣料(每件消耗 + 每箱装向上取整),发货扣成品,
+  盘点调整原因必填;负库存整单拦死并报逐项缺口;生产单冻结 BOM 快照。
+  只挂在 `org_type=factory` 组织下(吉林制造公司由迁移改为 factory),
+  角色硬门=owner + 制造公司 super_admin,绝不联动 K/P。三条迁移
+  `20260821_01..03`。
 - P 系列上架新增按需 WooCommerce 层级类目同步：控制台从 Google taxonomy
   解析完整父链，按路径幂等查建缺失的 `product_cat` 并缓存 Google→WC term
   映射；上架包携带叶子 term id，n8n 仅在 id 存在时挂类目，解析或 WC

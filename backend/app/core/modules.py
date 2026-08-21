@@ -1452,6 +1452,82 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="mfg.inventory",
+        display_name="库存",
+        description=(
+            "Manufacturing inventory ledger: parts and finished goods on one "
+            "append-only movement ledger, BOM-driven production deduction "
+            "(per-unit and per-carton), shipments and audited adjustments. "
+            "Factory organizations only; never linked to K/P."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/mfg-inventory",
+        api_namespace="/mfg",
+        navigation=_navigation(
+            group="Registry",
+            label="库存",
+            icon="Warehouse",
+            order=19,
+        ),
+        required_permissions=("mfg.inventory.read",),
+        permission_manifest=(
+            _permission(
+                module_key="mfg.inventory",
+                permission_key="mfg.inventory.read",
+                category="business",
+                action="read",
+                label="Read manufacturing inventory",
+                description=(
+                    "View parts, finished goods, stock levels, BOMs and the "
+                    "movement ledger."
+                ),
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="mfg.inventory",
+                permission_key="mfg.inventory.manage",
+                category="business",
+                action="manage",
+                label="Manage manufacturing inventory",
+                description=(
+                    "Create items and BOMs; post receipts, production runs, "
+                    "shipments and stock adjustments."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.mfg.inventory",
+        data_boundary=_data_boundary(
+            reads=(
+                "mfg_items",
+                "mfg_bom_lines",
+                "mfg_documents",
+                "mfg_movements",
+                "mfg_doc_counters",
+                "organizations",
+            ),
+            writes=(
+                "mfg_items",
+                "mfg_bom_lines",
+                "mfg_documents",
+                "mfg_movements",
+                "mfg_doc_counters",
+            ),
+            blocked_objects=("cross_module_writes",),
+        ),
+    ),
+    _manifest(
         module_key="geo.content",
         display_name="GEO 内容引擎",
         description=(

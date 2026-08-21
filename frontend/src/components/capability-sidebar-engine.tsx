@@ -73,6 +73,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "seo.",
   "gmc.",
   "content.",
+  "mfg.",
 ] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";

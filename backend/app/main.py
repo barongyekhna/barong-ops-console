@@ -46,6 +46,7 @@ from .modules.b2b.router import router as b2b_wholesale_router
 from .modules.geo_series.router import router as geo_content_router
 from .modules.geo_series.machine_router import router as geo_machine_router
 from .modules.seo_series.router import router as seo_content_router
+from .modules.m_series.router import router as mfg_inventory_router
 from .modules.seo_series.machine_router import router as seo_machine_router
 from .modules.content_desk.router import router as content_desk_router
 from .modules.content_links.machine_router import router as content_links_machine_router
@@ -351,6 +352,49 @@ def _craft_fact_detail_for_production(
     return detail if isinstance(detail, str) and detail.strip() else None
 
 
+def _mfg_inventory_detail_for_production(
+    request: Request,
+    status_code: int,
+    detail: object,
+) -> object | None:
+    """M 系列(制造库存)的门禁话必须原样传到前台。
+
+    「桌腿缺 4 条」「编码已存在」「只有成品才有配件清单」这些消息就是产品本身——
+    被消毒成「Request conflict.」等于让操作员猜。范围卡死:只有 ``/mfg/`` 下的
+    404/409/422;409 只透 ``{message, shortages[]}`` 这一个形状(纯业务数量,无敏感值),
+    其余只透纯字符串。
+    """
+    if not request.url.path.startswith(f"{APPLICATION_API_PREFIX}/mfg/"):
+        return None
+    if status_code not in {
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_409_CONFLICT,
+        status.HTTP_422_UNPROCESSABLE_ENTITY,
+    }:
+        return None
+    if isinstance(detail, str):
+        return detail if detail.strip() else None
+    if status_code != status.HTTP_409_CONFLICT or not isinstance(detail, dict):
+        return None
+    if set(detail) != {"message", "shortages"}:
+        return None
+    message = detail.get("message")
+    shortages = detail.get("shortages")
+    if not isinstance(message, str) or not isinstance(shortages, list):
+        return None
+    allowed_keys = {
+        "item_id", "code", "name", "unit", "mode",
+        "bom_qty", "required", "available", "short",
+    }
+    if not all(
+        isinstance(row, dict) and set(row) <= allowed_keys
+        and all(isinstance(v, str) for v in row.values())
+        for row in shortages
+    ):
+        return None
+    return {"message": message, "shortages": list(shortages)}
+
+
 def _structured_failure_detail_for_production(
     request: Request,
     detail: object,
@@ -637,6 +681,10 @@ async def sanitized_http_exception_handler(
             detail = _structured_failure_detail_for_production(request, exc.detail)
         if detail is None:
             detail = _craft_fact_detail_for_production(
+                request, exc.status_code, exc.detail
+            )
+        if detail is None:
+            detail = _mfg_inventory_detail_for_production(
                 request, exc.status_code, exc.detail
             )
         if detail is None:
@@ -1037,6 +1085,7 @@ app.include_router(b2b_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(b2b_machine_router)
 app.include_router(geo_content_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(seo_content_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(mfg_inventory_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(geo_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(geo_machine_router)
 app.include_router(seo_machine_router, prefix=APPLICATION_API_PREFIX)

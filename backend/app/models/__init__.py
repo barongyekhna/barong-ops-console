@@ -111,6 +111,13 @@ from ..modules.seo_series.content.models import (
     SeoTopic,
 )
 from ..modules.seo_series.content.models_terms import SeoWpCategoryMap
+from ..modules.m_series.inventory.models import (
+    MfgBomLine,
+    MfgDocCounter,
+    MfgDocument,
+    MfgItem,
+    MfgMovement,
+)
 from ..modules.geo_series.content.models import GeoMinedQuestion
 from ..modules.geo_series.monitor.models import (
     GeoMonitorQuestion,
@@ -169,6 +176,11 @@ __all__ = [
     "SeoPublishJob",
     "SeoRadarRun",
     "SeoTopic",
+    "MfgBomLine",
+    "MfgDocCounter",
+    "MfgDocument",
+    "MfgItem",
+    "MfgMovement",
     "SeoWpCategoryMap",
     "CraftFactRevision",
     "GeoBacklinkJob",

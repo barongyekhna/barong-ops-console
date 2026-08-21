@@ -78,6 +78,10 @@ INTL_TRADE_ONLY_MODULE_KEYS = R_SERIES_MODULE_KEYS | frozenset(
     }
 )
 INTL_TRADE_ONLY_MODULE_KEYS |= CS_CUSTOMER_SERVICE_MODULE_KEYS
+# M 系列(制造库存)只属于 factory 类型组织:非 factory 组织成员(owner 除外)
+# 在模块清单里直接看不到。按 org_type 判,不按组织名。
+FACTORY_ONLY_MODULE_KEYS = frozenset({"mfg.inventory"})
+FACTORY_ORG_TYPE = "factory"
 
 
 def _manifest_from_raw(
@@ -399,6 +403,51 @@ def _user_has_r_series_org_access(db: Session, user: User) -> bool:
     )
 
 
+def _user_has_factory_org_access(db: Session, user: User) -> bool:
+    if is_owner_role(user.role):
+        return True
+
+    org_ids: set[str] = set()
+    if user.organization_id:
+        org_ids.add(user.organization_id)
+    org_ids.update(
+        db.scalars(
+            select(OrgMembershipRecord.org_id).where(
+                OrgMembershipRecord.user_id == str(user.id),
+                OrgMembershipRecord.status == "active",
+            )
+        )
+    )
+    if not org_ids:
+        return False
+    return (
+        db.scalar(
+            select(OrganizationRecord.org_id)
+            .where(
+                OrganizationRecord.org_id.in_(org_ids),
+                OrganizationRecord.org_type == FACTORY_ORG_TYPE,
+                OrganizationRecord.status != "deleted",
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _filter_factory_only_manifests_for_user(
+    db: Session,
+    user: User,
+    manifests: list[ModuleManifestV1],
+) -> list[ModuleManifestV1]:
+    if _user_has_factory_org_access(db, user):
+        return manifests
+    return [
+        manifest
+        for manifest in manifests
+        if manifest.module_key not in FACTORY_ONLY_MODULE_KEYS
+    ]
+
+
 def _filter_r_series_manifests_for_user(
     db: Session,
     user: User,
@@ -549,10 +598,14 @@ def list_modules_for_user(
         user,
         request=request,
     )
-    manifests = _filter_r_series_manifests_for_user(
+    manifests = _filter_factory_only_manifests_for_user(
         db,
         user,
-        list_module_manifests_with_dynamic(db),
+        _filter_r_series_manifests_for_user(
+            db,
+            user,
+            list_module_manifests_with_dynamic(db),
+        ),
     )
     items = [
         build_module_access_state(manifest, current_user_permissions)

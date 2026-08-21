@@ -443,6 +443,32 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "mfg.inventory.read",
+        "module_key": "mfg.inventory",
+        "category": "business",
+        "action": "read",
+        "label": "Read manufacturing inventory",
+        "description": (
+            "View parts, finished goods, stock levels, BOMs and the "
+            "movement ledger."
+        ),
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "mfg.inventory.manage",
+        "module_key": "mfg.inventory",
+        "category": "business",
+        "action": "manage",
+        "label": "Manage manufacturing inventory",
+        "description": (
+            "Create items and BOMs; post receipts, production runs, "
+            "shipments and stock adjustments."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "content.desk.read",
         "module_key": "content.desk",
         "category": "business",

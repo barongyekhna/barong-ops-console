@@ -42,6 +42,9 @@ CS_CUSTOMER_SERVICE_MODULE_ID = "cs.customer_service"
 # 独立站/贸易业务模块只属于国际贸易公司,制造公司下不该出现
 # (2026-07-27 用户拍板一次性清理;此前只有 I/R/CS 做了限定,其余漏了)。
 B2B_WHOLESALE_MODULE_ID = "b2b.wholesale"
+# M 系列只属于 factory 类型组织(按 org_type 判,不按组织名;2026-08-21 拍板)。
+MFG_INVENTORY_MODULE_ID = "mfg.inventory"
+FACTORY_ORG_TYPE = "factory"
 TRADE_ONLY_MODULE_IDS = frozenset(
     {
         "b2b.wholesale",
@@ -64,6 +67,8 @@ def _module_allowed_for_organization(
     manifest: ModuleManifestV1,
 ) -> bool:
     organization_name = organization.org_name.strip()
+    if manifest.module_key == MFG_INVENTORY_MODULE_ID:
+        return (organization.org_type or "").strip() == FACTORY_ORG_TYPE
     if manifest.module_key == I_IMAGE_SYSTEM_MODULE_ID:
         return organization_name == I_IMAGE_SYSTEM_ORGANIZATION_NAME
     if _is_r_series_module(manifest.module_key):

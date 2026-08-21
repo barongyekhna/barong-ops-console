@@ -207,6 +207,7 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["h.site_health", "业务处理"],
   ["w.site_ops", "业务处理"],
   ["b2b.wholesale", "业务处理"],
+  ["mfg.inventory", "业务处理"],
   ["geo.content", "业务处理"],
   ["seo.content", "业务处理"],
   ["content.desk", "业务处理"],
@@ -234,6 +235,7 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["h.site_health", "H 站点健康"],
   ["w.site_ops", "W-S 物流网络中枢"],
   ["b2b.wholesale", "B2B 业务"],
+  ["mfg.inventory", "库存"],
   ["geo.content", "GEO 内容引擎"],
   ["seo.content", "SEO 内容引擎"],
   ["content.desk", "内容台"],
@@ -262,6 +264,7 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["w.site_ops", 15],
   ["cs.customer_service", 16],
   ["b2b.wholesale", 17],
+  ["mfg.inventory", 21],
   ["geo.content", 18],
   ["seo.content", 19],
   ["content.desk", 11],
@@ -289,6 +292,7 @@ const F_ENRICHMENT_MODULE_KEY = "f.enrichment";
 const H_SITE_HEALTH_MODULE_KEY = "h.site_health";
 const W_SITE_OPS_MODULE_KEY = "w.site_ops";
 const B2B_WHOLESALE_MODULE_KEY = "b2b.wholesale";
+const MFG_INVENTORY_MODULE_KEY = "mfg.inventory";
 const OWNER_ONLY_ADMIN_MODULE_KEYS = new Set([
   "admin.modules",
 ]);
@@ -710,6 +714,7 @@ const ACTION_SCOPED_EXECUTION_GATE_MODULE_KEYS = new Set([
   H_SITE_HEALTH_MODULE_KEY,
   W_SITE_OPS_MODULE_KEY,
   B2B_WHOLESALE_MODULE_KEY,
+  MFG_INVENTORY_MODULE_KEY,
 ]);
 
 function usesActionScopedExecutionGate(moduleKey: string | undefined) {

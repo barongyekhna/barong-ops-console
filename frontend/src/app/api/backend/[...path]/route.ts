@@ -1467,6 +1467,65 @@ function isAllowedHPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedMfgPath(method: string, path: string[]) {
+  if (path[0] !== "mfg") {
+    return false;
+  }
+  // 漂移测试用 UUID 或 "12" 代入 {id};后端按 UUID 解析,非法 id 由后端 422。
+  const isId = (segment: string) =>
+    isUuidPathSegment(segment) || /^\d+$/.test(segment);
+  // GET /mfg/context ; GET /mfg/stock
+  if (path.length === 2 && (path[1] === "context" || path[1] === "stock")) {
+    return method === "GET";
+  }
+  // GET /mfg/production/preview
+  if (path.length === 3 && path[1] === "production" && path[2] === "preview") {
+    return method === "GET";
+  }
+  if (path[1] === "items") {
+    // GET/POST /mfg/items
+    if (path.length === 2) {
+      return method === "GET" || method === "POST";
+    }
+    if (!isId(path[2])) {
+      return false;
+    }
+    // PATCH /mfg/items/{id}
+    if (path.length === 3) {
+      return method === "PATCH";
+    }
+    if (path.length === 4) {
+      // GET /mfg/items/{id}/movements
+      if (path[3] === "movements") {
+        return method === "GET";
+      }
+      // GET/PUT /mfg/items/{id}/bom
+      if (path[3] === "bom") {
+        return method === "GET" || method === "PUT";
+      }
+    }
+    return false;
+  }
+  if (path[1] === "documents") {
+    // GET /mfg/documents
+    if (path.length === 2) {
+      return method === "GET";
+    }
+    if (path.length === 3) {
+      // POST /mfg/documents/{receipt|production|shipment|adjustment}
+      if (["receipt", "production", "shipment", "adjustment"].includes(path[2])) {
+        return method === "POST";
+      }
+      // GET /mfg/documents/{id}
+      if (isId(path[2])) {
+        return method === "GET";
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
 function isAllowedB2bPath(method: string, path: string[]) {
   if (path[0] !== "b2b") {
     return false;
@@ -2477,6 +2536,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedFPath(method, path) ||
     isAllowedHPath(method, path) ||
     isAllowedB2bPath(method, path) ||
+    isAllowedMfgPath(method, path) ||
     isAllowedCsPath(method, path) ||
     isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||
