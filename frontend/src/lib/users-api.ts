@@ -35,6 +35,8 @@ export type ManagedUser = {
   organization_id: string | null;
   must_change_password: boolean;
   is_active: boolean;
+  /** 数字员工账号(如白苏婉)。只是标签,不参与任何鉴权。 */
+  is_bot?: boolean;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
@@ -147,6 +149,38 @@ export function createUser(payload: CreateUserPayload) {
   return apiRequest<ManagedUser>("/users", {
     body: payload,
     method: "POST",
+  });
+}
+
+export type RegisterBotPayload = {
+  username: string;
+  display_name: string;
+  job_title: string;
+  organization_id: string;
+  bio?: string | null;
+  password: string;
+};
+
+export type PurgeUserResponse = {
+  user_id: number;
+  username: string;
+  role: string;
+  is_bot: boolean;
+  removed: Record<string, number>;
+};
+
+/** 注册数字员工:viewer + 机器人标记 + 挂组织;零权限码。只有 owner 能调。 */
+export function registerBot(payload: RegisterBotPayload) {
+  return apiRequest<ManagedUser>("/users/bots", {
+    body: payload,
+    method: "POST",
+  });
+}
+
+/** 彻底删除:只删已停用、非 owner、无业务记录引用的账号;否则后端 409 说明原因。 */
+export function purgeUser(userId: number) {
+  return apiRequest<PurgeUserResponse>(`/users/${userId}`, {
+    method: "DELETE",
   });
 }
 

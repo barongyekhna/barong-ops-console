@@ -74,6 +74,7 @@ class UserResponse(BaseModel):
     organization_id: str | None = None
     must_change_password: bool
     is_active: bool
+    is_bot: bool = False
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -153,3 +154,22 @@ class UserRoleResponse(BaseModel):
 class UserRolesResponse(BaseModel):
     assignable_roles: list[UserRoleResponse]
     standard_roles: list[UserRoleResponse]
+
+
+class BotCreate(BaseModel):
+    """注册数字员工。角色固定 viewer + is_bot,零权限码;密码给 worker 登录用。"""
+
+    username: str = Field(min_length=2, max_length=64, pattern=r"^[a-z][a-z0-9_]*$")
+    display_name: str = Field(min_length=1, max_length=64)
+    job_title: str = Field(min_length=1, max_length=255)
+    organization_id: str = Field(min_length=1, max_length=40)
+    bio: str | None = Field(default=None, max_length=255)
+    password: str = Field(min_length=12, max_length=128)
+
+
+class UserPurgeResponse(BaseModel):
+    user_id: int
+    username: str
+    role: str
+    is_bot: bool
+    removed: dict[str, int]

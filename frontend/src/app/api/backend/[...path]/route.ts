@@ -409,8 +409,14 @@ function isAllowedUsersPath(method: string, path: string[]) {
     return method === "GET";
   }
 
+  // POST /users/bots —— 注册数字员工(2026-08-22 拍板:机器人必须在用户管理里注册)
+  if (path.length === 2 && path[1] === "bots") {
+    return method === "POST";
+  }
+
+  // DELETE /users/{id} —— 彻底删除已停用账号
   if (path.length === 2 && isIntegerPathSegment(path[1])) {
-    return method === "GET" || method === "PATCH";
+    return method === "GET" || method === "PATCH" || method === "DELETE";
   }
 
   if (
@@ -2002,13 +2008,14 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "POST";
   }
 
-  // POST /k/products/{id}/brand-audit/ignore  逐条忽略/人工放行品牌审查发现
+  // POST /k/products/{id}/brand-audit/ignore    逐条忽略/人工放行品牌审查发现
+  // POST /k/products/{id}/brand-audit/override  整产品人工放行（高于一切）
   if (
     path.length === 5 &&
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&
     path[3] === "brand-audit" &&
-    path[4] === "ignore"
+    (path[4] === "ignore" || path[4] === "override")
   ) {
     return method === "POST";
   }
@@ -2032,6 +2039,38 @@ function isAllowedKPath(method: string, path: string[]) {
     path[3] === "generation-jobs"
   ) {
     return method === "GET";
+  }
+
+  // 作图工作台：产品怎么工作（物理约束，人工可改）
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "operating-model"
+  ) {
+    return method === "PUT";
+  }
+
+  // 作图工作台：可当底板的实拍图清单（带姿态与「是否已圈产品」）
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "image-plates"
+  ) {
+    return method === "GET";
+  }
+
+  // 作图工作台：保存某张底图的产品保护蒙版
+  if (
+    path.length === 6 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "image-plates" &&
+    isUuidPathSegment(path[4]) &&
+    path[5] === "mask"
+  ) {
+    return method === "PUT";
   }
 
   // 一次性作图：批量渲染 + 进度 + 失败重试

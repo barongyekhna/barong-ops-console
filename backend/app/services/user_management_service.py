@@ -24,6 +24,7 @@ from ..repositories.users import (
     update_user as update_user_record,
 )
 from ..schemas.user import (
+    BotCreate,
     DEFAULT_INITIAL_PASSWORD,
     UserCreate,
     UserUpdate,
@@ -409,3 +410,178 @@ def enable_managed_user(
     db.commit()
     db.refresh(user)
     return user
+
+
+# ---------------------------------------------------------------- 机器人注册 / 账号清理
+#
+# 2026-08-22 拍板:以后的机器人必须在用户管理里注册(带清晰的机器人标记和所属组织),
+# 不再靠各自的脚本偷偷建号。注册只做"身份":用户行 + C19 资料 + 组织成员关系;
+# 每个数字员工的职责/红灯清单仍由各自模块的 agent_registry 登记。
+
+
+class BotOperationNotAllowedError(UserManagementError):
+    pass
+
+
+class UserPurgeBlockedError(UserManagementError):
+    pass
+
+
+def create_bot_user(
+    db: Session,
+    *,
+    payload: BotCreate,
+    actor: User,
+    audit: AuditContext,
+) -> User:
+    """注册一个数字员工:viewer 角色 + is_bot + 挂一个组织 + C19 显示名/简介。
+
+    零权限码——机器人能干什么由它自己的 worker 以说话人身份过各模块的门,
+    不在这里授权。只有 owner 能注册。
+    """
+    from ..models.c19 import C19ProfileRecord
+    from ..models.org_membership import OrgMembershipRecord
+    from ..schemas.org_membership import generate_membership_id
+    from sqlalchemy import select
+
+    if not is_owner_role(actor.role):
+        raise UserManagementPermissionDeniedError("Only the owner can register bots.")
+    username = payload.username.strip()
+    if get_user_by_username(db, username) is not None:
+        raise DuplicateUsernameError("Username already exists.")
+    if get_organization(db, payload.organization_id) is None:
+        raise UserOrganizationNotFoundError("Organization not found.")
+    try:
+        password_hash = hash_password(payload.password)
+    except ValueError as exc:
+        raise UserManagementError(f"Password rejected: {exc}") from None
+
+    try:
+        user = create_user_record(
+            db,
+            username=username,
+            password_hash=password_hash,
+            role="viewer",
+            job_title=payload.job_title,
+            organization_id=payload.organization_id,
+            must_change_password=False,
+            is_active=True,
+        )
+        user.is_bot = True
+        db.add(user)
+        db.flush()
+        sync_profile_for_user(db, user=user)
+        profile = db.get(C19ProfileRecord, user.id)
+        if profile is not None:
+            profile.display_name = payload.display_name.strip()
+            profile.bio = (payload.bio or "").strip() or None
+            db.add(profile)
+        existing = db.scalar(
+            select(OrgMembershipRecord).where(
+                OrgMembershipRecord.user_id == str(user.id),
+                OrgMembershipRecord.org_id == payload.organization_id,
+            )
+        )
+        if existing is None:
+            db.add(
+                OrgMembershipRecord(
+                    membership_id=generate_membership_id(),
+                    user_id=str(user.id),
+                    org_id=payload.organization_id,
+                    role="member",
+                    status="active",
+                )
+            )
+        _log_user_operation(
+            db,
+            actor=actor,
+            action="user.bot.register",
+            target=user,
+            audit=audit,
+            details={
+                "username": user.username,
+                "display_name": payload.display_name,
+                "job_title": user.job_title,
+                "organization_id": user.organization_id,
+            },
+        )
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise DuplicateUsernameError("Username already exists.") from None
+    db.refresh(user)
+    return user
+
+
+def purge_managed_user(
+    db: Session,
+    *,
+    user_id: int,
+    actor: User,
+    audit: AuditContext,
+) -> dict[str, object]:
+    """彻底删除一个账号。只删:已停用、非 owner、非自己、没有业务记录引用的账号。
+
+    有审批/评审/客服回信/自动化任务引用的账号只能停用不能删——那些记录要能
+    追溯到人。C19 会话历史保留(会话行不删,成员关系删)。
+    """
+    from sqlalchemy import delete, select, func
+    from ..models.approval import ApprovalDecisionRecord, ApprovalRequestRecord
+    from ..models.auth_session import AuthSession
+    from ..models.c19 import C19ConversationMemberRecord
+    from ..models.error import SystemError
+    from ..models.job import AutomationJob
+    from ..models.org_membership import OrgMembershipRecord
+    from ..models.permission import UserPermissionAssignment
+    from ..models.review import ReviewItem
+    from .data_isolation import without_org_data_isolation
+
+    if not is_owner_role(actor.role):
+        raise UserManagementPermissionDeniedError("Only the owner can delete accounts.")
+    user = get_managed_user(db, user_id)
+    if user.id == actor.id:
+        raise BotOperationNotAllowedError("Cannot delete yourself.")
+    if is_owner_role(user.role):
+        raise BotOperationNotAllowedError("Owner accounts cannot be deleted.")
+    if user.is_active:
+        raise BotOperationNotAllowedError("Disable the account first, then delete it.")
+
+    with without_org_data_isolation():
+        refs: dict[str, int] = {}
+        checks = [
+            ("approval_requests", select(func.count()).select_from(ApprovalRequestRecord).where(
+                (ApprovalRequestRecord.requester_id == user.id) | (ApprovalRequestRecord.reviewer_id == user.id))),
+            ("approval_decisions", select(func.count()).select_from(ApprovalDecisionRecord).where(ApprovalDecisionRecord.actor_id == user.id)),
+            ("review_items", select(func.count()).select_from(ReviewItem).where(
+                (ReviewItem.requested_by == user.id) | (ReviewItem.assigned_to == user.id) | (ReviewItem.decided_by == user.id))),
+            ("automation_jobs", select(func.count()).select_from(AutomationJob).where(AutomationJob.requested_by_user_id == user.id)),
+            ("system_errors", select(func.count()).select_from(SystemError).where(SystemError.acknowledged_by == user.id)),
+            ("granted_permissions", select(func.count()).select_from(UserPermissionAssignment).where(UserPermissionAssignment.granted_by_user_id == user.id)),
+        ]
+        for name, stmt in checks:
+            count = int(db.scalar(stmt) or 0)
+            if count:
+                refs[name] = count
+        if refs:
+            raise UserPurgeBlockedError(
+                "Account has business records and can only stay disabled: "
+                + ", ".join(f"{k}={v}" for k, v in refs.items())
+            )
+
+        removed = {
+            "conversation_memberships": db.execute(
+                delete(C19ConversationMemberRecord).where(C19ConversationMemberRecord.user_id == user.id)
+            ).rowcount,
+            "org_memberships": db.execute(
+                delete(OrgMembershipRecord).where(OrgMembershipRecord.user_id == str(user.id))
+            ).rowcount,
+            "auth_sessions": db.execute(delete(AuthSession).where(AuthSession.user_id == user.id)).rowcount,
+            "permission_assignments": db.execute(
+                delete(UserPermissionAssignment).where(UserPermissionAssignment.user_id == user.id)
+            ).rowcount,
+        }
+        details = {"username": user.username, "role": user.role, "is_bot": bool(user.is_bot), "removed": removed}
+        _log_user_operation(db, actor=actor, action="user.purge", target=user, audit=audit, details=details)
+        db.delete(user)  # c19_profiles 及其下游(affiliations/friend_requests/blocks)由 FK CASCADE 带走
+        db.commit()
+    return {"user_id": user_id, **details}

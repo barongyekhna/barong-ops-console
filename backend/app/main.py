@@ -352,6 +352,21 @@ def _craft_fact_detail_for_production(
     return detail if isinstance(detail, str) and detail.strip() else None
 
 
+def _user_management_conflict_detail_for_production(
+    request: Request,
+    status_code: int,
+    detail: object,
+) -> str | None:
+    """用户管理的 409 要说清楚是「先停用」还是「有业务记录只能停用」——
+    消毒成 Request conflict. 操作员就得猜。只放 /users/ 的 409 纯字符串,文案里
+    只有表名和计数,没有敏感值。"""
+    if status_code != status.HTTP_409_CONFLICT:
+        return None
+    if not request.url.path.startswith(f"{APPLICATION_API_PREFIX}/users/"):
+        return None
+    return detail if isinstance(detail, str) and detail.strip() else None
+
+
 def _mfg_inventory_detail_for_production(
     request: Request,
     status_code: int,
@@ -685,6 +700,10 @@ async def sanitized_http_exception_handler(
             )
         if detail is None:
             detail = _mfg_inventory_detail_for_production(
+                request, exc.status_code, exc.detail
+            )
+        if detail is None:
+            detail = _user_management_conflict_detail_for_production(
                 request, exc.status_code, exc.detail
             )
         if detail is None:

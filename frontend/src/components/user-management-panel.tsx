@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Bot,
   Eye,
   KeyRound,
   LoaderCircle,
@@ -10,6 +11,7 @@ import {
   RotateCcw,
   Save,
   ShieldAlert,
+  Trash2,
   UserRoundCog,
 } from "lucide-react";
 import {
@@ -41,6 +43,8 @@ import {
   listOrganizations,
   listUserRoles,
   listUsers,
+  purgeUser,
+  registerBot,
   resetUserPassword,
   updateUser,
   type ManagedUser,
@@ -184,6 +188,13 @@ export function UserManagementPanel() {
   const [resetTarget, setResetTarget] = useState<ManagedUser | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [createUsername, setCreateUsername] = useState("");
+  // 注册机器人(2026-08-22 拍板:以后的机器人必须在这里注册,带清晰标记和所属组织)
+  const [botUsername, setBotUsername] = useState("");
+  const [botDisplayName, setBotDisplayName] = useState("");
+  const [botJobTitle, setBotJobTitle] = useState("");
+  const [botOrganizationId, setBotOrganizationId] = useState("");
+  const [botBio, setBotBio] = useState("");
+  const [botPassword, setBotPassword] = useState("");
   const [createJobTitle, setCreateJobTitle] = useState("");
   const [createOrganizationId, setCreateOrganizationId] = useState("");
   const [createRole, setCreateRole] =
@@ -506,6 +517,87 @@ export function UserManagementPanel() {
       setActionError(
         formatUsersApiError(error, "账号创建未完成，请重试。"),
       );
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleRegisterBot(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearActionMessages();
+    if (!isOwnerRole(currentUser?.role)) {
+      setActionError("只有 owner 能注册机器人。");
+      return;
+    }
+    const username = botUsername.trim();
+    const displayName = botDisplayName.trim();
+    const jobTitle = botJobTitle.trim();
+    const organizationId = botOrganizationId || creatableOrganizations[0]?.org_id || "";
+    if (!username || !displayName || !jobTitle || !organizationId) {
+      setActionError("登录名、显示名、岗位、组织都要填。");
+      return;
+    }
+    if (!/^[a-z][a-z0-9_]*$/.test(username)) {
+      setActionError("登录名只能是小写字母、数字、下划线，且字母开头。");
+      return;
+    }
+    if (botPassword.length < 12) {
+      setActionError("机器人密码至少 12 位（给它的 worker 登录用）。");
+      return;
+    }
+    setPendingAction("register-bot");
+    try {
+      const created = await registerBot({
+        username,
+        display_name: displayName,
+        job_title: jobTitle,
+        organization_id: organizationId,
+        bio: botBio.trim() || null,
+        password: botPassword,
+      });
+      setActionNotice(
+        `已注册机器人：${displayName}（${created.username}）。把密码写进它的 worker 环境变量后再启动。`,
+      );
+      setBotUsername("");
+      setBotDisplayName("");
+      setBotJobTitle("");
+      setBotBio("");
+      setBotPassword("");
+      await refreshAfterMutation(created.id);
+    } catch (error) {
+      setActionError(formatUsersApiError(error, "机器人注册未完成，请重试。"));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handlePurge(target: ManagedUser) {
+    clearActionMessages();
+    if (!isOwnerRole(currentUser?.role)) {
+      setActionError("只有 owner 能删除账号。");
+      return;
+    }
+    if (target.is_active) {
+      setActionError("先停用，再删除。");
+      return;
+    }
+    if (
+      !window.confirm(
+        `彻底删除 ${target.username}？登录会话、组织成员关系、权限、通讯资料都会一起删掉，不可恢复。有业务记录引用的账号会被拒绝。`,
+      )
+    ) {
+      return;
+    }
+    setPendingAction(`purge-${target.id}`);
+    try {
+      const result = await purgeUser(target.id);
+      setActionNotice(`已删除账号：${result.username}。`);
+      if (expandedUser?.id === target.id) {
+        setExpandedUser(null);
+      }
+      await refreshAfterMutation();
+    } catch (error) {
+      setActionError(formatUsersApiError(error, "删除未完成。有业务记录引用的账号只能停用。"));
     } finally {
       setPendingAction(null);
     }
@@ -834,6 +926,105 @@ export function UserManagementPanel() {
           创建用户
         </button>
         </form>
+
+        {isOwnerRole(currentUser?.role) ? (
+          <form className="users-create-panel" onSubmit={handleRegisterBot}>
+            <div className="users-panel-heading">
+              <div>
+                <span className="eyebrow">数字员工</span>
+                <h3>注册机器人</h3>
+              </div>
+              <Bot aria-hidden="true" size={24} />
+            </div>
+            <p className="users-field-note">
+              数字员工在这里登记身份：带「机器人」标记、挂一个组织、零权限码。它能做什么由它自己的
+              worker 以说话人的身份过各模块的门。
+            </p>
+            <div className="users-form-grid">
+              <label className="field-group">
+                <span>登录名</span>
+                <span className="input-shell">
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setBotUsername(event.target.value)}
+                  placeholder="如 nijing"
+                  value={botUsername}
+                />
+                </span>
+              </label>
+              <label className="field-group">
+                <span>显示名</span>
+                <span className="input-shell">
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setBotDisplayName(event.target.value)}
+                  placeholder="如 霓旌"
+                  value={botDisplayName}
+                />
+                </span>
+              </label>
+              <label className="field-group">
+                <span>岗位</span>
+                <span className="input-shell">
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setBotJobTitle(event.target.value)}
+                  placeholder="如 库管员"
+                  value={botJobTitle}
+                />
+                </span>
+              </label>
+              <label className="field-group">
+                <span>所属组织</span>
+                <span className="input-shell">
+                <select
+                  onChange={(event) => setBotOrganizationId(event.target.value)}
+                  value={botOrganizationId || creatableOrganizations[0]?.org_id || ""}
+                >
+                  {creatableOrganizations.map((organization) => (
+                    <option key={organization.org_id} value={organization.org_id}>
+                      {organization.org_name}
+                    </option>
+                  ))}
+                </select>
+                </span>
+              </label>
+              <label className="field-group">
+                <span>简介（通讯里显示）</span>
+                <span className="input-shell">
+                <input
+                  autoComplete="off"
+                  onChange={(event) => setBotBio(event.target.value)}
+                  value={botBio}
+                />
+                </span>
+              </label>
+              <label className="field-group">
+                <span>登录密码（≥12 位，给 worker 用）</span>
+                <span className="input-shell">
+                <input
+                  autoComplete="new-password"
+                  onChange={(event) => setBotPassword(event.target.value)}
+                  type="password"
+                  value={botPassword}
+                />
+                </span>
+              </label>
+            </div>
+            <button
+              className="primary-button users-submit-button"
+              disabled={isBusy || isOrganizationsLoading || creatableOrganizations.length === 0}
+              type="submit"
+            >
+              {pendingAction === "register-bot" ? (
+                <LoaderCircle className="spin" aria-hidden="true" size={17} />
+              ) : (
+                <Bot aria-hidden="true" size={17} />
+              )}
+              注册机器人
+            </button>
+          </form>
+        ) : null}
           </aside>
         </>
       ) : null}
@@ -1016,6 +1207,9 @@ export function UserManagementPanel() {
                     <tr key={target.id}>
                       <td>
                         <strong>{target.username}</strong>
+                        {target.is_bot ? (
+                          <span className="users-bot-badge">机器人</span>
+                        ) : null}
                         {isSelf ? <span>当前账号</span> : null}
                       </td>
                       <td>
@@ -1107,6 +1301,29 @@ export function UserManagementPanel() {
                                 <Power aria-hidden="true" size={17} />
                               )}
                               启用
+                            </button>
+                          ) : null}
+
+                          {canManageRow &&
+                          !target.is_active &&
+                          isOwnerRole(currentUser?.role) ? (
+                            <button
+                              className="danger-button"
+                              disabled={isBusy}
+                              onClick={() => void handlePurge(target)}
+                              title="彻底删除（仅限已停用账号）"
+                              type="button"
+                            >
+                              {pendingAction === `purge-${target.id}` ? (
+                                <LoaderCircle
+                                  className="spin"
+                                  aria-hidden="true"
+                                  size={17}
+                                />
+                              ) : (
+                                <Trash2 aria-hidden="true" size={17} />
+                              )}
+                              删除
                             </button>
                           ) : null}
 

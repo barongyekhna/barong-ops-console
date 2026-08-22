@@ -34,6 +34,16 @@ class User(PrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         server_default=false(),
     )
+    # Digital-employee accounts (e.g. 白苏婉).  Deliberately a separate flag
+    # rather than role="bot_agent": rbac.py maps that legacy role to
+    # ROLE_SYSTEM, which only grants ACTION_INTERNAL and would strip the bot
+    # of even its own read permissions.  This flag is a label, never a gate.
+    is_bot: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=false(),
+    )
     failed_login_count: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

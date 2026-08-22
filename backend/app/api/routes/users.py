@@ -11,8 +11,10 @@ from ...models.organization import OrganizationRecord
 from ...models.user import User
 from ...schemas.common import ListResponse
 from ...schemas.user import (
+    BotCreate,
     PasswordResetRequest,
     UserCreate,
+    UserPurgeResponse,
     UserResponse,
     UserRolesResponse,
     UserUpdate,
@@ -21,6 +23,7 @@ from ...schemas.user import (
 )
 from ...services.data_isolation import without_org_data_isolation
 from ...services.user_management_service import (
+    BotOperationNotAllowedError,
     DuplicateUsernameError,
     ManagedUserNotFoundError,
     OwnerRoleNotAllowedError,
@@ -28,11 +31,14 @@ from ...services.user_management_service import (
     SelfPasswordResetNotAllowedError,
     UserManagementPermissionDeniedError,
     UserOrganizationNotFoundError,
+    UserPurgeBlockedError,
+    create_bot_user,
     create_managed_user,
     disable_managed_user,
     enable_managed_user,
     get_managed_user,
     list_users,
+    purge_managed_user,
     reset_managed_user_password,
     update_managed_user,
 )
@@ -113,6 +119,11 @@ def _raise_user_management_error(exc: Exception) -> None:
     if isinstance(exc, UserManagementPermissionDeniedError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from None
+    if isinstance(exc, (BotOperationNotAllowedError, UserPurgeBlockedError)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from None
     if isinstance(
@@ -272,6 +283,30 @@ def user_create(
     return _user_response(user, _organization_name_map(db, [user]))
 
 
+@router.post(
+    "/bots",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def bot_register(
+    payload: BotCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_user_manager),
+) -> UserResponse:
+    """注册数字员工(2026-08-22 拍板:以后的机器人必须在用户管理里注册)。"""
+    try:
+        user = create_bot_user(
+            db,
+            payload=payload,
+            actor=owner,
+            audit=get_audit_context(request),
+        )
+    except Exception as exc:
+        _raise_user_management_error(exc)
+    return _user_response(user, _organization_name_map(db, [user]))
+
+
 @router.get("/roles", response_model=UserRolesResponse)
 def user_roles(
     actor: User = Depends(get_current_user),
@@ -384,3 +419,23 @@ def user_enable(
     except Exception as exc:
         _raise_user_management_error(exc)
     return _user_response(user, _organization_name_map(db, [user]))
+
+
+@router.delete("/{user_id}", response_model=UserPurgeResponse)
+def user_purge(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_user_manager),
+) -> UserPurgeResponse:
+    """彻底删除:只删已停用、非 owner、无业务记录引用的账号;否则 409。"""
+    try:
+        result = purge_managed_user(
+            db,
+            user_id=user_id,
+            actor=owner,
+            audit=get_audit_context(request),
+        )
+    except Exception as exc:
+        _raise_user_management_error(exc)
+    return UserPurgeResponse(**result)
