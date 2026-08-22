@@ -42,3 +42,19 @@ def test_unit_matches() -> None:
     assert unit_matches(None, "条")
     assert unit_matches("条", "条")
     assert not unit_matches("个", "条")
+
+
+def test_bare_name_with_spec_siblings_must_ask() -> None:
+    legs = [
+        N(id=1, kind="part", code="LEG-STD", name="桌腿", unit="条", is_archived=False),
+        N(id=2, kind="part", code="LEG-L", name="桌腿加长", unit="条", is_archived=False),
+        N(id=3, kind="part", code="LEG-XL", name="桌腿超长", unit="条", is_archived=False),
+    ]
+    r = resolve_item("桌腿", legs)
+    assert r.status == "many" and {m.code for m in r.matches} == {"LEG-STD", "LEG-L", "LEG-XL"}
+    # 点名编码不歧义
+    assert resolve_item("LEG-STD", legs).matches[0].code == "LEG-STD"
+    # 全带规格也问
+    specs = [N(id=i, kind="part", code=f"LEG-{i}", name=f"桌腿 {i}0cm", unit="条", is_archived=False) for i in (6, 7, 8)]
+    assert resolve_item("桌腿", specs).status == "many"
+    assert resolve_item("桌腿 70cm", specs).matches[0].code == "LEG-7"

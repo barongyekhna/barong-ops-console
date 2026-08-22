@@ -7987,3 +7987,23 @@ textarea:focus-visible {
   .cs-drawer-body { padding-right: 14px; padding-left: 14px; }
   .cs-detail-drawer { width: 100%; }
 }
+/* 用户管理:中文显示名 + 机器人图标(取代白底黑字徽章) */
+.users-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.users-bot-icon {
+  flex: 0 0 auto;
+  color: #7fb6ff;
+  opacity: 0.9;
+}
+
+.users-login-name {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.55;
+}

@@ -60,6 +60,7 @@ import {
   mergeC19MessageWindow,
 } from "./C19ChatRecovery";
 import { c19SseReconnectDelay } from "./C19EventStreamRecovery";
+import { C19CardMessage, parseC19Card } from "./C19CardMessage";
 import { C19MessageAsset } from "./C19MessageAsset";
 import { announceC19UnreadChanged } from "./C19UnreadStatus";
 import styles from "./C19Workspace.module.css";
@@ -1784,6 +1785,23 @@ export function C19ChatPanel({
     [conversation.status, draft, pendingMessage, selectedAsset, transmit],
   );
 
+  // 数字员工待确认卡上的按钮:替用户发一条普通文本(「确认 #ab12」),不走输入框。
+  const sendQuickReply = useCallback(
+    (content: string) => {
+      if (conversation.status !== "active" || pendingMessageRef.current) return;
+      const pending = {
+        asset: undefined,
+        clientMessageId: makeClientMessageId(),
+        content,
+        contentType: "text",
+      } satisfies PendingMessage;
+      setPendingMessage(pending);
+      pendingMessageRef.current = pending;
+      void transmit(pending);
+    },
+    [conversation.status, transmit],
+  );
+
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -1920,7 +1938,21 @@ export function C19ChatPanel({
                     这条消息的资产引用不可用。
                   </small>
                 ) : null}
-                {record.content ? <p>{record.content}</p> : null}
+                {(() => {
+                  const card = own ? null : parseC19Card(record.content);
+                  if (!card) {
+                    return record.content ? <p>{record.content}</p> : null;
+                  }
+                  const isLatest = records[records.length - 1]?.record_id === record.record_id;
+                  return (
+                    <C19CardMessage
+                      actionable={isLatest}
+                      busy={Boolean(pendingMessage)}
+                      card={card}
+                      onAction={sendQuickReply}
+                    />
+                  );
+                })()}
                 <footer>
                   <time dateTime={record.persisted_at}>{messageTime(record.persisted_at)}</time>
                   {own ? <span>{receiptLabel(record.status)}</span> : null}

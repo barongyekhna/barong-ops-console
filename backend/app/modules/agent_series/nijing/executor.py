@@ -156,8 +156,13 @@ def _pick_item(db: Session, ctx: FactoryContext, intent: Intent, kinds: tuple[st
     return item
 
 
+CARD_MARKER_PREFIX = "⟦card:"
+
+
 def _card_footer(card_id: str) -> str:
-    return f"回「确认」执行,回「取消」作废(30 分钟后自动作废)。#{card_id}"
+    """最后一行是机器标记:通讯前端认出它就渲染成带「确认/取消」按钮的卡片,
+    按钮替用户发「确认 #id」/「取消 #id」。别的客户端看到的仍是可读文本。"""
+    return f"回「确认」执行,回「取消」作废(30 分钟后自动作废)。\n{CARD_MARKER_PREFIX}{card_id}⟧"
 
 
 def build_card(

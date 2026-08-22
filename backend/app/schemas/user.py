@@ -75,6 +75,7 @@ class UserResponse(BaseModel):
     must_change_password: bool
     is_active: bool
     is_bot: bool = False
+    display_name: str | None = None
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime

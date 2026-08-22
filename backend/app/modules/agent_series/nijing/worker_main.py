@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import signal
 import time
 import uuid
@@ -89,14 +90,28 @@ def _log_operation(*, action: str, target_type: str, target_id: str, result: str
         db.close()
 
 
+_CARD_REF = re.compile(r"^(?P<word>.+?)\s*#(?P<card>[0-9a-f]{4})\s*$")
+
+
+def _split_card_ref(text: str) -> tuple[str, str | None]:
+    """「确认 #ab12」→ ("确认", "ab12");「确认」→ ("确认", None)。"""
+    t = text.strip().strip("。!！.")
+    m = _CARD_REF.match(t)
+    if m:
+        return m.group("word").strip().casefold(), m.group("card")
+    return t.casefold(), None
+
+
 def _is_confirm(text: str) -> bool:
-    t = text.strip().strip("。!！.").casefold()
-    return t in CONFIRM_WORDS
+    return _split_card_ref(text)[0] in CONFIRM_WORDS
 
 
 def _is_cancel(text: str) -> bool:
-    t = text.strip().strip("。!！.").casefold()
-    return t in CANCEL_WORDS
+    return _split_card_ref(text)[0] in CANCEL_WORDS
+
+
+def _card_ref(text: str) -> str | None:
+    return _split_card_ref(text)[1]
 
 
 class NijingWorker:
@@ -215,6 +230,8 @@ class NijingWorker:
                     pending = None
                 elif card.speaker_id != speaker_id:
                     return f"这张卡是别人开的,只有开卡的人能确认。#{card.card_id}"
+                elif (_is_confirm(text) or _is_cancel(text)) and _card_ref(text) not in (None, card.card_id):
+                    return f"#{_card_ref(text)} 这张卡已作废,当前待确认的是 #{card.card_id}。"
                 elif _is_confirm(text):
                     return self._execute(db, ctx, card=card, speaker=speaker, text=text, record_id=record_id, conversation_id=conversation_id)
                 elif _is_cancel(text):
@@ -226,7 +243,8 @@ class NijingWorker:
                     prefix = f"上一张卡 #{card.card_id} 已作废。\n"
                     return prefix + self._fresh(db, ctx, speaker=speaker, text=text, record_id=record_id, conversation_id=conversation_id)
             if _is_confirm(text) or _is_cancel(text):
-                return "现在没有待确认的卡。"
+                ref = _card_ref(text)
+                return f"#{ref} 这张卡已经处理过或已作废。" if ref else "现在没有待确认的卡。"
             return self._fresh(db, ctx, speaker=speaker, text=text, record_id=record_id, conversation_id=conversation_id)
         finally:
             db.close()

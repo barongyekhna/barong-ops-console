@@ -33,17 +33,20 @@ def resolve_item(text: str | None, items: list[Any], *, kinds: tuple[str, ...] |
     query = _norm(text or "")
     if not query:
         return Resolution("none", [], pool[:3])
-    for pick in (
-        lambda i: i.code.casefold() == (text or "").strip().casefold(),
-        lambda i: i.name == (text or "").strip(),
-        lambda i: _norm(i.code) == query or _norm(i.name) == query,
-    ):
-        hits = [i for i in pool if pick(i)]
-        if len(hits) == 1:
-            return Resolution("one", hits, [])
-        if len(hits) > 1:
-            return Resolution("many", hits, [])
     contains = [i for i in pool if query in _norm(i.name) or query in _norm(i.code)]
+    # 编码精确命中是用户在「点名」,不歧义。
+    code_hits = [i for i in pool if i.code.casefold() == (text or "").strip().casefold()]
+    if len(code_hits) == 1:
+        return Resolution("one", code_hits, [])
+    # 名字精确命中但还有别的名字包含它(「桌腿」vs「桌腿加长」「桌腿超长」):
+    # 用户说「桌腿」未必指的是裸名那个,一律问回去(2026-08-22 拍板)。
+    name_hits = [i for i in pool if i.name == (text or "").strip() or _norm(i.name) == query]
+    if len(name_hits) == 1 and len(contains) <= 1:
+        return Resolution("one", name_hits, [])
+    if len(name_hits) >= 1 and len(contains) > 1:
+        return Resolution("many", contains, [])
+    if len(name_hits) > 1:
+        return Resolution("many", name_hits, [])
     if len(contains) == 1:
         return Resolution("one", contains, [])
     if len(contains) > 1:

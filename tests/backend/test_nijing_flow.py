@@ -160,3 +160,15 @@ def test_handle_conversation_skips_echo_and_replays(worker):
     worker.intents["桌腿还剩多少"] = Intent(intent="query_stock", item="桌腿")
     assert worker.handle_conversation("c1") is True
     assert client.sent[-1] == ("c1", "桌腿 380 条")
+
+
+def test_card_marker_and_button_replies(worker):
+    from backend.app.modules.agent_series.nijing.executor import CARD_MARKER_PREFIX, _card_footer
+    assert _card_footer("ab12").endswith(f"{CARD_MARKER_PREFIX}ab12⟧")
+    worker.intents["入库1000条桌腿"] = Intent(intent="receipt", item="桌腿", qty=Decimal(1000))
+    _say(worker, "入库1000条桌腿")
+    # 按钮发的是带卡号的确认;旧卡号被拒
+    assert "已作废" in _say(worker, "确认 #0000")
+    assert worker.executed_calls == []
+    assert "RC-000009" in _say(worker, "确认 #ab12", rid="btn-1")
+    assert "已经处理过" in _say(worker, "取消 #ab12", rid="btn-2")

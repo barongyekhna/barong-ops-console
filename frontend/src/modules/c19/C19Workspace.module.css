@@ -2319,3 +2319,94 @@
     width: 100%;
   }
 }
+
+/* ---------- 数字员工的待确认卡(文本消息渲染成卡片) ---------- */
+.confirmCard {
+  margin: 4px 0 2px;
+  border: 1px solid rgba(255, 196, 107, 0.45);
+  border-radius: 12px;
+  background: rgba(255, 196, 107, 0.08);
+  overflow: hidden;
+  min-width: 260px;
+}
+
+.confirmCard[data-actionable="false"] {
+  border-color: rgba(120, 170, 255, 0.22);
+  background: rgba(120, 170, 255, 0.06);
+  opacity: 0.85;
+}
+
+.confirmCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 196, 107, 0.25);
+  font-weight: 600;
+}
+
+.confirmCardTitle::before {
+  content: "待确认 · ";
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.confirmCardId {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.confirmCardBody {
+  margin: 0;
+  padding: 10px 12px;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.confirmCardActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 8px 12px 10px;
+  border-top: 1px solid rgba(255, 196, 107, 0.25);
+}
+
+.confirmCardConfirm,
+.confirmCardCancel {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.confirmCardConfirm {
+  background: #2f9e63;
+  color: #fff;
+}
+
+.confirmCardConfirm:hover:not(:disabled) {
+  background: #3cb877;
+}
+
+.confirmCardCancel {
+  background: transparent;
+  border-color: rgba(255, 143, 143, 0.5);
+  color: #ff8f8f;
+}
+
+.confirmCardConfirm:disabled,
+.confirmCardCancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.confirmCardDone {
+  padding: 6px 12px 8px;
+  font-size: 12px;
+  opacity: 0.6;
+}

@@ -37,6 +37,8 @@ export type ManagedUser = {
   is_active: boolean;
   /** 数字员工账号(如白苏婉)。只是标签,不参与任何鉴权。 */
   is_bot?: boolean;
+  /** 中文显示名(来自通讯资料);没有就显示登录名 */
+  display_name?: string | null;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;

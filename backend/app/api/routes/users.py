@@ -162,9 +162,26 @@ def _organization_name_map(
     return {row.org_id: row.org_name for row in rows}
 
 
+def _display_name_map(db: Session, users: list[User]) -> dict[int, str]:
+    """中文显示名来自 C19 资料(机器人注册时写的「霓旌」这类),登录名只是账号。"""
+    from ...models.c19 import C19ProfileRecord
+
+    user_ids = [user.id for user in users if user.id is not None]
+    if not user_ids:
+        return {}
+    with without_org_data_isolation():
+        rows = db.execute(
+            select(C19ProfileRecord.user_id, C19ProfileRecord.display_name).where(
+                C19ProfileRecord.user_id.in_(user_ids)
+            )
+        ).all()
+    return {int(user_id): name for user_id, name in rows if name}
+
+
 def _user_response(
     user: User,
     organization_names: dict[str, str],
+    display_names: dict[int, str] | None = None,
 ) -> UserResponse:
     response = UserResponse.model_validate(user)
     if response.organization_id:
@@ -172,6 +189,8 @@ def _user_response(
             response.organization_id,
             response.organization_id,
         )
+    if display_names:
+        response.display_name = display_names.get(user.id)
     return response
 
 
@@ -224,9 +243,10 @@ def users(
                 role=requested_role,
             )
         organization_names = _organization_name_map(db, result.items)
+        display_names = _display_name_map(db, result.items)
         response = ListResponse(
             items=[
-                _user_response(item, organization_names)
+                _user_response(item, organization_names, display_names)
                 for item in result.items
             ],
             count=result.count,
@@ -280,7 +300,7 @@ def user_create(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]))
+    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
 
 
 @router.post(
@@ -304,7 +324,7 @@ def bot_register(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]))
+    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
 
 
 @router.get("/roles", response_model=UserRolesResponse)
@@ -338,7 +358,7 @@ def user_detail(
     except Exception as exc:
         _raise_user_management_error(exc)
     _ensure_user_visible(actor, user)
-    return _user_response(user, _organization_name_map(db, [user]))
+    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
@@ -359,7 +379,7 @@ def user_update(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]))
+    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
 
 
 @router.post("/{user_id}/reset-password", response_model=UserResponse)
@@ -380,7 +400,7 @@ def user_reset_password(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]))
+    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
 
 
 @router.post("/{user_id}/disable", response_model=UserResponse)
@@ -399,7 +419,7 @@ def user_disable(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]))
+    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
 
 
 @router.post("/{user_id}/enable", response_model=UserResponse)
@@ -418,7 +438,7 @@ def user_enable(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]))
+    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
 
 
 @router.delete("/{user_id}", response_model=UserPurgeResponse)

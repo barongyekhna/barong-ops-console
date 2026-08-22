@@ -1206,9 +1206,18 @@ export function UserManagementPanel() {
                   return (
                     <tr key={target.id}>
                       <td>
-                        <strong>{target.username}</strong>
-                        {target.is_bot ? (
-                          <span className="users-bot-badge">机器人</span>
+                        <strong className="users-name-cell">
+                          {target.is_bot ? (
+                            <Bot
+                              aria-label="机器人"
+                              className="users-bot-icon"
+                              size={15}
+                            />
+                          ) : null}
+                          {target.display_name || target.username}
+                        </strong>
+                        {target.display_name && target.display_name !== target.username ? (
+                          <span className="users-login-name">{target.username}</span>
                         ) : null}
                         {isSelf ? <span>当前账号</span> : null}
                       </td>
