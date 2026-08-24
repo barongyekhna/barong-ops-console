@@ -1,13 +1,7 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { ProductListFull } from "@/modules/k/product-knowledge/ProductList";
-
-export const metadata: Metadata = {
-  title: "完整产品列表",
-};
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
+// M7 (QA 2026-08-22): /products/full rendered the identical ProductListFull as
+// /products. Consolidated on /products; redirect keeps old links working.
 export default function FullProductsPage() {
-  return <ProductListFull />;
+  redirect("/products");
 }

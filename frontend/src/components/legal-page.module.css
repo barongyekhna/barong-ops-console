@@ -1,0 +1,29 @@
+/* Public (pre-auth) legal/support page shell — dark brand, calm & readable. */
+.page{min-height:100vh; color:#dbe6f2;
+  font-family:var(--font-inter), system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  background:
+    radial-gradient(1000px 700px at 85% -5%, rgba(203,141,81,.1), transparent 55%),
+    linear-gradient(160deg, #13243f 0%, #0a1a30 48%, #06111f 100%);
+  padding:clamp(28px,5vw,64px) clamp(20px,5vw,40px) 80px}
+.frame{max-width:820px; margin:0 auto}
+.head{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  padding-bottom:20px; border-bottom:1px solid rgba(203,141,81,.16)}
+.brand{display:flex; align-items:center; gap:12px; text-decoration:none; color:inherit}
+.brand img{width:44px; height:44px; object-fit:contain; filter:drop-shadow(0 0 12px rgba(203,141,81,.3))}
+.brand strong{display:block; font-size:17px; color:#f7f2e9; letter-spacing:.06em}
+.brand small{display:block; font-family:var(--font-mono), ui-monospace, Menlo, monospace;
+  font-size:10.5px; letter-spacing:.24em; text-transform:uppercase; color:#8ba0bb; margin-top:2px}
+.back{font-family:var(--font-mono), ui-monospace, Menlo, monospace; font-size:12px; letter-spacing:.08em;
+  color:#e4b98a; text-decoration:none}
+.back:hover{color:#f2d3a0}
+
+.tabs{display:flex; gap:6px; margin:24px 0 30px; flex-wrap:wrap}
+.tab, .tabOn{font-size:13px; font-weight:600; padding:8px 16px; border-radius:999px; text-decoration:none;
+  border:1px solid transparent; transition:.15s}
+.tab{color:#8ba0bb; background:rgba(255,255,255,.02); border-color:rgba(203,141,81,.14)}
+.tab:hover{color:#e4b98a; border-color:rgba(203,141,81,.35)}
+.tabOn{color:#e4b98a; background:rgba(203,141,81,.13); border-color:rgba(203,141,81,.4)}
+
+.title{font-size:clamp(26px,4vw,34px); font-weight:800; color:#f7f2e9; margin:0 0 6px; letter-spacing:-.01em}
+.foot{margin-top:48px; padding-top:20px; border-top:1px solid rgba(203,141,81,.14);
+  font-family:var(--font-mono), ui-monospace, Menlo, monospace; font-size:11px; letter-spacing:.1em; color:#5d7590}

@@ -1474,7 +1474,7 @@ export function ProductListFull() {
                                 type="button"
                               >
                                 <ImagePlus aria-hidden="true" size={15} />
-                                Create Image
+                                创建图片
                               </button>
                               <button
                                 className="secondary-button"

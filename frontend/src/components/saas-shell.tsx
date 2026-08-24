@@ -1,11 +1,14 @@
 "use client";
 
-import { LogOut, Menu, RefreshCcw, Search, X } from "lucide-react";
+import { LogOut, Menu, RefreshCcw, Search, Settings, X } from "lucide-react";
+import Link from "next/link";
 
 import { Logo } from "@/components/brand-logo";
 import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine";
+import { formatDisplayName, useProfile } from "@/components/profile-provider";
 import { NotificationBell } from "@/modules/notifications/NotificationBell";
-import { RELEASE_STATUS, RELEASE_VERSION } from "@/lib/release-metadata";
+
+import styles from "./saas-shell.module.css";
 
 type SidebarProps = {
   isOpen: boolean;
@@ -74,6 +77,11 @@ export function TopHeader({
   title,
   username,
 }: TopHeaderProps) {
+  const { profile } = useProfile();
+  const realName = profile?.display_name || username || "";
+  const shownName = formatDisplayName(profile?.nickname, realName || (username ?? "—"));
+  const avatarUrl = profile?.avatar_url ?? null;
+  const initial = (realName || username || "?").slice(0, 1).toUpperCase();
   return (
     <header className="topbar">
       <div className="topbar-title">
@@ -92,10 +100,10 @@ export function TopHeader({
         <div className="topbar-heading-copy">
           <span className="eyebrow">工作台</span>
           <div className="topbar-title-row">
+            {/* L1 (QA 2026-08-22): removed the internal release-version badge
+                (e.g. "C-SERIES-V1.1.0") from the top bar — it's an internal
+                codename with no meaning to end users. */}
             <h1>{title}</h1>
-            <span className="release-badge" title={`发布状态: ${RELEASE_STATUS}`}>
-              {RELEASE_VERSION}
-            </span>
           </div>
         </div>
       </div>
@@ -114,10 +122,26 @@ export function TopHeader({
         </button>
 
         <div className="account-area">
+          <span className={styles.avatar} aria-hidden="true">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatarUrl} alt="" />
+            ) : (
+              <span className={styles.avatarInitial}>{initial}</span>
+            )}
+          </span>
           <div className="account-copy">
-            <strong>{username}</strong>
+            <strong>{shownName}</strong>
             <span>{role}</span>
           </div>
+          <Link
+            href="/settings"
+            className={styles.gear}
+            title="设置"
+            aria-label="设置"
+          >
+            <Settings aria-hidden="true" size={17} />
+          </Link>
           <button
             className="logout-button"
             disabled={isActionPending}

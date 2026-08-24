@@ -32,7 +32,6 @@ export function C19CardMessage({
     <div className={styles.confirmCard} data-actionable={actionable}>
       <header className={styles.confirmCardHead}>
         <span className={styles.confirmCardTitle}>{card.title}</span>
-        <span className={styles.confirmCardId}>#{card.cardId}</span>
       </header>
       <pre className={styles.confirmCardBody}>{card.lines.join("\n")}</pre>
       {actionable ? (

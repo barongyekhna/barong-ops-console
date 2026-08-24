@@ -17,7 +17,7 @@ import type { C19Affiliation, C19Profile } from "./types";
 
 function roleLabel(affiliation: C19Affiliation) {
   return affiliation.role === "owner"
-    ? "Owner"
+    ? "负责人"
     : affiliation.role === "admin"
       ? "管理员"
       : "成员";
@@ -144,7 +144,7 @@ export function C19ProfileCard({
         >
           {profile.affiliations.length === 0 ? (
             <span className={styles.profileOrgEmpty}>
-              基础通讯用户 · 未加入任何组织
+              暂未加入任何组织
             </span>
           ) : (
             profile.affiliations.map((affiliation) => (

@@ -1,0 +1,6 @@
+/* Row-action tweaks for user management — additive, mine-only.
+   All row actions are icon-only squares (consistent); only delete reads danger. */
+.iconDanger:hover:not(:disabled) {
+  color: #ff6b8a !important;
+  border-color: #ff6b8a !important;
+}

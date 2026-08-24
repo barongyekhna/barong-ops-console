@@ -10,7 +10,7 @@
 .workspace input:focus-visible,
 .workspace select:focus-visible,
 .workspace textarea:focus-visible {
-  outline: 3px solid rgb(14 165 233 / 38%);
+  outline: 3px solid rgb(57 212 255 / 34%);
   outline-offset: 2px;
 }
 
@@ -18,8 +18,8 @@
 .panel,
 .identityBar,
 .storageNotice {
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-line, #dbe3ee);
+  background: var(--color-surface, #0d1826);
+  border: 1px solid var(--color-line, #1c2f47);
   border-radius: 18px;
   box-shadow: 0 14px 36px rgb(15 23 42 / 5%);
 }
@@ -27,8 +27,8 @@
 .hero {
   align-items: center;
   background:
-    radial-gradient(circle at 82% 5%, rgb(56 189 248 / 14%), transparent 34%),
-    linear-gradient(135deg, #fff 0%, #f8fbff 100%);
+    radial-gradient(circle at 82% 5%, rgb(57 212 255 / 16%), transparent 34%),
+    linear-gradient(135deg, #0d1826 0%, #0a1524 100%);
   display: flex;
   justify-content: space-between;
   padding: 24px 26px;
@@ -37,7 +37,7 @@
 .hero h2,
 .panel h3,
 .detailHeading h3 {
-  color: var(--color-text-strong, #0f172a);
+  color: var(--color-text-strong, #dce9f7);
   margin: 0;
 }
 
@@ -50,12 +50,12 @@
 .hero p,
 .panelHeading p,
 .detailHeading p {
-  color: var(--color-text-muted, #64748b);
+  color: var(--color-muted, #8299b4);
   margin: 6px 0 0;
 }
 
 .eyebrow {
-  color: #0369a1;
+  color: #39d4ff;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.13em;
@@ -76,10 +76,10 @@
 .statusBadge,
 .selfBadge,
 .countBadge {
-  background: #e0f2fe;
-  border: 1px solid #bae6fd;
+  background: #0e2438;
+  border: 1px solid #2a5573;
   border-radius: 999px;
-  color: #075985;
+  color: #39d4ff;
   font-size: 12px;
   font-weight: 800;
   padding: 5px 10px;
@@ -93,10 +93,10 @@
 .groupControls button,
 .inviteControl button {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 10px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -109,9 +109,9 @@
 }
 
 .primaryButton {
-  background: #0f172a;
-  border-color: #0f172a;
-  color: #fff;
+  background: linear-gradient(135deg, #39d4ff, #1a90c4);
+  border-color: #39d4ff;
+  color: #04121f;
   width: 100%;
 }
 
@@ -126,15 +126,15 @@
 }
 
 .dangerButton {
-  border-color: #fecaca !important;
-  color: #b91c1c !important;
+  border-color: #4a2230 !important;
+  color: #ff6b8a !important;
 }
 
 .storageNotice {
   align-items: center;
-  background: linear-gradient(120deg, #fff7ed, #fffbeb);
-  border-color: #fed7aa;
-  color: #9a3412;
+  background: linear-gradient(120deg, #241a05, #241a05);
+  border-color: #4a3410;
+  color: #ffb13b;
   display: flex;
   gap: 13px;
   padding: 16px 20px;
@@ -146,7 +146,7 @@
 }
 
 .storageNotice span {
-  color: #7c2d12;
+  color: #ffb13b;
   font-size: 13px;
 }
 
@@ -170,15 +170,15 @@
 }
 
 .identityBar span:not(.identityIcon) {
-  color: #64748b;
+  color: #8299b4;
   font-size: 13px;
 }
 
 .identityIcon {
   align-items: center;
-  background: #e0f2fe;
+  background: #0e2438;
   border-radius: 11px;
-  color: #0369a1;
+  color: #39d4ff;
   display: inline-flex;
   height: 38px;
   justify-content: center;
@@ -195,10 +195,10 @@
   padding: 12px 15px;
 }
 
-.warning { background: #fffbeb; border-color: #fde68a; color: #92400e; }
-.error { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
-.success { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
-.loading { background: #f8fafc; border-color: #e2e8f0; color: #475569; }
+.warning { background: #241a05; border-color: #4a3410; color: #ffb13b; }
+.error { background: #240d12; border-color: #4a2230; color: #ff6b8a; }
+.success { background: #0b1f18; border-color: #2f7a52; color: #4dffa1; }
+.loading { background: #0a1524; border-color: #1c2f47; color: #8299b4; }
 
 .warning:has(> button),
 .error:has(> button) {
@@ -210,7 +210,7 @@
 
 .warning > button,
 .error > button {
-  background: #fff;
+  background: #0d1826;
   border: 1px solid currentColor;
   border-radius: 8px;
   color: inherit;
@@ -224,8 +224,8 @@
 
 .tabs {
   align-items: center;
-  background: #e9eff7;
-  border: 1px solid #d8e1ed;
+  background: #0c1a2b;
+  border: 1px solid #1c2f47;
   border-radius: 13px;
   display: flex;
   gap: 5px;
@@ -239,7 +239,7 @@
   background: transparent;
   border: 0;
   border-radius: 9px;
-  color: #475569;
+  color: #8299b4;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -251,9 +251,9 @@
 
 .tabs .activeTab,
 .orgFilters .selectedFilter {
-  background: #fff;
+  background: #0d1826;
   box-shadow: 0 4px 14px rgb(15 23 42 / 8%);
-  color: #0f172a;
+  color: #dce9f7;
 }
 
 .panel {
@@ -280,10 +280,10 @@
 
 .search {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #dbe3ee;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 11px;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   gap: 8px;
   padding: 0 11px;
@@ -297,14 +297,14 @@
 .settingGrid select {
   background: transparent;
   border: 0;
-  color: #0f172a;
+  color: #dce9f7;
   font: inherit;
   min-height: 40px;
   outline: none;
 }
 
 .searching {
-  color: #0369a1;
+  color: #39d4ff;
   flex: 0 0 auto;
   font-size: 11px;
   font-weight: 800;
@@ -319,7 +319,7 @@
 }
 
 .orgFilters button {
-  background: #f1f5f9;
+  background: #0c1a2b;
   flex: 0 0 auto;
   padding: 7px 10px;
 }
@@ -334,8 +334,8 @@
 .rowCard,
 .memberRow,
 .memberOption {
-  background: #fbfdff;
-  border: 1px solid #e2e8f0;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 14px;
 }
 
@@ -360,21 +360,21 @@
 .contactHeader strong,
 .rowCard strong,
 .memberRow strong {
-  color: #0f172a;
+  color: #dce9f7;
 }
 
 .contactHeader span,
 .rowCard span,
 .memberRow span {
-  color: #64748b;
+  color: #8299b4;
   font-size: 12px;
 }
 
 .avatar {
   align-items: center;
-  background: linear-gradient(145deg, #0ea5e9, #2563eb);
+  background: linear-gradient(145deg, #39d4ff, #39d4ff);
   border-radius: 13px;
-  color: #fff !important;
+  color: #0d1826 !important;
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 12px !important;
@@ -394,10 +394,10 @@
 
 .affiliationTags > span {
   align-items: center;
-  background: #eef6ff;
-  border: 1px solid #dbeafe;
+  background: #0e2036;
+  border: 1px solid #0e2438;
   border-radius: 999px;
-  color: #1e3a8a;
+  color: #39d4ff;
   display: inline-flex;
   font-size: 11px;
   gap: 5px;
@@ -414,7 +414,7 @@
 
 .field > span,
 .compactField > span {
-  color: #475569;
+  color: #8299b4;
   font-size: 12px;
   font-weight: 760;
 }
@@ -424,8 +424,8 @@
 .compactField select,
 .requestNote,
 .settingGrid select {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 9px;
   padding: 0 10px;
   width: 100%;
@@ -433,7 +433,7 @@
 
 .compactField { min-width: min(310px, 100%); }
 .compactField select { min-height: 34px; }
-.compactField small { color: #b45309; font-size: 11px; }
+.compactField small { color: #ffb13b; font-size: 11px; }
 
 .requestNote {
   font-size: 12px;
@@ -442,9 +442,9 @@
 
 .empty {
   align-items: center;
-  border: 1px dashed #cbd5e1;
+  border: 1px dashed #24384f;
   border-radius: 13px;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   font-size: 13px;
   justify-content: center;
@@ -483,7 +483,7 @@
 }
 
 .rowCard p {
-  color: #475569;
+  color: #8299b4;
   font-size: 12px;
   margin: 5px 0 0;
 }
@@ -508,10 +508,10 @@
 
 .conversationList > button {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 11px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -523,9 +523,9 @@
 
 .conversationList > button > span {
   align-items: center;
-  background: #e0f2fe;
+  background: #0e2438;
   border-radius: 9px;
-  color: #0369a1;
+  color: #39d4ff;
   display: inline-flex;
   height: 34px;
   justify-content: center;
@@ -533,8 +533,8 @@
 }
 
 .conversationList > button > div { display: grid; gap: 2px; }
-.conversationList small { color: #64748b; }
-.conversationList .selectedConversation { border-color: #38bdf8; background: #f0f9ff; }
+.conversationList small { color: #8299b4; }
+.conversationList .selectedConversation { border-color: #39d4ff; background: #0e2036; }
 
 .groupForm,
 .groupControls,
@@ -557,15 +557,15 @@
 .memberOption .compactField { margin-top: 8px; }
 
 .detailPanel { min-height: 560px; }
-.detailHeading { border-bottom: 1px solid #e2e8f0; padding-bottom: 15px; }
-.detailHeading > div > span { color: #0369a1; font-size: 11px; font-weight: 800; }
+.detailHeading { border-bottom: 1px solid #1c2f47; padding-bottom: 15px; }
+.detailHeading > div > span { color: #39d4ff; font-size: 11px; font-weight: 800; }
 .detailHeading h3 { font-size: 23px; margin-top: 3px; }
 .detailHeading p { font-family: ui-monospace, monospace; font-size: 11px; }
 
 .settingsSection,
 .membersSection,
 .groupControls {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #1c2f47;
   border-radius: 14px;
   padding: 15px;
 }
@@ -573,7 +573,7 @@
 .settingsSection h4,
 .membersSection h4 {
   align-items: center;
-  color: #0f172a;
+  color: #dce9f7;
   display: flex;
   gap: 7px;
   margin: 0 0 12px;
@@ -587,9 +587,9 @@
 
 .settingGrid label {
   align-items: center;
-  background: #f8fafc;
+  background: #0a1524;
   border-radius: 9px;
-  color: #334155;
+  color: #b3c6dc;
   display: flex;
   font-size: 13px;
   gap: 7px;
@@ -601,21 +601,21 @@
 .settingGrid label:last-child span { font-size: 11px; font-weight: 700; }
 
 .sectionHeading h4 { margin-bottom: 0; }
-.sectionHeading > span { color: #64748b; font-size: 12px; }
+.sectionHeading > span { color: #8299b4; font-size: 12px; }
 
 .inviteControl { display: grid; gap: 9px; }
 
 .destructiveActions {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #1c2f47;
   justify-content: flex-end;
   padding-top: 14px;
 }
 
 .readOnlyFooter {
   align-items: center;
-  background: #f8fafc;
+  background: #0a1524;
   border-radius: 10px;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   font-size: 12px;
   gap: 8px;
@@ -628,7 +628,7 @@
 }
 
 .chatPanel {
-  border: 1px solid #dbe3ee;
+  border: 1px solid #1c2f47;
   border-radius: 16px;
   display: grid;
   overflow: hidden;
@@ -636,8 +636,8 @@
 
 .chatHeading {
   align-items: center;
-  background: linear-gradient(135deg, #f8fbff, #eff8ff);
-  border-bottom: 1px solid #dbe3ee;
+  background: linear-gradient(135deg, #0a1524, #0e2036);
+  border-bottom: 1px solid #1c2f47;
   display: flex;
   gap: 14px;
   justify-content: space-between;
@@ -645,7 +645,7 @@
 }
 
 .chatHeading > div:first-child > span {
-  color: #0369a1;
+  color: #39d4ff;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -669,10 +669,10 @@
 
 .chatRuntimeState > span {
   align-items: center;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
+  background: #0b1f18;
+  border: 1px solid #2f7a52;
   border-radius: 999px;
-  color: #047857;
+  color: #4dffa1;
   display: inline-flex;
   font-size: 11px;
   font-weight: 750;
@@ -682,27 +682,27 @@
 
 .chatRuntimeState > span[data-mode="polling"],
 .chatRuntimeState > span[data-mode="connecting"] {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
+  background: #0e2036;
+  border-color: #2a5573;
+  color: #39d4ff;
 }
 
 .chatRuntimeState > span[data-mode="offline"] {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: #240d12;
+  border-color: #4a2230;
+  color: #ff6b8a;
 }
 
 .chatRuntimeState strong {
-  color: #b45309;
+  color: #ffb13b;
   font-size: 11px;
 }
 
 .messageHistory {
   align-content: start;
   background:
-    linear-gradient(rgb(248 250 252 / 94%), rgb(248 250 252 / 94%)),
-    radial-gradient(circle at 20% 20%, #bae6fd 0 1px, transparent 1px);
+    linear-gradient(rgb(10 21 36 / 94%), rgb(10 21 36 / 94%)),
+    radial-gradient(circle at 20% 20%, #2a5573 0 1px, transparent 1px);
   background-size: auto, 18px 18px;
   display: grid;
   gap: 10px;
@@ -714,7 +714,7 @@
 
 .chatEmpty {
   align-items: center;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   font-size: 13px;
   justify-content: center;
@@ -724,10 +724,10 @@
 
 .loadOlderButton {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 999px;
-  color: #475569;
+  color: #8299b4;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -751,27 +751,27 @@
 }
 
 .ownMessage {
-  background: #dff4ff;
-  border-color: #bae6fd;
+  background: #0e2438;
+  border-color: #2a5573;
   border-bottom-right-radius: 4px;
   justify-self: end;
 }
 
 .peerMessage {
-  background: #fff;
-  border-color: #e2e8f0;
+  background: #0d1826;
+  border-color: #1c2f47;
   border-bottom-left-radius: 4px;
   justify-self: start;
 }
 
 .peerMessage > strong {
-  color: #0369a1;
+  color: #39d4ff;
   font-size: 11px;
 }
 
 .ownMessage p,
 .peerMessage p {
-  color: #0f172a;
+  color: #dce9f7;
   font-size: 14px;
   line-height: 1.55;
   margin: 0;
@@ -787,7 +787,7 @@
 
 .messageImageFrame {
   align-items: center;
-  background: rgb(15 23 42 / 7%);
+  background: rgb(120 200 255 / 8%);
   border-radius: 10px;
   display: flex;
   justify-content: center;
@@ -806,7 +806,7 @@
 
 .messageImageFrame > span {
   align-items: center;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   font-size: 11px;
   gap: 7px;
@@ -822,7 +822,7 @@
 }
 
 .messageAssetMeta > span {
-  color: #334155;
+  color: #b3c6dc;
   font-size: 11px;
   max-width: 250px;
   overflow: hidden;
@@ -832,12 +832,12 @@
 
 .messageAssetMeta small,
 .assetInlineError {
-  color: #64748b;
+  color: #8299b4;
   font-size: 10px;
 }
 
 .assetInlineError {
-  color: #b45309;
+  color: #ffb13b;
   overflow-wrap: anywhere;
 }
 
@@ -850,10 +850,10 @@
 
 .messageAssetActions button {
   align-items: center;
-  background: rgb(255 255 255 / 78%);
-  border: 1px solid #cbd5e1;
+  background: rgb(13 24 38 / 82%);
+  border: 1px solid #24384f;
   border-radius: 7px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -866,8 +866,8 @@
 
 .fileAttachment {
   align-items: center;
-  background: rgb(255 255 255 / 72%);
-  border: 1px solid rgb(148 163 184 / 45%);
+  background: rgb(13 24 38 / 78%);
+  border: 1px solid rgb(120 200 255 / 22%);
   border-radius: 10px;
   display: flex;
   gap: 9px;
@@ -875,13 +875,13 @@
 }
 
 .fileAttachment > div { display: grid; gap: 3px; min-width: 0; }
-.fileAttachment strong { color: #0f172a; font-size: 12px; overflow-wrap: anywhere; }
-.fileAttachment span { color: #64748b; font-size: 10px; }
+.fileAttachment strong { color: #dce9f7; font-size: 12px; overflow-wrap: anywhere; }
+.fileAttachment span { color: #8299b4; font-size: 10px; }
 
 .ownMessage footer,
 .peerMessage footer {
   align-items: center;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   font-size: 10px;
   gap: 6px;
@@ -900,21 +900,21 @@
 }
 
 .chatRuntimeError {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: #240d12;
+  border-color: #4a2230;
+  color: #ff6b8a;
 }
 
 .chatRuntimeWarning {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
+  background: #241a05;
+  border-color: #4a3410;
+  color: #ffb13b;
 }
 
 .chatRuntimeError button {
   align-items: center;
-  background: #fff;
-  border: 1px solid #fecaca;
+  background: #0d1826;
+  border: 1px solid #4a2230;
   border-radius: 8px;
   color: inherit;
   cursor: pointer;
@@ -926,7 +926,7 @@
 }
 
 .composer {
-  border-top: 1px solid #dbe3ee;
+  border-top: 1px solid #1c2f47;
   display: grid;
   gap: 9px;
   padding: 13px;
@@ -934,7 +934,7 @@
 
 .quickEmoji {
   align-items: center;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   gap: 5px;
   position: relative;
@@ -943,10 +943,10 @@
 
 .emojiTrigger {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
+  background: #0a1524;
+  border: 1px solid #24384f;
   border-radius: 8px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -958,16 +958,16 @@
 
 .emojiTrigger:hover:not(:disabled),
 .emojiTrigger[aria-expanded="true"] {
-  background: #e0f2fe;
-  border-color: #7dd3fc;
-  color: #075985;
+  background: #0e2438;
+  border-color: #39d4ff;
+  color: #39d4ff;
 }
 
 .emojiTrigger:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .emojiPicker {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 13px;
   bottom: calc(100% + 8px);
   box-shadow: 0 16px 38px rgb(15 23 42 / 22%);
@@ -981,7 +981,7 @@
 }
 
 .emojiCategories {
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #1c2f47;
   display: flex;
   gap: 4px;
   overflow-x: auto;
@@ -992,7 +992,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 7px;
-  color: #64748b;
+  color: #8299b4;
   cursor: pointer;
   flex: 1;
   font: inherit;
@@ -1003,9 +1003,9 @@
 }
 
 .emojiCategories button[aria-selected="true"] {
-  background: #e0f2fe;
-  border-color: #bae6fd;
-  color: #075985;
+  background: #0e2438;
+  border-color: #2a5573;
+  color: #39d4ff;
 }
 
 .emojiGrid {
@@ -1030,8 +1030,8 @@
 
 .emojiGrid button:hover,
 .emojiGrid button:focus-visible {
-  background: #f1f5f9;
-  border-color: #e2e8f0;
+  background: #0c1a2b;
+  border-color: #1c2f47;
 }
 
 .assetPickerRow {
@@ -1052,10 +1052,10 @@
 
 .assetPickerRow > button {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
+  background: #0a1524;
+  border: 1px solid #24384f;
   border-radius: 8px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -1066,12 +1066,12 @@
 }
 
 .assetPickerRow > button:disabled { cursor: not-allowed; opacity: 0.45; }
-.assetPickerRow > span { color: #64748b; font-size: 10px; }
+.assetPickerRow > span { color: #8299b4; font-size: 10px; }
 
 .selectedAssetCard {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
+  background: #0a1524;
+  border: 1px solid #24384f;
   border-radius: 11px;
   display: grid;
   gap: 10px;
@@ -1087,22 +1087,22 @@
 }
 
 .selectedAssetCard > svg:not(.assetSpinner) {
-  color: #0369a1;
+  color: #39d4ff;
   justify-self: center;
 }
 
 .selectedAssetCard > div { display: grid; gap: 3px; min-width: 0; }
-.selectedAssetCard strong { color: #0f172a; font-size: 12px; overflow-wrap: anywhere; }
-.selectedAssetCard span { color: #475569; font-size: 10px; }
-.selectedAssetCard small { color: #64748b; font-size: 9px; overflow-wrap: anywhere; }
+.selectedAssetCard strong { color: #dce9f7; font-size: 12px; overflow-wrap: anywhere; }
+.selectedAssetCard span { color: #8299b4; font-size: 10px; }
+.selectedAssetCard small { color: #8299b4; font-size: 9px; overflow-wrap: anywhere; }
 .selectedAssetCard progress { height: 6px; max-width: 320px; width: 100%; }
 
 .selectedAssetCard > button {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 8px;
-  color: #64748b;
+  color: #8299b4;
   cursor: pointer;
   display: inline-flex;
   height: 30px;
@@ -1113,7 +1113,7 @@
 
 .selectedAssetCard > button:disabled { cursor: not-allowed; opacity: 0.45; }
 
-.assetSpinner { animation: c19AssetSpin 1s linear infinite; color: #0284c7; }
+.assetSpinner { animation: c19AssetSpin 1s linear infinite; color: #1a90c4; }
 
 @keyframes c19AssetSpin {
   to { transform: rotate(360deg); }
@@ -1124,10 +1124,10 @@
 }
 
 .composer textarea {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 11px;
-  color: #0f172a;
+  color: #dce9f7;
   font: inherit;
   line-height: 1.5;
   min-height: 76px;
@@ -1137,8 +1137,8 @@
   width: 100%;
 }
 
-.composer textarea:focus { border-color: #38bdf8; box-shadow: 0 0 0 3px rgb(56 189 248 / 14%); }
-.composer textarea:disabled { background: #f8fafc; cursor: not-allowed; }
+.composer textarea:focus { border-color: #39d4ff; box-shadow: 0 0 0 3px rgb(57 212 255 / 16%); }
+.composer textarea:disabled { background: #0a1524; cursor: not-allowed; }
 
 .composerFooter {
   align-items: center;
@@ -1148,16 +1148,16 @@
 }
 
 .composerFooter > span {
-  color: #64748b;
+  color: #8299b4;
   font-size: 10px;
 }
 
 .sendButton {
   align-items: center;
-  background: #0f172a;
-  border: 1px solid #0f172a;
+  background: #dce9f7;
+  border: 1px solid #dce9f7;
   border-radius: 9px;
-  color: #fff;
+  color: #0d1826;
   cursor: pointer;
   display: inline-flex;
   flex: 0 0 auto;
@@ -1173,8 +1173,8 @@
 
 .pendingRetry {
   align-items: center;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  background: #241a05;
+  border: 1px solid #4a3410;
   border-radius: 11px;
   display: flex;
   gap: 12px;
@@ -1183,15 +1183,15 @@
 }
 
 .pendingRetry > div { display: grid; gap: 2px; }
-.pendingRetry strong { color: #9a3412; font-size: 12px; }
-.pendingRetry span { color: #7c2d12; font-size: 11px; }
-.pendingRetry small { color: #9a3412; font-size: 10px; }
+.pendingRetry strong { color: #ffb13b; font-size: 12px; }
+.pendingRetry span { color: #ffb13b; font-size: 11px; }
+.pendingRetry small { color: #ffb13b; font-size: 10px; }
 
 .pendingRetry > button {
-  background: #fff;
-  border: 1px solid #fdba74;
+  background: #0d1826;
+  border: 1px solid #ffb13b;
   border-radius: 8px;
-  color: #9a3412;
+  color: #ffb13b;
   cursor: pointer;
   flex: 0 0 auto;
   font: inherit;
@@ -1242,8 +1242,8 @@
    ══════════════════════════════════════════════════════════════════ */
 
 .appShell {
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-line, #dbe3ee);
+  background: var(--color-surface, #0d1826);
+  border: 1px solid var(--color-line, #1c2f47);
   border-radius: 18px;
   box-shadow: 0 14px 36px rgb(15 23 42 / 5%);
   display: flex;
@@ -1253,8 +1253,8 @@
 
 .sideRail {
   align-items: center;
-  background: linear-gradient(180deg, #f8fbff, #eef6ff);
-  border-right: 1px solid #dbe3ee;
+  background: linear-gradient(180deg, #0a1524, #0e2036);
+  border-right: 1px solid #1c2f47;
   display: flex;
   flex: none;
   flex-direction: column;
@@ -1271,7 +1271,7 @@
   background: transparent;
   border: 1px solid transparent;
   border-radius: 12px;
-  color: #475569;
+  color: #8299b4;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -1292,14 +1292,14 @@
 .railButton:hover,
 .railRefresh:hover:not(:disabled),
 .railProfile:hover {
-  background: rgb(224 242 254 / 66%);
-  color: #0f172a;
+  background: rgb(14 36 56 / 72%);
+  color: #dce9f7;
 }
 
 .railButtonActive {
-  background: #e0f2fe;
-  border-color: #bae6fd;
-  color: #075985;
+  background: #0e2438;
+  border-color: #2a5573;
+  color: #39d4ff;
 }
 
 .railIconWrap {
@@ -1308,9 +1308,9 @@
 }
 
 .railBadge {
-  background: #ef4444;
+  background: #ff6b8a;
   border-radius: 999px;
-  color: #fff;
+  color: #0d1826;
   font-size: 10px;
   font-style: normal;
   font-weight: 800;
@@ -1337,10 +1337,10 @@
 
 .railProfileAvatar {
   align-items: center;
-  background: linear-gradient(135deg, #38bdf8, #0284c7);
-  border: 1px solid #bae6fd;
+  background: linear-gradient(135deg, #39d4ff, #1a90c4);
+  border: 1px solid #2a5573;
   border-radius: 10px;
-  color: #fff;
+  color: #0d1826;
   display: inline-flex;
   font-size: 11px;
   font-weight: 800;
@@ -1370,8 +1370,8 @@
 }
 
 .sessionRail {
-  background: #fbfdff;
-  border-right: 1px solid #dbe3ee;
+  background: #0a1524;
+  border-right: 1px solid #1c2f47;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1380,7 +1380,7 @@
 
 .sessionRailHead {
   align-items: center;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #1c2f47;
   display: flex;
   gap: 8px;
   padding: 12px;
@@ -1388,10 +1388,10 @@
 
 .sessionSearch {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 10px;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   flex: 1;
   gap: 6px;
@@ -1402,7 +1402,7 @@
 .sessionSearch input {
   background: transparent;
   border: none;
-  color: #0f172a;
+  color: #dce9f7;
   flex: 1;
   font: inherit;
   font-size: 13px;
@@ -1412,10 +1412,10 @@
 
 .newGroupButton {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 10px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   flex: none;
@@ -1425,9 +1425,9 @@
 }
 
 .newGroupButton:hover {
-  background: #e0f2fe;
-  border-color: #bae6fd;
-  color: #075985;
+  background: #0e2438;
+  border-color: #2a5573;
+  color: #39d4ff;
 }
 
 .sessionList {
@@ -1442,7 +1442,7 @@
   align-items: center;
   background: transparent;
   border: none;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid #0c1a2b;
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -1453,20 +1453,20 @@
 }
 
 .sessionRow:hover {
-  background: #f1f8ff;
+  background: #0c1a2b;
 }
 
 .sessionRowActive {
-  background: #e0f2fe;
+  background: #0e2438;
 }
 
 .sessionAvatar,
 .sessionGroupAvatar,
 .contactAvatar {
   align-items: center;
-  background: linear-gradient(135deg, #38bdf8, #0284c7);
+  background: linear-gradient(135deg, #39d4ff, #1a90c4);
   border-radius: 11px;
-  color: #fff;
+  color: #0d1826;
   display: inline-flex;
   flex: none;
   font-size: 13px;
@@ -1488,7 +1488,7 @@
 }
 
 .sessionGroupAvatar {
-  background: linear-gradient(135deg, #a5b4fc, #6366f1);
+  background: linear-gradient(135deg, #5aa0d8, #5aa0d8);
 }
 
 .sessionMeta {
@@ -1506,7 +1506,7 @@
 }
 
 .sessionTopLine strong {
-  color: #0f172a;
+  color: #dce9f7;
   font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1514,7 +1514,7 @@
 }
 
 .sessionTopLine time {
-  color: #94a3b8;
+  color: #6b83a0;
   flex: none;
   font-size: 11px;
 }
@@ -1528,7 +1528,7 @@
 }
 
 .sessionBottomLine small {
-  color: #64748b;
+  color: #8299b4;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1537,7 +1537,7 @@
 
 .sessionFlags {
   align-items: center;
-  color: #94a3b8;
+  color: #6b83a0;
   display: inline-flex;
   flex: none;
   gap: 5px;
@@ -1546,9 +1546,9 @@
 .unreadBadge,
 .unreadBadgeMuted,
 .entryBadge {
-  background: #ef4444;
+  background: #ff6b8a;
   border-radius: 999px;
-  color: #fff;
+  color: #0d1826;
   font-size: 10px;
   font-style: normal;
   font-weight: 800;
@@ -1559,13 +1559,13 @@
 }
 
 .unreadBadgeMuted {
-  background: #94a3b8;
+  background: #6b83a0;
 }
 
 .entryBadgePlain {
-  background: #e2e8f0;
+  background: #1c2f47;
   border-radius: 999px;
-  color: #475569;
+  color: #8299b4;
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
@@ -1584,7 +1584,7 @@
 
 .chatStageEmpty {
   align-items: center;
-  color: #94a3b8;
+  color: #6b83a0;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1617,10 +1617,10 @@
 
 .stageMenuButton {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 9px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   height: 30px;
@@ -1629,9 +1629,9 @@
 }
 
 .stageMenuButton:hover {
-  background: #e0f2fe;
-  border-color: #bae6fd;
-  color: #075985;
+  background: #0e2438;
+  border-color: #2a5573;
+  color: #39d4ff;
 }
 
 /* 连接状态胶囊移到标题下方后重定义（覆盖旧的 eyebrow 样式） */
@@ -1643,10 +1643,10 @@
 
 .chatHeading > div:first-child > span {
   align-items: center;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
+  background: #0b1f18;
+  border: 1px solid #2f7a52;
   border-radius: 999px;
-  color: #047857;
+  color: #4dffa1;
   display: inline-flex;
   font-size: 11px;
   font-weight: 750;
@@ -1659,15 +1659,15 @@
 
 .chatHeading > div:first-child > span[data-mode="polling"],
 .chatHeading > div:first-child > span[data-mode="connecting"] {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
+  background: #0e2036;
+  border-color: #2a5573;
+  color: #39d4ff;
 }
 
 .chatHeading > div:first-child > span[data-mode="offline"] {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: #240d12;
+  border-color: #4a2230;
+  color: #ff6b8a;
 }
 
 .chatHeading h3 {
@@ -1687,8 +1687,8 @@
 /* ── 会话信息抽屉 ────────────────────────────────────────── */
 
 .infoDrawer {
-  background: #fff;
-  border-left: 1px solid #dbe3ee;
+  background: #0d1826;
+  border-left: 1px solid #1c2f47;
   bottom: 0;
   box-shadow: -18px 0 36px rgb(15 23 42 / 8%);
   display: flex;
@@ -1705,8 +1705,8 @@
 
 .drawerPeerCard {
   align-items: center;
-  background: #f8fbff;
-  border: 1px solid #dbe3ee;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 12px;
   cursor: pointer;
   display: flex;
@@ -1717,17 +1717,17 @@
 }
 
 .drawerPeerCard:hover {
-  background: #e0f2fe;
+  background: #0e2438;
 }
 
 .drawerPeerCard strong {
-  color: #0f172a;
+  color: #dce9f7;
   display: block;
   font-size: 14px;
 }
 
 .drawerPeerCard small {
-  color: #0369a1;
+  color: #39d4ff;
   font-size: 12px;
 }
 
@@ -1752,14 +1752,14 @@
 
 .memberNameBtn strong {
   align-items: center;
-  color: #0f172a;
+  color: #dce9f7;
   display: flex;
   font-size: 13px;
   gap: 5px;
 }
 
 .memberNameBtn small {
-  color: #94a3b8;
+  color: #6b83a0;
   font-size: 11px;
 }
 
@@ -1782,7 +1782,7 @@
 }
 
 .contactsCount {
-  color: #94a3b8;
+  color: #6b83a0;
   flex: none;
   font-size: 12px;
 }
@@ -1794,10 +1794,10 @@
 
 .contactEntryRow {
   align-items: center;
-  background: #f8fbff;
-  border: 1px solid #e2e8f0;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 12px;
-  color: #0f172a;
+  color: #dce9f7;
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -1809,8 +1809,8 @@
 }
 
 .contactEntryRow:hover {
-  background: #e0f2fe;
-  border-color: #bae6fd;
+  background: #0e2438;
+  border-color: #2a5573;
 }
 
 .contactEntryRow em {
@@ -1820,9 +1820,9 @@
 .entryIconNew,
 .entryIconBlock {
   align-items: center;
-  background: linear-gradient(135deg, #34d399, #059669);
+  background: linear-gradient(135deg, #4dffa1, #4dffa1);
   border-radius: 10px;
-  color: #fff;
+  color: #0d1826;
   display: inline-flex;
   flex: none;
   height: 34px;
@@ -1831,7 +1831,7 @@
 }
 
 .entryIconBlock {
-  background: linear-gradient(135deg, #94a3b8, #475569);
+  background: linear-gradient(135deg, #6b83a0, #8299b4);
 }
 
 .contactList {
@@ -1843,7 +1843,7 @@
   align-items: center;
   background: transparent;
   border: none;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid #0c1a2b;
   cursor: pointer;
   display: flex;
   font: inherit;
@@ -1854,7 +1854,7 @@
 }
 
 .contactRowBtn:hover {
-  background: #f1f8ff;
+  background: #0c1a2b;
 }
 
 .contactRowMeta {
@@ -1865,14 +1865,14 @@
 
 .contactRowMeta strong {
   align-items: center;
-  color: #0f172a;
+  color: #dce9f7;
   display: flex;
   font-size: 14px;
   gap: 6px;
 }
 
 .contactRowMeta small {
-  color: #94a3b8;
+  color: #6b83a0;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1895,7 +1895,7 @@
 
 .subviewHead h3 {
   align-items: center;
-  color: #0f172a;
+  color: #dce9f7;
   display: flex;
   gap: 7px;
   margin: 0;
@@ -1903,10 +1903,10 @@
 
 .backBtn {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 9px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   flex: none;
@@ -1916,7 +1916,7 @@
 }
 
 .backBtn:hover {
-  background: #e0f2fe;
+  background: #0e2438;
 }
 
 /* ── 名片弹层 ───────────────────────────────────────────── */
@@ -1924,7 +1924,7 @@
 .profileMask {
   align-items: center;
   backdrop-filter: blur(3px);
-  background: rgb(15 23 42 / 42%);
+  background: rgb(2 6 23 / 55%);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -1935,8 +1935,8 @@
 
 .profileCardModal,
 .groupComposerCard {
-  background: #fff;
-  border: 1px solid #dbe3ee;
+  background: #0d1826;
+  border: 1px solid #1c2f47;
   border-radius: 18px;
   box-shadow: 0 28px 70px rgb(15 23 42 / 26%);
   display: grid;
@@ -1954,10 +1954,10 @@
 
 .profileClose {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 9px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   height: 30px;
@@ -1970,7 +1970,7 @@
 }
 
 .profileClose:hover {
-  background: #e0f2fe;
+  background: #0e2438;
 }
 
 .profileCardHead {
@@ -1981,9 +1981,9 @@
 
 .profileCardAvatar {
   align-items: center;
-  background: linear-gradient(135deg, #38bdf8, #0284c7);
+  background: linear-gradient(135deg, #39d4ff, #1a90c4);
   border-radius: 15px;
-  color: #fff;
+  color: #0d1826;
   display: inline-flex;
   flex: none;
   font-size: 18px;
@@ -1995,8 +1995,8 @@
 }
 
 .avatarEditor {
-  background: #f8fbff;
-  border: 1px solid #dbe3ee;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 12px;
   display: grid;
   gap: 8px;
@@ -2011,17 +2011,17 @@
 
 .avatarEditor label > span {
   align-items: center;
-  color: #334155;
+  color: #b3c6dc;
   display: flex;
   font-size: 13px;
   font-weight: 800;
 }
 
 .avatarEditor input {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 9px;
-  color: #0f172a;
+  color: #dce9f7;
   font: inherit;
   font-size: 12px;
   min-width: 0;
@@ -2030,7 +2030,7 @@
 }
 
 .avatarEditor > small {
-  color: #64748b;
+  color: #8299b4;
   font-size: 10px;
   line-height: 1.45;
 }
@@ -2041,10 +2041,10 @@
 }
 
 .avatarEditorActions button {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 9px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   flex: 1;
   font: inherit;
@@ -2054,9 +2054,9 @@
 }
 
 .avatarEditorActions button:first-child {
-  background: #0f172a;
-  border-color: #0f172a;
-  color: #fff;
+  background: #dce9f7;
+  border-color: #dce9f7;
+  color: #0d1826;
 }
 
 .avatarEditorActions button:disabled {
@@ -2065,18 +2065,18 @@
 }
 
 .avatarEditor > p {
-  color: #b91c1c;
+  color: #ff6b8a;
   font-size: 11px;
   margin: 0;
 }
 
 .avatarEditor > p[data-tone="success"] {
-  color: #047857;
+  color: #4dffa1;
 }
 
 .profileCardHead strong {
   align-items: center;
-  color: #0f172a;
+  color: #dce9f7;
   display: flex;
   flex-wrap: wrap;
   font-size: 19px;
@@ -2084,7 +2084,7 @@
 }
 
 .profileCardHead > div > span {
-  color: #64748b;
+  color: #8299b4;
   display: block;
   font-size: 13px;
   margin-top: 3px;
@@ -2092,10 +2092,10 @@
 
 .profileSelfTag,
 .profileFriendTag {
-  background: #e0f2fe;
-  border: 1px solid #bae6fd;
+  background: #0e2438;
+  border: 1px solid #2a5573;
   border-radius: 999px;
-  color: #075985;
+  color: #39d4ff;
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
@@ -2103,9 +2103,9 @@
 }
 
 .profileFriendTag {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #047857;
+  background: #0b1f18;
+  border-color: #2f7a52;
+  color: #4dffa1;
 }
 
 .profileOrgList {
@@ -2115,10 +2115,10 @@
 
 .profileOrgRow {
   align-items: center;
-  background: #f8fbff;
-  border: 1px solid #e2e8f0;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 10px;
-  color: #334155;
+  color: #b3c6dc;
   display: flex;
   font-size: 13px;
   font-weight: 700;
@@ -2127,16 +2127,16 @@
 }
 
 .profileOrgRow small {
-  background: #e2e8f0;
+  background: #1c2f47;
   border-radius: 999px;
-  color: #475569;
+  color: #8299b4;
   font-size: 11px;
   margin-left: auto;
   padding: 2px 8px;
 }
 
 .profileOrgEmpty {
-  color: #94a3b8;
+  color: #6b83a0;
   font-size: 13px;
 }
 
@@ -2147,10 +2147,10 @@
 
 .profilePrimaryAction {
   align-items: center;
-  background: #0f172a;
-  border: 1px solid #0f172a;
+  background: #dce9f7;
+  border: 1px solid #dce9f7;
   border-radius: 12px;
-  color: #fff;
+  color: #0d1826;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -2163,7 +2163,7 @@
 }
 
 .profilePrimaryAction:hover:not(:disabled) {
-  background: #1e293b;
+  background: #c2d4e8;
 }
 
 .profilePrimaryAction:disabled {
@@ -2179,10 +2179,10 @@
 
 .profileSecondaryActions button {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 10px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   flex: 1;
@@ -2206,7 +2206,7 @@
 }
 
 .profileRequestForm input {
-  border: 1px solid #cbd5e1;
+  border: 1px solid #24384f;
   border-radius: 10px;
   flex: 1;
   font: inherit;
@@ -2216,10 +2216,10 @@
 }
 
 .profileRequestForm button {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 10px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   flex: none;
   font: inherit;
@@ -2236,7 +2236,7 @@
 /* ── 发起群聊 ───────────────────────────────────────────── */
 
 .groupMemberList {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #1c2f47;
   border-radius: 12px;
   display: flex;
   flex-direction: column;
@@ -2247,7 +2247,7 @@
 .memberCheckRow,
 .memberCheckRowActive {
   align-items: center;
-  border-bottom: 1px solid #eef2f7;
+  border-bottom: 1px solid #0c1a2b;
   cursor: pointer;
   display: flex;
   gap: 10px;
@@ -2255,7 +2255,7 @@
 }
 
 .memberCheckRowActive {
-  background: #e0f2fe;
+  background: #0e2438;
 }
 
 .memberCheckRow .contactAvatar,
@@ -2285,7 +2285,7 @@
   }
 
   .sideRail {
-    border-bottom: 1px solid #dbe3ee;
+    border-bottom: 1px solid #1c2f47;
     border-right: none;
     flex-direction: row;
     justify-content: center;
@@ -2305,7 +2305,7 @@
   }
 
   .sessionRail {
-    border-bottom: 1px solid #dbe3ee;
+    border-bottom: 1px solid #1c2f47;
     border-right: none;
     max-height: 38vh;
     width: 100%;
@@ -2385,18 +2385,18 @@
 }
 
 .confirmCardConfirm {
-  background: #2f9e63;
-  color: #fff;
+  background: #4dffa1;
+  color: #0d1826;
 }
 
 .confirmCardConfirm:hover:not(:disabled) {
-  background: #3cb877;
+  background: #4dffa1;
 }
 
 .confirmCardCancel {
   background: transparent;
   border-color: rgba(255, 143, 143, 0.5);
-  color: #ff8f8f;
+  color: #ff8fa3;
 }
 
 .confirmCardConfirm:disabled,

@@ -2543,6 +2543,25 @@ function withApiLayer(layer: BackendApiLayer, requestedPath: string) {
   return `${apiLayerPrefix(layer)}/${requestedPath}`;
 }
 
+function isAllowedProfilePath(method: string, path: string[]) {
+  if (path[0] !== "profile") {
+    return false;
+  }
+  // GET / PATCH /profile/me  — read or update own nickname / theme
+  if (path.length === 2 && path[1] === "me") {
+    return method === "GET" || method === "PATCH";
+  }
+  // POST /profile/me/avatar  — upload own avatar (multipart)
+  if (path.length === 3 && path[1] === "me" && path[2] === "avatar") {
+    return method === "POST";
+  }
+  // GET /profile/avatar/{user_id}  — serve any member's avatar image
+  if (path.length === 3 && path[1] === "avatar") {
+    return method === "GET";
+  }
+  return false;
+}
+
 export function getBackendApiPath(method: string, path: string[]) {
   const requestedPath = path.join("/");
 
@@ -2582,6 +2601,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedRwPath(method, path) ||
     isAllowedArcadePath(method, path) ||
     isAllowedNotificationsPath(method, path) ||
+    isAllowedProfilePath(method, path) ||
     isAllowedGeoPath(method, path) ||
     isAllowedSeoPath(method, path) ||
     isAllowedContentDeskPath(method, path) ||

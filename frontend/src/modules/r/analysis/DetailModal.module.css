@@ -95,7 +95,7 @@
   height: 76px;
   object-fit: contain;
   border-radius: 8px;
-  background: #fff;
+  background: #0d1826;
   border: 1px solid rgb(120 200 255 / 20%);
 }
 
@@ -157,7 +157,7 @@
   border: 1px solid rgb(120 200 255 / 18%);
   border-radius: 4px;
   padding: 3px 9px;
-  color: #9fb8cc;
+  color: #7d95ae;
   font-variant-numeric: tabular-nums;
 }
 
@@ -182,7 +182,7 @@
 .layerName {
   font-family: ui-monospace, monospace;
   font-size: 0.72rem;
-  color: #9fb8cc;
+  color: #7d95ae;
   letter-spacing: 0.06em;
 }
 
@@ -296,7 +296,7 @@
   border-radius: 999px;
   padding: 2px 10px;
   margin: 0 6px 6px 0;
-  color: #9fb8cc;
+  color: #7d95ae;
 }
 
 .kwChip[data-primary="true"] {
@@ -307,7 +307,7 @@
 .kwTitle {
   margin: 0 0 4px;
   font-size: 0.74rem;
-  color: #9fb8cc;
+  color: #7d95ae;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -419,7 +419,7 @@
   height: 56px;
   object-fit: cover;
   border-radius: 6px;
-  background: #fff;
+  background: #0d1826;
   flex-shrink: 0;
 }
 
@@ -470,7 +470,7 @@
 .expansionReason {
   margin: 3px 0 0;
   font-size: 0.68rem;
-  color: #9fb8cc;
+  color: #7d95ae;
   line-height: 1.5;
 }
 
@@ -484,7 +484,7 @@
 }
 
 .trendBadge[data-trend="declining"] {
-  color: #ff5f70;
+  color: #ff6b8a;
 }
 
 .trendBadge[data-trend="stable"] {
@@ -543,7 +543,7 @@
   padding: 8px 10px;
   font-size: 0.76rem;
   line-height: 1.55;
-  color: #ffd9a0;
+  color: #ffcf8a;
   border: 1px solid rgb(255 177 59 / 35%);
   border-radius: 6px;
   background: rgb(255 177 59 / 7%);
@@ -557,14 +557,14 @@
 .themeRow p {
   margin: 3px 0 0;
   font-size: 0.7rem;
-  color: #9fb8cc;
+  color: #7d95ae;
   line-height: 1.5;
 }
 
 .themeName {
   font-size: 0.74rem;
   font-weight: 700;
-  color: #ff9aa6;
+  color: #ff859c;
 }
 
 .reviewFold {
@@ -589,14 +589,14 @@
 .reviewQuote span {
   font-size: 0.66rem;
   font-weight: 700;
-  color: #ffb1ba;
+  color: #ff859c;
 }
 
 .reviewQuote p {
   margin: 3px 0 0;
   font-size: 0.7rem;
   line-height: 1.55;
-  color: #b9cde0;
+  color: #7d95ae;
 }
 
 /* ---- Google Ads 实测数据 ---- */
@@ -608,7 +608,7 @@
 }
 
 .gadsBig[data-hot="true"] {
-  color: #ff9d3b;
+  color: #ffb13b;
 }
 
 .gadsCards {
@@ -664,7 +664,7 @@
 .gadsHint {
   margin: 8px 0 0;
   font-size: 0.7rem;
-  color: #ffd9a0;
+  color: #ffcf8a;
   line-height: 1.5;
 }
 
@@ -696,7 +696,7 @@
 .gadsTable td {
   padding: 6px 10px;
   border-bottom: 1px dashed rgb(120 200 255 / 8%);
-  color: #b9cde0;
+  color: #7d95ae;
   font-variant-numeric: tabular-nums;
 }
 

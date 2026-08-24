@@ -5341,7 +5341,7 @@ textarea:focus-visible {
    and dark text token is flipped here so contrast is guaranteed.
    Visual only; honors prefers-reduced-motion. No heavy blur on cards.
    ================================================================= */
-@media (prefers-color-scheme: dark) {
+@media all { /* H6 QA2026-08-22: 强制全站深色cockpit(原prefers-color-scheme,导致浅OS半明半暗) */
   :root {
     color-scheme: dark;
     --color-canvas: #0b1020;
@@ -7987,6 +7987,266 @@ textarea:focus-visible {
   .cs-drawer-body { padding-right: 14px; padding-left: 14px; }
   .cs-detail-drawer { width: 100%; }
 }
+
+/* ==========================================================================
+   K 作图工作台（2026-08-04）
+   换路后整套作图操作收进浮窗：圈产品 → 工作原理 → 出图。
+   K 产品详情页只留一个入口按钮，页面反而变短。
+   ========================================================================== */
+
+.k-studio {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* 浮窗容器是 max-height:92vh + overflow:hidden，内容超出会被直接裁掉且滚
+     不动。这里**不依赖**从父级传下来的高度——父级用的是 max-height 而不是
+     height，这条链传不可靠（实测滚不动）。直接自己按视口约束，内容区自己滚。
+     min-height:0 不能省——flex 子项默认 min-height:auto，不给 0 的话内部的
+     overflow 根本不会生效。 */
+  flex: 1;
+  min-height: 0;
+  max-height: 86vh;
+  padding: 20px 22px 22px;
+}
+
+.k-studio-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  justify-content: space-between;
+  /* 浮窗的关闭按钮是 absolute 定位在右上角(34px 见方 + 14px 边距 = 占掉
+     右侧 48px)。.k-studio 自带 22px 内边距，这里再补出差额即可。 */
+  padding-right: 34px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border, #2a2f3a);
+}
+
+.k-studio-eyebrow {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.k-studio-head h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.k-studio-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.k-studio-steps button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 3px;
+}
+
+.k-studio-steps button:hover { border-color: rgba(159, 211, 86, 0.6); }
+
+.k-studio-steps button.is-on {
+  font-weight: 600;
+  color: #10131a;
+  background: #9fd356;
+  border-color: #9fd356;
+}
+
+.k-studio-steps button em {
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.k-studio-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  /* 双保险：即便父级高度没传下来，这条也保证内容区自己能滚 */
+  max-height: 70vh;
+  overflow-y: auto;
+  /* 滚动条别贴着内容 */
+  padding-right: 4px;
+}
+
+/* flex column + overflow 的经典坑：子项默认 flex-shrink:1，空间不够时
+   不会溢出、而是被压扁。画笔那块自带 overflow:hidden，被压扁的结果就是
+   底图被裁掉一半；同时因为内容被压到刚好放下，压根不产生溢出，滚动条也
+   不出现。必须禁止收缩，让内容真的超出去，滚动才有意义。 */
+.k-studio-body > * { flex-shrink: 0; }
+
+.k-studio-muted { margin: 0; font-size: 13.5px; opacity: 0.7; }
+
+.k-studio-error,
+.k-studio-notice,
+.k-studio-warn {
+  margin: 0;
+  padding: 10px 13px;
+  font-size: 13.5px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+
+.k-studio-error { color: #ffb4b4; background: rgba(229, 72, 77, 0.12); border-color: rgba(229, 72, 77, 0.4); }
+.k-studio-notice { color: #bfe89a; background: rgba(159, 211, 86, 0.12); border-color: rgba(159, 211, 86, 0.35); }
+.k-studio-warn { color: #f0cf8a; background: rgba(227, 169, 60, 0.12); border-color: rgba(227, 169, 60, 0.4); }
+
+/* 底图选择 */
+.k-studio-plates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 12px;
+}
+
+.k-studio-plate {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 3px;
+}
+
+.k-studio-plate.is-on { border-color: #9fd356; box-shadow: 0 0 0 1px #9fd356 inset; }
+.k-studio-plate img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+
+.k-studio-plate-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.k-studio-plate-meta em { font-style: normal; opacity: 0.6; }
+.k-studio-plate-meta em.is-done { color: #9fd356; opacity: 1; }
+
+.k-studio-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* 画笔 */
+.k-maskbrush {
+  overflow: hidden;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 3px;
+}
+
+.k-maskbrush-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #2a2f3a);
+}
+
+.k-maskbrush-bar .secondary-button.is-on {
+  font-weight: 600;
+  color: #10131a;
+  background: #9fd356;
+  border-color: #9fd356;
+}
+
+.k-maskbrush-size {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 12.5px;
+  opacity: 0.8;
+}
+
+.k-maskbrush-size input { width: 104px; accent-color: #9fd356; }
+
+.k-maskbrush-cov {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.k-maskbrush-cov.is-ok { color: #9fd356; opacity: 1; }
+
+.k-maskbrush-stage { display: flex; justify-content: center; padding: 14px; }
+
+.k-maskbrush-stage { align-items: flex-start; }
+
+.k-maskbrush-holder {
+  position: relative;
+  display: inline-block;   /* 贴合图片实际尺寸，canvas 才能精确覆盖 */
+  max-width: 100%;
+  line-height: 0;
+}
+
+/* 竖版底图很高（preview 就有 1280px），必须同时限宽和限高，
+   否则画笔区把浮窗撑爆。canvas 用 inset:0 跟着 img 的实际尺寸走。 */
+.k-maskbrush-holder img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(520px, 100%);
+  max-height: 44vh;
+}
+
+.k-maskbrush-holder canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.k-maskbrush-hint {
+  margin: 0;
+  padding: 11px 14px 13px;
+  font-size: 13px;
+  line-height: 1.65;
+  opacity: 0.75;
+  border-top: 1px solid var(--border, #2a2f3a);
+}
+
+.k-maskbrush-hint em { font-style: normal; opacity: 0.75; }
+
+@media (max-width: 620px) {
+  .k-studio-steps { width: 100%; }
+  .k-studio-steps button { flex: 1; justify-content: center; }
+}
+
+/* ── 数字员工标记 ────────────────────────────────────────────────
+   员工名单里一眼看出这一行不是人。跟 C19 通讯里的徽章同色系。 */
+.users-bot-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  background: #f5f3ff;
+  color: #5b21b6;
+  font-size: 11px;
+  font-weight: 800;
+  vertical-align: middle;
+}
+
 /* 用户管理:中文显示名 + 机器人图标(取代白底黑字徽章) */
 .users-name-cell {
   display: inline-flex;
@@ -8006,4 +8266,80 @@ textarea:focus-visible {
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   opacity: 0.55;
+}
+
+
+/* ============================================================
+   THEME · LIGHT LAYER (functional pages) — appended 2026-08-23
+   Additive: applies only when <html data-theme="light"> (set by ThemeProvider
+   for the 白天 / system-light choice). The forced-dark cockpit layer above still
+   governs the default and 黑夜. Cockpit (.cc-dash) and the login page carry their
+   own dark tokens, so they stay dark in every theme. Net effect: dark shell +
+   light content. Components not yet tokenized may stay dark until the page-by-
+   page redesign tokenizes them.
+   ============================================================ */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-canvas: #f6f8fc;
+  --color-canvas-soft: #eef2f8;
+  --color-surface: #ffffff;
+  --color-surface-solid: #ffffff;
+  --color-surface-muted: #f4f7fb;
+  --color-elevated: #ffffff;
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+  --color-text: #0f172a;
+  --color-text-strong: #0b1220;
+  --color-muted: #566179;
+  --color-subtle: #6b7a93;
+  --color-primary: #4f46e5;
+  --color-primary-strong: #4338ca;
+  --color-primary-soft: rgb(79 70 229 / 10%);
+  --color-success: #16a34a;
+  --color-success-soft: rgb(22 163 74 / 10%);
+  --color-warning: #c2660a;
+  --color-warning-soft: rgb(217 119 6 / 12%);
+  --color-error: #dc2626;
+  --color-error-soft: rgb(220 38 38 / 10%);
+  --color-info: #2563eb;
+  --color-info-soft: rgb(37 99 235 / 10%);
+  --shadow-card: 0 16px 40px rgb(15 23 42 / 8%);
+  --shadow-subtle: 0 10px 28px rgb(15 23 42 / 6%);
+  --ink: var(--color-text);
+  --muted: var(--color-muted);
+  --line: var(--color-line);
+  --surface: var(--color-surface);
+  --canvas: var(--color-canvas);
+  --accent: #4f46e5;
+  --accent-bright: #6366f1;
+  --accent-soft: #a5b4fc;
+  --accent-deep: #4338ca;
+}
+:root[data-theme="light"] body {
+  background: var(--color-canvas);
+  color: var(--color-text);
+}
+
+/* ============================================================
+   COCKPIT ACCENT SHIFT (dark) — appended 2026-08-23
+   The forced-dark layer's primary/accent were indigo (#818cf8/#6366f1),
+   making the generic shared pages (approvals/reviews/errors/memory/
+   organizations/operation-logs) read as "generic indigo" instead of the
+   火凤凰 cockpit. Shift the dark theme's primary/accent/info/signal to
+   cockpit cyan so every token-driven page aligns with the cockpit — with a
+   touch of amber for focus. Scoped to non-light so 白天 keeps its own accent;
+   .cc-dash / .login-page / settings use their own tokens and are untouched.
+   ============================================================ */
+:root:not([data-theme="light"]) {
+  --color-primary: #39d4ff;
+  --color-primary-strong: #22a7d8;
+  --color-primary-soft: rgb(57 212 255 / 12%);
+  --color-info: #39d4ff;
+  --color-info-soft: rgb(57 212 255 / 12%);
+  --accent: #39d4ff;
+  --accent-bright: #5fe3ff;
+  --accent-soft: #9de8ff;
+  --accent-deep: #22a7d8;
+  --signal: #39d4ff;
+  --signal-dark: #22a7d8;
 }

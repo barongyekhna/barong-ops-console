@@ -53,7 +53,7 @@
   display: grid;
   gap: 14px;
   padding: 16px;
-  background: #fbfcfb;
+  background: #0c1626;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -64,7 +64,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  color: #26332e;
+  color: #d6e8f6;
 }
 
 .formSectionHeading h4 {
@@ -100,13 +100,13 @@
   align-content: center;
   gap: 4px;
   padding: 9px 12px;
-  background: #eef8f4;
-  border: 1px solid #c5eadc;
+  background: rgba(57,212,255,0.08);
+  border: 1px solid rgba(77,255,161,0.12);
   border-radius: 6px;
 }
 
 .autoKeyNotice strong {
-  color: #26332e;
+  color: #d6e8f6;
   font-size: 0.72rem;
   font-weight: 800;
 }
@@ -126,7 +126,7 @@
   display: grid;
   gap: 12px;
   padding: 14px;
-  background: #ffffff;
+  background: #0d1826;
   border: 1px solid var(--line);
   border-radius: 8px;
 }
@@ -139,7 +139,7 @@
 }
 
 .variantPreview strong {
-  color: #3e4542;
+  color: #d6e8f6;
   font-size: 0.75rem;
   font-weight: 800;
 }
@@ -149,9 +149,9 @@
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
-  color: #087c5e;
-  background: #e5f6ef;
-  border: 1px solid #bde7d6;
+  color: #4dffa1;
+  background: rgba(77,255,161,0.1);
+  border: 1px solid rgba(77,255,161,0.14);
   border-radius: 4px;
   font-size: 0.72rem;
   font-weight: 800;
@@ -190,19 +190,19 @@
   display: grid;
   gap: 5px;
   padding: 10px 12px;
-  background: #f7f9f8;
+  background: #0c1626;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
 
 .variantImageFolder strong {
-  color: #3e4542;
+  color: #d6e8f6;
   font-size: 0.72rem;
   font-weight: 800;
 }
 
 .variantImageFolder span {
-  color: #087c5e;
+  color: #4dffa1;
   font-size: 0.75rem;
   font-weight: 800;
   overflow-wrap: anywhere;
@@ -214,7 +214,7 @@
 }
 
 .field span {
-  color: #3e4542;
+  color: #d6e8f6;
   font-size: 0.75rem;
   font-weight: 740;
 }
@@ -225,8 +225,8 @@
   width: 100%;
   min-width: 0;
   color: var(--ink);
-  background: #ffffff;
-  border: 1px solid #cfd4d1;
+  background: #0d1826;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
   outline: 0;
 }
@@ -253,7 +253,7 @@
 .formMessage {
   min-height: 18px;
   margin: 0;
-  color: #a32f2f;
+  color: #ff6b8a;
   font-size: 0.78rem;
 }
 
@@ -298,15 +298,15 @@
   gap: 10px;
   padding: 22px;
   color: var(--muted);
-  background: #f7f9f8;
-  border: 1px dashed #ccd3cf;
+  background: #0c1626;
+  border: 1px dashed rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
 .errorState {
   justify-content: flex-start;
-  color: #9b3030;
-  border-color: #e2bcbc;
+  color: #ff6b8a;
+  border-color: rgba(255,107,138,0.35);
 }
 
 .errorState div {
@@ -315,7 +315,7 @@
 }
 
 .errorState strong {
-  color: #8d2c2c;
+  color: #ff859c;
   font-size: 0.86rem;
 }
 
@@ -385,7 +385,7 @@
 
 .table th {
   color: var(--muted);
-  background: #f7f9f8;
+  background: #0c1626;
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -403,7 +403,7 @@
 .table tbody tr:hover td,
 .table tbody tr:focus-visible td,
 .selectedRow td {
-  background: #eef8f4;
+  background: rgba(57,212,255,0.08);
 }
 
 .detailRow,
@@ -416,7 +416,7 @@
 .detailRow:hover td,
 .detailRow:focus-visible td {
   padding: 0;
-  background: #ffffff;
+  background: #0d1826;
 }
 
 .table tbody tr:focus-visible {
@@ -448,15 +448,15 @@
 }
 
 .dangerButton {
-  color: #9b3030;
-  border-color: #e2bcbc;
-  background: #fff7f7;
+  color: #ff6b8a;
+  border-color: rgba(255,107,138,0.35);
+  background: rgba(255,107,138,0.1);
 }
 
 .dangerButton:hover {
-  color: #842727;
-  border-color: #d79b9b;
-  background: #fff0f0;
+  color: #ff859c;
+  border-color: rgba(255,107,138,0.4);
+  background: rgba(255,107,138,0.12);
 }
 
 .statusBadge {
@@ -464,9 +464,9 @@
   min-height: 24px;
   align-items: center;
   padding: 0 8px;
-  color: #087c5e;
-  background: #e5f6ef;
-  border: 1px solid #bde7d6;
+  color: #4dffa1;
+  background: rgba(77,255,161,0.1);
+  border: 1px solid rgba(77,255,161,0.14);
   border-radius: 4px;
   font-size: 0.68rem;
   font-weight: 800;
@@ -501,8 +501,8 @@
   align-items: center;
   justify-content: center;
   color: var(--signal-dark);
-  background: #e4f6ef;
-  border: 1px solid #c5eadc;
+  background: rgba(77,255,161,0.1);
+  border: 1px solid rgba(77,255,161,0.12);
   border-radius: 6px;
 }
 
@@ -516,8 +516,8 @@
 .detailGrid div {
   min-width: 0;
   padding: 12px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -577,7 +577,7 @@
 }
 
 .sellingPointsError {
-  color: #a32f2f;
+  color: #ff6b8a;
   /* 后端一次列出全部问题(每条一行),不换行会挤成一坨读不出来 */
   white-space: pre-line;
 }
@@ -602,8 +602,8 @@
 .exportSummary {
   min-width: 0;
   padding: 10px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -643,14 +643,14 @@
 .workflowProgress {
   height: 8px;
   overflow: hidden;
-  background: #e9efec;
+  background: rgba(255,255,255,0.04);
   border-radius: 999px;
 }
 
 .workflowProgress span {
   height: 100%;
   display: block;
-  background: #20b486;
+  background: #4dffa1;
   border-radius: inherit;
   transition: width 160ms ease;
 }
@@ -666,8 +666,8 @@
   gap: 8px;
   align-items: center;
   padding: 9px 10px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -679,8 +679,8 @@
   align-items: center;
   min-height: 74px;
   padding: 10px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -691,19 +691,19 @@
 }
 
 .workflowStages li[data-status="running"] {
-  background: #eef8f4;
-  border-color: #bde7d6;
+  background: rgba(57,212,255,0.08);
+  border-color: rgba(77,255,161,0.14);
 }
 
 .workflowStages li[data-status="completed"] {
-  background: #e5f6ef;
-  border-color: #91dabc;
+  background: rgba(77,255,161,0.1);
+  border-color: #4dffa1;
 }
 
 .workflowStages li[data-status="failed"],
 .workflowStages li[data-status="blocked"] {
-  background: #fff4f4;
-  border-color: #e2bcbc;
+  background: rgba(255,107,138,0.1);
+  border-color: rgba(255,107,138,0.35);
 }
 
 .workflowSteps span,
@@ -725,17 +725,17 @@
 
 .workflowStages li[data-status="running"] strong,
 .workflowStages li[data-status="completed"] strong {
-  color: #087c5e;
+  color: #4dffa1;
 }
 
 .workflowStages li[data-status="failed"] strong,
 .workflowStages li[data-status="blocked"] strong {
-  color: #a32f2f;
+  color: #ff6b8a;
 }
 
 .workflowSteps strong {
   justify-self: end;
-  color: #087c5e;
+  color: #4dffa1;
   font-size: 0.66rem;
   font-weight: 820;
   text-transform: uppercase;
@@ -748,8 +748,8 @@
   display: grid;
   gap: 10px;
   padding: 10px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -764,9 +764,9 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  color: #087c5e;
-  background: #ffffff;
-  border: 1px solid #d9e3df;
+  color: #4dffa1;
+  background: #0d1826;
+  border: 1px solid rgba(120,200,255,0.1);
   border-radius: 6px;
 }
 
@@ -814,9 +814,9 @@
 }
 
 .riskDecisionList button[aria-pressed="true"] {
-  color: #087c5e;
-  border-color: #80d5b9;
-  background: #e5f6ef;
+  color: #4dffa1;
+  border-color: #4dffa1;
+  background: rgba(77,255,161,0.1);
 }
 
 .keywordReviewGrid {
@@ -831,8 +831,8 @@
   display: grid;
   gap: 10px;
   padding: 12px;
-  background: #fbfcfb;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -844,7 +844,7 @@
 }
 
 .columnHeading strong {
-  color: #26332e;
+  color: #d6e8f6;
   font-size: 0.8rem;
   font-weight: 820;
 }
@@ -867,8 +867,8 @@
   width: 100%;
   min-width: 0;
   color: var(--ink);
-  background: #ffffff;
-  border: 1px solid #cfd4d1;
+  background: #0d1826;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
   outline: 0;
 }
@@ -939,9 +939,9 @@
   display: inline-flex;
   align-items: center;
   padding: 0 10px;
-  color: #806219;
-  background: #fff8e5;
-  border: 1px solid #e6d39d;
+  color: #ffb13b;
+  background: rgba(255,177,59,0.12);
+  border: 1px solid rgba(255,177,59,0.35);
   border-radius: 4px;
   font-size: 0.7rem;
   font-weight: 820;
@@ -949,9 +949,9 @@
 
 .sectionFooter > span[data-complete="true"],
 .readinessGrid span[data-complete="true"] {
-  color: #087c5e;
-  background: #e5f6ef;
-  border-color: #bde7d6;
+  color: #4dffa1;
+  background: rgba(77,255,161,0.1);
+  border-color: rgba(77,255,161,0.14);
 }
 
 .readinessGrid {
@@ -979,9 +979,9 @@
   align-items: center;
   gap: 10px;
   padding: 12px;
-  color: #3e4542;
-  background: #ffffff;
-  border: 1px dashed #9fb4ab;
+  color: #d6e8f6;
+  background: #0d1826;
+  border: 1px dashed rgba(120,200,255,0.24);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -1028,8 +1028,8 @@
 .sellingPointsMetrics div {
   min-width: 0;
   padding: 10px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -1065,8 +1065,8 @@
   gap: 8px;
   align-items: start;
   padding: 10px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -1075,7 +1075,7 @@
   margin: 4px 0 0;
   font-size: 0.78rem;
   line-height: 1.6;
-  color: #6b7a75;
+  color: #7d95ae;
 }
 
 .variantPriceTableWrap {
@@ -1094,15 +1094,15 @@
   font-size: 0.7rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #6b7a75;
+  color: #7d95ae;
   white-space: nowrap;
-  border-bottom: 1px solid #e3e7e5;
+  border-bottom: 1px solid rgba(120,200,255,0.16);
 }
 
 .variantPriceTable td {
   padding: 9px 10px;
   vertical-align: middle;
-  border-bottom: 1px solid #eef1ef;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 
 .variantPriceTable tbody tr:last-child td {
@@ -1117,7 +1117,7 @@
 .variantPriceSku {
   font-family: var(--font-mono, monospace);
   font-size: 0.76rem;
-  color: #6b7a75;
+  color: #7d95ae;
   white-space: nowrap;
 }
 
@@ -1133,8 +1133,8 @@
   min-width: 0;
   padding: 0 10px;
   color: var(--ink);
-  background: #ffffff;
-  border: 1px solid #cfd4d1;
+  background: #0d1826;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
   outline: 0;
   font-variant-numeric: tabular-nums;
@@ -1147,8 +1147,8 @@
 
 /* 没填价格的变体一眼可见——多变体产品缺一个价就上不了架 */
 .variantPriceCell input[data-missing="true"] {
-  border-color: #e08a8a;
-  background: #fff6f6;
+  border-color: rgba(255,107,138,0.45);
+  background: rgba(255,107,138,0.1);
 }
 
 .variantPriceFlag {
@@ -1157,8 +1157,8 @@
   white-space: nowrap;
 }
 
-.variantPriceFlag[data-tone="bad"] { color: #c0392b; }
-.variantPriceFlag[data-tone="changed"] { color: #b8860b; }
+.variantPriceFlag[data-tone="bad"] { color: #ff6b8a; }
+.variantPriceFlag[data-tone="changed"] { color: #ffb13b; }
 
 .variantPriceActions {
   display: flex;
@@ -1170,7 +1170,7 @@
 
 .variantPriceStatus {
   font-size: 0.78rem;
-  color: #6b7a75;
+  color: #7d95ae;
 }
 
 /* 编辑态的卖点行:必须盖过上面那条三列网格。
@@ -1200,7 +1200,7 @@
   justify-content: center;
   font-size: 0.78rem;
   font-weight: 800;
-  color: #6b7a75;
+  color: #7d95ae;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1231,8 +1231,8 @@
   align-items: baseline;
   font-size: 0.8rem;
   line-height: 1.6;
-  color: #3e4542;
-  background: #eef3f1;
+  color: #d6e8f6;
+  background: rgba(255,255,255,0.04);
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
@@ -1242,7 +1242,7 @@
   font-size: 0.68rem;
   font-weight: 800;
   letter-spacing: 0.08em;
-  color: #6b7a75;
+  color: #7d95ae;
 }
 
 /* 编辑态的文案框不需要那么高——短句占一大块空框很难受 */
@@ -1258,7 +1258,7 @@
 
 .sellingPointBullets em {
   justify-self: end;
-  color: #087c5e;
+  color: #4dffa1;
   font-size: 0.72rem;
   font-style: normal;
   font-weight: 800;
@@ -1280,9 +1280,9 @@
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
-  color: #087c5e;
-  background: #e5f6ef;
-  border: 1px solid #bde7d6;
+  color: #4dffa1;
+  background: rgba(77,255,161,0.1);
+  border: 1px solid rgba(77,255,161,0.14);
   border-radius: 4px;
   font-size: 0.68rem;
   font-weight: 800;
@@ -1331,8 +1331,8 @@
 .confirmMeta div {
   min-width: 0;
   padding: 10px 12px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -1635,7 +1635,7 @@
   background: rgb(255 107 138 / 8%);
 }
 .dangerButton:hover {
-  color: #ffd0da;
+  color: rgba(255,107,138,0.2);
   border-color: rgb(255 107 138 / 55%);
   background: rgb(255 107 138 / 14%);
 }
@@ -1677,7 +1677,7 @@
   border-bottom-color: var(--mm-line, rgb(120 200 255 / 16%));
 }
 .variantPriceTable td {
-  color: #cfe8f5;
+  color: rgba(57,212,255,0.12);
   border-bottom-color: rgb(120 200 255 / 10%);
 }
 .variantPriceTable strong { color: #eafaff; }
@@ -1892,7 +1892,7 @@
 
 .pipeStage[data-state="done"] .pipeDot {
   color: #03121a;
-  background: linear-gradient(180deg, #5fffb0, #2fd483);
+  background: linear-gradient(180deg, #5fffb0, #4dffa1);
   border-color: rgb(77 255 161 / 60%);
   box-shadow: 0 0 12px rgb(77 255 161 / 45%);
 }
@@ -2159,7 +2159,7 @@
 }
 
 .renderError {
-  color: #a32f2f;
+  color: #ff6b8a;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -2245,7 +2245,7 @@
   font-size: 0.72rem;
   font-weight: 750;
   letter-spacing: 0.04em;
-  color: #0e7a5f;
+  color: #4dffa1;
   background: rgb(14 122 95 / 10%);
   border: 1px solid rgb(14 122 95 / 30%);
 }
@@ -2335,13 +2335,13 @@
 }
 
 .renderStateBadge[data-state="staged"] {
-  color: #b26b00;
+  color: #ffb13b;
   border-color: rgb(255 177 59 / 55%);
   background: rgb(255 177 59 / 12%);
 }
 
 .renderStateBadge[data-state="available"] {
-  color: #0e7a5f;
+  color: #4dffa1;
   border-color: rgb(14 122 95 / 40%);
   background: rgb(14 122 95 / 10%);
 }
@@ -2539,15 +2539,15 @@
 }
 
 .riskActions button[data-kind="approve"][aria-pressed="true"] {
-  color: #fff;
-  background: #0e7a5f;
-  border-color: #0e7a5f;
+  color: #0d1826;
+  background: #4dffa1;
+  border-color: #4dffa1;
 }
 
 .riskActions button[data-kind="reject"][aria-pressed="true"] {
-  color: #fff;
-  background: #c73b3b;
-  border-color: #c73b3b;
+  color: #0d1826;
+  background: #ff6b8a;
+  border-color: #ff6b8a;
 }
 
 .riskActions button:hover { color: inherit; }
@@ -3174,7 +3174,7 @@
 }
 
 .spSaveNotice {
-  color: #52e5a3;
+  color: #67e3b0;
   font-size: 0.82rem;
   margin: 6px 0 0;
 }

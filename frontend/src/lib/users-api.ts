@@ -39,6 +39,7 @@ export type ManagedUser = {
   is_bot?: boolean;
   /** 中文显示名(来自通讯资料);没有就显示登录名 */
   display_name?: string | null;
+  nickname?: string | null;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;

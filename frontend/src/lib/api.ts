@@ -4,7 +4,7 @@ import {
   clearFrontendRequestCache,
   requestWithFrontendCache,
 } from "@/lib/request-cache";
-import { translateKBackendError } from "@/lib/i18n";
+import { translateC19BackendError, translateKBackendError } from "@/lib/i18n";
 
 export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 
@@ -248,8 +248,9 @@ function fallbackErrorMessageForStatus(status: number) {
 }
 
 function isTechnicalErrorMessage(message: string) {
-  const normalized = message.trim().toLowerCase();
-  return (
+  const trimmed = message.trim();
+  const normalized = trimmed.toLowerCase();
+  if (
     normalized === "not authenticated." ||
     normalized === "not authenticated" ||
     normalized === "internal server error." ||
@@ -262,7 +263,15 @@ function isTechnicalErrorMessage(message: string) {
     normalized === "request failed" ||
     normalized === "加载失败，请稍后重试。" ||
     normalized === "服务暂时不可用，请稍后重试。"
-  );
+  ) {
+    return true;
+  }
+  // 通用启发式:整个 UI 是中文,任何不含中文的后端英文/工程串(异常文本、
+  // 字段名、堆栈等)都不该原样呈现给用户 → 判为技术串,由调用方按状态兜底。
+  if (trimmed && !/[一-鿿]/.test(trimmed)) {
+    return true;
+  }
+  return false;
 }
 
 function storedSessionToken() {
@@ -394,17 +403,29 @@ export async function apiRequest<T>(
             } catch {
               // Keep the stable fallback when the backend does not return JSON.
             }
-            if (isTechnicalErrorMessage(message)) {
-              message = fallbackErrorMessageForStatus(response.status);
-            }
+            const statusFallback = fallbackErrorMessageForStatus(
+              response.status,
+            );
             if (backendPath.startsWith("/k/")) {
               message = translateKBackendError({
                 detail: errorDetail,
-                fallback: fallbackErrorMessageForStatus(response.status),
+                fallback: statusFallback,
                 message,
                 path: backendPath,
                 status: response.status,
               });
+            } else if (backendPath.startsWith("/c19")) {
+              message = translateC19BackendError({
+                detail: errorDetail,
+                fallback: statusFallback,
+                message,
+                status: response.status,
+              });
+            }
+            // 通用兜底:任何仍是英文/工程串(未被翻译器认出的后端文案)一律
+            // 换成中文状态兜底,保证前端永不出现原始英文报错。
+            if (isTechnicalErrorMessage(message)) {
+              message = statusFallback;
             }
             throw new ApiError(message, response.status);
           }

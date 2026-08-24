@@ -1,0 +1,9 @@
+/* Shared legal/support document body — reused by public legal pages and the Settings About tab. */
+.doc{max-width:70ch}
+.updated{font-family:var(--font-mono), ui-monospace, Menlo, Consolas, monospace;
+  font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:#5d7590; margin:0 0 20px}
+.intro{font-size:15.5px; line-height:1.75; color:#c6d4e6; margin:0 0 8px}
+.section{margin-top:26px}
+.h{font-size:15px; font-weight:700; color:#e4b98a; letter-spacing:.02em; margin:0 0 10px}
+.p{font-size:14px; line-height:1.8; color:#9db0c8; margin:0 0 10px}
+.p:last-child{margin-bottom:0}

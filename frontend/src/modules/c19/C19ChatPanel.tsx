@@ -189,13 +189,13 @@ function runtimeErrorMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 403) return "你已不再拥有这个会话的访问权。";
-    if (error.status === 404) return "会话或消息运行时不存在。";
+    if (error.status === 404) return "会话或消息不存在。";
     if (error.status === 409) return error.message || "消息状态发生冲突，请刷新后重试。";
     if (error.status === 413) return "图片或文件超过资产服务允许的大小。";
     if (error.status === 415) return "图片或文件类型不受支持。";
     if (error.status === 422) return error.message || "消息内容不符合发送规则。";
     if (error.status === 429) return "发送过于频繁，请稍后再试。";
-    if (error.status >= 500) return "聊天记录服务暂时不可用，消息没有被假定为成功。";
+    if (error.status >= 500) return "聊天服务暂时不可用，消息未发送成功，请重试。";
     return error.message || fallback;
   }
   return error instanceof Error && error.message ? error.message : fallback;
@@ -604,7 +604,7 @@ export function C19ChatPanel({
             const trackedCursors = checkpoint.olderCursors;
             if (trackedCursors.has(cursor)) {
               throw new RecoverySafetyError(
-                "恢复游标发生循环，已暂停自动恢复；回执保持冻结。",
+                "消息恢复出现问题，已暂停，请刷新会话后重试。",
               );
             }
             if (trackedCursors.size >= MAX_TRACKED_CURSORS) {
@@ -702,7 +702,7 @@ export function C19ChatPanel({
             recoveryCheckpointRef.current = null;
           }
           setRecoveryError(
-            runtimeErrorMessage(error, "断线消息恢复失败；送达与已读位置保持冻结。"),
+            runtimeErrorMessage(error, "断线后消息补齐失败，请刷新会话后重试。"),
           );
         }
         return false;
@@ -885,7 +885,7 @@ export function C19ChatPanel({
           )
         ) {
           receiptInFlightRef.current.delivered = deliveredThrough;
-          setReceiptError(runtimeErrorMessage(error, "送达位置更新失败。"));
+          setReceiptError(runtimeErrorMessage(error, "已读状态更新失败。"));
         }
       });
   }, [
@@ -1054,7 +1054,7 @@ export function C19ChatPanel({
         if (stopped) return;
         if (cursor) {
           if (visitedCursors.has(cursor)) {
-            throw new Error("事件游标发生循环，已停止推进。");
+            throw new Error("消息同步出现问题，请刷新会话。");
           }
           visitedCursors.add(cursor);
         }
@@ -1081,14 +1081,14 @@ export function C19ChatPanel({
           return;
         }
         if (!page.next_cursor || page.next_cursor === cursor) {
-          throw new Error("事件游标未能向前推进，已停止推进。");
+          throw new Error("消息同步出现问题，请刷新会话。");
         }
         cursor = page.next_cursor;
       }
       if (selectedConversationChanged || forceRecovery) {
         await recoverSelectedConversation();
       }
-      throw new Error("事件积压超过单次安全恢复上限，将从当前游标继续。");
+      throw new Error("待同步的消息较多，正在分批加载。");
     };
 
     const schedulePoll = () => {
@@ -1111,7 +1111,7 @@ export function C19ChatPanel({
       try {
         await ensureEventTailBoundary();
         if (!eventCursorRef.current) {
-          throw new Error("事件尾游标尚未就绪。");
+          throw new Error("消息同步尚未就绪，请稍候。");
         }
         await drainEventPages(eventCursorRef.current);
         if (stopped || !pollingActive) return;
@@ -1129,7 +1129,7 @@ export function C19ChatPanel({
           try {
             await ensureEventTailBoundary();
             if (!eventCursorRef.current) {
-              throw new Error("事件尾游标恢复失败。");
+              throw new Error("消息同步失败，请刷新会话。");
             }
             await recoverSelectedConversation();
             await drainEventPages(eventCursorRef.current, true);
@@ -1305,7 +1305,7 @@ export function C19ChatPanel({
     void ensureEventTailBoundary()
       .then(() => {
         if (!eventCursorRef.current) {
-          throw new Error("事件尾游标尚未就绪。");
+          throw new Error("消息同步尚未就绪，请稍候。");
         }
         return drainEventPages(eventCursorRef.current, true);
       })
@@ -1475,7 +1475,7 @@ export function C19ChatPanel({
         setAssetTransfer({
           phase: "selected",
           progress: 0,
-          statusText: "已选择；发送时会先计算校验值并进入隔离扫描。",
+          statusText: "已选择，发送时会自动检查图片。",
         });
         setSendError("");
       } catch (error) {
@@ -1564,7 +1564,7 @@ export function C19ChatPanel({
           asset.sha256_hex !== pendingAsset.sha256Hex
         ) {
           throw new C19AssetTransferError(
-            "资产服务返回的不可变快照与本次选择不一致，已停止发送。",
+            "图片校验不一致，已停止发送，请重新选择。",
           );
         }
       };
@@ -1576,7 +1576,7 @@ export function C19ChatPanel({
             updateAssetTransfer({
               phase: "hashing",
               progress: 0,
-              statusText: "正在本机计算 SHA-256，不会把文件交给 JSON 代理。",
+              statusText: "正在准备图片…",
             });
             const sha256Hex = await sha256C19File(
               pendingAsset.file,
@@ -1586,7 +1586,7 @@ export function C19ChatPanel({
             rememberAsset(pendingAsset);
           }
           if (!pendingAsset.sha256Hex) {
-            throw new C19AssetTransferError("文件校验值计算失败。");
+            throw new C19AssetTransferError("图片准备失败，请重试。");
           }
 
           updateAssetTransfer({
@@ -1610,7 +1610,7 @@ export function C19ChatPanel({
             pendingAsset.assetId &&
             pendingAsset.assetId !== intent.asset.asset_id
           ) {
-            throw new C19AssetTransferError("资产幂等响应不一致，已停止发送。");
+            throw new C19AssetTransferError("这条似乎已发送，请刷新后查看。");
           }
           pendingAsset = { ...pendingAsset, assetId: intent.asset.asset_id };
           rememberAsset(pendingAsset);
@@ -1627,7 +1627,7 @@ export function C19ChatPanel({
             updateAssetTransfer({
               phase: "uploading",
               progress: 0,
-              statusText: "正在把原始字节直传资产数据面。",
+              statusText: "正在上传图片…",
             });
             await putC19AssetBytes({
               file: pendingAsset.file,
@@ -1638,8 +1638,8 @@ export function C19ChatPanel({
                   progress,
                   statusText:
                     progress < 100
-                      ? `正在直传文件：${progress}%`
-                      : "字节已上传，等待服务端确认。",
+                      ? `正在上传：${progress}%`
+                      : "上传完成，等待确认…",
                 }),
               signal: controller.signal,
             });
@@ -1662,7 +1662,7 @@ export function C19ChatPanel({
             updateAssetTransfer({
               phase: "scanning",
               progress: 100,
-              statusText: "文件处于隔离区，正在校验格式并进行恶意软件扫描。",
+              statusText: "正在检查图片…",
             });
             await waitForC19AssetPoll(controller.signal);
             remoteAsset = await getC19AssetStatus(
@@ -1684,7 +1684,7 @@ export function C19ChatPanel({
           updateAssetTransfer({
             phase: "persisting",
             progress: 100,
-            statusText: "正在把不可变资产引用持久化到消息记录。",
+            statusText: "正在保存…",
           });
         }
 
@@ -1726,18 +1726,18 @@ export function C19ChatPanel({
           if (currentPending.asset) resetAssetComposer(false);
           setSendError(
             !messagePersistenceStarted
-              ? "原 client_asset_id 已永久失效，不能继续重放；请重新选择文件。"
+              ? "这张图片已失效，请重新选择后发送。"
               : currentPending.asset
-                ? "这条消息的旧记录已经删除，原 client_message_id 不能继续重放；请重新选择文件后发送。"
-                : "这条消息的旧记录已经删除，原 client_message_id 不能继续重放；内容已保留，再次发送会生成新的消息编号。",
+                ? "原消息已被删除，请重新选择图片后发送。"
+                : "原消息已被删除，内容已保留，再次发送即可。",
           );
           return;
         }
         const errorMessage = runtimeErrorMessage(
           error,
           currentPending.asset
-            ? "资产或消息尚未确认成功，可使用同一资产和消息编号安全重试。"
-            : "发送失败；服务端未确认持久化，可使用同一消息编号安全重试。",
+            ? "消息未确认成功，请重试（不会重复发送）。"
+            : "发送失败，请重试（不会重复发送）。",
         );
         setSendError(errorMessage);
         if (currentPending.asset) {
@@ -1834,7 +1834,7 @@ export function C19ChatPanel({
     connectionMode === "live"
       ? "实时连接"
       : connectionMode === "polling"
-        ? "HTTP 恢复模式"
+        ? "备用连接"
         : connectionMode === "connecting"
           ? "正在连接"
           : "连接中断";
@@ -1905,7 +1905,7 @@ export function C19ChatPanel({
         ) : null}
 
         {isLoadingHistory ? (
-          <div className={styles.chatEmpty} role="status">正在读取持久化消息…</div>
+          <div className={styles.chatEmpty} role="status">正在加载消息…</div>
         ) : records.length === 0 ? (
           <div className={styles.chatEmpty} role="status">
             还没有消息，可以发送第一条消息。
@@ -1921,7 +1921,7 @@ export function C19ChatPanel({
               >
                 {!own ? (
                   <strong>
-                    {profileNames.get(senderId) ?? `成员 #${record.sender_user_id}`}
+                    {profileNames.get(senderId) ?? "未命名成员"}
                   </strong>
                 ) : null}
                 {record.assets.map((asset) => (
@@ -1965,9 +1965,9 @@ export function C19ChatPanel({
 
       {historyWindowLimited ? (
         <div className={styles.chatRuntimeWarning} role="status">
-          {recoveryReady ? "大量消息已按游标完整校验" : "正在分批校验大量消息"}；
+          {recoveryReady ? "历史消息已全部加载" : "正在加载历史消息"}；
           界面仅保留最近 {MAX_RENDERED_MESSAGES} 条，可使用“加载更早消息”按需查看，
-          回执不会跨越未恢复区间。
+          加载完成后会更新已读状态。
         </div>
       ) : null}
       {historyError ? (
@@ -1992,7 +1992,7 @@ export function C19ChatPanel({
       ) : null}
       {isRecovering && !isLoadingHistory ? (
         <div className={styles.chatRuntimeWarning} role="status">
-          正在按持久化游标校验并补齐消息；完成前不会推进送达或已读位置。
+          正在补齐历史消息，完成后会更新已读状态。
         </div>
       ) : null}
       {recoveryError ? (
@@ -2185,8 +2185,8 @@ export function C19ChatPanel({
             <Send aria-hidden="true" size={16} />
             {isSending
               ? selectedAsset
-                ? "资产处理中…"
-                : "持久化中…"
+                ? "图片处理中…"
+                : "发送中…"
               : pendingMessage
                 ? "安全重试"
                 : "发送"}
@@ -2198,8 +2198,7 @@ export function C19ChatPanel({
               <strong>消息尚未确认成功</strong>
               <span>{sendError}</span>
               <small>
-                重试会复用同一 client_message_id
-                {pendingMessage.asset ? " 与 client_asset_id" : ""}，不会制造重复消息。
+                重试不会制造重复消息。
               </small>
             </div>
             <button

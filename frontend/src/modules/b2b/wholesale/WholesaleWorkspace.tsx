@@ -82,8 +82,19 @@ function money(value: string | null): string {
 /** 毛利率:店家一眼要看的就是这个数,决定他进不进货。 */
 function marginPercent(item: WholesaleItem, draft?: DraftRow): number | null {
   const msrp = Number(item.msrp ?? "");
-  const wholesale = Number(draft?.wholesale_price || item.wholesale_price || "");
-  if (!Number.isFinite(msrp) || !Number.isFinite(wholesale) || msrp <= 0) {
+  // L15 (QA 2026-08-22): an empty wholesale price must read as "no margin yet",
+  // not 100%. Number("") is 0, which made ((msrp-0)/msrp)*100 = 100%.
+  const rawWholesale = draft?.wholesale_price || item.wholesale_price || "";
+  if (!rawWholesale.toString().trim()) {
+    return null;
+  }
+  const wholesale = Number(rawWholesale);
+  if (
+    !Number.isFinite(msrp) ||
+    !Number.isFinite(wholesale) ||
+    msrp <= 0 ||
+    wholesale <= 0
+  ) {
     return null;
   }
   return ((msrp - wholesale) / msrp) * 100;

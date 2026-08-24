@@ -2248,7 +2248,16 @@ export function ProductForm({
       ) : null}
 
       <label className={styles.field}>
-        <span>{labels.description}</span>
+        {/* M9 (QA 2026-08-22): mark description as required (it is enforced but
+            was the only required field with no marker, so an empty submit looked
+            like a dead button). */}
+        <span>
+          {labels.description}
+          <span aria-hidden="true" style={{ color: "var(--color-error)" }}>
+            {" "}
+            *
+          </span>
+        </span>
         <textarea
           onChange={(event) => updateValue("raw_input_text", event.target.value)}
           placeholder={labels.descriptionPlaceholder}

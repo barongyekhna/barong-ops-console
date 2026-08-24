@@ -252,6 +252,73 @@ export function translateKBackendError({
   return fallback;
 }
 
+// 通讯(C19)后端错误码 → 给人看的中文。后端 detail 一律英文/工程话,
+// 这里按稳定的 code 翻成人话;拿不到 code 的(identity_social_router 走 str(exc))
+// 靠 api.ts 的通用英文兜底,绝不把原始英文/异常文本呈现给用户。
+const C19_ERROR_MESSAGES: Record<string, string> = {
+  c19_access_denied: "当前账号无权进行此操作。",
+  c19_conversation_unavailable: "该会话暂时打不开，请稍后再试。",
+  c19_invalid_cursor: "聊天记录有更新，请刷新后再试。",
+  c19_message_deleted: "原消息已被删除，无法继续。",
+  c19_message_idempotency_conflict: "这条消息似乎已经发送，请刷新后查看。",
+  c19_message_position_conflict: "消息顺序有更新，请刷新后再试。",
+  c19_message_rejected: "消息没能发出去，请稍后重试。",
+  c19_moment_audience_invalid: "请选择有效的可见范围。",
+  c19_moment_deleted: "这条动态已不可用。",
+  c19_moment_unavailable: "这条动态已不可用。",
+  c19_moment_idempotency_conflict: "这条动态似乎已经发布，请刷新后查看。",
+  c19_moment_rejected: "动态没能发布，请稍后重试。",
+  c19_moment_store_error: "动态服务暂时不可用，请稍后再试。",
+  c19_moment_store_invalid_response: "动态服务暂时不可用，请稍后再试。",
+  c19_moment_store_unavailable: "动态服务暂时不可用，请稍后再试。",
+  c19_asset_binding_conflict: "这张图片已绑定到其它消息，请重新选择。",
+  c19_asset_idempotency_conflict: "这张图片似乎已经发送，请刷新后查看。",
+  c19_asset_quota_exceeded: "今天的图片发送次数已用完，请明天再试。",
+  c19_asset_store_error: "图片服务暂时不可用，请稍后再试。",
+  c19_asset_store_invalid_response: "图片服务暂时不可用，请稍后再试。",
+  c19_asset_store_unavailable: "图片服务暂时不可用，请稍后再试。",
+  c19_asset_transfer_denied: "无权转存这张图片。",
+  c19_asset_transfer_unavailable: "图片转存暂时不可用，请稍后再试。",
+  c19_asset_unavailable: "这张图片暂时无法访问。",
+  c19_rate_limit_contention: "系统有点忙，请稍后再试。",
+  c19_rate_limit_unavailable: "系统有点忙，请稍后再试。",
+  c19_rate_limited: "操作太频繁，请稍后再试。",
+  c19_record_store_error: "聊天服务暂时不可用，请稍后再试。",
+  c19_record_store_invalid_response: "聊天服务暂时不可用，请稍后再试。",
+  c19_record_store_unavailable: "聊天服务暂时不可用，请稍后再试。",
+};
+
+type C19BackendErrorInput = {
+  detail?: unknown;
+  fallback?: string;
+  message?: string | null;
+  status?: number | null;
+};
+
+export function translateC19BackendError({
+  detail,
+  fallback = "通讯服务暂时不可用，请稍后再试。",
+  message,
+  status,
+}: C19BackendErrorInput) {
+  const record = objectValue(detail);
+  const code = stringValue(record?.code);
+  if (code && C19_ERROR_MESSAGES[code]) {
+    return C19_ERROR_MESSAGES[code];
+  }
+
+  const rawMessage = stringValue(message || record?.message);
+  // 已是中文(含 CJK)且不是原始码 → 直接用;否则(英文/工程话/异常文本)一律兜底。
+  if (rawMessage && /[一-鿿]/.test(rawMessage)) {
+    return rawMessage;
+  }
+
+  if (status === 429) {
+    return "操作太频繁，请稍后再试。";
+  }
+  return fallback;
+}
+
 export function translateUiText(value: string | null | undefined) {
   const text = value?.trim() ?? "";
   if (!text) {

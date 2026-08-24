@@ -393,7 +393,10 @@ export function OperationsDashboard() {
       : 0;
   const pendingApprovals = statusCount(approvalItems, "pending");
   const modules = capabilityState.sidebarItems.slice(0, 8);
-  const activeModules = modules.filter(
+  // M8 (QA 2026-08-22): count active modules across ALL visible modules, not
+  // just the first 8 shown as cards — otherwise "可用模块 N" contradicted the
+  // "X 个可见模块" subtitle next to it.
+  const activeModules = capabilityState.sidebarItems.filter(
     (item) => moduleStatus(item) === "active",
   ).length;
   const moduleCards = modules.map((item) => {

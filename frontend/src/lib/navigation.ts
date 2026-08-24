@@ -15,7 +15,6 @@ import {
   LayoutDashboard,
   LockKeyhole,
   PackageSearch,
-  Settings,
   ShieldCheck,
   Sparkles,
   UploadCloud,
@@ -312,17 +311,9 @@ export const navigationGroups: NavigationGroup[] = [
         route_namespace: "/key-health",
         status: "sealed",
       },
-      {
-        category: "admin",
-        denied_behavior: "hide_when_denied",
-        href: "/settings",
-        icon: Settings,
-        label: "设置",
-        module_key: "admin.settings",
-        required_permission: "settings.read",
-        route_namespace: "/settings",
-        status: "planned",
-      },
+      // M15 (QA 2026-08-22): removed the "设置" nav entry — it pointed at
+      // /settings, a planned page with no backend route (dead link / 404).
+      // Re-add when a real settings page exists.
       {
         category: "system",
         denied_behavior: "hide_when_denied",
@@ -388,8 +379,11 @@ export const navigationModuleRecords: ModuleAwareNavigationRecord[] = [
   ...embeddedNavigationModules,
 ];
 
-export const pageTitles = Object.fromEntries(
-  navigationGroups.flatMap((group) =>
-    group.items.map((item) => [item.href, item.label]),
+export const pageTitles = {
+  ...Object.fromEntries(
+    navigationGroups.flatMap((group) =>
+      group.items.map((item) => [item.href, item.label]),
+    ),
   ),
-) as Record<string, string>;
+  "/settings": "设置",
+} as Record<string, string>;

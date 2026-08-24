@@ -132,13 +132,14 @@ function clearStoredAuthSession() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [initialAuthSession] = useState(readStoredAuthSession);
-  const [status, setStatus] = useState<AuthStatus>(() =>
-    initialAuthSession ? "authenticated" : "checking",
-  );
-  const [user, setUser] = useState<AuthenticatedUser | null>(() =>
-    initialAuthSession?.user ?? null,
-  );
+  // Deterministic initial state: identical on the server render and the client's
+  // first render so hydration matches. Reading localStorage in these
+  // initializers caused a React #418 hydration mismatch on EVERY page (server
+  // saw no session → "checking"; client saw the stored session →
+  // "authenticated"). The persisted session is restored after mount, in an
+  // effect (see below), which is the only safe place to touch localStorage.
+  const [status, setStatus] = useState<AuthStatus>("checking");
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const previousPathnameRef = useRef(pathname);
   const authSnapshotRef = useRef<{
     status: AuthStatus;
@@ -147,7 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionCheckAbortControllerRef = useRef<AbortController | null>(null);
   const sessionCheckGenerationRef = useRef(0);
   const loginInFlightRef = useRef<Promise<AuthLoginResult> | null>(null);
-  const sessionTokenRef = useRef(initialAuthSession?.sessionToken ?? null);
+  const sessionTokenRef = useRef<string | null>(null);
   authSnapshotRef.current = { status, user };
 
   const abortSessionCheck = useCallback((message: string) => {
@@ -245,6 +246,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
   }, [abortSessionCheck, clearSession, pathname, resetAuthState]);
+
+  // Restore any persisted session AFTER mount (never during render — see the
+  // deterministic initial state above). Runs before the refresh effect below,
+  // so sessionTokenRef is populated first and refresh takes the fast
+  // "supplemental" validation path instead of a full "checking" reload.
+  useEffect(() => {
+    const stored = readStoredAuthSession();
+    if (stored) {
+      sessionTokenRef.current = stored.sessionToken;
+      if (stored.user) {
+        setUser(stored.user);
+      }
+      setStatus("authenticated");
+    }
+  }, []);
 
   useEffect(() => {
     void refresh();

@@ -23,6 +23,9 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { formatDisplayName } from "@/components/profile-provider";
+
+import styles from "./user-management-panel.module.css";
 import { isApiAbortError } from "@/lib/api";
 import {
   canManageUsersForRole,
@@ -1077,7 +1080,7 @@ export function UserManagementPanel() {
           </label>
           <div className="users-inline-actions">
             <button
-              className="danger-button"
+              className="primary-button"
               disabled={isBusy}
               type="submit"
             >
@@ -1214,9 +1217,13 @@ export function UserManagementPanel() {
                               size={15}
                             />
                           ) : null}
-                          {target.display_name || target.username}
+                          {formatDisplayName(
+                            target.nickname,
+                            target.display_name || target.username,
+                          )}
                         </strong>
-                        {target.display_name && target.display_name !== target.username ? (
+                        {(target.display_name || target.username) !==
+                        target.username ? (
                           <span className="users-login-name">{target.username}</span>
                         ) : null}
                         {isSelf ? <span>当前账号</span> : null}
@@ -1272,14 +1279,11 @@ export function UserManagementPanel() {
 
                           {canManageRow && target.is_active ? (
                             <button
-                              className="secondary-button"
+                              className="icon-button"
                               disabled={actionDisabled}
                               onClick={() => void handleDisable(target)}
-                              title={
-                                isSelf
-                                  ? "不能停用当前账号"
-                                  : "停用用户"
-                              }
+                              title={isSelf ? "不能停用当前账号" : "停用用户"}
+                              aria-label="停用用户"
                               type="button"
                             >
                               {pendingAction === `disable-${target.id}` ? (
@@ -1291,13 +1295,14 @@ export function UserManagementPanel() {
                               ) : (
                                 <PowerOff aria-hidden="true" size={17} />
                               )}
-                              停用
                             </button>
                           ) : canManageRow ? (
                             <button
-                              className="secondary-button"
+                              className="icon-button"
                               disabled={isBusy}
                               onClick={() => void handleEnable(target)}
+                              title="启用用户"
+                              aria-label="启用用户"
                               type="button"
                             >
                               {pendingAction === `enable-${target.id}` ? (
@@ -1309,47 +1314,20 @@ export function UserManagementPanel() {
                               ) : (
                                 <Power aria-hidden="true" size={17} />
                               )}
-                              启用
-                            </button>
-                          ) : null}
-
-                          {canManageRow &&
-                          !target.is_active &&
-                          isOwnerRole(currentUser?.role) ? (
-                            <button
-                              className="danger-button"
-                              disabled={isBusy}
-                              onClick={() => void handlePurge(target)}
-                              title="彻底删除（仅限已停用账号）"
-                              type="button"
-                            >
-                              {pendingAction === `purge-${target.id}` ? (
-                                <LoaderCircle
-                                  className="spin"
-                                  aria-hidden="true"
-                                  size={17}
-                                />
-                              ) : (
-                                <Trash2 aria-hidden="true" size={17} />
-                              )}
-                              删除
                             </button>
                           ) : null}
 
                           {canManageRow ? (
                             <button
-                              className="danger-button"
+                              className="icon-button"
                               disabled={actionDisabled}
                               onClick={() => {
                                 clearActionMessages();
                                 setResetTarget(target);
                                 setResetPassword("");
                               }}
-                              title={
-                                isSelf
-                                  ? "不能重置当前账号密码"
-                                  : "重置密码"
-                              }
+                              title={isSelf ? "不能重置当前账号密码" : "重置密码"}
+                              aria-label="重置密码"
                               type="button"
                             >
                               {rowPending &&
@@ -1362,7 +1340,29 @@ export function UserManagementPanel() {
                               ) : (
                                 <KeyRound aria-hidden="true" size={17} />
                               )}
-                              重置
+                            </button>
+                          ) : null}
+
+                          {canManageRow &&
+                          !target.is_active &&
+                          isOwnerRole(currentUser?.role) ? (
+                            <button
+                              className={`icon-button ${styles.iconDanger}`}
+                              disabled={isBusy}
+                              onClick={() => void handlePurge(target)}
+                              title="彻底删除（仅限已停用账号）"
+                              aria-label="彻底删除"
+                              type="button"
+                            >
+                              {pendingAction === `purge-${target.id}` ? (
+                                <LoaderCircle
+                                  className="spin"
+                                  aria-hidden="true"
+                                  size={17}
+                                />
+                              ) : (
+                                <Trash2 aria-hidden="true" size={17} />
+                              )}
                             </button>
                           ) : null}
                         </div>

@@ -198,7 +198,14 @@ export type RaCruiseState = {
   updated_by: string | null;
   today: {
     ai_evaluations: number;
-    providers: { provider: string; label: string; used: number }[];
+    providers: {
+      provider: string;
+      label: string;
+      used: number;
+      budget: number;
+      remaining: number | null;
+      unlimited: boolean;
+    }[];
   };
 };
 

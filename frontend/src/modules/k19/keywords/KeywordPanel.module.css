@@ -38,8 +38,8 @@
   justify-items: end;
   gap: 2px;
   padding: 10px 12px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
+  background: #0c1626;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -84,8 +84,8 @@
   height: 40px;
   padding: 0 11px;
   color: var(--ink);
-  background: #ffffff;
-  border: 1px solid #cfd4d1;
+  background: #0d1826;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
   outline: 0;
 }
@@ -104,8 +104,8 @@
   align-items: center;
   justify-content: center;
   color: var(--ink);
-  background: #ffffff;
-  border: 1px solid #cfd4d1;
+  background: #0d1826;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -115,7 +115,7 @@
   height: 40px;
   gap: 7px;
   padding: 0 12px;
-  color: #ffffff;
+  color: #0d1826;
   background: var(--signal-dark);
   border-color: var(--signal-dark);
   font-size: 0.78rem;
@@ -130,14 +130,14 @@
 
 .iconButton {
   color: #064f3e;
-  background: #e5f6ef;
-  border-color: #bde7d6;
+  background: rgba(77,255,161,0.1);
+  border-color: rgba(77,255,161,0.14);
 }
 
 .iconButtonSecondary {
   color: #45505a;
-  background: #f8fafb;
-  border-color: #d9e0e3;
+  background: #0c1626;
+  border-color: rgba(120,200,255,0.12);
 }
 
 .iconTextButton:disabled,
@@ -169,8 +169,8 @@
   gap: 8px;
   height: 40px;
   padding: 0 10px;
-  background: #ffffff;
-  border: 1px solid #cfd4d1;
+  background: #0d1826;
+  border: 1px solid rgba(120,200,255,0.16);
   border-radius: 6px;
 }
 
@@ -205,20 +205,20 @@
   width: 100%;
   min-width: 900px;
   border-collapse: collapse;
-  background: #ffffff;
+  background: #0d1826;
 }
 
 .table th,
 .table td {
   padding: 11px 12px;
-  border-bottom: 1px solid #e7ebea;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
   text-align: left;
   vertical-align: middle;
 }
 
 .table th {
   color: var(--muted);
-  background: #f7f9f8;
+  background: #0c1626;
   font-size: 0.66rem;
   font-weight: 820;
   letter-spacing: 0.08em;
@@ -263,57 +263,57 @@
 }
 
 .active {
-  color: #075b45;
-  background: #e5f6ef;
-  border-color: #bde7d6;
+  color: #4dffa1;
+  background: rgba(77,255,161,0.1);
+  border-color: rgba(77,255,161,0.14);
 }
 
 .archived {
   color: #5a626b;
-  background: #edf0f2;
-  border-color: #d7dde1;
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(120,200,255,0.16);
 }
 
 .suggested {
   color: #775414;
-  background: #fff2d5;
-  border-color: #efd29b;
+  background: rgba(255,177,59,0.12);
+  border-color: rgba(255,177,59,0.35);
 }
 
 .edited {
   color: #145a78;
-  background: #e1f2f9;
+  background: rgba(57,212,255,0.1);
   border-color: #b6ddeb;
 }
 
 .sourceK15 {
-  color: #075b45;
-  background: #e5f6ef;
-  border-color: #bde7d6;
+  color: #4dffa1;
+  background: rgba(77,255,161,0.1);
+  border-color: rgba(77,255,161,0.14);
 }
 
 .sourceK16 {
   color: #155d7c;
-  background: #e4f3fb;
+  background: rgba(57,212,255,0.1);
   border-color: #b7dff0;
 }
 
 .sourceK17 {
   color: #59488c;
-  background: #eeeafa;
-  border-color: #d3c9f3;
+  background: rgba(139,92,246,0.14);
+  border-color: rgba(139,92,246,0.2);
 }
 
 .sourceK18 {
   color: #79510b;
-  background: #fff1d4;
-  border-color: #efd29b;
+  background: rgba(255,177,59,0.12);
+  border-color: rgba(255,177,59,0.35);
 }
 
 .sourceManual {
   color: #4b5259;
-  background: #eef1f3;
-  border-color: #d7dde1;
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(120,200,255,0.16);
 }
 
 .rowActions,
@@ -347,7 +347,7 @@
 }
 
 .error {
-  color: #a32f2f;
+  color: #ff6b8a;
 }
 
 @media (max-width: 980px) {
