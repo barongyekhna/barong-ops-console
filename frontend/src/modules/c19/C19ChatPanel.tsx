@@ -86,6 +86,10 @@ const EVENT_LIMIT = 200;
 const MAX_EVENT_DRAIN_PAGES = 50;
 const EVENT_POLL_INTERVAL_MS = 4_000;
 const SSE_HANDSHAKE_TIMEOUT_MS = 12_000;
+// 后台对账提示只在真卡住时才打扰用户:补齐提示延迟到超过 1.5s 才显示;
+// 报错横条只在连续失败到达阈值后才亮(偶发一次自愈的失败不惊扰)。
+const RECOVERY_SLOW_HINT_MS = 1500;
+const RECOVERY_ERROR_VISIBLE_THRESHOLD = 3;
 const STATUS_REFRESH_INTERVAL_MS = 15_000;
 const MESSAGE_MAX_LENGTH = 4_000;
 const ASSET_SCAN_POLL_LIMIT = 120;
@@ -283,7 +287,20 @@ export function C19ChatPanel({
   const [receiptError, setReceiptError] = useState("");
   const [recoveryError, setRecoveryError] = useState("");
   const [isRecovering, setIsRecovering] = useState(true);
+  const [recoverySlow, setRecoverySlow] = useState(false);
   const [recoveryReady, setRecoveryReady] = useState(false);
+  const recoveryFailureStreakRef = useRef(0);
+
+  // 补齐提示延迟显示:对账通常一两秒就完成,只有真卡住(>1.5s)才提示,
+  // 避免每次进会话都闪一下"正在补齐历史消息"。
+  useEffect(() => {
+    if (!isRecovering) {
+      setRecoverySlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setRecoverySlow(true), RECOVERY_SLOW_HINT_MS);
+    return () => clearTimeout(timer);
+  }, [isRecovering]);
   const [safeReceiptSequence, setSafeReceiptSequence] = useState(0);
   const [historyWindowLimited, setHistoryWindowLimited] = useState(false);
   const [renderWindowMode, setRenderWindowMode] =
@@ -683,6 +700,7 @@ export function C19ChatPanel({
         receiptSafetyScopeRef.current = receiptSafetyScope;
         setRecoveryReady(true);
         setRecoveryError("");
+        recoveryFailureStreakRef.current = 0;
         if (paging.initialized) {
           setHistoryError("");
         }
@@ -692,7 +710,8 @@ export function C19ChatPanel({
           activeConversationRef.current === conversationId &&
           recoveryOperationRef.current === operation
         ) {
-          if (error instanceof RecoverySafetyError) {
+          const recoveryPaused = error instanceof RecoverySafetyError;
+          if (recoveryPaused) {
             automaticRecoveryPausedRef.current = true;
           }
           if (
@@ -701,9 +720,17 @@ export function C19ChatPanel({
           ) {
             recoveryCheckpointRef.current = null;
           }
-          setRecoveryError(
-            runtimeErrorMessage(error, "断线后消息补齐失败，请刷新会话后重试。"),
-          );
+          // 只有自动恢复被暂停(不会自愈)、或连续失败到阈值,才把报错亮给用户;
+          // 偶发一次、下一轮就恢复的失败保持静默,避免"服务暂时不可用"反复跳。
+          recoveryFailureStreakRef.current += 1;
+          if (
+            recoveryPaused ||
+            recoveryFailureStreakRef.current >= RECOVERY_ERROR_VISIBLE_THRESHOLD
+          ) {
+            setRecoveryError(
+              runtimeErrorMessage(error, "断线后消息补齐失败，请刷新会话后重试。"),
+            );
+          }
         }
         return false;
       } finally {
@@ -777,6 +804,7 @@ export function C19ChatPanel({
     setSendError("");
     setReceiptError("");
     setRecoveryError("");
+    recoveryFailureStreakRef.current = 0;
     setIsRecovering(true);
     setRecoveryReady(false);
     setSafeReceiptSequence(0);
@@ -1990,7 +2018,7 @@ export function C19ChatPanel({
           </button>
         </div>
       ) : null}
-      {isRecovering && !isLoadingHistory ? (
+      {recoverySlow && !isLoadingHistory ? (
         <div className={styles.chatRuntimeWarning} role="status">
           正在补齐历史消息，完成后会更新已读状态。
         </div>
