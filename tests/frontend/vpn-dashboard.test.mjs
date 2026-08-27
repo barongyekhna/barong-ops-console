@@ -226,4 +226,11 @@ test("VPN page keeps the Fire Phoenix cockpit classes without adding CSS", () =>
   assert.match(nginx, /limit_except PATCH \{ deny all; \}/);
   assert.match(nginx, /location = \/api\/backend\/vpn\/devices\/enroll/);
   assert.match(nginx, /limit_except POST \{ deny all; \}/);
+  // The installer must live under /api/backend: the session cookie path is
+  // /api/backend, so any other prefix never reaches auth_request with a cookie.
+  assert.match(dashboard, /"\/api\/backend\/vpn\/downloads\/windows"/);
+  assert.match(dashboard, /window\.location\.assign\(WINDOWS_APP_DOWNLOAD_PATH\)/);
+  assert.match(nginx, /location = \/api\/backend\/vpn\/downloads\/windows/);
+  assert.match(nginx, /auth_request \/_barong_vpn_release_auth;/);
+  assert.doesNotMatch(dashboard, /"\/downloads\//);
 });

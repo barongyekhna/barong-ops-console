@@ -6,6 +6,7 @@ import { isAllowedBackendProxyPath } from "../../frontend/src/app/api/backend/[.
 import {
   navigationItems,
   navigationModuleRecords,
+  pageTitles,
 } from "../../frontend/src/lib/navigation.ts";
 import {
   MODULE_NO_PERMISSION_DESCRIPTION,
@@ -751,7 +752,10 @@ test("productized routes are visible while diagnostics stay out of navigation", 
   assert.equal(item("admin.workflows"), undefined);
   assert.equal(item("core.dashboard").href, "/dashboard");
   assert.equal(item("core.vpn").href, "/vpn");
-  assert.equal(item("admin.settings").href, "/settings");
+  // M15 (QA 2026-08-22) removed the "设置" nav entry (dead link); the page
+  // title stays so the route still renders a name when reached directly.
+  assert.equal(item("admin.settings"), undefined);
+  assert.equal(pageTitles["/settings"], "设置");
 });
 
 test("VPN route uses its dedicated cockpit inside the normal login guard", () => {
@@ -1356,7 +1360,6 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "core.vpn",
     "admin.modules",
     "admin.key_health",
-    "admin.settings",
     "system.errors",
     "system.memory_events",
     "system.operation_logs",

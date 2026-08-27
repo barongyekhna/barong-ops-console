@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- VPN:Windows 控制台 App 安装包改由 `/api/backend/vpn/downloads/windows`
+  提供(会话 cookie 的 path 是 `/api/backend`,原 `/downloads/*.exe` 永远拿不到
+  cookie、`auth_request` 一律 401,导致 0.2.2 从未有人装上;旧路径改 404)。
+  VPN 页「一键连接」卡在普通浏览器里改为「下载 Windows 控制台 App」入口。
+  根因回顾:专线 08-15 由 443 改 62000,用户电脑上的 0.2.1 把旧端口一次性写死
+  在本机隧道配置里且永不轮换,必须卸载重装重登记。
+- 前端测试 `module-isolation`:「设置」导航项已于 08-22 QA(M15)有意移除,
+  两条断言同步更新为不存在该入口、仅保留 `/settings` 页面标题。
+
 ### Added
 
 - 用户管理新增「注册机器人」(owner 专用:viewer + 机器人标记 + 所属组织 + C19

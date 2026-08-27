@@ -44,6 +44,14 @@ import {
 } from "./status";
 
 const POLL_INTERVAL_MS = 15_000;
+// Served by nginx under /api/backend so the session cookie travels with the
+// navigation; a same-origin navigation (not fetch) keeps the browser's native
+// download flow and cookie handling.
+const WINDOWS_APP_DOWNLOAD_PATH = "/api/backend/vpn/downloads/windows";
+
+function downloadWindowsApp() {
+  window.location.assign(WINDOWS_APP_DOWNLOAD_PATH);
+}
 
 const STATUS_LABELS: Record<ModuleCardStatus, string> = {
   active: "可用",
@@ -370,7 +378,7 @@ export function VpnDashboard() {
       }[nativePlatform]
     : "APP REQUIRED";
   const nativeActionLabel = !nativeBridgeAvailable
-    ? "请使用控制台 App"
+    ? "下载 Windows 控制台 App"
     : nativeBusy
       ? "正在处理…"
       : !nativeStatus?.installed
@@ -381,7 +389,7 @@ export function VpnDashboard() {
             ? "断开 VPN"
             : "连接 VPN";
   const nativeDescription = !nativeBridgeAvailable
-    ? "普通浏览器没有本机系统权限，请在控制台 App 中直接连接。"
+    ? "普通浏览器没有本机系统权限。先下载并安装 Windows 控制台 App，再在 App 里打开本页点一键连接。"
     : nativeError
       ? nativeError
       : nativeStatus?.connected
@@ -429,8 +437,8 @@ export function VpnDashboard() {
           </div>
           <div className="cc-card">
             <MetricCard
-              detail="所有成员设备总数"
-              label="成员设备"
+              detail="已启用的隧道设备(停用/未连接的不计入)"
+              label="在线隧道设备"
               value={peerCount ?? "—"}
             />
           </div>
@@ -482,10 +490,14 @@ export function VpnDashboard() {
               actionLabel={nativeActionLabel}
               badge={nativeBadge}
               description={nativeDescription}
-              disabled={!nativeBridgeAvailable || nativeBusy}
+              disabled={nativeBusy}
               name="一键连接"
-              onAction={() => void controlNativeVpn()}
-              status={nativeError ? "error" : nativeBridgeAvailable ? "active" : "disabled"}
+              onAction={
+                nativeBridgeAvailable
+                  ? () => void controlNativeVpn()
+                  : downloadWindowsApp
+              }
+              status={nativeError ? "error" : "active"}
             />
           </div>
 
