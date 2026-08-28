@@ -76,3 +76,9 @@ ssh root@<节点> 'cp /opt/barong-vpn-agent/agent.py /opt/barong-vpn-agent/agent
 - Windows：`/opt/barong-vpn-windows-app-src/windows`（Go agent + Electron 壳），产物 `releases/windows/`。
 - 安卓：`/opt/barong-vpn-windows-app-src/android`（内置 AmneziaWG 内核），产物 `releases/android/`；正式签名钥匙在 `/etc/barong-android-signing/`（**必须另行备份**）。
 - 苹果：源码在 `.../apple`，等 Apple Developer 账号。
+
+## 发新版客户端(自动更新)
+
+- **Windows**:`console-app` 里 `npm run dist:win` 产出 `BarongOpsConsoleSetup-<ver>-pilot-x64.exe`、`.blockmap`、`latest.yml`,三个一起放进 `releases/windows/`,并把 nginx `downloads/windows` 的 alias 指到新 exe。已装的 App 启动 30 秒后及每 6 小时读 `/api/backend/vpn/updates/windows/latest.yml`(带控制台会话 cookie),后台下载完弹窗"现在重启安装/下次打开时安装"。VPN 组件版本变化时由壳按 `REQUIRED_AGENT_VERSION` 自动升级。
+- **安卓**:`./gradlew :app:assembleRelease`(签名从 `/etc/barong-android-signing` 经环境变量注入)产出 APK,放进 `releases/android/` 并重写 `latest.json`(`version_code` 必须递增)。已装的 App 启动 20 秒后及每 6 小时读 `/api/backend/vpn/updates/android/latest.json`,弹窗"立即更新"→ 系统下载管理器下载(带 cookie)→ 点通知安装。
+- 两个更新源和手动下载都在 `auth_request` 门后;安装包内不含任何服务器信息。
