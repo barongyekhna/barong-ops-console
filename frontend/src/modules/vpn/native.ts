@@ -10,6 +10,8 @@ export type NativeVpnStatus = {
   desired_connected: boolean;
   device_id: string | null;
   installed: boolean;
+  node_id: string | null;
+  node_name: string | null;
   platform: NativeVpnPlatform;
   provisioned: boolean;
   tunnel_service_state: string;
@@ -35,9 +37,10 @@ export type NativeVpnBridge = {
 };
 
 const DEVICE_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ADDRESS_PATTERN =
   /^10\.66\.66\.(?:[2-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-4])\/32$/;
+const NODE_ID_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 const KEY_PATTERN = /^[A-Za-z0-9+/]{43}=$/;
 const AGENT_FIELD_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/;
 const NATIVE_PLATFORMS = new Set<NativeVpnPlatform>([
@@ -59,6 +62,10 @@ function safeString(value: unknown, maxLength: number): string | null {
   return normalized.length > 0 && normalized.length <= maxLength
     ? normalized
     : null;
+}
+
+function optionalString(value: unknown, maxLength: number): string | null {
+  return value === undefined || value === null ? null : safeString(value, maxLength);
 }
 
 export function getNativeVpnBridge(): NativeVpnBridge | null {
@@ -90,15 +97,11 @@ export function normalizeNativeVpnStatus(payload: unknown): NativeVpnStatus | nu
   }
   const available = payload.available === true;
   const installed = payload.installed === true;
-  const deviceId = payload.device_id === undefined || payload.device_id === null
-    ? null
-    : safeString(payload.device_id, 36);
-  const address = payload.address === undefined || payload.address === null
-    ? null
-    : safeString(payload.address, 32);
-  const agentVersion = payload.agent_version === undefined || payload.agent_version === null
-    ? null
-    : safeString(payload.agent_version, 32);
+  const deviceId = optionalString(payload.device_id, 36);
+  const address = optionalString(payload.address, 32);
+  const agentVersion = optionalString(payload.agent_version, 32);
+  const nodeId = optionalString(payload.node_id, 32);
+  const nodeName = optionalString(payload.node_name, 64);
   const tunnelState = safeString(payload.tunnel_service_state, 32) ?? "unavailable";
   const platform = payload.platform === undefined || payload.platform === null
     ? "windows"
@@ -110,6 +113,7 @@ export function normalizeNativeVpnStatus(payload: unknown): NativeVpnStatus | nu
     (deviceId !== null && !DEVICE_ID_PATTERN.test(deviceId)) ||
     (address !== null && !ADDRESS_PATTERN.test(address)) ||
     (agentVersion !== null && !AGENT_FIELD_PATTERN.test(agentVersion)) ||
+    (nodeId !== null && !NODE_ID_PATTERN.test(nodeId)) ||
     platform === null ||
     typeof payload.provisioned !== "boolean" ||
     typeof payload.desired_connected !== "boolean" ||
@@ -125,6 +129,8 @@ export function normalizeNativeVpnStatus(payload: unknown): NativeVpnStatus | nu
     desired_connected: payload.desired_connected,
     device_id: deviceId,
     installed,
+    node_id: nodeId,
+    node_name: nodeName,
     platform,
     provisioned: payload.provisioned,
     tunnel_service_state: tunnelState,

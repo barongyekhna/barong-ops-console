@@ -3,69 +3,62 @@
 import { apiRequest } from "@/lib/api";
 
 import {
-  normalizeCreatedVpnDevice,
   normalizeNativeVpnEnrollment,
   normalizeVpnDevice,
   normalizeVpnDeviceList,
-  type CreatedVpnDevice,
   type NativeVpnEnrollment,
   type VpnDevice,
-  type VpnDevicePlatform,
+  type VpnDeviceList,
 } from "./devices";
 import type { NativeVpnIdentity } from "./native";
-import { normalizeVpnStatus, type VpnStatus } from "./status";
+import { normalizeVpnNodeList, type VpnNode } from "./nodes";
 
-export async function getVpnStatus(signal?: AbortSignal): Promise<VpnStatus> {
-  const payload = await apiRequest<unknown>("/vpn/status", {
+// Installers are served by nginx under /api/backend so the session cookie
+// (path=/api/backend) travels with a plain same-origin navigation.
+export const VPN_DOWNLOADS = {
+  android: "/api/backend/vpn/downloads/android",
+  windows: "/api/backend/vpn/downloads/windows",
+} as const;
+
+export async function getVpnNodes(signal?: AbortSignal): Promise<VpnNode[]> {
+  const payload = await apiRequest<unknown>("/vpn/nodes", {
     bypassCache: true,
     method: "GET",
     retryLimit: 0,
     signal,
-    timeoutMs: 7_000,
+    timeoutMs: 9_000,
   });
-  const status = normalizeVpnStatus(payload);
-  if (!status) {
-    throw new Error("VPN 状态数据格式异常。");
+  const nodes = normalizeVpnNodeList(payload);
+  if (!nodes) {
+    throw new Error("VPN 节点数据格式异常。");
   }
-  return status;
+  return nodes;
 }
 
 export async function getVpnDevices(
   signal?: AbortSignal,
-): Promise<VpnDevice[]> {
+): Promise<VpnDeviceList> {
   const payload = await apiRequest<unknown>("/vpn/devices", {
     bypassCache: true,
     method: "GET",
     retryLimit: 0,
     signal,
-    timeoutMs: 8_000,
+    timeoutMs: 9_000,
   });
-  const devices = normalizeVpnDeviceList(payload);
-  if (!devices) {
+  const list = normalizeVpnDeviceList(payload);
+  if (!list) {
     throw new Error("VPN 设备数据格式异常。");
   }
-  return devices;
+  return list;
 }
 
-export async function createVpnDevice(input: {
-  name: string;
-  platform: VpnDevicePlatform;
-}): Promise<CreatedVpnDevice> {
-  const payload = await apiRequest<unknown>("/vpn/devices", {
-    body: input,
-    method: "POST",
-    retryLimit: 0,
-    timeoutMs: 10_000,
-  });
-  const created = normalizeCreatedVpnDevice(payload);
-  if (!created) {
-    throw new Error("VPN 设备创建结果格式异常。");
-  }
-  return created;
-}
-
+/**
+ * The only way a device comes into existence: the signed-in client enrolls
+ * itself with its own public key on the node it picked.
+ */
 export async function enrollNativeVpnDevice(
   identity: NativeVpnIdentity,
+  nodeId: string,
 ): Promise<NativeVpnEnrollment> {
   const payload = await apiRequest<unknown>("/vpn/devices/enroll", {
     body: {
@@ -73,6 +66,7 @@ export async function enrollNativeVpnDevice(
       architecture: identity.architecture,
       device_id: identity.device_id,
       name: identity.suggested_name,
+      node_id: nodeId,
       platform: identity.platform,
       public_key: identity.public_key,
     },

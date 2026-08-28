@@ -8,7 +8,10 @@ Type=simple
 User=root
 Group=root
 LoadCredential=control-token:/etc/barong-vpn-agent/control-token
-ExecStart=/usr/bin/python3 -B -I /opt/barong-vpn-agent/agent.py --state-file /var/lib/barong-vpn-agent/devices.json --runtime-dir /run/barong-vpn-agent
+# --public-host is the address clients dial; it is handed to them at enrollment
+# together with the live listen port, server public key and AmneziaWG
+# parameters (GET /v1/node), so no client ever hard-codes this node.
+ExecStart=/usr/bin/python3 -B -I /opt/barong-vpn-agent/agent.py --state-file /var/lib/barong-vpn-agent/devices.json --runtime-dir /run/barong-vpn-agent --public-host 45.76.173.147
 Restart=on-failure
 RestartSec=2s
 TimeoutStartSec=10s

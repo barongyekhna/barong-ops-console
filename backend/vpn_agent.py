@@ -9,7 +9,6 @@ import re
 import subprocess
 import tempfile
 import threading
-import uuid
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -19,14 +18,15 @@ from typing import Any, Optional
 from urllib.parse import urlsplit
 
 
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 BIND_HOST = "127.0.0.1"
 BIND_PORT = 8765
 INTERFACE = "awg0"
 SERVICE = "awg-quick@awg0.service"
 EXPECTED_PORT = 62000
-DEFAULT_ENDPOINT = "45.76.173.147:62000"
-DEFAULT_DNS = "1.1.1.1"
+DEFAULT_PUBLIC_HOST = "45.76.173.147"
+DEFAULT_MTU = 1280
+NODE_SCHEMA_VERSION = 1
 DEFAULT_STATE_PATH = Path("/var/lib/barong-vpn-agent/devices.json")
 DEFAULT_RUNTIME_DIR = Path("/run/barong-vpn-agent")
 COMMAND_TIMEOUT_SECONDS = 5
@@ -40,7 +40,10 @@ AGENT_FIELD_PATTERN = re.compile(r"^[A-Za-z0-9._+-]{1,32}$")
 DEVICE_ID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
-OBFUSCATION_FIELDS = ("Jc", "Jmin", "Jmax", "S1", "S2", "H1", "H2", "H3", "H4")
+OBFUSCATION_FIELDS = (
+    "Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4",
+)
+HOST_PATTERN = re.compile(r"^(?:\d{1,3}\.){3}\d{1,3}$|^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
 LOGGER = logging.getLogger("barong_vpn_agent")
 
 
@@ -324,14 +327,18 @@ class DeviceManager:
         *,
         state_path: Path = DEFAULT_STATE_PATH,
         runtime_dir: Path = DEFAULT_RUNTIME_DIR,
-        endpoint: str = DEFAULT_ENDPOINT,
-        dns: str = DEFAULT_DNS,
+        public_host: str = DEFAULT_PUBLIC_HOST,
+        mtu: int = DEFAULT_MTU,
         command_runner: CommandRunner = run_command,
     ) -> None:
+        if HOST_PATTERN.fullmatch(public_host) is None:
+            raise ValueError("invalid public host")
+        if not 576 <= mtu <= 1500:
+            raise ValueError("invalid mtu")
         self.state_path = state_path
         self.runtime_dir = runtime_dir
-        self.endpoint = endpoint
-        self.dns = dns
+        self.public_host = public_host
+        self.mtu = mtu
         self.command_runner = command_runner
         self._lock = threading.RLock()
 
@@ -388,13 +395,28 @@ class DeviceManager:
         except StatusCommandError as exc:
             raise DeviceError(503, "vpn_unavailable", "VPN device service is unavailable.") from exc
 
-    def _generate_credentials(self) -> tuple[str, str, str]:
-        private_key = self._run(("/usr/bin/awg", "genkey"))
-        public_key = self._run(("/usr/bin/awg", "pubkey"), f"{private_key}\n")
-        preshared_key = self._run(("/usr/bin/awg", "genpsk"))
-        if not all(_valid_key(item) for item in (private_key, public_key, preshared_key)):
-            raise DeviceError(503, "key_generation_failed", "VPN key generation failed.")
-        return private_key, public_key, preshared_key
+    def node_info(self) -> dict[str, Any]:
+        """Public parameters a client needs to build its tunnel to this node.
+
+        Everything comes from the live awg0 interface so the console never
+        stores a copy that can drift from the server.
+        """
+        server_public_key, obfuscation = self._server_parameters()
+        try:
+            listen_port = int(self._run(("/usr/bin/awg", "show", INTERFACE, "listen-port")))
+        except ValueError as exc:
+            raise DeviceError(503, "vpn_unavailable", "VPN listen port is unavailable.") from exc
+        if not 1 <= listen_port <= 65535:
+            raise DeviceError(503, "vpn_unavailable", "VPN listen port is unavailable.")
+        return {
+            "node_schema": NODE_SCHEMA_VERSION,
+            "interface": INTERFACE,
+            "public_key": server_public_key,
+            "endpoint": f"{self.public_host}:{listen_port}",
+            "listen_port": listen_port,
+            "mtu": self.mtu,
+            "obfuscation": {field: int(obfuscation[field]) for field in OBFUSCATION_FIELDS},
+        }
 
     def _generate_preshared_key(self) -> str:
         preshared_key = self._run(("/usr/bin/awg", "genpsk"))
@@ -483,36 +505,6 @@ class DeviceManager:
                 return f"10.66.66.{host}/32"
         raise DeviceError(409, "address_pool_exhausted", "VPN address pool is full.")
 
-    def _render_configuration(
-        self,
-        *,
-        address: str,
-        private_key: str,
-        preshared_key: str,
-        server_public_key: str,
-        obfuscation: Mapping[str, str],
-    ) -> str:
-        interface_lines = [
-            "[Interface]",
-            f"PrivateKey = {private_key}",
-            f"Address = {address}",
-            f"DNS = {self.dns}",
-        ]
-        interface_lines.extend(
-            f"{field} = {obfuscation[field]}" for field in OBFUSCATION_FIELDS
-        )
-        peer_lines = [
-            "",
-            "[Peer]",
-            f"PublicKey = {server_public_key}",
-            f"PresharedKey = {preshared_key}",
-            f"Endpoint = {self.endpoint}",
-            "AllowedIPs = 0.0.0.0/0",
-            "PersistentKeepalive = 25",
-            "",
-        ]
-        return "\n".join(interface_lines + peer_lines)
-
     @staticmethod
     def _public_device(
         device: Mapping[str, Any],
@@ -555,53 +547,6 @@ class DeviceManager:
             metrics = self._metrics()
             return [self._public_device(item, metrics) for item in devices]
 
-    def create_device(
-        self, owner_id: object, *, name: object, platform: object
-    ) -> dict[str, Any]:
-        owner = _validated_owner(owner_id)
-        device_name = _validated_name(name)
-        device_platform = _validated_platform(platform)
-        with self._lock:
-            devices = self._load()
-            if sum(item.get("owner_id") == owner for item in devices) >= MAX_DEVICES_PER_OWNER:
-                raise DeviceError(409, "device_limit_reached", "Device limit reached.")
-            address = self._next_address(devices)
-            private_key, public_key, preshared_key = self._generate_credentials()
-            server_public_key, obfuscation = self._server_parameters()
-            now = iso_utc()
-            device = {
-                "id": str(uuid.uuid4()),
-                "owner_id": owner,
-                "name": device_name,
-                "platform": device_platform,
-                "address": address,
-                "public_key": public_key,
-                "preshared_key": preshared_key,
-                "enabled": True,
-                "created_at": now,
-                "updated_at": now,
-            }
-            self._apply_peer(public_key, preshared_key, address)
-            try:
-                self._save([*devices, device])
-            except DeviceError:
-                try:
-                    self._remove_peer(public_key)
-                except DeviceError:
-                    LOGGER.error("failed to roll back newly created managed peer")
-                raise
-            return {
-                "device": self._public_device(device, {}),
-                "configuration": self._render_configuration(
-                    address=address,
-                    private_key=private_key,
-                    preshared_key=preshared_key,
-                    server_public_key=server_public_key,
-                    obfuscation=obfuscation,
-                ),
-                "one_time": True,
-            }
-
     def enroll_native_device(
         self,
         owner_id: object,
@@ -634,9 +579,29 @@ class DeviceManager:
                 ):
                     raise DeviceError(409, "device_conflict", "Device identity conflict.")
                 address = existing.get("address")
-                preshared_key = existing.get("preshared_key")
-                if not isinstance(address, str) or not _valid_key(preshared_key):
+                if not isinstance(address, str):
                     raise DeviceError(503, "invalid_state", "Stored device state is invalid.")
+                # Same owner, same device, same key: the client lost or replaced
+                # its local provisioning (reinstall, node switch). Issue a fresh
+                # PSK and re-apply the peer so the old secret stops working.
+                previous_psk = existing.get("preshared_key")
+                preshared_key = self._generate_preshared_key()
+                self._apply_peer(native_public_key, preshared_key, address)
+                existing["preshared_key"] = preshared_key
+                existing["name"] = device_name
+                existing["architecture"] = native_architecture
+                existing["agent_version"] = native_agent_version
+                existing["enabled"] = True
+                existing["updated_at"] = iso_utc()
+                try:
+                    self._save(devices)
+                except DeviceError:
+                    if _valid_key(previous_psk):
+                        try:
+                            self._apply_peer(native_public_key, previous_psk, address)
+                        except DeviceError:
+                            LOGGER.error("failed to roll back re-enrolled peer")
+                    raise
                 return {
                     "device": self._public_device(existing, self._metrics()),
                     "provisioning": {
@@ -814,11 +779,14 @@ class AgentHandler(BaseHTTPRequestHandler):
         if not head_only:
             self.wfile.write(body)
 
-    def _authorized_owner(self) -> str:
+    def _authorized_token(self) -> None:
         expected = f"Bearer {self.agent_server.control_token}"
         supplied = self.headers.get("Authorization", "")
         if not hmac.compare_digest(supplied, expected):
             raise DeviceError(401, "not_authenticated", "Not authenticated.")
+
+    def _authorized_owner(self) -> str:
+        self._authorized_token()
         return _validated_owner(self.headers.get("X-Barong-User-ID"))
 
     def _read_json(self) -> dict[str, object]:
@@ -873,6 +841,15 @@ class AgentHandler(BaseHTTPRequestHandler):
                 return
             self._send_json(200, {"devices": devices})
             return
+        if path == "/v1/node":
+            try:
+                self._authorized_token()
+                node = self.agent_server.manager.node_info()
+            except DeviceError as exc:
+                self._handle_device_error(exc)
+                return
+            self._send_json(200, node)
+            return
         self._send_json(404, {"error": "not_found", "message": "Not found."})
 
     def do_HEAD(self) -> None:  # noqa: N802
@@ -888,28 +865,24 @@ class AgentHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlsplit(self.path).path
-        if path not in {"/v1/devices", "/v1/devices/enroll"}:
+        # Only native enrollment exists: every device is the signed-in client
+        # itself, carrying its own public key. There is no server-side key
+        # generation and no manually created device.
+        if path != "/v1/devices/enroll":
             self._send_json(405, {"error": "method_not_allowed"})
             return
         try:
             owner = self._authorized_owner()
             payload = self._read_json()
-            if path == "/v1/devices/enroll":
-                result = self.agent_server.manager.enroll_native_device(
-                    owner,
-                    name=payload.get("name"),
-                    platform=payload.get("platform"),
-                    device_id=payload.get("device_id"),
-                    public_key=payload.get("public_key"),
-                    architecture=payload.get("architecture"),
-                    agent_version=payload.get("agent_version"),
-                )
-            else:
-                result = self.agent_server.manager.create_device(
-                    owner,
-                    name=payload.get("name"),
-                    platform=payload.get("platform"),
-                )
+            result = self.agent_server.manager.enroll_native_device(
+                owner,
+                name=payload.get("name"),
+                platform=payload.get("platform"),
+                device_id=payload.get("device_id"),
+                public_key=payload.get("public_key"),
+                architecture=payload.get("architecture"),
+                agent_version=payload.get("agent_version"),
+            )
         except DeviceError as exc:
             self._handle_device_error(exc)
             return
@@ -967,14 +940,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=BIND_PORT)
     parser.add_argument("--state-file", type=Path, default=DEFAULT_STATE_PATH)
     parser.add_argument("--runtime-dir", type=Path, default=DEFAULT_RUNTIME_DIR)
-    parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
-    parser.add_argument("--dns", default=DEFAULT_DNS)
+    parser.add_argument("--public-host", default=DEFAULT_PUBLIC_HOST)
+    parser.add_argument("--mtu", type=int, default=DEFAULT_MTU)
     parser.add_argument("--token-file", type=Path)
     args = parser.parse_args()
     if args.host != BIND_HOST:
         parser.error("the VPN agent must bind to 127.0.0.1")
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
+    if HOST_PATTERN.fullmatch(args.public_host) is None:
+        parser.error("--public-host must be an IPv4 address or hostname")
+    if not 576 <= args.mtu <= 1500:
+        parser.error("--mtu must be between 576 and 1500")
     return args
 
 
@@ -988,8 +965,8 @@ def main() -> None:
     manager = DeviceManager(
         state_path=args.state_file,
         runtime_dir=args.runtime_dir,
-        endpoint=args.endpoint,
-        dns=args.dns,
+        public_host=args.public_host,
+        mtu=args.mtu,
     )
     stop_event = threading.Event()
     reconciler = threading.Thread(

@@ -1,0 +1,13 @@
+{
+  "_comment": "Copy to /etc/barong-vpn-gateway/nodes.json (root:barong-vpn-gateway 0640). One entry per VPN node. agent_url must be the local end of that node's SSH bridge (see deploy/systemd/barong-vpn-bridge@.service). Restart barong-vpn-gateway after editing. See docs/VPN_OPERATIONS.md.",
+  "nodes": [
+    {
+      "id": "us-la",
+      "name": "美国-洛杉矶",
+      "region": "US",
+      "agent_url": "http://127.0.0.1:18765",
+      "enabled": true,
+      "order": 10
+    }
+  ]
+}

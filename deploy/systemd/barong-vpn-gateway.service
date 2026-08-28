@@ -9,6 +9,8 @@ User=barong-vpn-gateway
 Group=barong-vpn-gateway
 WorkingDirectory=/opt/barong-ops-console
 LoadCredential=agent-token:/etc/barong-vpn-gateway/agent-token
+# Node registry (see deploy/vpn/nodes.example.json, docs/VPN_OPERATIONS.md).
+LoadCredential=nodes:/etc/barong-vpn-gateway/nodes.json
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /opt/barong-ops-console/backend/vpn_gateway.py --host 127.0.0.1 --port 18766

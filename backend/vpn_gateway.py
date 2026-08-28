@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Optional
@@ -14,14 +16,18 @@ from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 AUTH_URL = "http://127.0.0.1:8000/api/public/auth/me"
-VPN_AGENT_HEALTH_URL = "http://127.0.0.1:18765/health"
-VPN_AGENT_STATUS_URL = "http://127.0.0.1:18765/v1/status"
-VPN_AGENT_DEVICES_URL = "http://127.0.0.1:18765/v1/devices"
 BACKEND_HEALTH_URL = "http://127.0.0.1:8000/health"
+# Legacy single-node layout (the first node ever deployed). Used only when no
+# nodes file exists so the gateway keeps serving after an upgrade.
+LEGACY_AGENT_URL = "http://127.0.0.1:18765"
+VPN_AGENT_HEALTH_URL = f"{LEGACY_AGENT_URL}/health"
+VPN_AGENT_STATUS_URL = f"{LEGACY_AGENT_URL}/v1/status"
+VPN_AGENT_DEVICES_URL = f"{LEGACY_AGENT_URL}/v1/devices"
 
 STATUS_PATH = "/api/backend/vpn/status"
+NODES_PATH = "/api/backend/vpn/nodes"
 DEVICES_PATH = "/api/backend/vpn/devices"
 NATIVE_ENROLL_PATH = f"{DEVICES_PATH}/enroll"
 DEVICE_PATH_PREFIX = f"{DEVICES_PATH}/"
@@ -29,8 +35,12 @@ HEALTH_PATH = "/health"
 MAX_COOKIE_BYTES = 8192
 MAX_BODY_BYTES = 16_384
 MAX_UPSTREAM_BYTES = 65_536
+MAX_NODES = 32
+MAX_DEVICES_PER_NODE = 10
 AUTH_TIMEOUT_SECONDS = 1.5
 VPN_TIMEOUT_SECONDS = 5.0
+PROVISIONING_SCHEMA_VERSION = 2
+DEFAULT_DNS = ("1.1.1.1", "1.0.0.1")
 PLATFORMS = {"windows", "macos", "ios", "android", "other"}
 DEVICE_ID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -38,6 +48,12 @@ DEVICE_ID_PATTERN = re.compile(
 ADDRESS_PATTERN = re.compile(r"^10\.66\.66\.(?:[2-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-4])/32$")
 KEY_PATTERN = re.compile(r"^[A-Za-z0-9+/]{43}=$")
 AGENT_FIELD_PATTERN = re.compile(r"^[A-Za-z0-9._+-]{1,32}$")
+NODE_ID_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$")
+ENDPOINT_PATTERN = re.compile(
+    r"^(?:(?:\d{1,3}\.){3}\d{1,3}|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+):(\d{2,5})$"
+)
+OBFUSCATION_FIELDS = ("Jc", "Jmin", "Jmax", "S1", "S2", "S3", "S4", "H1", "H2", "H3", "H4")
+NODE_STATUS_STATES = {"ok", "degraded"}
 
 LOGGER = logging.getLogger("barong_vpn_gateway")
 _OPENER = build_opener(ProxyHandler({}))
@@ -58,6 +74,53 @@ FetchJson = Callable[
     [str, str, Mapping[str, str], Optional[object], float],
     tuple[int, object],
 ]
+
+
+@dataclass(frozen=True)
+class Node:
+    id: str
+    name: str
+    region: str
+    agent_url: str
+    enabled: bool
+    order: int
+
+    @property
+    def status_url(self) -> str:
+        return f"{self.agent_url}/v1/status"
+
+    @property
+    def devices_url(self) -> str:
+        return f"{self.agent_url}/v1/devices"
+
+    @property
+    def node_url(self) -> str:
+        return f"{self.agent_url}/v1/node"
+
+    @property
+    def health_url(self) -> str:
+        return f"{self.agent_url}/health"
+
+    def public(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "region": self.region,
+            "enabled": self.enabled,
+            "order": self.order,
+        }
+
+
+LEGACY_NODES: tuple[Node, ...] = (
+    Node(
+        id="us-la",
+        name="美国-洛杉矶",
+        region="US",
+        agent_url=LEGACY_AGENT_URL,
+        enabled=True,
+        order=10,
+    ),
+)
 
 
 def _decode_json(raw: bytes) -> object:
@@ -104,6 +167,100 @@ def fetch_json(
     return status_code, _decode_json(raw)
 
 
+# --------------------------------------------------------------------------
+# Node registry
+# --------------------------------------------------------------------------
+
+
+def parse_nodes(payload: object) -> tuple[Node, ...]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("nodes"), list):
+        raise RuntimeError("nodes file must contain a 'nodes' list")
+    raw_nodes = payload["nodes"]
+    if not 1 <= len(raw_nodes) <= MAX_NODES:
+        raise RuntimeError(f"nodes file must list between 1 and {MAX_NODES} nodes")
+    nodes: list[Node] = []
+    seen: set[str] = set()
+    for item in raw_nodes:
+        if not isinstance(item, dict):
+            raise RuntimeError("every node must be an object")
+        node_id = item.get("id")
+        name = item.get("name")
+        region = item.get("region", "")
+        agent_url = item.get("agent_url")
+        enabled = item.get("enabled", True)
+        order = item.get("order", 100)
+        if not isinstance(node_id, str) or NODE_ID_PATTERN.fullmatch(node_id) is None:
+            raise RuntimeError(f"invalid node id: {node_id!r}")
+        if node_id in seen:
+            raise RuntimeError(f"duplicate node id: {node_id}")
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 64:
+            raise RuntimeError(f"invalid node name for {node_id}")
+        if not isinstance(region, str) or len(region) > 32:
+            raise RuntimeError(f"invalid node region for {node_id}")
+        if (
+            not isinstance(agent_url, str)
+            or re.fullmatch(r"http://127\.0\.0\.1:\d{2,5}", agent_url) is None
+        ):
+            raise RuntimeError(
+                f"node {node_id}: agent_url must be http://127.0.0.1:<port> (an SSH bridge)"
+            )
+        if not isinstance(enabled, bool):
+            raise RuntimeError(f"node {node_id}: enabled must be a boolean")
+        if isinstance(order, bool) or not isinstance(order, int) or not 0 <= order <= 10_000:
+            raise RuntimeError(f"node {node_id}: order must be an integer 0-10000")
+        seen.add(node_id)
+        nodes.append(
+            Node(
+                id=node_id,
+                name=name.strip(),
+                region=region.strip(),
+                agent_url=agent_url,
+                enabled=enabled,
+                order=order,
+            )
+        )
+    nodes.sort(key=lambda node: (node.order, node.id))
+    return tuple(nodes)
+
+
+def load_nodes(path: Path) -> tuple[Node, ...]:
+    if not path.exists():
+        LOGGER.warning("nodes file %s missing; using the legacy single node", path)
+        return LEGACY_NODES
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("nodes file unreadable") from exc
+    return parse_nodes(payload)
+
+
+def enabled_nodes(nodes: Sequence[Node]) -> list[Node]:
+    return [node for node in nodes if node.enabled]
+
+
+def find_node(nodes: Sequence[Node], node_id: object) -> Node:
+    if not isinstance(node_id, str) or NODE_ID_PATTERN.fullmatch(node_id) is None:
+        raise GatewayError(400, "节点不存在。")
+    for node in nodes:
+        if node.id == node_id:
+            if not node.enabled:
+                raise GatewayError(409, "该节点已停用。")
+            return node
+    raise GatewayError(400, "节点不存在。")
+
+
+def default_node(nodes: Sequence[Node]) -> Node:
+    active = enabled_nodes(nodes)
+    if not active:
+        raise GatewayError(503, "VPN status temporarily unavailable.")
+    return active[0]
+
+
+# --------------------------------------------------------------------------
+# Sanitizers: every byte that reaches a browser passes through one of these.
+# --------------------------------------------------------------------------
+
+
 def _safe_string(value: object, *, max_length: int = 256) -> str | None:
     if not isinstance(value, str):
         return None
@@ -123,9 +280,7 @@ def _safe_timestamp(value: object) -> str | None:
     return _safe_string(value, max_length=64)
 
 
-def sanitize_vpn_status(payload: object) -> dict[str, object]:
-    if not isinstance(payload, dict) or payload.get("status") != "ok":
-        raise GatewayError(503, "VPN status temporarily unavailable.")
+def _status_body(payload: Mapping[str, object], state: str) -> dict[str, object]:
     vpn = payload.get("vpn")
     if not isinstance(vpn, dict) or vpn.get("interface") != "awg0":
         raise GatewayError(503, "VPN status temporarily unavailable.")
@@ -141,7 +296,7 @@ def sanitize_vpn_status(payload: object) -> dict[str, object]:
             if safe_item is not None:
                 warnings.append(safe_item)
     return {
-        "status": "ok",
+        "status": state,
         "generated_at": _safe_timestamp(payload.get("generated_at")),
         "agent_version": _safe_string(payload.get("agent_version"), max_length=32),
         "vpn": {
@@ -168,7 +323,31 @@ def sanitize_vpn_status(payload: object) -> dict[str, object]:
     }
 
 
-def sanitize_device(payload: object) -> dict[str, object]:
+def sanitize_vpn_status(payload: object) -> dict[str, object]:
+    """Strict form used by /status (and nginx auth_request): only 'ok'."""
+    if not isinstance(payload, dict) or payload.get("status") != "ok":
+        raise GatewayError(503, "VPN status temporarily unavailable.")
+    return _status_body(payload, "ok")
+
+
+def sanitize_node_status(payload: object) -> dict[str, object]:
+    """Lenient form used by /nodes: 'degraded' is passed through with warnings."""
+    if not isinstance(payload, dict) or payload.get("status") not in NODE_STATUS_STATES:
+        raise GatewayError(503, "VPN status temporarily unavailable.")
+    return _status_body(payload, str(payload["status"]))
+
+
+def unreachable_status() -> dict[str, object]:
+    return {
+        "status": "unreachable",
+        "generated_at": None,
+        "agent_version": None,
+        "vpn": None,
+        "warnings": ["node_unreachable"],
+    }
+
+
+def sanitize_device(payload: object, *, node_id: str | None = None) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise GatewayError(503, "VPN device service temporarily unavailable.")
     device_id = _safe_string(payload.get("id"), max_length=36)
@@ -186,7 +365,7 @@ def sanitize_device(payload: object) -> dict[str, object]:
         or not isinstance(enabled, bool)
     ):
         raise GatewayError(503, "VPN device service temporarily unavailable.")
-    return {
+    device: dict[str, object] = {
         "id": device_id,
         "name": name,
         "platform": platform,
@@ -198,34 +377,59 @@ def sanitize_device(payload: object) -> dict[str, object]:
         "received_bytes": _safe_non_negative_int(payload.get("received_bytes")),
         "sent_bytes": _safe_non_negative_int(payload.get("sent_bytes")),
     }
+    if node_id is not None:
+        device["node_id"] = node_id
+    return device
 
 
-def sanitize_device_list(payload: object) -> dict[str, object]:
+def sanitize_device_list(payload: object, *, node_id: str | None = None) -> dict[str, object]:
     if not isinstance(payload, dict) or not isinstance(payload.get("devices"), list):
         raise GatewayError(503, "VPN device service temporarily unavailable.")
     devices = payload["devices"]
-    if len(devices) > 10:
+    if len(devices) > MAX_DEVICES_PER_NODE:
         raise GatewayError(503, "VPN device service temporarily unavailable.")
-    return {"devices": [sanitize_device(item) for item in devices]}
+    return {"devices": [sanitize_device(item, node_id=node_id) for item in devices]}
 
 
-def sanitize_created_device(payload: object) -> dict[str, object]:
-    if not isinstance(payload, dict) or payload.get("one_time") is not True:
+def sanitize_node_info(payload: object) -> dict[str, object]:
+    """Public tunnel parameters of one node, straight from its agent."""
+    if not isinstance(payload, dict) or payload.get("node_schema") != 1:
         raise GatewayError(503, "VPN device service temporarily unavailable.")
-    configuration = payload.get("configuration")
-    if not isinstance(configuration, str) or not 1 <= len(configuration) <= 8192:
+    public_key = payload.get("public_key")
+    endpoint = payload.get("endpoint")
+    mtu = payload.get("mtu")
+    obfuscation = payload.get("obfuscation")
+    if (
+        not isinstance(public_key, str)
+        or KEY_PATTERN.fullmatch(public_key) is None
+        or not isinstance(endpoint, str)
+        or ENDPOINT_PATTERN.fullmatch(endpoint) is None
+        or not 1 <= int(endpoint.rsplit(":", 1)[1]) <= 65535
+        or isinstance(mtu, bool)
+        or not isinstance(mtu, int)
+        or not 576 <= mtu <= 1500
+        or not isinstance(obfuscation, dict)
+    ):
         raise GatewayError(503, "VPN device service temporarily unavailable.")
+    safe_obfuscation: dict[str, int] = {}
+    for field in OBFUSCATION_FIELDS:
+        value = _safe_non_negative_int(obfuscation.get(field))
+        if value is None:
+            raise GatewayError(503, "VPN device service temporarily unavailable.")
+        safe_obfuscation[field] = value
     return {
-        "device": sanitize_device(payload.get("device")),
-        "configuration": configuration,
-        "one_time": True,
+        "public_key": public_key,
+        "endpoint": endpoint,
+        "mtu": mtu,
+        "obfuscation": safe_obfuscation,
     }
 
 
-def sanitize_native_enrollment(payload: object) -> dict[str, object]:
-    if not isinstance(payload, dict) or payload.get("one_time") is not True:
+def build_provisioning(node: Node, node_info: Mapping[str, object], agent_payload: object) -> dict[str, object]:
+    """Compose the schema-2 provisioning the client turns into a tunnel."""
+    if not isinstance(agent_payload, dict) or agent_payload.get("one_time") is not True:
         raise GatewayError(503, "VPN device service temporarily unavailable.")
-    provisioning = payload.get("provisioning")
+    provisioning = agent_payload.get("provisioning")
     if not isinstance(provisioning, dict):
         raise GatewayError(503, "VPN device service temporarily unavailable.")
     device_id = _safe_string(provisioning.get("device_id"), max_length=36)
@@ -242,15 +446,29 @@ def sanitize_native_enrollment(payload: object) -> dict[str, object]:
     ):
         raise GatewayError(503, "VPN device service temporarily unavailable.")
     return {
-        "device": sanitize_device(payload.get("device")),
+        "device": sanitize_device(agent_payload.get("device"), node_id=node.id),
         "provisioning": {
-            "schema_version": 1,
+            "schema_version": PROVISIONING_SCHEMA_VERSION,
+            "node": {
+                "id": node.id,
+                "name": node.name,
+                "endpoint": node_info["endpoint"],
+                "public_key": node_info["public_key"],
+                "mtu": node_info["mtu"],
+                "obfuscation": dict(node_info["obfuscation"]),  # type: ignore[arg-type]
+            },
             "device_id": device_id,
             "address": address,
             "preshared_key": preshared_key,
+            "dns": list(DEFAULT_DNS),
         },
         "one_time": True,
     }
+
+
+# --------------------------------------------------------------------------
+# Authentication and agent plumbing
+# --------------------------------------------------------------------------
 
 
 def _authenticate(cookie: str | None, *, fetcher: FetchJson) -> str:
@@ -296,82 +514,109 @@ def _agent_error(status_code: int) -> GatewayError:
     return GatewayError(503, "VPN device service temporarily unavailable.")
 
 
+def _node_status(node: Node, fetcher: FetchJson) -> dict[str, object]:
+    try:
+        status_code, payload = fetcher(node.status_url, "GET", {}, None, VPN_TIMEOUT_SECONDS)
+    except UpstreamUnavailable:
+        return unreachable_status()
+    if status_code not in {200, 503}:
+        return unreachable_status()
+    try:
+        return sanitize_node_status(payload)
+    except GatewayError:
+        return unreachable_status()
+
+
+def _fan_out(nodes: Sequence[Node], task: Callable[[Node], Any]) -> list[Any]:
+    if not nodes:
+        return []
+    if len(nodes) == 1:
+        return [task(nodes[0])]
+    with ThreadPoolExecutor(max_workers=min(len(nodes), 8)) as pool:
+        return list(pool.map(task, nodes))
+
+
+# --------------------------------------------------------------------------
+# Authenticated operations
+# --------------------------------------------------------------------------
+
+
 def get_authenticated_vpn_status(
     cookie: str | None,
     *,
+    nodes: Sequence[Node] = LEGACY_NODES,
     fetcher: FetchJson = fetch_json,
 ) -> dict[str, object]:
+    """Strict status of the default node (nginx auth_request relies on 200)."""
     _authenticate(cookie, fetcher=fetcher)
+    node = default_node(nodes)
     try:
-        status_code, payload = fetcher(
-            VPN_AGENT_STATUS_URL,
-            "GET",
-            {},
-            None,
-            VPN_TIMEOUT_SECONDS,
-        )
+        status_code, payload = fetcher(node.status_url, "GET", {}, None, VPN_TIMEOUT_SECONDS)
     except UpstreamUnavailable as exc:
         raise GatewayError(503, "VPN status temporarily unavailable.") from exc
     if status_code != 200:
         raise GatewayError(503, "VPN status temporarily unavailable.")
-    return sanitize_vpn_status(payload)
+    result = sanitize_vpn_status(payload)
+    result["node_id"] = node.id
+    return result
+
+
+def get_authenticated_nodes(
+    cookie: str | None,
+    *,
+    nodes: Sequence[Node] = LEGACY_NODES,
+    fetcher: FetchJson = fetch_json,
+) -> dict[str, object]:
+    _authenticate(cookie, fetcher=fetcher)
+    listed = [node for node in nodes]
+
+    def describe(node: Node) -> dict[str, object]:
+        entry = node.public()
+        entry["status"] = _node_status(node, fetcher) if node.enabled else unreachable_status()
+        return entry
+
+    return {"nodes": _fan_out(listed, describe)}
 
 
 def get_authenticated_devices(
     cookie: str | None,
     *,
+    nodes: Sequence[Node] = LEGACY_NODES,
     agent_token: str,
     fetcher: FetchJson = fetch_json,
 ) -> dict[str, object]:
     owner_id = _authenticate(cookie, fetcher=fetcher)
-    try:
-        status_code, payload = fetcher(
-            VPN_AGENT_DEVICES_URL,
-            "GET",
-            _agent_headers(owner_id, agent_token),
-            None,
-            VPN_TIMEOUT_SECONDS,
-        )
-    except UpstreamUnavailable as exc:
-        raise GatewayError(503, "VPN device service temporarily unavailable.") from exc
-    if status_code != 200:
-        raise _agent_error(status_code)
-    return sanitize_device_list(payload)
+    headers = _agent_headers(owner_id, agent_token)
+    active = enabled_nodes(nodes)
 
+    def fetch(node: Node) -> tuple[list[dict[str, object]], str | None]:
+        try:
+            status_code, payload = fetcher(node.devices_url, "GET", headers, None, VPN_TIMEOUT_SECONDS)
+        except UpstreamUnavailable:
+            return [], node.id
+        if status_code != 200:
+            return [], node.id
+        try:
+            return sanitize_device_list(payload, node_id=node.id)["devices"], None  # type: ignore[return-value]
+        except GatewayError:
+            return [], node.id
 
-def create_authenticated_device(
-    cookie: str | None,
-    request_payload: object,
-    *,
-    agent_token: str,
-    fetcher: FetchJson = fetch_json,
-) -> dict[str, object]:
-    owner_id = _authenticate(cookie, fetcher=fetcher)
-    if not isinstance(request_payload, dict):
-        raise GatewayError(400, "设备信息不正确。")
-    name = _safe_string(request_payload.get("name"), max_length=64)
-    platform = request_payload.get("platform")
-    if name is None or platform not in PLATFORMS:
-        raise GatewayError(400, "设备信息不正确。")
-    try:
-        status_code, payload = fetcher(
-            VPN_AGENT_DEVICES_URL,
-            "POST",
-            _agent_headers(owner_id, agent_token),
-            {"name": name, "platform": platform},
-            VPN_TIMEOUT_SECONDS,
-        )
-    except UpstreamUnavailable as exc:
-        raise GatewayError(503, "VPN device service temporarily unavailable.") from exc
-    if status_code != 201:
-        raise _agent_error(status_code)
-    return sanitize_created_device(payload)
+    devices: list[dict[str, object]] = []
+    unavailable: list[str] = []
+    for node_devices, failed in _fan_out(active, fetch):
+        devices.extend(node_devices)
+        if failed is not None:
+            unavailable.append(failed)
+    if active and len(unavailable) == len(active):
+        raise GatewayError(503, "VPN device service temporarily unavailable.")
+    return {"devices": devices, "unavailable_nodes": unavailable}
 
 
 def enroll_authenticated_device(
     cookie: str | None,
     request_payload: object,
     *,
+    nodes: Sequence[Node] = LEGACY_NODES,
     agent_token: str,
     fetcher: FetchJson = fetch_json,
 ) -> dict[str, object]:
@@ -397,6 +642,20 @@ def enroll_authenticated_device(
         or AGENT_FIELD_PATTERN.fullmatch(agent_version) is None
     ):
         raise GatewayError(400, "设备信息不正确。")
+    # Clients that predate node selection enroll on the default node.
+    node = (
+        find_node(nodes, request_payload["node_id"])
+        if "node_id" in request_payload
+        else default_node(nodes)
+    )
+    headers = _agent_headers(owner_id, agent_token)
+    try:
+        info_status, info_payload = fetcher(node.node_url, "GET", headers, None, VPN_TIMEOUT_SECONDS)
+    except UpstreamUnavailable as exc:
+        raise GatewayError(503, "VPN device service temporarily unavailable.") from exc
+    if info_status != 200:
+        raise GatewayError(503, "VPN device service temporarily unavailable.")
+    node_info = sanitize_node_info(info_payload)
     forwarded = {
         "name": name,
         "platform": platform,
@@ -407,9 +666,9 @@ def enroll_authenticated_device(
     }
     try:
         status_code, payload = fetcher(
-            f"{VPN_AGENT_DEVICES_URL}/enroll",
+            f"{node.devices_url}/enroll",
             "POST",
-            _agent_headers(owner_id, agent_token),
+            headers,
             forwarded,
             VPN_TIMEOUT_SECONDS,
         )
@@ -417,7 +676,7 @@ def enroll_authenticated_device(
         raise GatewayError(503, "VPN device service temporarily unavailable.") from exc
     if status_code != 201:
         raise _agent_error(status_code)
-    return sanitize_native_enrollment(payload)
+    return build_provisioning(node, node_info, payload)
 
 
 def update_authenticated_device(
@@ -425,6 +684,7 @@ def update_authenticated_device(
     device_id: str,
     request_payload: object,
     *,
+    nodes: Sequence[Node] = LEGACY_NODES,
     agent_token: str,
     fetcher: FetchJson = fetch_json,
 ) -> dict[str, object]:
@@ -434,29 +694,42 @@ def update_authenticated_device(
     enabled = request_payload.get("enabled") if isinstance(request_payload, dict) else None
     if not isinstance(enabled, bool):
         raise GatewayError(400, "设备状态不正确。")
-    try:
-        status_code, payload = fetcher(
-            f"{VPN_AGENT_DEVICES_URL}/{device_id}",
-            "PATCH",
-            _agent_headers(owner_id, agent_token),
-            {"enabled": enabled},
-            VPN_TIMEOUT_SECONDS,
-        )
-    except UpstreamUnavailable as exc:
-        raise GatewayError(503, "VPN device service temporarily unavailable.") from exc
-    if status_code != 200:
-        raise _agent_error(status_code)
-    if not isinstance(payload, dict):
-        raise GatewayError(503, "VPN device service temporarily unavailable.")
-    return {"device": sanitize_device(payload.get("device"))}
+    headers = _agent_headers(owner_id, agent_token)
+    active = enabled_nodes(nodes)
+    if isinstance(request_payload, dict) and "node_id" in request_payload:
+        active = [find_node(nodes, request_payload["node_id"])]
+    last_error: GatewayError = GatewayError(404, "没有找到这台设备。")
+    for node in active:
+        try:
+            status_code, payload = fetcher(
+                f"{node.devices_url}/{device_id}",
+                "PATCH",
+                headers,
+                {"enabled": enabled},
+                VPN_TIMEOUT_SECONDS,
+            )
+        except UpstreamUnavailable:
+            last_error = GatewayError(503, "VPN device service temporarily unavailable.")
+            continue
+        if status_code == 404:
+            continue
+        if status_code != 200:
+            raise _agent_error(status_code)
+        if not isinstance(payload, dict):
+            raise GatewayError(503, "VPN device service temporarily unavailable.")
+        return {"device": sanitize_device(payload.get("device"), node_id=node.id)}
+    raise last_error
 
 
-def dependency_health(*, fetcher: FetchJson = fetch_json) -> tuple[int, dict[str, object]]:
+def dependency_health(
+    *,
+    nodes: Sequence[Node] = LEGACY_NODES,
+    fetcher: FetchJson = fetch_json,
+) -> tuple[int, dict[str, object]]:
+    targets: list[tuple[str, str]] = [("console_backend", BACKEND_HEALTH_URL)]
+    targets.extend((f"vpn_agent:{node.id}", node.health_url) for node in enabled_nodes(nodes))
     dependencies: dict[str, str] = {}
-    for name, url in (
-        ("console_backend", BACKEND_HEALTH_URL),
-        ("vpn_agent", VPN_AGENT_HEALTH_URL),
-    ):
+    for name, url in targets:
         try:
             status_code, payload = fetcher(url, "GET", {}, None, VPN_TIMEOUT_SECONDS)
             healthy = (
@@ -474,7 +747,8 @@ def dependency_health(*, fetcher: FetchJson = fetch_json) -> tuple[int, dict[str
             "status": "ok" if healthy else "degraded",
             "service": "barong-vpn-gateway",
             "version": VERSION,
-            "mode": "device_management",
+            "mode": "multi_node",
+            "node_count": len(enabled_nodes(nodes)),
             "dependencies": dependencies,
         },
     )
@@ -497,6 +771,20 @@ def _credential_path() -> Path:
     return Path("/etc/barong-vpn-gateway/agent-token")
 
 
+def _nodes_path() -> Path:
+    # Delivered by systemd LoadCredential=nodes:... so the unprivileged gateway
+    # user never needs read access to /etc/barong-vpn-gateway itself.
+    credentials_directory = os.environ.get("CREDENTIALS_DIRECTORY")
+    if credentials_directory and (Path(credentials_directory) / "nodes").exists():
+        return Path(credentials_directory) / "nodes"
+    return Path("/etc/barong-vpn-gateway/nodes.json")
+
+
+# --------------------------------------------------------------------------
+# HTTP surface
+# --------------------------------------------------------------------------
+
+
 class VpnGatewayServer(ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 64
@@ -507,9 +795,11 @@ class VpnGatewayServer(ThreadingHTTPServer):
         handler: type[BaseHTTPRequestHandler],
         *,
         agent_token: str,
+        nodes: Sequence[Node],
     ) -> None:
         super().__init__(server_address, handler)
         self.agent_token = agent_token
+        self.nodes = tuple(nodes)
 
 
 class VpnGatewayHandler(BaseHTTPRequestHandler):
@@ -557,16 +847,21 @@ class VpnGatewayHandler(BaseHTTPRequestHandler):
 
     def _handle_read(self, *, head_only: bool = False) -> None:
         path = urlsplit(self.path).path
+        nodes = self.gateway_server.nodes
         if path == HEALTH_PATH:
-            status_code, payload = dependency_health()
+            status_code, payload = dependency_health(nodes=nodes)
             self._send_json(status_code, payload, head_only=head_only)
             return
+        cookie = self.headers.get("Cookie")
         try:
             if path == STATUS_PATH:
-                payload = get_authenticated_vpn_status(self.headers.get("Cookie"))
+                payload = get_authenticated_vpn_status(cookie, nodes=nodes)
+            elif path == NODES_PATH:
+                payload = get_authenticated_nodes(cookie, nodes=nodes)
             elif path == DEVICES_PATH:
                 payload = get_authenticated_devices(
-                    self.headers.get("Cookie"),
+                    cookie,
+                    nodes=nodes,
                     agent_token=self.gateway_server.agent_token,
                 )
             else:
@@ -585,23 +880,18 @@ class VpnGatewayHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
-        if path not in {DEVICES_PATH, NATIVE_ENROLL_PATH}:
+        # Devices are never created by hand: the only POST is the signed-in
+        # client enrolling itself with its own public key.
+        if path != NATIVE_ENROLL_PATH:
             self._send_json(405, {"detail": "Method not allowed."})
             return
         try:
-            request_payload = self._read_json()
-            if path == NATIVE_ENROLL_PATH:
-                payload = enroll_authenticated_device(
-                    self.headers.get("Cookie"),
-                    request_payload,
-                    agent_token=self.gateway_server.agent_token,
-                )
-            else:
-                payload = create_authenticated_device(
-                    self.headers.get("Cookie"),
-                    request_payload,
-                    agent_token=self.gateway_server.agent_token,
-                )
+            payload = enroll_authenticated_device(
+                self.headers.get("Cookie"),
+                self._read_json(),
+                nodes=self.gateway_server.nodes,
+                agent_token=self.gateway_server.agent_token,
+            )
         except GatewayError as exc:
             self._send_gateway_error(exc)
             return
@@ -617,6 +907,7 @@ class VpnGatewayHandler(BaseHTTPRequestHandler):
                 self.headers.get("Cookie"),
                 path[len(DEVICE_PATH_PREFIX) :],
                 self._read_json(),
+                nodes=self.gateway_server.nodes,
                 agent_token=self.gateway_server.agent_token,
             )
         except GatewayError as exc:
@@ -649,6 +940,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18766)
     parser.add_argument("--agent-token-file", type=Path)
+    parser.add_argument("--nodes-file", type=Path)
     args = parser.parse_args()
     if args.host != "127.0.0.1":
         parser.error("the VPN gateway must bind to 127.0.0.1")
@@ -661,12 +953,18 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     args = parse_args()
     agent_token = load_agent_token(args.agent_token_file or _credential_path())
+    nodes = load_nodes(args.nodes_file or _nodes_path())
     server = VpnGatewayServer(
         (args.host, args.port),
         VpnGatewayHandler,
         agent_token=agent_token,
+        nodes=nodes,
     )
-    LOGGER.info("starting VPN gateway version=%s on loopback", VERSION)
+    LOGGER.info(
+        "starting VPN gateway version=%s nodes=%s on loopback",
+        VERSION,
+        ",".join(node.id for node in nodes),
+    )
     server.serve_forever(poll_interval=0.5)
 
 

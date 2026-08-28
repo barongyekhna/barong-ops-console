@@ -1,0 +1,55 @@
+[Unit]
+Description=Barong VPN control bridge to node %i (SSH port forward to the node agent)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+# One instance per VPN node. /etc/barong-vpn-bridge/%i.env must define:
+#   REMOTE_HOST=45.76.173.147     public address of the node
+#   LOCAL_PORT=18765              loopback port the gateway's nodes.json points at
+#   REMOTE_PORT=8765              agent port on the node (default in vpn_agent.py)
+# The node must have user barong-vpn-bridge whose authorized_keys carries the
+# public half of /var/lib/barong-vpn-bridge/.ssh/id_ed25519 with
+#   restrict,port-forwarding,permitopen="127.0.0.1:8765"
+# and its host key must be pinned in /etc/barong-vpn-bridge/known_hosts.
+[Service]
+Type=simple
+User=barong-vpn-bridge
+Group=barong-vpn-bridge
+EnvironmentFile=/etc/barong-vpn-bridge/%i.env
+ExecStartPre=/usr/bin/test -r /var/lib/barong-vpn-bridge/.ssh/id_ed25519
+ExecStartPre=/usr/bin/test -r /etc/barong-vpn-bridge/known_hosts
+ExecStart=/usr/bin/ssh -F /dev/null -N -T -i /var/lib/barong-vpn-bridge/.ssh/id_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/barong-vpn-bridge/known_hosts -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o PreferredAuthentications=publickey -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ConnectTimeout=10 -o PermitLocalCommand=no -o RequestTTY=no -o LogLevel=ERROR -L 127.0.0.1:${LOCAL_PORT}:127.0.0.1:${REMOTE_PORT} barong-vpn-bridge@${REMOTE_HOST}
+Restart=always
+RestartSec=5s
+TimeoutStartSec=20s
+TimeoutStopSec=10s
+UMask=0077
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET
+# systemd does not expand variables in IPAddressAllow. Pin the node address
+# per instance with a drop-in, e.g. /etc/systemd/system/barong-vpn-bridge@us-la.service.d/ip.conf:
+#   [Service]
+#   IPAddressDeny=any
+#   IPAddressAllow=localhost
+#   IPAddressAllow=45.76.173.147
+
+[Install]
+WantedBy=multi-user.target

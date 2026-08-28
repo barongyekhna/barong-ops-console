@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+### Changed
+
+- VPN 二期:多节点体系。网关 0.4.0 持有节点登记簿(`/etc/barong-vpn-gateway/nodes.json`,
+  示例 `deploy/vpn/nodes.example.json`),新增 `GET /api/backend/vpn/nodes`(每节点实时
+  状态,`degraded` 带 warnings 透传,不再吞成 503),设备列表跨节点汇总带 `node_id`;
+  登记响应升到 **provisioning schema 2**:节点 endpoint/公钥/MTU/AmneziaWG 参数由
+  agent `GET /v1/node` 现读现发,客户端不再内置任何服务器信息。agent 0.4.0 登记重放
+  换发新 PSK。**删除网页手动建设备**(`POST /vpn/devices` 与 agent `create_device`),
+  设备只能由登录的客户端自己登记。首节点命名「美国-洛杉矶」(`us-la`)。
+- VPN 页重做:常驻连接状态条(呼吸灯 + 5s 实时上下行速率 + 累计流量 + 一键连接/断开)、
+  统一的节点面板(吃登记簿渲染,点节点即切换)、只读设备列表;连接过程等隧道真正
+  建立后再判定,修掉"刚连上闪一次异常"。样式为 `globals.css` 末尾追加的 `.cc-vpn-*` 层。
+- Windows 控制台 App 0.3.0 / 安卓 0.3.0:隧道配置完全由 provisioning v2 渲染,允许
+  重新登记(换节点/换 PSK)覆盖本机配置;安装包改为在服务器容器内构建并发布到
+  `/api/backend/vpn/downloads/{windows,android}`。运维手册 `docs/VPN_OPERATIONS.md`,
+  SSH 桥模板 `deploy/systemd/barong-vpn-bridge@.service`。
+
 ### Fixed
 
 - VPN:Windows 控制台 App 安装包改由 `/api/backend/vpn/downloads/windows`

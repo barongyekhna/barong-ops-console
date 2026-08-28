@@ -1,152 +1,118 @@
 "use client";
 
-import {
-  type FormEvent,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { DashboardScene } from "@/components/dashboard-scene";
-import {
-  DashboardSkeleton,
-  MetricCard,
-  type ModuleCardStatus,
-} from "@/components/dashboard-ui";
+import { DashboardSkeleton } from "@/components/dashboard-ui";
 import { ApiRequestAbortedError, isApiAbortError } from "@/lib/api";
 
 import {
-  createVpnDevice,
   enrollNativeVpnDevice,
   getVpnDevices,
-  getVpnStatus,
+  getVpnNodes,
   setVpnDeviceEnabled,
+  VPN_DOWNLOADS,
 } from "./api";
 import {
-  platformLabel,
-  type CreatedVpnDevice,
-  type VpnDevice,
-  type VpnDevicePlatform,
-} from "./devices";
+  ConnectionBar,
+  type ConnectionPhase,
+  type ConnectionRates,
+} from "./ConnectionBar";
+import { DeviceList } from "./DeviceList";
+import type { VpnDevice } from "./devices";
 import {
   getNativeVpnBridge,
   normalizeNativeVpnIdentity,
   normalizeNativeVpnStatus,
   type NativeVpnStatus,
 } from "./native";
-import {
-  formatBytes,
-  formatStatusTime,
-  isVpnOnline,
-  totalTransferBytes,
-  type VpnStatus,
-} from "./status";
+import { NodePanel } from "./NodePanel";
+import { isNodeOnline, type VpnNode } from "./nodes";
 
-const POLL_INTERVAL_MS = 15_000;
-// Served by nginx under /api/backend so the session cookie travels with the
-// navigation; a same-origin navigation (not fetch) keeps the browser's native
-// download flow and cookie handling.
-const WINDOWS_APP_DOWNLOAD_PATH = "/api/backend/vpn/downloads/windows";
+// Live view: poll every 5s while the tab is visible so rates and the lamp
+// track reality; hidden tabs stop polling entirely.
+const POLL_INTERVAL_MS = 5_000;
+// After asking the native agent to connect, watch its status for up to 20s
+// before calling the attempt failed. The tunnel service needs a few seconds.
+const CONNECT_SETTLE_ATTEMPTS = 20;
+const CONNECT_SETTLE_INTERVAL_MS = 1_000;
 
-function downloadWindowsApp() {
-  window.location.assign(WINDOWS_APP_DOWNLOAD_PATH);
-}
-
-const STATUS_LABELS: Record<ModuleCardStatus, string> = {
-  active: "可用",
-  disabled: "待开放",
-  error: "异常",
-};
-
-type StageCardProps = {
-  actionLabel: string;
-  badge: string;
-  description: string;
-  disabled?: boolean;
-  name: string;
-  onAction?: () => void;
-  status: ModuleCardStatus;
-};
-
-function StageCard({
-  actionLabel,
-  badge,
-  description,
-  disabled = false,
-  name,
-  onAction,
-  status,
-}: StageCardProps) {
-  return (
-    <article className="module-card">
-      <div className="module-card-header">
-        <div>
-          <span className={`status-pill ${status}`}>
-            <span aria-hidden="true" />
-            {STATUS_LABELS[status]}
-          </span>
-          <h3>{name}</h3>
-        </div>
-        <span className="subtle-badge">{badge}</span>
-      </div>
-      <p>{description}</p>
-      <button
-        className="module-card-action"
-        disabled={disabled || !onAction}
-        onClick={onAction}
-        type="button"
-      >
-        {actionLabel}
-      </button>
-    </article>
-  );
-}
+type Sample = { at: number; received: number; sent: number };
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-function configurationFilename(device: VpnDevice): string {
-  const safeName = device.name.replace(/[^\p{L}\p{N}._-]+/gu, "-");
-  return `${safeName || "barong-vpn"}.conf`;
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+function sumBytes(devices: VpnDevice[], key: "received_bytes" | "sent_bytes"): number | null {
+  const values = devices.map((device) => device[key]).filter((v): v is number => v !== null);
+  return values.length === 0 ? null : values.reduce((a, b) => a + b, 0);
 }
 
 export function VpnDashboard() {
-  const [status, setStatus] = useState<VpnStatus | null>(null);
+  const [nodes, setNodes] = useState<VpnNode[]>([]);
   const [devices, setDevices] = useState<VpnDevice[]>([]);
-  const [statusError, setStatusError] = useState("");
+  const [unavailableNodes, setUnavailableNodes] = useState<string[]>([]);
+  const [nodeError, setNodeError] = useState("");
   const [deviceError, setDeviceError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [deviceName, setDeviceName] = useState("");
-  const [platform, setPlatform] = useState<VpnDevicePlatform>("windows");
-  const [oneTimeDevice, setOneTimeDevice] =
-    useState<CreatedVpnDevice | null>(null);
-  const [copyMessage, setCopyMessage] = useState("");
   const [nativeStatus, setNativeStatus] = useState<NativeVpnStatus | null>(null);
   const [nativeError, setNativeError] = useState("");
-  const [nativeBusy, setNativeBusy] = useState(false);
+  const [nativeBusy, setNativeBusy] = useState<"connect" | "disconnect" | "switch" | null>(null);
+  const [switchingNodeId, setSwitchingNodeId] = useState<string | null>(null);
+  const [rates, setRates] = useState<ConnectionRates>({
+    down_bytes_per_second: null,
+    up_bytes_per_second: null,
+  });
   const requestGenerationRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const lastSampleRef = useRef<Sample | null>(null);
+  const nativeStatusRef = useRef<NativeVpnStatus | null>(null);
+  nativeStatusRef.current = nativeStatus;
 
-  const loadNative = useCallback(async () => {
-    const bridge = getNativeVpnBridge();
-    if (!bridge) {
+  const bridge = typeof window === "undefined" ? null : getNativeVpnBridge();
+  const nativeAvailable = bridge !== null;
+
+  const updateRates = useCallback((list: VpnDevice[], localDeviceId: string | null) => {
+    const scope = localDeviceId
+      ? list.filter((device) => device.id === localDeviceId)
+      : list;
+    const received = sumBytes(scope, "received_bytes");
+    const sent = sumBytes(scope, "sent_bytes");
+    const now = Date.now();
+    const previous = lastSampleRef.current;
+    if (received !== null && sent !== null) {
+      if (previous && now > previous.at) {
+        const seconds = (now - previous.at) / 1000;
+        setRates({
+          down_bytes_per_second: Math.max(0, (received - previous.received) / seconds),
+          up_bytes_per_second: Math.max(0, (sent - previous.sent) / seconds),
+        });
+      }
+      lastSampleRef.current = { at: now, received, sent };
+    }
+  }, []);
+
+  const loadNative = useCallback(async (): Promise<NativeVpnStatus | null> => {
+    const currentBridge = getNativeVpnBridge();
+    if (!currentBridge) {
       setNativeStatus(null);
-      setNativeError("");
-      return;
+      return null;
     }
     try {
-      const nextStatus = normalizeNativeVpnStatus(await bridge.status());
+      const nextStatus = normalizeNativeVpnStatus(await currentBridge.status());
       if (!nextStatus) {
         throw new Error("本机 VPN 状态格式异常。");
       }
       setNativeStatus(nextStatus);
-      setNativeError("");
+      return nextStatus;
     } catch (error) {
       setNativeError(errorMessage(error, "本机 VPN 状态暂时无法读取。"));
+      return null;
     }
   }, []);
 
@@ -154,9 +120,7 @@ export function VpnDashboard() {
     async ({ silent = false }: { silent?: boolean } = {}) => {
       const previousController = abortControllerRef.current;
       if (previousController && !previousController.signal.aborted) {
-        previousController.abort(
-          new ApiRequestAbortedError("VPN request superseded."),
-        );
+        previousController.abort(new ApiRequestAbortedError("VPN request superseded."));
       }
       const controller = new AbortController();
       const generation = requestGenerationRef.current + 1;
@@ -166,37 +130,32 @@ export function VpnDashboard() {
         setIsLoading(true);
       }
 
-      const [statusResult, devicesResult] = await Promise.allSettled([
-        getVpnStatus(controller.signal),
+      const [nodesResult, devicesResult] = await Promise.allSettled([
+        getVpnNodes(controller.signal),
         getVpnDevices(controller.signal),
       ]);
-      if (
-        controller.signal.aborted ||
-        requestGenerationRef.current !== generation
-      ) {
+      if (controller.signal.aborted || requestGenerationRef.current !== generation) {
         return;
       }
 
-      if (statusResult.status === "fulfilled") {
-        setStatus(statusResult.value);
-        setStatusError("");
-      } else if (!isApiAbortError(statusResult.reason)) {
-        setStatusError(
-          errorMessage(statusResult.reason, "VPN 状态暂时无法读取。"),
-        );
+      if (nodesResult.status === "fulfilled") {
+        setNodes(nodesResult.value);
+        setNodeError("");
+      } else if (!isApiAbortError(nodesResult.reason)) {
+        setNodeError(errorMessage(nodesResult.reason, "节点状态暂时无法读取。"));
       }
       if (devicesResult.status === "fulfilled") {
-        setDevices(devicesResult.value);
+        setDevices(devicesResult.value.devices);
+        setUnavailableNodes(devicesResult.value.unavailable_nodes);
         setDeviceError("");
+        updateRates(devicesResult.value.devices, nativeStatusRef.current?.device_id ?? null);
       } else if (!isApiAbortError(devicesResult.reason)) {
-        setDeviceError(
-          errorMessage(devicesResult.reason, "我的 VPN 设备暂时无法读取。"),
-        );
+        setDeviceError(errorMessage(devicesResult.reason, "我的设备暂时无法读取。"));
       }
       abortControllerRef.current = null;
       setIsLoading(false);
     },
-    [],
+    [updateRates],
   );
 
   useEffect(() => {
@@ -229,85 +188,121 @@ export function VpnDashboard() {
     };
   }, [load, loadNative]);
 
+  // Wait for the native tunnel to actually come up (or down) instead of
+  // judging the first status read after the command, which is what used to
+  // flash "异常" for a moment right after a successful connect.
+  const settleNative = useCallback(
+    async (wantConnected: boolean): Promise<NativeVpnStatus | null> => {
+      for (let attempt = 0; attempt < CONNECT_SETTLE_ATTEMPTS; attempt += 1) {
+        const status = await loadNative();
+        if (status && status.connected === wantConnected) {
+          return status;
+        }
+        await sleep(CONNECT_SETTLE_INTERVAL_MS);
+      }
+      return null;
+    },
+    [loadNative],
+  );
+
+  const localDevice = nativeStatus?.device_id
+    ? devices.find((device) => device.id === nativeStatus.device_id) ?? null
+    : null;
+  const currentNodeId = nativeStatus?.node_id ?? localDevice?.node_id ?? null;
+  const currentNode = nodes.find((node) => node.id === currentNodeId) ?? null;
+  const defaultNode = nodes.find((node) => node.enabled && isNodeOnline(node)) ?? nodes.find((node) => node.enabled) ?? null;
+
+  const enrollAndConnect = useCallback(
+    async (node: VpnNode) => {
+      const currentBridge = getNativeVpnBridge();
+      if (!currentBridge) {
+        throw new Error("请在控制台 App 中使用一键连接。");
+      }
+      let status = nativeStatusRef.current;
+      if (!status?.installed) {
+        const installed = normalizeNativeVpnStatus(await currentBridge.install());
+        if (!installed?.installed) {
+          throw new Error("VPN 组件尚未完成安装，请允许系统权限后重试。");
+        }
+        status = installed;
+        setNativeStatus(installed);
+      }
+      const identity = normalizeNativeVpnIdentity(await currentBridge.enrollment());
+      if (!identity) {
+        throw new Error("本机设备身份格式异常。");
+      }
+      const enrollment = await enrollNativeVpnDevice(identity, node.id);
+      await currentBridge.provision(enrollment.provisioning);
+      setDevices((before) => [
+        ...before.filter((device) => device.id !== enrollment.device.id),
+        enrollment.device,
+      ]);
+      await currentBridge.connect();
+      const settled = await settleNative(true);
+      if (!settled) {
+        throw new Error("连接超时，请稍后再试一次。");
+      }
+    },
+    [settleNative],
+  );
+
   const controlNativeVpn = async () => {
-    const bridge = getNativeVpnBridge();
-    if (!bridge) {
+    const currentBridge = getNativeVpnBridge();
+    if (!currentBridge) {
       setNativeError("请在控制台 App 中使用一键连接。");
       return;
     }
-    setNativeBusy(true);
+    const status = nativeStatusRef.current;
+    const wantsDisconnect = Boolean(status?.provisioned && (status.connected || status.desired_connected));
+    setNativeBusy(wantsDisconnect ? "disconnect" : "connect");
     setNativeError("");
     try {
-      let current = nativeStatus;
-      if (!current?.installed) {
-        const installed = normalizeNativeVpnStatus(await bridge.install());
-        if (!installed?.installed) {
-          throw new Error("VPN 组件尚未完成安装，请允许管理员权限后重试。");
+      if (wantsDisconnect) {
+        await currentBridge.disconnect();
+        await settleNative(false);
+      } else if (status?.provisioned && status.node_id) {
+        await currentBridge.connect();
+        const settled = await settleNative(true);
+        if (!settled) {
+          throw new Error("连接超时，请稍后再试一次。");
         }
-        current = installed;
-      }
-      if (!current.provisioned) {
-        const identity = normalizeNativeVpnIdentity(await bridge.enrollment());
-        if (!identity) {
-          throw new Error("本机设备身份格式异常。");
-        }
-        const enrollment = await enrollNativeVpnDevice(identity);
-        await bridge.provision(enrollment.provisioning);
-        setDevices((devicesBeforeEnrollment) => {
-          const withoutCurrent = devicesBeforeEnrollment.filter(
-            (device) => device.id !== enrollment.device.id,
-          );
-          return [...withoutCurrent, enrollment.device];
-        });
-        await bridge.connect();
-      } else if (current.connected || current.desired_connected) {
-        await bridge.disconnect();
       } else {
-        await bridge.connect();
+        const target = currentNode ?? defaultNode;
+        if (!target) {
+          throw new Error("当前没有可用节点。");
+        }
+        await enrollAndConnect(target);
       }
-      await Promise.all([load({ silent: true }), loadNative()]);
+      await load({ silent: true });
     } catch (error) {
-      const message = errorMessage(error, "本机 VPN 操作失败，请稍后重试。");
+      setNativeError(errorMessage(error, "本机 VPN 操作失败，请稍后重试。"));
       await loadNative();
-      setNativeError(message);
     } finally {
-      setNativeBusy(false);
+      setNativeBusy(null);
     }
   };
 
-  const openCreateDrawer = () => {
-    setOneTimeDevice(null);
-    setCopyMessage("");
-    setDeviceError("");
-    setDrawerOpen(true);
-  };
-
-  const closeDrawer = () => {
-    setDrawerOpen(false);
-    setOneTimeDevice(null);
-    setCopyMessage("");
-  };
-
-  const submitDevice = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const name = deviceName.trim();
-    if (!name) {
-      setDeviceError("请填写设备名称。");
+  const switchNode = async (node: VpnNode) => {
+    if (!nativeAvailable || node.id === currentNodeId) {
       return;
     }
-    setIsMutating(true);
-    setDeviceError("");
+    setNativeBusy("switch");
+    setSwitchingNodeId(node.id);
+    setNativeError("");
     try {
-      const created = await createVpnDevice({ name, platform });
-      setDevices((current) => [...current, created.device]);
-      setOneTimeDevice(created);
-      setDeviceName("");
-      setCopyMessage("");
-      void load({ silent: true });
+      const currentBridge = getNativeVpnBridge();
+      if (currentBridge && nativeStatusRef.current?.connected) {
+        await currentBridge.disconnect();
+        await settleNative(false);
+      }
+      await enrollAndConnect(node);
+      await load({ silent: true });
     } catch (error) {
-      setDeviceError(errorMessage(error, "设备创建失败，请稍后重试。"));
+      setNativeError(errorMessage(error, "切换节点失败，请稍后重试。"));
+      await loadNative();
     } finally {
-      setIsMutating(false);
+      setNativeBusy(null);
+      setSwitchingNodeId(null);
     }
   };
 
@@ -317,7 +312,7 @@ export function VpnDashboard() {
     try {
       const updated = await setVpnDeviceEnabled(device.id, !device.enabled);
       setDevices((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
+        current.map((item) => (item.id === updated.id ? { ...item, ...updated, node_id: updated.node_id ?? item.node_id } : item)),
       );
       void load({ silent: true });
     } catch (error) {
@@ -327,83 +322,62 @@ export function VpnDashboard() {
     }
   };
 
-  const copyConfiguration = async () => {
-    if (!oneTimeDevice) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(oneTimeDevice.configuration);
-      setCopyMessage("配置已复制。请立即保存，关闭后无法再次查看。");
-    } catch {
-      setCopyMessage("浏览器未允许复制，请使用下载配置。");
-    }
-  };
+  // ---- derived view state -------------------------------------------------
+  let phase: ConnectionPhase;
+  if (!nativeAvailable) {
+    phase = "browser";
+  } else if (nativeBusy === "disconnect") {
+    phase = "disconnecting";
+  } else if (nativeBusy !== null) {
+    phase = "connecting";
+  } else if (nativeError) {
+    phase = "error";
+  } else if (nativeStatus?.connected) {
+    phase = "connected";
+  } else if (nativeStatus?.desired_connected) {
+    phase = "connecting";
+  } else {
+    phase = "disconnected";
+  }
 
-  const downloadConfiguration = () => {
-    if (!oneTimeDevice) {
-      return;
-    }
-    const blob = new Blob([oneTimeDevice.configuration], {
-      type: "text/plain;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = configurationFilename(oneTimeDevice.device);
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setCopyMessage("配置已下载。关闭后无法再次查看。");
-  };
-
-  const online = isVpnOnline(status);
-  const peerCount = status?.vpn.peer_count;
-  const activePeerCount = status?.vpn.recently_active_peer_count;
-  const transfer = totalTransferBytes(status);
-  const headerStatus =
-    isLoading && !status
-      ? "连接中"
-      : statusError
-        ? "读取异常"
-        : online
-          ? "服务在线"
-          : "服务异常";
-  const nativeBridgeAvailable = getNativeVpnBridge() !== null;
-  const nativePlatform = nativeStatus?.platform ?? "windows";
-  const nativeBadge = nativeBridgeAvailable
-    ? {
-        android: "ANDROID APP",
-        ios: "IPHONE APP",
-        macos: "MAC APP",
-        windows: "WINDOWS APP",
-      }[nativePlatform]
-    : "APP REQUIRED";
-  const nativeActionLabel = !nativeBridgeAvailable
-    ? "下载 Windows 控制台 App"
-    : nativeBusy
-      ? "正在处理…"
-      : !nativeStatus?.installed
-        ? "安装并启用"
-        : !nativeStatus.provisioned
-          ? "启用本机 VPN"
-          : nativeStatus.connected || nativeStatus.desired_connected
-            ? "断开 VPN"
-            : "连接 VPN";
-  const nativeDescription = !nativeBridgeAvailable
-    ? "普通浏览器没有本机系统权限。先下载并安装 Windows 控制台 App，再在 App 里打开本页点一键连接。"
+  const nodeName = phase === "browser"
+    ? defaultNode?.name ?? null
+    : nativeStatus?.node_name ?? currentNode?.name ?? defaultNode?.name ?? null;
+  const actionLabel = !nativeStatus?.installed
+    ? "安装并连接"
+    : !nativeStatus.provisioned
+      ? "登记本机并连接"
+      : nativeStatus.connected || nativeStatus.desired_connected
+        ? "断开 VPN"
+        : "连接 VPN";
+  const detail = phase === "browser"
+    ? "普通浏览器没有本机系统权限。安装控制台 App 后在 App 里打开本页，一键登记本机并连接。"
     : nativeError
       ? nativeError
-      : nativeStatus?.connected
-        ? `本机已通过 ${nativeStatus.address ?? "专属地址"} 连接；关闭控制台不会断开。`
-        : nativeStatus?.desired_connected
-          ? "本机正在建立安全连接；关闭控制台不会取消连接。"
-        : nativeStatus?.provisioned
-          ? "本机 VPN 已配置完成，可以直接连接。"
-          : nativePlatform === "android"
-            ? "第一次启用会申请一次 Android 系统 VPN 权限，并自动登记本机。"
-            : "第一次启用会申请一次管理员权限，并自动安装和登记 VPN 组件。";
+      : phase === "connected"
+        ? `本机经 ${currentNode?.name ?? "专线"} 出口上网；关闭控制台不会断开。`
+        : phase === "connecting"
+          ? "正在建立安全隧道…"
+          : phase === "disconnecting"
+            ? "正在断开…"
+            : nativeStatus?.provisioned
+              ? "本机已登记，随时可以连接。"
+              : "第一次会申请一次系统权限，并自动登记本机。";
+  const deviceCounts = devices.reduce<Record<string, number>>((acc, device) => {
+    if (device.node_id) {
+      acc[device.node_id] = (acc[device.node_id] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+  const scopeDevices = localDevice ? [localDevice] : devices;
+  const headerStatus = isLoading && nodes.length === 0
+    ? "连接中"
+    : nodeError
+      ? "读取异常"
+      : `${nodes.filter(isNodeOnline).length} 个节点在线`;
 
   return (
-    <div className="dashboard-page cc-dash">
+    <div className="dashboard-page cc-dash cc-vpn">
       <DashboardScene />
 
       <div className="cc-head">
@@ -424,272 +398,50 @@ export function VpnDashboard() {
         </div>
       </div>
 
-      {isLoading && !status && !statusError ? (
+      <ConnectionBar
+        actionDisabled={!nativeAvailable || (phase !== "connected" && !defaultNode && !currentNode)}
+        actionLabel={actionLabel}
+        address={nativeStatus?.address ?? localDevice?.address ?? null}
+        busy={nativeBusy !== null}
+        detail={detail}
+        nodeName={nodeName}
+        onAction={() => void controlNativeVpn()}
+        onDownloadAndroid={() => window.location.assign(VPN_DOWNLOADS.android)}
+        onDownloadWindows={() => window.location.assign(VPN_DOWNLOADS.windows)}
+        phase={phase}
+        rates={rates}
+        totalReceived={sumBytes(scopeDevices, "received_bytes")}
+        totalSent={sumBytes(scopeDevices, "sent_bytes")}
+      />
+
+      {isLoading && nodes.length === 0 && !nodeError ? (
         <DashboardSkeleton />
       ) : (
-        <div className="cc-grid">
-          <div className="cc-card">
-            <MetricCard
-              detail={`${status?.vpn.interface ?? "awg0"} · ${status?.vpn.address ?? "地址待同步"}`}
-              label="新 VPN 服务"
-              value={online ? "在线" : "异常"}
-            />
-          </div>
-          <div className="cc-card">
-            <MetricCard
-              detail="已启用的隧道设备(停用/未连接的不计入)"
-              label="在线隧道设备"
-              value={peerCount ?? "—"}
-            />
-          </div>
-          <div className="cc-card">
-            <MetricCard
-              detail={
-                status?.vpn.latest_handshake_at
-                  ? `最后握手 ${formatStatusTime(status.vpn.latest_handshake_at)}`
-                  : "暂无设备握手"
-              }
-              label="近期在线"
-              value={activePeerCount ?? "—"}
-            />
-          </div>
-          <div className="cc-card">
-            <MetricCard
-              detail={`接收 ${formatBytes(status?.vpn.transfer.received_bytes)} · 发送 ${formatBytes(status?.vpn.transfer.sent_bytes)}`}
-              label="累计流量"
-              value={formatBytes(transfer)}
-            />
-          </div>
-
-          <div className="cc-card">
-            <StageCard
-              actionLabel="实时监控"
-              badge="AWG0"
-              description={
-                !status
-                  ? "控制台暂时无法读取新 VPN 服务状态。"
-                  : online
-                    ? `新 VPN 正在 UDP ${status.vpn.listen_port ?? "—"} 端口稳定运行。`
-                    : "状态通道可用，但新 VPN 服务当前未达到在线条件。"
-              }
-              name="新 VPN 服务"
-              status={online ? "active" : "error"}
-            />
-          </div>
-          <div className="cc-card">
-            <StageCard
-              actionLabel={`${devices.length} 台我的设备`}
-              badge="MULTI-USER"
-              description="每位登录用户都能创建自己的独立设备，并且只能管理自己的设备。"
-              name="多人设备接入"
-              status={deviceError ? "error" : "active"}
-            />
-          </div>
-          <div className="cc-card">
-            <StageCard
-              actionLabel={nativeActionLabel}
-              badge={nativeBadge}
-              description={nativeDescription}
-              disabled={nativeBusy}
-              name="一键连接"
-              onAction={
-                nativeBridgeAvailable
-                  ? () => void controlNativeVpn()
-                  : downloadWindowsApp
-              }
-              status={nativeError ? "error" : "active"}
-            />
-          </div>
-
+        <div className="cc-grid cc-vpn-grid">
           <div className="cc-card wide">
-            <article className="module-card">
-              <div className="module-card-header">
-                <div>
-                  <span className="status-pill active">
-                    <span aria-hidden="true" />
-                    本人可见
-                  </span>
-                  <h3>我的 VPN 设备</h3>
-                </div>
-                <span className="subtle-badge">{devices.length}/10</span>
-              </div>
-              <p>
-                每台设备都有独立地址，可单独停用；其他用户无法查看或操作这些设备。
-              </p>
-              <button
-                className="module-card-action"
-                disabled={isMutating || devices.length >= 10}
-                onClick={openCreateDrawer}
-                type="button"
-              >
-                ＋ 添加设备
-              </button>
-              {deviceError ? (
-                <div className="form-message" role="alert">
-                  {deviceError}
-                </div>
-              ) : null}
-              {devices.length === 0 ? (
-                <button
-                  className="cc-add"
-                  disabled={isMutating}
-                  onClick={openCreateDrawer}
-                  type="button"
-                >
-                  <span className="cc-add-plus">＋</span>
-                  创建第一台 VPN 设备
-                </button>
-              ) : (
-                <div>
-                  {devices.map((device) => (
-                    <div className="cc-lib" key={device.id}>
-                      <div>
-                        <div className="cc-lib-name">{device.name}</div>
-                        <div className="cc-lib-desc">
-                          {platformLabel(device.platform)} · {device.address} ·{" "}
-                          {device.last_handshake_at
-                            ? `最后连接 ${formatStatusTime(device.last_handshake_at)}`
-                            : "尚未连接"}
-                        </div>
-                      </div>
-                      <span
-                        className={`status-pill ${device.enabled ? "active" : "disabled"}`}
-                      >
-                        <span aria-hidden="true" />
-                        {device.enabled ? "已启用" : "已停用"}
-                      </span>
-                      <button
-                        className="module-card-action"
-                        disabled={isMutating}
-                        onClick={() => void toggleDevice(device)}
-                        type="button"
-                      >
-                        {device.enabled ? "停用" : "重新启用"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </article>
+            <NodePanel
+              currentNodeId={currentNodeId}
+              deviceCounts={deviceCounts}
+              error={nodeError}
+              nodes={nodes}
+              onSelect={(node) => void switchNode(node)}
+              selectable={nativeAvailable && Boolean(nativeStatus?.installed)}
+              switchingNodeId={switchingNodeId}
+            />
+          </div>
+          <div className="cc-card wide">
+            <DeviceList
+              busy={isMutating}
+              currentDeviceId={nativeStatus?.device_id ?? null}
+              devices={devices}
+              error={deviceError}
+              nodes={nodes}
+              onToggle={(device) => void toggleDevice(device)}
+              unavailableNodes={unavailableNodes}
+            />
           </div>
         </div>
       )}
-
-      {drawerOpen ? (
-        <>
-          <button
-            aria-label="关闭设备面板"
-            className="cc-scrim"
-            onClick={closeDrawer}
-            type="button"
-          />
-          <aside aria-label="添加 VPN 设备" className="cc-drawer">
-            <div className="cc-drawer-head">
-              <div>
-                <h3>{oneTimeDevice ? "设备创建成功" : "添加 VPN 设备"}</h3>
-                <span>
-                  {oneTimeDevice ? "配置只显示这一次" : "只会加入新 VPN awg0"}
-                </span>
-              </div>
-              <button
-                aria-label="关闭"
-                className="cc-drawer-close"
-                onClick={closeDrawer}
-                type="button"
-              >
-                ×
-              </button>
-            </div>
-            <div className="cc-drawer-body">
-              {oneTimeDevice ? (
-                <div className="module-card">
-                  <div className="module-card-header">
-                    <div>
-                      <span className="status-pill active">
-                        <span aria-hidden="true" />
-                        已启用
-                      </span>
-                      <h3>{oneTimeDevice.device.name}</h3>
-                    </div>
-                    <span className="subtle-badge">
-                      {oneTimeDevice.device.address}
-                    </span>
-                  </div>
-                  <p>
-                    请立即复制或下载配置。出于安全原因，关闭此面板后私钥无法再次查看。
-                  </p>
-                  <span className="textarea-shell">
-                    <textarea
-                      aria-label="一次性 VPN 配置"
-                      readOnly
-                      value={oneTimeDevice.configuration}
-                    />
-                  </span>
-                  <button
-                    className="module-card-action"
-                    onClick={() => void copyConfiguration()}
-                    type="button"
-                  >
-                    复制配置
-                  </button>
-                  <button
-                    className="module-card-action"
-                    onClick={downloadConfiguration}
-                    type="button"
-                  >
-                    下载配置
-                  </button>
-                  <div aria-live="polite" className="form-message">
-                    {copyMessage}
-                  </div>
-                </div>
-              ) : (
-                <form className="module-card" onSubmit={submitDevice}>
-                  <label className="field-group">
-                    <span>设备名称</span>
-                    <span className="input-shell">
-                      <input
-                        autoComplete="off"
-                        maxLength={64}
-                        onChange={(event) => setDeviceName(event.target.value)}
-                        placeholder="例如：张三的办公电脑"
-                        required
-                        value={deviceName}
-                      />
-                    </span>
-                  </label>
-                  <label className="field-group">
-                    <span>设备类型</span>
-                    <select
-                      className="select-shell"
-                      onChange={(event) =>
-                        setPlatform(event.target.value as VpnDevicePlatform)
-                      }
-                      value={platform}
-                    >
-                      <option value="windows">Windows 电脑</option>
-                      <option value="macos">苹果电脑</option>
-                      <option value="ios">苹果手机</option>
-                      <option value="android">安卓手机</option>
-                      <option value="other">其他设备</option>
-                    </select>
-                  </label>
-                  <div aria-live="polite" className="form-message">
-                    {deviceError}
-                  </div>
-                  <button
-                    className="module-card-action"
-                    disabled={isMutating}
-                    type="submit"
-                  >
-                    {isMutating ? "正在创建…" : "创建设备"}
-                  </button>
-                </form>
-              )}
-            </div>
-          </aside>
-        </>
-      ) : null}
     </div>
   );
 }
