@@ -88,6 +88,24 @@ server {
         proxy_read_timeout 30s;
     }
 
+    # K 外部精修通道(MCP):Codex 桌面版等外部代理经 Bearer token 直达 k-mcp
+    # sidecar(127.0.0.1:8095)。Streamable HTTP 无状态模式也会发 GET;交稿是 base64
+    # 图片,2K PNG 约 8-10MB,故放宽 body 上限。/files/* 靠 HMAC 签名 URL,不走 Bearer。
+    location ^~ /mcp/k-images {
+        limit_except POST GET DELETE { deny all; }
+        client_max_body_size 32m;
+        proxy_pass http://127.0.0.1:8095;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 120s;
+    }
+
     location = /w/tracking/webhook {
         limit_except POST { deny all; }
         client_max_body_size 2m;

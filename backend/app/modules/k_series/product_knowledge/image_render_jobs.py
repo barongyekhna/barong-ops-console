@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import io
 import json
 import logging
 import os
@@ -33,7 +34,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -70,6 +71,8 @@ _TABLE = "k_image_render_jobs"
 _LOGGER = logging.getLogger("k-image-render")
 
 RENDER_PIPELINE_TAG = "k_auto_render"
+# metadata_json.submitted_via 值:图不是 worker 渲染的,是外部代理经 MCP 交回来的。
+EXTERNAL_SUBMISSION_TAG = "mcp"
 
 PLACEMENT_GALLERY = "gallery"
 PLACEMENT_DESCRIPTION = "description"
@@ -99,13 +102,22 @@ HOUSE_STYLE_BLOCK = (
 # 画布含产品,不加这句非主图就漂。放在 prompt 末尾=最后一句最高优先。
 PRODUCT_FIDELITY_BLOCK = (
     "\n\nPRODUCT FIDELITY (non-negotiable, applies to this and every image): the "
-    "physical product must stay IDENTICAL to the attached reference photo — same "
+    "physical product must stay IDENTICAL to the attached reference photo(s) — "
+    "same "
     "shape, proportions, body and head geometry, and the exact layout and number "
     "of its buttons, ports, display and controls, plus the same textures, colour "
     "and markings. You may re-frame it, change its angle, show it in use, and "
     "place it in the requested scene, but never redesign, restyle, reshape, add, "
     "remove, merge, or reposition any physical part of the product, and never "
-    "invent product details you cannot see in the reference."
+    "invent product details you cannot see in the reference.\n"
+    "USING MULTIPLE REFERENCES: when several reference photos are attached, the "
+    "FIRST one is the product's canonical appearance. The others show the SAME "
+    "product from other angles, its accessories, and what is in the box — use "
+    "them to get the real shape, colour and count of every part right (an "
+    "accessory you cannot see in any reference does not exist and must never be "
+    "invented, added, or swapped for a different-looking one). Take only "
+    "PRODUCT TRUTH from them: never copy their composition, background, "
+    "lighting, layout, or any text or graphics printed on them."
 )
 
 INFO_OVERLAY_BASE_BLOCK = (
@@ -124,6 +136,54 @@ PROOF_SCENE_BLOCK = (
     "physically coherent lighting, contact shadows, reflections and depth. "
     "Do not imply any additional feature or performance claim."
 )
+
+# 工作原理硬约束：K 的作图链路原本没有任何一环知道「这东西怎么工作」——作图
+# 简报只拿到文字规格，从没见过产品照片。2026-08-03 熊猫花洒(潜水泵,整机浸没
+# 才出水)于是被画成「搁在干燥碎石地上却在喷水」，9 张图错 3 张。
+# 约束由 workflow_engine 看原厂参考图推导，存在 image_instruction_json
+# ["operating_model"]，这里逐张拼进 prompt。main 是白底静态产品图,不展示工作
+# 状态,不需要。
+_OPERATING_CONSTRAINT_HEADER = (
+    "\n\nOPERATING CONSTRAINT (physics, non-negotiable — overrides composition "
+    "and styling): this product only works as described below. If this image "
+    "shows it working, every condition here must be visibly satisfied in frame; "
+    "change the setting until it is, never depict an impossible state."
+)
+
+
+def _operating_constraint_block(instruction: dict[str, Any]) -> str:
+    """Build the physics block from the brief's derived operating model."""
+    model = instruction.get("operating_model")
+    if not isinstance(model, dict):
+        return ""
+    constraints = [
+        str(item).strip()
+        for item in (model.get("hard_constraints") or [])
+        if str(item).strip()
+    ]
+    forbidden = [
+        str(item).strip()
+        for item in (model.get("forbidden_depictions") or [])
+        if str(item).strip()
+    ]
+    how = str(model.get("how_it_works") or "").strip()
+    if not constraints and not forbidden:
+        return ""
+    parts = [_OPERATING_CONSTRAINT_HEADER]
+    if how:
+        parts.append(f" HOW IT WORKS: {how}")
+    if constraints:
+        parts.append(
+            " MUST BE TRUE IN ANY IN-USE SHOT: "
+            + "; ".join(constraints[:6])
+            + "."
+        )
+    if forbidden:
+        parts.append(
+            " NEVER DEPICT: " + "; ".join(forbidden[:6]) + "."
+        )
+    return "".join(parts)
+
 
 NON_MAIN_EVIDENCE_BLOCK = (
     "\n\nFINAL SECONDARY-IMAGE CONSTRAINT: this is not the storefront main and "
@@ -689,6 +749,153 @@ def store_reference_image_asset(
     return row
 
 
+ASSET_ROLE_PRODUCT_MASK = "product_mask"
+
+
+def store_product_mask_asset(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    plate_asset: KProductKnowledgeMediaAsset,
+    contents: bytes,
+    user: User | None,
+) -> KProductKnowledgeMediaAsset:
+    """存一张「产品保护区」蒙版，绑定到某张实拍底图。
+
+    运营者在浮窗里把产品刷一遍，导出的 PNG 落到这里。渲染时它被送给
+    image edit 接口：**不透明处 = 锁住不许模型碰，透明处 = 交给模型重绘**。
+
+    2026-08-03 实测的关键结论：刷少了(产品露在保护区外)那部分会被当背景
+    重画——花洒头就这么变成了银色金属圈，整张图作废；刷胖了只是产品周围
+    留一圈原背景残留，盯着才看得出。所以交互上要引导「宁可往外多刷」。
+
+    同一张底图重复上传时覆盖：旧的标 removed，永远只有一张生效。
+    """
+    if not contents:
+        raise KImageRenderError("MASK_EMPTY", "蒙版内容为空。", status_code=422)
+    if len(contents) > _REFERENCE_MAX_BYTES:
+        raise KImageRenderError(
+            "MASK_TOO_LARGE", "蒙版超过大小上限。", status_code=422
+        )
+    if _detect_image_mime(contents) != "image/png":
+        # 必须 PNG:蒙版靠 alpha 通道表达保护区,JPEG 没有 alpha。
+        raise KImageRenderError(
+            "MASK_NOT_PNG", "蒙版必须是 PNG（要带透明通道）。", status_code=422
+        )
+
+    # 尺寸必须与底图逐像素一致（image edit 接口的硬要求，不符会在渲染时才
+    # 400）。但不该为此难为前端：画笔按显示尺寸作画、底图又可能是 preview，
+    # 尺寸天然对不上。这里统一缩放对齐，前端只管画。
+    plate_loaded = _asset_file_bytes(plate_asset)
+    if plate_loaded is not None:
+        try:
+            from PIL import Image as _PILImage
+
+            with _PILImage.open(io.BytesIO(plate_loaded[1])) as plate_img:
+                plate_size = plate_img.size
+            with _PILImage.open(io.BytesIO(contents)) as mask_img:
+                if mask_img.size != plate_size:
+                    # NEAREST：蒙版是二值的，插值会在边界糊出半透明像素，
+                    # 那等于让保护区边缘半生不熟。
+                    resized = mask_img.convert("RGBA").resize(
+                        plate_size, _PILImage.Resampling.NEAREST
+                    )
+                    buffer = io.BytesIO()
+                    resized.save(buffer, format="PNG")
+                    contents = buffer.getvalue()
+                    _LOGGER.info(
+                        "mask resized %s -> %s for plate %s",
+                        mask_img.size,
+                        plate_size,
+                        plate_asset.id,
+                    )
+        except KImageRenderError:
+            raise
+        except Exception:  # noqa: BLE001 - Pillow 缺席时按原样存（本地轻依赖）
+            _LOGGER.warning("mask resize skipped for plate %s", plate_asset.id)
+
+    variant = db.get(KProductKnowledgeVariant, plate_asset.variant_id) if (
+        plate_asset.variant_id
+    ) else _first_variant(db, product)
+    variant_sku = (
+        variant.variant_sku if variant is not None else (product.sku or "default")
+    )
+
+    for stale in db.scalars(
+        select(KProductKnowledgeMediaAsset).where(
+            KProductKnowledgeMediaAsset.product_id == product.id,
+            KProductKnowledgeMediaAsset.asset_role == ASSET_ROLE_PRODUCT_MASK,
+            KProductKnowledgeMediaAsset.status == "available",
+        )
+    ).all():
+        meta = stale.metadata_json if isinstance(stale.metadata_json, dict) else {}
+        if str(meta.get("mask_for_asset_id") or "") == str(plate_asset.id):
+            stale.status = "removed"
+            db.add(stale)
+
+    object_key = (
+        f"images/{product.product_key}/{variant_sku}/mask/{uuid4()}-mask.png"
+    )
+    root = _media_storage_root_path()
+    storage_file = write_media_file(root, object_key, contents)
+    user_id = _user_uuid(user) if user is not None else None
+    row = KProductKnowledgeMediaAsset(
+        id=uuid4(),
+        product_id=product.id,
+        variant_id=plate_asset.variant_id,
+        variant_sku=plate_asset.variant_sku,
+        asset_type="image",
+        asset_role=ASSET_ROLE_PRODUCT_MASK,
+        status="available",
+        review_status="not_applicable",
+        storage_provider="local_filesystem",
+        object_key=object_key,
+        file_size=len(contents),
+        mime_type="image/png",
+        source="operator_mask",
+        metadata_json={
+            "content_sha256": hashlib.sha256(contents).hexdigest(),
+            "storage_provider": "local_filesystem",
+            "storage_relative_path": object_key,
+            "storage_path": str(storage_file),
+            "mask_for_asset_id": str(plate_asset.id),
+            "mask_for_object_key": plate_asset.object_key,
+            "product_key": product.product_key,
+            "sku": product.sku,
+            # 蒙版不是给人看的素材,别让它混进画廊/审查/上架
+            "k_image_ai_generation_allowed": False,
+            "k_image_review_allowed": False,
+        },
+        created_by_user_id=user_id,
+        updated_by_user_id=user_id,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def product_mask_by_plate(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> dict[str, KProductKnowledgeMediaAsset]:
+    """{底图 asset_id: 蒙版资产}。没刷过的底图不在里面。"""
+    out: dict[str, KProductKnowledgeMediaAsset] = {}
+    for row in db.scalars(
+        select(KProductKnowledgeMediaAsset)
+        .where(
+            KProductKnowledgeMediaAsset.product_id == product.id,
+            KProductKnowledgeMediaAsset.asset_role == ASSET_ROLE_PRODUCT_MASK,
+            KProductKnowledgeMediaAsset.status == "available",
+        )
+        .order_by(KProductKnowledgeMediaAsset.created_at.asc())
+    ).all():
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        plate_id = str(meta.get("mask_for_asset_id") or "").strip()
+        if plate_id:
+            out[plate_id] = row
+    return out
+
+
 def _original_photo_assets(
     db: Session,
     product: KProductKnowledgeProduct,
@@ -731,6 +938,145 @@ def _asset_file_bytes(row: KProductKnowledgeMediaAsset) -> tuple[str, bytes, str
         mime = _detect_image_mime(contents) or row.mime_type or "image/png"
         return f"asset-{row.id}", contents, mime
     return None
+
+
+# 一次 edit 最多带几张参考图。I 系列硬上限是 MAX_EDIT_REFERENCE_IMAGES(10)，
+# 这里取 4：主体 + 三张补充角度/配件，够模型看清结构又不至于让它被一堆构图
+# 带偏，也控住每张图的上传体积。
+MAX_RENDER_REFERENCE_IMAGES = 4
+
+
+def _resolve_reference_images(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> list[tuple[str, bytes, str]]:
+    """渲染要喂给 image 模型的参考图，主体第一张。
+
+    2026-08-03 熊猫花洒(PSPE-002)：此前这里只送 1 张，AI 从没见过配件与其他
+    角度，于是配件图整张靠编——把橙色吸盘挂钩画成透明白色、网袋和彩盒消失、
+    还凭空多出一个真实配件里根本不存在的浴球。而几何门查不出这类错误(参考图
+    里没有的东西无从比对)，一路放行。
+
+    按 ``operating_model.reference_classification`` 只剔掉「压根看不到产品」的
+    那些（证书/检测报告/纯文字页）。**带版式的电商合成图照送**——里面的产品
+    同样是实拍抠出来的，熊猫那张白底全家福正是唯一能看清全部配件真实长相的
+    图，把它当"营销素材"扔掉等于白修。风险由 PRODUCT_FIDELITY_BLOCK 兜：
+    明令只取产品真相、不许抄它们的构图/背景/文字。
+
+    第一张永远是主体（``_original_photo_assets`` 已把主图排在最前）。没有分类
+    信息(老产品/推导失败)时退回只送第一张 = 与此前行为完全一致。
+    """
+    from .brand_guard import product_operating_model, reference_kind_usable
+
+    classification = product_operating_model(product).get("reference_classification")
+    classification = classification if isinstance(classification, dict) else {}
+
+    fallback: tuple[str, bytes, str] | None = None
+    # (不是绑定主图, 负字节数, 图) —— 排序键，见下方注释
+    usable: list[tuple[int, int, tuple[str, bytes, str]]] = []
+    for row in _original_photo_assets(db, product):
+        loaded = _asset_file_bytes(row)
+        if loaded is None:
+            continue
+        if fallback is None:
+            fallback = loaded
+        if not classification:
+            break  # 没有分类信息 → 维持旧行为，只送第一张
+        if reference_kind_usable(classification.get(str(row.object_key or ""))):
+            is_main = row.asset_role == ASSET_ROLE_MAIN
+            usable.append((0 if is_main else 1, -len(loaded[1]), loaded))
+    if fallback is None:
+        return []
+    if not classification or not usable:
+        return [fallback]
+    # 绑定的主图永远打头（它是运营者认定的标准外观）；没有绑定主图时按
+    # **字节数降序**——参考图往往同一秒批量入库，入库顺序毫无意义，而
+    # PRODUCT_FIDELITY_BLOCK 把第一张当作产品的标准外观。熊猫那 6 张里
+    # 1600×1600 的全家福（唯一看得清全部配件的那张）恰好排在入库最后，
+    # 按顺序取会让一张挂钩拼图当上"标准外观"。宽高列没填，字节数是手上
+    # 唯一能反映信息量的信号。
+    usable.sort(key=lambda entry: (entry[0], entry[1]))
+    return [entry[2] for entry in usable[:MAX_RENDER_REFERENCE_IMAGES]]
+
+
+class RenderPlate(NamedTuple):
+    """一张成品图的底板：实拍底图 + 它的产品保护蒙版（可能没有）。"""
+
+    plate: tuple[str, bytes, str]
+    mask: tuple[str, bytes, str] | None
+    pose: str
+    plate_asset_id: str
+
+
+def _resolve_render_plate(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    *,
+    role: str,
+) -> RenderPlate | None:
+    """按图位挑底板：哪张实拍当底图、它有没有刷过蒙版。
+
+    2026-08-03 换路：产品像素不再交给生成模型。场景图必须拿「正在使用」姿态
+    的实拍当底板（软管展开、连着花洒头的那张），拿摆拍当底板出来就是「产品
+    静静躺着而水在喷」。产品的姿态在照片里定死了、事后改不了——这是行业边界
+    (Flair 这类工具同样靠人摆素材)，所以底板选对与否直接决定成品能不能用。
+
+    返回 None = 这个产品没有可用底板，调用方退回旧的多参考图路径。
+    """
+    from .brand_guard import (
+        PLATE_POSE_PREFERENCE,
+        POSE_NONE,
+        POSE_PRODUCT_ONLY,
+        product_operating_model,
+        reference_kind_usable,
+        reference_pose,
+    )
+
+    operating_model = product_operating_model(product)
+    classification = operating_model.get("reference_classification")
+    classification = classification if isinstance(classification, dict) else {}
+    if not classification:
+        return None  # 素材台账还没建（老产品）→ 走旧路径
+
+    masks = product_mask_by_plate(db, product)
+    candidates: list[tuple[int, int, int, RenderPlate]] = []
+    for row in _original_photo_assets(db, product):
+        key = str(row.object_key or "")
+        if not reference_kind_usable(classification.get(key)):
+            continue
+        pose = reference_pose(operating_model, key)
+        if pose == POSE_NONE:
+            continue
+        loaded = _asset_file_bytes(row)
+        if loaded is None:
+            continue
+        mask_asset = masks.get(str(row.id))
+        mask_loaded = _asset_file_bytes(mask_asset) if mask_asset is not None else None
+        preference = PLATE_POSE_PREFERENCE.get(role) or (POSE_PRODUCT_ONLY,)
+        try:
+            pose_rank = preference.index(pose)
+        except ValueError:
+            pose_rank = len(preference)  # 不在偏好里 = 最后才考虑
+        # 排序键，顺序有讲究：
+        # ① 姿态先行 —— 姿态错的底板出来是废图(拿配件平铺图当主图底板,成品
+        #    就是一张平铺图改了背景)；没刷蒙版只是产品可能被重绘,几何门还兜
+        #    得住。两害相权，姿态错更致命。
+        # ② 同姿态内，刷过蒙版的优先（没蒙版等于把产品重新交给模型画）。
+        # ③ 再同分就挑字节数最大的 —— 参考图常常同一秒批量入库，入库顺序毫无
+        #    意义；大图通常是高清全景/全家福，小图是压过的卖点 banner。
+        candidates.append(
+            (
+                pose_rank,
+                0 if mask_loaded is not None else 1,
+                -len(loaded[1]),
+                RenderPlate(loaded, mask_loaded, pose, str(row.id)),
+            )
+        )
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda entry: (entry[0], entry[1], entry[2]))
+    return candidates[0][3]
 
 
 def _resolve_reference_image(
@@ -782,6 +1128,168 @@ def reference_available(db: Session, product: KProductKnowledgeProduct) -> bool:
 
 # --- enqueue + status (request path) ----------------------------------------
 
+class RenderPromptContext(NamedTuple):
+    """Product-level inputs shared by every image prompt of one product."""
+
+    brand_terms: tuple[str, ...]
+    festival_block: str
+    operating_constraint_block: str
+
+    @classmethod
+    def for_product(cls, product: KProductKnowledgeProduct) -> "RenderPromptContext":
+        from .brand_guard import normalized_brand_terms
+
+        instruction = product.image_instruction_json
+        warnings_json = getattr(product, "ai_warnings_json", None)
+        festival_style = (
+            warnings_json.get("festival_style")
+            if isinstance(warnings_json, dict)
+            else None
+        )
+        return cls(
+            brand_terms=tuple(normalized_brand_terms(product)),
+            festival_block=_festival_block(festival_style),
+            operating_constraint_block=_operating_constraint_block(
+                instruction if isinstance(instruction, dict) else {}
+            ),
+        )
+
+
+def resolve_asset_role(placement: str, position: int, main_position: int | None) -> str:
+    if placement == PLACEMENT_DESCRIPTION:
+        return ASSET_ROLE_DESCRIPTION
+    if position == main_position:
+        return ASSET_ROLE_MAIN
+    return ASSET_ROLE_GALLERY
+
+
+def resolve_render_specs(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> tuple[list[tuple[int, dict[str, Any]]], int, str]:
+    """Brief -> ``[(position, spec)]`` (incl. colorway mains at 101+), the
+    single main position and the channel. Raises the same structural errors
+    the render enqueue always raised; shared with the external (MCP) channel
+    so an outside painter sees exactly the positions the worker would render."""
+    images = _instruction_images(product)
+    if not images:
+        raise KImageRenderError(
+            "IMAGE_BRIEF_REQUIRED",
+            "请先生成作图指令（image_instruction），再一次性作图。",
+        )
+    specs: list[tuple[int, dict[str, Any]]] = []
+    for index, spec in enumerate(images, start=1):
+        specs.append((_spec_position(spec, index), spec))
+    known_positions = {position for position, _ in specs}
+    # 颜色变体主图:按色自动追加(有变体专属参考图才会出现;位号段 101+)
+    for colorway_spec in _colorway_specs(db, product, known_positions):
+        colorway_position = int(colorway_spec["position"])
+        specs.append((colorway_position, colorway_spec))
+        known_positions.add(colorway_position)
+
+    gallery_positions = [
+        position
+        for position, spec in specs
+        if _spec_placement(spec) == PLACEMENT_GALLERY
+    ]
+    main_position = _explicit_main_position(specs)
+    if main_position is None:
+        # Backward-compatible fallback for a legacy brief. New briefs always
+        # carry role=main and are validated when generated.
+        main_position = min(gallery_positions) if gallery_positions else None
+    if main_position is None:
+        raise KImageRenderError(
+            "IMAGE_BRIEF_MAIN_REQUIRED",
+            "作图指令必须有且只有一张 gallery main 主图。",
+            status_code=422,
+        )
+    white_secondary_positions = [
+        position
+        for position, spec in specs
+        if position != main_position
+        and _normalized_role(spec) in _WHITE_SECONDARY_ROLE_ALIASES
+    ]
+    if white_secondary_positions:
+        raise KImageRenderError(
+            "IMAGE_BRIEF_WHITE_SECONDARY_FORBIDDEN",
+            "白底图只能是唯一 main；请重新生成证据图/真实场景图替换白底副图。",
+            status_code=422,
+        )
+    channel = (product.channel or "dtc").strip().lower()
+    return sorted(specs, key=lambda item: item[0]), main_position, channel
+
+
+def build_render_prompt(
+    spec: dict[str, Any],
+    instruction: dict[str, Any],
+    *,
+    asset_role: str,
+    context: RenderPromptContext,
+    position: int,
+    rejection_hint: str | None = None,
+) -> str:
+    """The ONE final prompt for one image. Worker renders and the external
+    (MCP) channel both read this, so an outside painter gets byte-identical
+    instructions. Block order is load-bearing: PRODUCT_FIDELITY_BLOCK is
+    always the last sentence (highest priority)."""
+    from .brand_guard import BRAND_REMOVAL_PROMPT_BLOCK
+
+    prompt = _compose_prompt(
+        spec,
+        instruction,
+        allow_overlay=asset_role != ASSET_ROLE_MAIN,
+    )
+    if not prompt:
+        raise KImageRenderError(
+            "IMAGE_PROMPT_MISSING",
+            f"第 {position} 张图缺 prompt，请重新生成作图指令。",
+            status_code=422,
+        )
+    prompt += BRAND_REMOVAL_PROMPT_BLOCK
+    if context.brand_terms:
+        prompt += (
+            " Known brand marks that may appear on the reference product "
+            f"and MUST be removed: {', '.join(context.brand_terms)}."
+        )
+    # 上一版这张图哪里被审查打回来了。三类都可能(品牌标识/产品画变形/
+    # 画面违反工作原理),所以措辞保持中性,别再写死成「品牌审查」。
+    if rejection_hint:
+        prompt += (
+            " A previous render of this exact image was REJECTED by review"
+            f" for the following defect(s): {rejection_hint} — fix that specifically"
+            " this time while keeping everything else about the image as"
+            " described above."
+        )
+    # Only the one storefront/feed main receives the white-background block.
+    if asset_role in _HOUSE_STYLE_ROLES and _HOUSE_STYLE_MARKER not in prompt:
+        prompt += HOUSE_STYLE_BLOCK
+    elif asset_role != ASSET_ROLE_MAIN:
+        prompt += NON_MAIN_EVIDENCE_BLOCK
+    if (
+        asset_role != ASSET_ROLE_MAIN
+        and _normalized_role(spec) in _PROOF_SCENE_ROLE_ALIASES
+    ):
+        # This final block wins over a stale/global studio style block and
+        # prevents a proof shot from degrading into a clean product pose.
+        prompt += PROOF_SCENE_BLOCK
+    # 节日轻氛围:只给场景/描述图注入;主图与颜色变体主图(带 variant_color)
+    # 永远纯净——GMC 主图/变体展示图合规底线。
+    is_colorway_main = bool(str(spec.get("variant_color") or "").strip())
+    if (
+        context.festival_block
+        and asset_role != ASSET_ROLE_MAIN
+        and not is_colorway_main
+    ):
+        prompt += context.festival_block
+    # 工作原理硬约束:非白底图都要带(白底主图不展示工作状态)。放在保真块
+    # 之前 —— 保真块必须始终是最后一句(最高优先)。
+    if asset_role != ASSET_ROLE_MAIN:
+        prompt += context.operating_constraint_block
+    # 产品保真:所有角色的最后一句,锁死几何/控件/颜色/标记(可换姿势/场景)。
+    prompt += PRODUCT_FIDELITY_BLOCK
+    return prompt
+
+
 def enqueue_image_render_jobs(
     db: Session,
     *,
@@ -792,8 +1300,7 @@ def enqueue_image_render_jobs(
     brand_removal_hints: dict[int, str] | None = None,
 ) -> tuple[UUID, list[dict[str, Any]]]:
     instruction = product.image_instruction_json
-    images = _instruction_images(product)
-    if not images:
+    if not _instruction_images(product):
         raise KImageRenderError(
             "IMAGE_BRIEF_REQUIRED",
             "请先生成作图指令（image_instruction），再一次性作图。",
@@ -839,15 +1346,8 @@ def enqueue_image_render_jobs(
             "这个产品已有作图任务在跑，等它完成或失败后再试。",
         )
 
-    specs: list[tuple[int, dict[str, Any]]] = []
-    for index, spec in enumerate(images, start=1):
-        specs.append((_spec_position(spec, index), spec))
+    specs, main_position, channel = resolve_render_specs(db, product)
     known_positions = {position for position, _ in specs}
-    # 颜色变体主图:按色自动追加(有变体专属参考图才会出现;位号段 101+)
-    for colorway_spec in _colorway_specs(db, product, known_positions):
-        colorway_position = int(colorway_spec["position"])
-        specs.append((colorway_position, colorway_spec))
-        known_positions.add(colorway_position)
     wanted: set[int] | None = None
     if positions:
         wanted = {int(p) for p in positions}
@@ -858,106 +1358,22 @@ def enqueue_image_render_jobs(
                 f"作图指令里没有这些图的位置：{sorted(unknown)}",
                 status_code=422,
             )
-
-    gallery_positions = [
-        position
-        for position, spec in specs
-        if _spec_placement(spec) == PLACEMENT_GALLERY
-    ]
-    main_position = _explicit_main_position(specs)
-    if main_position is None:
-        # Backward-compatible fallback for a legacy brief. New briefs always
-        # carry role=main and are validated when generated.
-        main_position = min(gallery_positions) if gallery_positions else None
-    if main_position is None:
-        raise KImageRenderError(
-            "IMAGE_BRIEF_MAIN_REQUIRED",
-            "作图指令必须有且只有一张 gallery main 主图。",
-            status_code=422,
-        )
-    white_secondary_positions = [
-        position
-        for position, spec in specs
-        if position != main_position
-        and _normalized_role(spec) in _WHITE_SECONDARY_ROLE_ALIASES
-    ]
-    if white_secondary_positions:
-        raise KImageRenderError(
-            "IMAGE_BRIEF_WHITE_SECONDARY_FORBIDDEN",
-            "白底图只能是唯一 main；请重新生成证据图/真实场景图替换白底副图。",
-            status_code=422,
-        )
-    channel = (product.channel or "dtc").strip().lower()
-
-    # 品牌红线：每张图都带移除指令；已知品牌词/审查检出位置追加强化提示
-    from .brand_guard import BRAND_REMOVAL_PROMPT_BLOCK, normalized_brand_terms
-
-    brand_terms = normalized_brand_terms(product)
-    warnings_json = getattr(product, "ai_warnings_json", None)
-    festival_style = (
-        warnings_json.get("festival_style")
-        if isinstance(warnings_json, dict)
-        else None
-    )
-    festival_block = _festival_block(festival_style)
+    prompt_context = RenderPromptContext.for_product(product)
     batch_id = uuid4()
     created: list[dict[str, Any]] = []
     for position, spec in sorted(specs, key=lambda item: item[0]):
         if wanted is not None and position not in wanted:
             continue
         placement = _spec_placement(spec)
-        if placement == PLACEMENT_DESCRIPTION:
-            asset_role = ASSET_ROLE_DESCRIPTION
-        elif position == main_position:
-            asset_role = ASSET_ROLE_MAIN
-        else:
-            asset_role = ASSET_ROLE_GALLERY
-        prompt = _compose_prompt(
+        asset_role = resolve_asset_role(placement, position, main_position)
+        prompt = build_render_prompt(
             spec,
             instruction if isinstance(instruction, dict) else {},
-            allow_overlay=asset_role != ASSET_ROLE_MAIN,
+            asset_role=asset_role,
+            context=prompt_context,
+            position=position,
+            rejection_hint=(brand_removal_hints or {}).get(position),
         )
-        if not prompt:
-            raise KImageRenderError(
-                "IMAGE_PROMPT_MISSING",
-                f"第 {position} 张图缺 prompt，请重新生成作图指令。",
-                status_code=422,
-            )
-        prompt += BRAND_REMOVAL_PROMPT_BLOCK
-        if brand_terms:
-            prompt += (
-                " Known brand marks that may appear on the reference product "
-                f"and MUST be removed: {', '.join(brand_terms)}."
-            )
-        hint = (brand_removal_hints or {}).get(position)
-        if hint:
-            prompt += (
-                f" A previous render of this image FAILED brand review: {hint}"
-                " — make absolutely sure that mark is gone this time."
-            )
-        # Only the one storefront/feed main receives the white-background block.
-        if asset_role in _HOUSE_STYLE_ROLES and _HOUSE_STYLE_MARKER not in prompt:
-            prompt += HOUSE_STYLE_BLOCK
-        elif asset_role != ASSET_ROLE_MAIN:
-            prompt += NON_MAIN_EVIDENCE_BLOCK
-        if (
-            asset_role != ASSET_ROLE_MAIN
-            and _normalized_role(spec) in _PROOF_SCENE_ROLE_ALIASES
-        ):
-            # This final block wins over a stale/global studio style block and
-            # prevents a proof shot from degrading into a clean product pose.
-            prompt += PROOF_SCENE_BLOCK
-        # 节日轻氛围:只给场景/描述图注入;主图与颜色变体主图(带 variant_color)
-        # 永远纯净——GMC 主图/变体展示图合规底线。
-        is_colorway_main = bool(str(spec.get("variant_color") or "").strip())
-        if (
-            festival_block
-            and asset_role != ASSET_ROLE_MAIN
-            and not is_colorway_main
-        ):
-            prompt += festival_block
-        # 产品保真:所有角色的最后一句,锁死几何/控件/颜色/标记(可换姿势/场景)。
-        prompt += PRODUCT_FIDELITY_BLOCK
         overlay = _overlay_snapshot(
             spec,
             product_id=product.id,
@@ -1279,6 +1695,7 @@ def _store_render_asset(
     content_sha256: str,
     prompt_used: str,
     user: User | None,
+    plate_meta: dict[str, Any] | None = None,
 ) -> KProductKnowledgeMediaAsset:
     del mime_type, width, height  # superseded by the mandatory post-process
     overlay = _decode_overlay_snapshot(
@@ -1410,6 +1827,9 @@ def _store_render_asset(
             "preview_path": str(preview_path),
             "thumbnail_object_key": thumbnail_object_key,
             "thumbnail_path": str(thumbnail_path),
+            # 这张图是拿哪张实拍当底板、有没有蒙版保护 —— 出问题时能追溯到
+            # 是「底板选错」还是「没刷蒙版」。
+            **(plate_meta or {}),
         },
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
@@ -1483,16 +1903,42 @@ def _process_render_job(job: dict[str, Any]) -> None:
             product = db.get(KProductKnowledgeProduct, job["product_id"])
             if product is None:
                 raise KImageRenderError("PRODUCT_NOT_FOUND", "产品不存在或已删除。")
-            # 单张重做可指定“以某张已生成图为参考”（在其基础上修改）
-            reference = None
+            # 单张重做可指定“以某张已生成图为参考”（在其基础上修改）。
+            # 运营者点名了哪张就只用那张——意图不该被别的参考图稀释。
+            references: list[tuple[str, bytes, str]] = []
+            mask_image: tuple[str, bytes, str] | None = None
+            plate_meta: dict[str, Any] = {}
             if job.get("reference_asset_id"):
                 ref_asset = db.get(
                     KProductKnowledgeMediaAsset, job["reference_asset_id"]
                 )
                 if ref_asset is not None:
-                    reference = _asset_file_bytes(ref_asset)
-            if reference is None:
-                reference = _resolve_reference_image(db, product)
+                    picked = _asset_file_bytes(ref_asset)
+                    if picked is not None:
+                        references = [picked]
+            if not references:
+                # 首选:按图位挑实拍底板 + 它的产品保护蒙版。蒙版在手时,产品
+                # 像素被锁死,模型只重绘背景——变形/多出一个/管路接错都不可能
+                # 发生(2026-08-03 换路)。
+                # role_label 存的是简报里的角色(proof_scene/accessory/…),
+                # asset_role 只有 main/gallery/description,选底板要看前者。
+                plate = _resolve_render_plate(
+                    db, product, role=str(job.get("role_label") or "").strip().lower()
+                )
+                if plate is not None:
+                    references = [plate.plate]
+                    mask_image = plate.mask
+                    plate_meta = {
+                        "plate_asset_id": plate.plate_asset_id,
+                        "plate_pose": plate.pose,
+                        "plate_masked": plate.mask is not None,
+                    }
+            if not references:
+                # 没建素材台账的老产品 → 退回旧的多参考图路径,行为与此前一致。
+                references = _resolve_reference_images(db, product)
+            if not references:
+                # 一张都没有 → 复用既有解析器抛它那条带指引的 409。
+                references = [_resolve_reference_image(db, product)]
             prompt = str(job["prompt"])
             engine = IImageModelEngine(db)
             # request=None: key resolution goes through the module execution
@@ -1507,8 +1953,9 @@ def _process_render_job(job: dict[str, Any]) -> None:
                     generation_count=1,
                     request=None,  # type: ignore[arg-type]
                     user=user,  # type: ignore[arg-type]
-                    reference_image_count=1,
-                    reference_images=[reference],
+                    reference_image_count=len(references),
+                    reference_images=references,
+                    mask_image=mask_image,
                 ),
                 job_id=job_id,
             )
@@ -1528,6 +1975,7 @@ def _process_render_job(job: dict[str, Any]) -> None:
                 ),
                 prompt_used=prompt,
                 user=user,
+                plate_meta=plate_meta,
             )
             asset_id = asset.id
             db.commit()
@@ -1586,8 +2034,40 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
         completed = [row for row in rows if row["status"] == "completed"]
         failed = [row for row in rows if row["status"] == "failed"]
 
-        # 成品先进「暂存区」：绑定主图 / 归档旧图 / 品牌审查全部推迟到
-        # 用户点「保存」（save_render_assets）—— 没保存的图对系统不存在。
+        # 成品先进「暂存区」：绑定主图 / 归档旧图仍推迟到用户点「保存」
+        # （save_render_assets）。但**审查不再等**——2026-08-03 熊猫花洒教训：
+        # 审查原本也压在保存之后，运营者打开产品页时系统对这批图一次检查都没
+        # 做过，三处软管接错(主图多出一截断管、软管从肚子接出、软管没接到花洒
+        # 头)全靠人肉发现。现在渲染一收尾就入队审查，几何/物理违规会走自动
+        # 重渲闭环，人看到的是已过检、必要时已重画过的图。
+        if completed and product.marketing_copy_json:
+            db.execute(
+                text(
+                    """
+                    INSERT INTO k_generation_jobs
+                        (id, product_id, job_type, status, batch_id,
+                         requested_by_username, workspace_key,
+                         business_context, scope_mode)
+                    SELECT :id, :product_id, 'brand_audit', 'pending', :batch_id,
+                           :username, :workspace_key, :business_context, :scope_mode
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM k_generation_jobs
+                        WHERE product_id = :product_id
+                          AND job_type = 'brand_audit'
+                          AND status IN ('pending', 'running')
+                    )
+                    """
+                ),
+                {
+                    "id": uuid4(),
+                    "product_id": product.id,
+                    "batch_id": uuid4(),
+                    "username": rows[0].get("requested_by_username"),
+                    "workspace_key": rows[0].get("workspace_key"),
+                    "business_context": rows[0].get("business_context"),
+                    "scope_mode": rows[0].get("scope_mode"),
+                },
+            )
 
         level = "info" if not failed else ("warning" if completed else "error")
         title = (
@@ -1657,7 +2137,8 @@ def cleanup_stale_staged(db: Session, product_id: UUID | None = None) -> int:
     """惰性清理：staged 超过 24 小时未保存的成品图删除（防意外刷新丢失
     的挂载期结束）。在查询/入队等触发点顺手调用。"""
     clause = "AND product_id = :product_id" if product_id is not None else ""
-    params: dict[str, Any] = {"tag": RENDER_PIPELINE_TAG}
+    # 外部精修通道(MCP)交的稿不吃 24h 惰性回收:人不一定当天审。
+    params: dict[str, Any] = {"tag": RENDER_PIPELINE_TAG, "external": EXTERNAL_SUBMISSION_TAG}
     if product_id is not None:
         params["product_id"] = product_id
     result = db.execute(
@@ -1667,6 +2148,7 @@ def cleanup_stale_staged(db: Session, product_id: UUID | None = None) -> int:
             SET status = 'removed', updated_at = now()
             WHERE status = 'staged'
               AND metadata_json->>'render_pipeline' = :tag
+              AND COALESCE(metadata_json->>'submitted_via', '') <> :external
               AND (metadata_json->>'staged_at')::timestamptz
                   < now() - interval '{STAGED_TTL_HOURS} hours'
               {clause}
@@ -1706,6 +2188,9 @@ def list_render_assets(
                 "role_label": meta.get("role_label") or "",
                 "variant_color": str(meta.get("variant_color") or "") or None,
                 "staged_at": meta.get("staged_at"),
+                # 外部精修通道(MCP)交的稿带 "mcp";worker 渲染的为 None。前端据此挂徽章。
+                "submitted_via": str(meta.get("submitted_via") or "") or None,
+                "submitted_by": str(meta.get("submitted_by_username") or "") or None,
             }
         )
     out.sort(key=lambda item: (item["position"], item["status"]))
@@ -1911,7 +2396,11 @@ def save_render_assets(
         except Exception:  # noqa: BLE001 - <5 images etc.; not fatal
             pass
 
-    # 内容正式变化 -> 品牌审查（老审查指纹随之失效）
+    # 内容正式变化 -> 品牌审查（老审查指纹随之失效）。
+    # 必须带 NOT EXISTS 去重：渲染批次收尾现在也会自动入队一条审查，若那条还
+    # 在 pending/running，这里再插就撞 uq_k_gen_jobs_active_product_type 唯一
+    # 索引，IntegrityError 把整个保存事务回滚——表现就是「点保存没反应」
+    # (2026-08-03 实际挡住了用户保存主图和第 9 张)。
     if product.marketing_copy_json:
         db.execute(
             text(
@@ -1920,9 +2409,14 @@ def save_render_assets(
                     (id, product_id, job_type, status, batch_id,
                      requested_by_username, workspace_key,
                      business_context, scope_mode)
-                VALUES
-                    (:id, :product_id, 'brand_audit', 'pending', :batch_id,
-                     :username, :workspace_key, :business_context, :scope_mode)
+                SELECT :id, :product_id, 'brand_audit', 'pending', :batch_id,
+                       :username, :workspace_key, :business_context, :scope_mode
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM k_generation_jobs
+                    WHERE product_id = :product_id
+                      AND job_type = 'brand_audit'
+                      AND status IN ('pending', 'running')
+                )
                 """
             ),
             {

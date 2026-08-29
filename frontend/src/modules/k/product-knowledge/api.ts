@@ -348,9 +348,16 @@ export async function enrichProductWithDeepSeek(
   await readJson<unknown>(response, path);
 }
 
+/**
+ * 把卖点生成排进后台队列，立即返回。
+ *
+ * 2026-08-03 之前这里是同步等后端跑完两次串行 DeepSeek 调用（实测中位数
+ * 100s、最慢 903s），刷新页面就白等。现在返回 job，由调用方轮
+ * `getGenerationJobs` 看 `stage` 分步显示。
+ */
 export async function generateProductSellingPoints(
   productId: string,
-): Promise<ProductSellingPoints> {
+): Promise<GenerationEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/selling-points/generate`;
   const response = await fetch(
     `${API_PROXY_BASE}${path}`,
@@ -361,7 +368,7 @@ export async function generateProductSellingPoints(
     },
   );
 
-  return readJson<ProductSellingPoints>(response, path);
+  return readJson<GenerationEnqueueResult>(response, path);
 }
 
 export async function approveProductSellingPoints(
@@ -402,6 +409,9 @@ export async function getProductSellingPoints(
   return readJson<ProductSellingPoints>(response, path);
 }
 
+/** 多阶段任务的进度。目前只有卖点生成用（bullets → zh → copy → done）。 */
+export type GenerationStage = "bullets" | "zh" | "copy" | "done";
+
 export type GenerationJob = {
   job_id: string;
   product_id: string;
@@ -409,6 +419,12 @@ export type GenerationJob = {
   status: string;
   error: string | null;
   skill_version: string | null;
+  /** 单阶段任务恒为 null。 */
+  stage?: GenerationStage | string | null;
+  /** 某个增强阶段失败时的原因，例如 {"zh": "..."}。卖点本体照常可用。 */
+  stage_errors?: Record<string, string> | null;
+  /** 入队时命中去重、复用了在途任务——按钮"没反应"其实是"已经在跑"。 */
+  deduplicated?: boolean | null;
   started_at?: string | null;
   finished_at?: string | null;
 };
@@ -474,6 +490,97 @@ export async function getGenerationJobs(productId: string): Promise<GenerationJo
   });
   const data = await readJson<{ jobs: GenerationJob[] }>(response, path);
   return data.jobs ?? [];
+}
+
+/**
+ * 作图底板：能当底图用的实拍参考图。
+ *
+ * pose 决定它适合当哪类成品图的底板——产品的姿态在照片里就定死了，事后改不
+ * 了，所以「软管展开、正在被使用」的那张只能靠实拍拿到。
+ */
+export type ImagePlate = {
+  asset_id: string;
+  pose: "in_use" | "product_only" | "accessories" | "detail";
+  has_mask: boolean;
+  mask_asset_id: string | null;
+  width: number | null;
+  height: number | null;
+  file_url: string;
+  preview_url: string;
+  thumbnail_url: string;
+};
+
+export async function getImagePlates(
+  productId: string,
+): Promise<{ items: ImagePlate[]; masked_count: number }> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/image-plates`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  const data = await readJson<{ items: ImagePlate[]; masked_count: number }>(
+    response,
+    path,
+  );
+  // 后端给的是它自己的路径（/k/media/…）。浏览器要走代理才拿得到，
+  // 少这个前缀图片就全是裂的。前缀是 API 层的事，别让组件各拼各的。
+  return {
+    ...data,
+    items: (data.items ?? []).map((item) => ({
+      ...item,
+      file_url: `${API_PROXY_BASE}${item.file_url}`,
+      preview_url: `${API_PROXY_BASE}${item.preview_url}`,
+      thumbnail_url: `${API_PROXY_BASE}${item.thumbnail_url}`,
+    })),
+  };
+}
+
+/** 保存某张底图的产品保护蒙版（画笔导出的 PNG）。覆盖式，一张底图只留一份。 */
+export async function savePlateMask(
+  productId: string,
+  assetId: string,
+  maskPngBase64: string,
+): Promise<{ mask_asset_id: string; bytes: number }> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/image-plates/${assetId}/mask`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ mask_png_base64: maskPngBase64 }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "PUT",
+  });
+  return readJson<{ mask_asset_id: string; bytes: number }>(response, path);
+}
+
+/** 「这个产品怎么工作」——AI 看原厂参考图推导，人工可改。作图/渲染/审查共用。 */
+export type OperatingModel = {
+  how_it_works: string;
+  hard_constraints: string[];
+  forbidden_depictions: string[];
+  buyer_personas: string[];
+  edited_by_user?: boolean;
+  derived_at?: string | null;
+  edited_at?: string | null;
+};
+
+export async function updateOperatingModel(
+  productId: string,
+  payload: {
+    how_it_works: string;
+    hard_constraints: string[];
+    forbidden_depictions: string[];
+    buyer_personas: string[];
+  },
+): Promise<OperatingModel> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/operating-model`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "PUT",
+  });
+  const data = await readJson<{ operating_model: OperatingModel }>(response, path);
+  return data.operating_model;
 }
 
 export type RenderJob = {
@@ -655,6 +762,39 @@ export async function ignoreBrandFinding(
   );
 }
 
+/**
+ * 人工放行整个产品的品牌审查。
+ *
+ * 2026-08-11 用户拍板：审查器是 AI，它不真正了解产品——花洒手柄上的 "STOP"
+ * （一键止水标识）被判成品牌字样。人做了决定之后，任何程序不得再拦。
+ */
+export async function setBrandAuditOverride(
+  productId: string,
+  enabled: boolean,
+  reason = "",
+): Promise<{ operator_override: unknown }> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/brand-audit/override`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ enabled, reason }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<{ operator_override: unknown }>(response, path);
+}
+
+/** 点「唤起 Codex 作图」预填进 Codex 输入框的指令(与后端 codex_prompt_for_sku 同文案)。 */
+export function codexPromptForSku(sku: string): string {
+  return (
+    `用 barong_k_images:先 k_get_image_brief 取 ${sku} 的简报,再 k_get_reference_images ` +
+    "取全部参考图并下载到本地。按简报逐位出图(缺哪位出哪位;已保存的位不动)," +
+    "产品像素以参考图为准不许改结构,严格遵守简报里的工作原理与配件清单。" +
+    "每张出完先对照参考图自查,再 k_submit_image 交上去;交完等 2 分钟用 " +
+    "k_get_submission_status 看审查,被打回的位按报告改了重交,直到干净。" +
+    "最后汇报每一位的状态。"
+  );
+}
+
 export type RenderAsset = {
   asset_id: string;
   position: number;
@@ -664,6 +804,10 @@ export type RenderAsset = {
   role_label: string | null;
   variant_color: string | null;
   staged_at: string | null;
+  /** "mcp" = 外部精修通道(Codex 等代理)交回来的稿;worker 渲染的为 null。 */
+  submitted_via?: string | null;
+  /** 外部稿是谁交的(用户名);worker 渲染的为 null。 */
+  submitted_by?: string | null;
 };
 
 export async function getRenderAssets(productId: string): Promise<RenderAsset[]> {

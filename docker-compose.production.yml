@@ -255,6 +255,48 @@ services:
     networks:
       - barong-ops-console-prod
 
+  k-mcp:
+    # K 外部精修通道:给 Codex 桌面版等外部代理的 MCP 服务(取简报/参考图,交稿只落 staged)。
+    # 独立镜像(多装 mcp SDK),只在 127.0.0.1:8095 监听,由 nginx location /mcp/k-images 直达。
+    container_name: k-mcp
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.k-mcp
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "4"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "8000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      C19_RECORD_STORE_URL: ""
+      C19_RECORD_STORE_TOKEN: ""
+      C19_RECORD_STORE_TIMEOUT_SECONDS: ""
+      C19_RECORD_EVENT_POLL_SECONDS: ""
+      C19_EVENT_STREAM_LIFETIME_SECONDS: ""
+      C19_ASSET_STORE_URL: ""
+      C19_ASSET_STORE_TOKEN: ""
+      C19_ASSET_STORE_TIMEOUT_SECONDS: ""
+      K_MCP_PORT: "8095"
+    volumes:
+      - console_k_media_data:/var/lib/barong/k-media
+    ports:
+      - "127.0.0.1:8095:8095"
+    command:
+      - python
+      - -m
+      - backend.app.mcp
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
   geo-worker:
     container_name: geo-worker
     build:

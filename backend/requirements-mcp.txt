@@ -1,0 +1,8 @@
+# K 外部精修通道(k-mcp sidecar)专用依赖 —— 只装进 backend/Dockerfile.k-mcp,
+# 主后端/worker 镜像不碰。
+# mcp 2.x 是换了 httpx2 的重写版,不用;1.29.1 的依赖全被主 requirements 现有 pin 满足。
+mcp==1.29.1
+# sse-starlette>=3.0.3 要求 starlette>=0.49.1,会把仓库钉死的 starlette==0.46.2 /
+# fastapi==0.115.12 拽炸;3.0.2 只要 anyio>=4.7。
+sse-starlette==3.0.2
+httpx-sse==0.4.3

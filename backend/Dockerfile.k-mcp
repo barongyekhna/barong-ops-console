@@ -1,0 +1,32 @@
+# k-mcp sidecar: 与 backend/Dockerfile 同一基底,只多装 MCP SDK(不装 playwright)。
+# 家规:每个 sidecar 独立镜像;主后端镜像零变化。
+FROM python:3.12.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore
+
+WORKDIR /app
+
+COPY backend/requirements.txt ./backend/requirements.txt
+COPY backend/requirements-mcp.txt ./backend/requirements-mcp.txt
+RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
+    && python -m pip install --no-cache-dir -r backend/requirements-mcp.txt \
+    && python -c "import starlette; assert starlette.__version__ == '0.46.2', starlette.__version__" \
+    && apt-get update \
+    && apt-get install --yes --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app \
+    && useradd --system --gid app --home-dir /app app \
+    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media /var/lib/barong/f-media \
+    && chown -R app:app /app /var/lib/barong
+
+COPY --chown=app:app backend ./backend
+COPY --chown=app:app r_system_v2 ./r_system_v2
+
+USER app
+
+EXPOSE 8095
+
+CMD ["python", "-m", "backend.app.mcp"]

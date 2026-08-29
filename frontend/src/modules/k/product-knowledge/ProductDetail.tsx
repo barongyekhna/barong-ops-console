@@ -31,6 +31,7 @@ import {
 } from "@/modules/k19/keywords/api";
 import type { KeywordEntry } from "@/modules/k19/keywords/types";
 
+import type { GenerationJob } from "./api";
 import {
   assignProductShipping,
   getProduct,
@@ -115,6 +116,8 @@ type PendingMediaUpload = {
 };
 type ProductDetailProps = {
   isGeneratingSellingPoints?: boolean;
+  /** 后台卖点生成任务（三阶段 bullets → zh → copy）的最新状态。 */
+  sellingPointsJob?: GenerationJob | null;
   isSavingProductInfo?: boolean;
   isWorkflowBusy?: boolean;
   mediaAssets?: KMediaAsset[];
@@ -332,20 +335,35 @@ function keywordProgressPercent(
   return Math.min(92, Math.max(12, base));
 }
 
+/** 三阶段任务的分步文案。null 表示不在生成中。 */
+const SELLING_POINTS_STAGE_LABEL: Record<string, string> = {
+  bullets: "第 1/3 步：正在写卖点…（约 1 分钟，可以先去忙别的）",
+  zh: "第 2/3 步：卖点已出，正在翻中文对照…",
+  copy: "第 3/3 步：正在写商品页整段文案…",
+};
+
 function sellingPointsProgressPercent(
   sellingPoints: ProductSellingPoints | null,
   isGenerating: boolean,
   approved: boolean,
   hasManualDraft: boolean,
+  stage?: string | null,
 ) {
   if (approved) {
     return 100;
   }
+  // 生成中的进度按真实阶段推进,而不是过去那样一律停在 36%。
+  if (isGenerating) {
+    if (stage === "copy") {
+      return 66;
+    }
+    if (stage === "zh") {
+      return 52;
+    }
+    return 36;
+  }
   if (sellingPoints || hasManualDraft) {
     return 72;
-  }
-  if (isGenerating) {
-    return 36;
   }
   return 0;
 }
@@ -465,6 +483,7 @@ function buildISystemHref(
 
 export function ProductDetail({
   isGeneratingSellingPoints = false,
+  sellingPointsJob = null,
   isSavingProductInfo = false,
   isWorkflowBusy = false,
   mediaAssets = [],
@@ -545,6 +564,15 @@ export function ProductDetail({
   const [sellingPointsTouched, setSellingPointsTouched] = useState(false);
   const [isEditingSellingPoints, setIsEditingSellingPoints] = useState(false);
   const [sellingPointsCopyStatus, setSellingPointsCopyStatus] = useState("");
+  // 后台三阶段任务的派生状态。
+  const sellingPointsStage = sellingPointsJob?.stage ?? null;
+  const sellingPointsStageErrors = sellingPointsJob?.stage_errors ?? null;
+  const sellingPointsJobFailed = sellingPointsJob?.status === "failed";
+  // 三步都走完才允许提交:approve 会把当前内容冻结进已审版本并清空已生成的
+  // 文案/作图指令,阶段 3 没跑完就提交,商品页文案会以空值定型,之后补审
+  // 还要再清一次。编辑不受影响 —— 阶段 1 一出结果就能改。
+  const sellingPointsStillRunning =
+    isGeneratingSellingPoints && sellingPointsStage !== "done";
   const [variantPriceDrafts, setVariantPriceDrafts] = useState<
     Record<string, string>
   >({});
@@ -610,12 +638,14 @@ export function ProductDetail({
         isGeneratingSellingPoints,
         sellingPointsApproved,
         sellingBullets.length > 0,
+        sellingPointsStage,
       ),
     [
       isGeneratingSellingPoints,
       sellingBullets.length,
       sellingPoints,
       sellingPointsApproved,
+      sellingPointsStage,
     ],
   );
   const riskKeywordKeys = useMemo(
@@ -829,6 +859,13 @@ export function ProductDetail({
       return;
     }
 
+    // 卖点生成改成后台分阶段推送后,这个 effect 会被反复触发(阶段 2 补中文、
+    // 阶段 3 补文案各推一次)。运营已经在改的内容绝不能被后来的阶段冲掉
+    // —— 阶段 1 一出结果就可以开始审,那正是我们鼓励的用法。
+    if (sellingPointsTouched || isEditingSellingPoints) {
+      return;
+    }
+
     setSellingBullets(
       sellingPoints.bullets.map((bullet) => ({
         ...bullet,
@@ -848,6 +885,9 @@ export function ProductDetail({
     setSellingPointsApproved(sellingPoints.source === "manual_review");
     setSellingPointsTouched(false);
     setSellingPointsCopyStatus("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 故意不依赖
+    // sellingPointsTouched / isEditingSellingPoints:它们只作为"别覆盖我"的
+    // 闸门读一次。放进依赖会让运营一退出编辑就被上一轮数据回灌。
   }, [sellingPoints]);
 
   useEffect(() => {
@@ -2624,7 +2664,10 @@ export function ProductDetail({
               className="secondary-button"
               disabled={isGeneratingSellingPoints}
               onClick={() => {
-                setSellingPointsTouched(true);
+                // 必须清掉这两个闸门:上面那个同步 effect 靠它们判断
+                // 「运营正在改,别覆盖」。点了重新生成就是要新结果,
+                // 不清的话三个阶段推回来的数据一条都进不来。
+                setSellingPointsTouched(false);
                 setSellingPointsApproved(false);
                 setIsEditingSellingPoints(false);
                 onGenerateSellingPoints?.();
@@ -2636,7 +2679,11 @@ export function ProductDetail({
               ) : (
                 <Sparkles aria-hidden="true" size={16} />
               )}
-              {sellingPoints ? "重新生成" : "生成"}
+              {isGeneratingSellingPoints
+                ? "后台生成中…"
+                : sellingPoints
+                  ? "重新生成"
+                  : "生成"}
             </button>
           </div>
         </div>
@@ -2673,6 +2720,37 @@ export function ProductDetail({
         ) : null}
         {sellingPointReviewError ? (
           <p className={styles.sellingPointsError}>{sellingPointReviewError}</p>
+        ) : null}
+        {sellingPointsJobFailed ? (
+          <p className={styles.sellingPointsError}>
+            卖点生成失败：{sellingPointsJob?.error || "未知原因"}。可以点「重新生成」再试一次。
+          </p>
+        ) : null}
+
+        {isGeneratingSellingPoints ? (
+          <p className={styles.copyReviewHint}>
+            {(sellingPointsStage &&
+              SELLING_POINTS_STAGE_LABEL[sellingPointsStage]) ||
+              "已排进后台队列，正在启动…"}
+            {hasSellingPointsDraft
+              ? " 下面已经出来的部分可以先看、先改。"
+              : " 你可以先去忙别的，好了这里会自动显示。"}
+          </p>
+        ) : null}
+
+        {/* 增强阶段失败不遮挡已到手的卖点 —— 卖点本体是阶段 1 出的，
+            中文/文案没补上不影响它可用。 */}
+        {sellingPointsStageErrors?.zh ? (
+          <p className={styles.copyReviewHint}>
+            中文对照没翻出来（{sellingPointsStageErrors.zh}）。卖点本身不受影响，
+            想要中文可以点「重新生成」。
+          </p>
+        ) : null}
+        {sellingPointsStageErrors?.copy ? (
+          <p className={styles.copyReviewHint}>
+            商品页整段文案没生成出来（{sellingPointsStageErrors.copy}）。
+            卖点与中文对照不受影响。
+          </p>
         ) : null}
 
         {hasSellingPointsDraft && !isEditingSellingPoints ? (
@@ -2957,16 +3035,30 @@ export function ProductDetail({
         ) : null}
         <div className={styles.sectionFooter}>
           <span data-complete={sellingPointsComplete}>
-            {sellingPointsComplete
-              ? "卖点已保存"
-              : sellingPointsDirty
-                ? "卖点已修改，待重新提交"
-                : "卖点待审核"}
+            {sellingPointsStillRunning
+              ? "生成中，三步走完才能提交"
+              : sellingPointsComplete
+                ? "卖点已保存"
+                : sellingPointsDirty
+                  ? "卖点已修改，待重新提交"
+                  : "卖点待审核"}
           </span>
           <button
             className="primary-button"
-            disabled={sellingBullets.length === 0 || isSavingSellingPoints}
+            disabled={
+              sellingBullets.length === 0 ||
+              isSavingSellingPoints ||
+              // 生成没走完不许提交:提交会把当前内容冻结成已审版本并清空
+              // 已生成的文案/作图指令,此时中文和商品页文案还没补上。
+              // 编辑不受此限 —— 阶段 1 出结果就能改。
+              sellingPointsStillRunning
+            }
             onClick={() => void submitSellingPointsReview()}
+            title={
+              sellingPointsStillRunning
+                ? "等三步走完再提交（现在就可以先改）"
+                : undefined
+            }
             type="button"
           >
             {isSavingSellingPoints ? (
@@ -2983,6 +3075,7 @@ export function ProductDetail({
         <CopyArtDirection
           onAssetsSaved={onRefreshWorkflow}
           productId={product.id}
+          sku={product.sku}
           channel={(product as { channel?: string | null }).channel ?? null}
         />
       ) : null}

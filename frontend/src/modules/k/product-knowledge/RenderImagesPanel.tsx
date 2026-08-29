@@ -440,6 +440,15 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
                 >
                   {asset.status === "staged" ? "暂存 · 待保存" : "已保存"}
                 </span>
+                {asset.submitted_via === "mcp" ? (
+                  <span
+                    className={styles.renderStateBadge}
+                    data-state="external"
+                    title={`外部精修通道交回的稿(${asset.submitted_by ?? "外部代理"} 经 Codex/MCP 提交),已过同一套审查`}
+                  >
+                    ✦ {asset.submitted_by ? `${asset.submitted_by} · ` : ""}Codex 精修
+                  </span>
+                ) : null}
                 {asset.status === "staged" ? (
                   <button
                     className="secondary-button"
