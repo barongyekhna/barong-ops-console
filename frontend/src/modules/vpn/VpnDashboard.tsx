@@ -34,8 +34,13 @@ import { isNodeOnline, type VpnNode } from "./nodes";
 const POLL_INTERVAL_MS = 5_000;
 // After asking the native agent to connect, watch its status for up to 20s
 // before calling the attempt failed. The tunnel service needs a few seconds.
-const CONNECT_SETTLE_ATTEMPTS = 20;
-const CONNECT_SETTLE_INTERVAL_MS = 1_000;
+const CONNECT_SETTLE_ATTEMPTS = 40;
+const CONNECT_SETTLE_INTERVAL_MS = 500;
+// While the tunnel is being torn down or brought up the console itself is
+// briefly unreachable; polling failures inside this window are expected and
+// must not surface as errors. Errors are shown only after repeated failures.
+const TRANSITION_GRACE_MS = 8_000;
+const ERROR_AFTER_FAILURES = 2;
 
 type Sample = { at: number; received: number; sent: number };
 
@@ -64,6 +69,10 @@ export function VpnDashboard() {
   const [nativeError, setNativeError] = useState("");
   const [nativeBusy, setNativeBusy] = useState<"connect" | "disconnect" | "switch" | null>(null);
   const [switchingNodeId, setSwitchingNodeId] = useState<string | null>(null);
+  const [switchStep, setSwitchStep] = useState("");
+  const transitionUntilRef = useRef(0);
+  const failureCountRef = useRef({ nodes: 0, devices: 0 });
+  const nativeBusyRef = useRef<"connect" | "disconnect" | "switch" | null>(null);
   const [rates, setRates] = useState<ConnectionRates>({
     down_bytes_per_second: null,
     up_bytes_per_second: null,
@@ -73,6 +82,7 @@ export function VpnDashboard() {
   const lastSampleRef = useRef<Sample | null>(null);
   const nativeStatusRef = useRef<NativeVpnStatus | null>(null);
   nativeStatusRef.current = nativeStatus;
+  nativeBusyRef.current = nativeBusy;
 
   const bridge = typeof window === "undefined" ? null : getNativeVpnBridge();
   const nativeAvailable = bridge !== null;
@@ -138,19 +148,29 @@ export function VpnDashboard() {
         return;
       }
 
+      const inTransition =
+        nativeBusyRef.current !== null || Date.now() < transitionUntilRef.current;
       if (nodesResult.status === "fulfilled") {
         setNodes(nodesResult.value);
         setNodeError("");
-      } else if (!isApiAbortError(nodesResult.reason)) {
-        setNodeError(errorMessage(nodesResult.reason, "节点状态暂时无法读取。"));
+        failureCountRef.current.nodes = 0;
+      } else if (!isApiAbortError(nodesResult.reason) && !inTransition) {
+        failureCountRef.current.nodes += 1;
+        if (failureCountRef.current.nodes >= ERROR_AFTER_FAILURES) {
+          setNodeError(errorMessage(nodesResult.reason, "节点状态暂时无法读取。"));
+        }
       }
       if (devicesResult.status === "fulfilled") {
         setDevices(devicesResult.value.devices);
         setUnavailableNodes(devicesResult.value.unavailable_nodes);
         setDeviceError("");
+        failureCountRef.current.devices = 0;
         updateRates(devicesResult.value.devices, nativeStatusRef.current?.device_id ?? null);
-      } else if (!isApiAbortError(devicesResult.reason)) {
-        setDeviceError(errorMessage(devicesResult.reason, "我的设备暂时无法读取。"));
+      } else if (!isApiAbortError(devicesResult.reason) && !inTransition) {
+        failureCountRef.current.devices += 1;
+        if (failureCountRef.current.devices >= ERROR_AFTER_FAILURES) {
+          setDeviceError(errorMessage(devicesResult.reason, "我的设备暂时无法读取。"));
+        }
       }
       abortControllerRef.current = null;
       setIsLoading(false);
@@ -162,7 +182,7 @@ export function VpnDashboard() {
     void load();
     void loadNative();
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && nativeBusyRef.current === null) {
         void load({ silent: true });
         void loadNative();
       }
@@ -227,21 +247,26 @@ export function VpnDashboard() {
         status = installed;
         setNativeStatus(installed);
       }
+      setSwitchStep(`正在向 ${node.name} 登记本机…`);
       const identity = normalizeNativeVpnIdentity(await currentBridge.enrollment());
       if (!identity) {
         throw new Error("本机设备身份格式异常。");
       }
       const enrollment = await enrollNativeVpnDevice(identity, node.id);
+      setSwitchStep("正在写入本机隧道配置…");
       await currentBridge.provision(enrollment.provisioning);
       setDevices((before) => [
         ...before.filter((device) => device.id !== enrollment.device.id),
         enrollment.device,
       ]);
+      setSwitchStep(`正在连接 ${node.name}…`);
+      transitionUntilRef.current = Date.now() + TRANSITION_GRACE_MS;
       await currentBridge.connect();
       const settled = await settleNative(true);
       if (!settled) {
         throw new Error("连接超时，请稍后再试一次。");
       }
+      transitionUntilRef.current = Date.now() + TRANSITION_GRACE_MS;
     },
     [settleNative],
   );
@@ -256,11 +281,16 @@ export function VpnDashboard() {
     const wantsDisconnect = Boolean(status?.provisioned && (status.connected || status.desired_connected));
     setNativeBusy(wantsDisconnect ? "disconnect" : "connect");
     setNativeError("");
+    setNodeError("");
+    setDeviceError("");
+    transitionUntilRef.current = Date.now() + TRANSITION_GRACE_MS;
     try {
       if (wantsDisconnect) {
+        setSwitchStep("正在断开…");
         await currentBridge.disconnect();
-        await settleNative(false);
+        await loadNative();
       } else if (status?.provisioned && status.node_id) {
+        setSwitchStep(`正在连接 ${currentNode?.name ?? "节点"}…`);
         await currentBridge.connect();
         const settled = await settleNative(true);
         if (!settled) {
@@ -279,6 +309,8 @@ export function VpnDashboard() {
       await loadNative();
     } finally {
       setNativeBusy(null);
+      setSwitchStep("");
+      transitionUntilRef.current = Date.now() + TRANSITION_GRACE_MS;
     }
   };
 
@@ -289,11 +321,15 @@ export function VpnDashboard() {
     setNativeBusy("switch");
     setSwitchingNodeId(node.id);
     setNativeError("");
+    setNodeError("");
+    setDeviceError("");
+    transitionUntilRef.current = Date.now() + TRANSITION_GRACE_MS;
     try {
       const currentBridge = getNativeVpnBridge();
-      if (currentBridge && nativeStatusRef.current?.connected) {
+      if (currentBridge && (nativeStatusRef.current?.connected || nativeStatusRef.current?.desired_connected)) {
+        setSwitchStep(`正在断开 ${currentNode?.name ?? "当前节点"}…`);
+        // The agent stops the tunnel synchronously; no polling wait needed.
         await currentBridge.disconnect();
-        await settleNative(false);
       }
       await enrollAndConnect(node);
       await load({ silent: true });
@@ -303,6 +339,8 @@ export function VpnDashboard() {
     } finally {
       setNativeBusy(null);
       setSwitchingNodeId(null);
+      setSwitchStep("");
+      transitionUntilRef.current = Date.now() + TRANSITION_GRACE_MS;
     }
   };
 
@@ -352,7 +390,9 @@ export function VpnDashboard() {
         : "连接 VPN";
   const detail = phase === "browser"
     ? "普通浏览器没有本机系统权限。安装控制台 App 后在 App 里打开本页，一键登记本机并连接。"
-    : nativeError
+    : nativeBusy !== null && switchStep
+      ? switchStep
+      : nativeError
       ? nativeError
       : phase === "connected"
         ? `本机经 ${currentNode?.name ?? "专线"} 出口上网；关闭控制台不会断开。`
