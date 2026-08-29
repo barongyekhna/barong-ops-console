@@ -39,10 +39,68 @@ export type ManagedUser = {
   is_bot?: boolean;
   /** 中文显示名(来自通讯资料);没有就显示登录名 */
   display_name?: string | null;
+  nickname?: string | null;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
+  /** MCP 个人钥匙状态(永远不含明文)。 */
+  mcp_token?: McpTokenSummary | null;
+  /** 头像(C19 资料),可直接当 img src。 */
+  avatar_url?: string | null;
+  /** 只在「创建账号」的响应里出现一次:初始密码 + MCP 钥匙明文,转交给新用户。 */
+  initial_password?: string | null;
+  mcp_token_secret?: string | null;
 };
+
+export type McpTokenSummary = {
+  has_token: boolean;
+  status: "active" | "disabled" | null;
+  token_prefix: string | null;
+  rotated_at: string | null;
+  last_used_at: string | null;
+};
+
+export type McpTokenIssued = {
+  token: string;
+  summary: McpTokenSummary;
+  setup_command_mac: string;
+  setup_command_windows: string;
+  server_name: string;
+  server_url: string;
+  verify_hint: string;
+};
+
+/** 管理者给某人换一把新钥匙;明文只回这一次,由管理者转交。 */
+export function resetUserMcpToken(userId: number) {
+  return apiRequest<McpTokenIssued>(`/users/${userId}/mcp-token-reset`, { method: "POST" });
+}
+
+export function disableUserMcpToken(userId: number) {
+  return apiRequest<McpTokenSummary>(`/users/${userId}/mcp-token-disable`, { method: "POST" });
+}
+
+export type McpTokenLogItem = {
+  id: number;
+  action: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  target_id: string | null;
+  target_username: string | null;
+  details: Record<string, unknown> | null;
+  ip_address: string | null;
+  created_at: string;
+};
+
+/** 钥匙操作记录(发放/重置/停用/启用);owner 看全部,super_admin 只看本组织。 */
+export function listMcpTokenLog(limit = 50) {
+  return apiRequest<{ items: McpTokenLogItem[]; count: number }>(
+    `/users/mcp-token-log?limit=${limit}`,
+  );
+}
+
+export function enableUserMcpToken(userId: number) {
+  return apiRequest<McpTokenSummary>(`/users/${userId}/mcp-token-enable`, { method: "POST" });
+}
 
 export type UserListResponse = {
   items: ManagedUser[];

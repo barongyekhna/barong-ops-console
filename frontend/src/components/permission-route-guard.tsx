@@ -103,6 +103,8 @@ export function PermissionRouteGuard({
     pathname === "/organizations" && isAuthenticated;
   const isPermissionCenterRoute =
     pathname === "/permissions" && isAuthenticated && isPrivilegedRole;
+  const isMcpKeysRoute =
+    pathname === "/mcp-keys" && isAuthenticated && isPrivilegedRole;
   const isModuleControlRoute =
     (pathname === "/modules" || pathname === "/module-control") &&
     isAuthenticated &&
@@ -127,6 +129,7 @@ export function PermissionRouteGuard({
     isUserManagerRoute ||
     isOrganizationListRoute ||
     isPermissionCenterRoute ||
+    isMcpKeysRoute ||
     isModuleControlRoute
   ) {
     return children;

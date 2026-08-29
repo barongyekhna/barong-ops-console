@@ -1,4 +1,6 @@
+import secrets
 from datetime import datetime
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -13,6 +15,22 @@ from ..core.roles import get_role_display_metadata, normalize_role
 
 ManagedUserRole = str
 DEFAULT_INITIAL_PASSWORD = "123456"
+
+# Length of the one-time random initial password handed to the creator when a
+# managed user is created. Kept comfortably above the 12-char minimum enforced
+# by change-password / reset-password so the account is never seeded with a
+# guessable secret like "123456".
+INITIAL_PASSWORD_LENGTH = 16
+
+
+def generate_initial_password() -> str:
+    """Return a random, URL-safe one-time initial password (no fixed default).
+
+    Used instead of DEFAULT_INITIAL_PASSWORD so a newly created account cannot
+    be taken over by anyone who merely knows the username. The plaintext is
+    returned to the creator exactly once (never stored in cleartext).
+    """
+    return secrets.token_urlsafe(INITIAL_PASSWORD_LENGTH)
 USER_MANAGEMENT_ROLES = (
     "owner",
     "super_admin",
@@ -76,9 +94,13 @@ class UserResponse(BaseModel):
     is_active: bool
     is_bot: bool = False
     display_name: str | None = None
+    nickname: str | None = None
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    mcp_token: "McpTokenSummary | None" = None
+    # 头像(C19 资料 avatar_ref,可直接当 img src);没有则 None。
+    avatar_url: str | None = None
 
     @field_validator("role")
     @classmethod
@@ -90,6 +112,56 @@ class UserResponse(BaseModel):
         self.title = self.job_title
         self.organization = self.organization_id
         return self
+
+
+class McpTokenSummary(BaseModel):
+    """MCP 个人钥匙状态(永远不含明文)。"""
+
+    has_token: bool = False
+    status: str | None = None
+    token_prefix: str | None = None
+    rotated_at: datetime | None = None
+    last_used_at: datetime | None = None
+
+
+class UserCreateResponse(UserResponse):
+    """Response for user creation. Carries the one-time initial password (and
+    the one-time MCP personal token) so the creator can pass them to the new
+    user. Only ever populated on creation."""
+
+    initial_password: str | None = None
+    mcp_token_secret: str | None = None
+
+
+class McpTokenLogItem(BaseModel):
+    """一条钥匙操作记录(发放/重置/停用/启用),id 已解析成用户名。"""
+
+    id: int
+    action: str
+    actor_id: str | None = None
+    actor_username: str | None = None
+    target_id: str | None = None
+    target_username: str | None = None
+    details: dict[str, Any] | None = None
+    ip_address: str | None = None
+    created_at: datetime
+
+
+class McpTokenLogResponse(BaseModel):
+    items: list[McpTokenLogItem]
+    count: int
+
+
+class McpTokenIssueResponse(BaseModel):
+    """一次性回明文钥匙 + 装机命令;之后只剩哈希,再看不到。"""
+
+    token: str
+    summary: McpTokenSummary
+    setup_command_mac: str
+    setup_command_windows: str
+    server_name: str
+    server_url: str
+    verify_hint: str
 
 
 class UserCreate(BaseModel):

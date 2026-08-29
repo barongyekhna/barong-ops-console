@@ -3,6 +3,7 @@
 import {
   Bot,
   Eye,
+  Fingerprint,
   KeyRound,
   LoaderCircle,
   Plus,
@@ -11,6 +12,8 @@ import {
   RotateCcw,
   Save,
   ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
   Trash2,
   UserRoundCog,
 } from "lucide-react";
@@ -23,6 +26,10 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { McpSecretBanner } from "@/components/mcp-secret-banner";
+import { formatDisplayName } from "@/components/profile-provider";
+
+import styles from "./user-management-panel.module.css";
 import { isApiAbortError } from "@/lib/api";
 import {
   canManageUsersForRole,
@@ -36,13 +43,17 @@ import {
   USERS_PAGE_LIMIT,
   createUser,
   disableUser,
+  disableUserMcpToken,
   enableUser,
+  enableUserMcpToken,
   formatUsersApiError,
   getUser,
   isManagedUserRole,
   listOrganizations,
   listUserRoles,
   listUsers,
+  resetUserMcpToken,
+  type McpTokenIssued,
   purgeUser,
   registerBot,
   resetUserPassword,
@@ -181,6 +192,10 @@ export function UserManagementPanel() {
   const [listError, setListError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
+  // MCP 个人钥匙:重置后明文只显示这一次(与初始密码同一做法),由管理者转交。
+  const [mcpIssued, setMcpIssued] = useState<
+    { username: string; secret: string; initialPassword?: string | null; mac?: string; windows?: string } | null
+  >(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [expandedUser, setExpandedUser] = useState<ManagedUser | null>(null);
   const [detailRole, setDetailRole] =
@@ -504,6 +519,13 @@ export function UserManagementPanel() {
         username,
       });
       setActionNotice(`已创建账号：${created.username}。`);
+      if (created.initial_password || created.mcp_token_secret) {
+        setMcpIssued({
+          username: created.username,
+          secret: created.mcp_token_secret ?? "",
+          initialPassword: created.initial_password ?? null,
+        });
+      }
       setCreateUsername("");
       setCreateJobTitle("");
       setCreateOrganizationId(
@@ -715,6 +737,61 @@ export function UserManagementPanel() {
       setActionError(
         formatUsersApiError(error, "角色更新未完成，请重试。"),
       );
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleMcpTokenReset(target: ManagedUser) {
+    clearActionMessages();
+    if (!canManageTarget(target)) {
+      setActionError("当前账号不能管理该用户。");
+      return;
+    }
+    if (
+      !window.confirm(
+        `确认给 ${target.username} 换一把新的 MCP 钥匙？旧钥匙立刻失效,新钥匙只显示这一次。`,
+      )
+    ) {
+      return;
+    }
+    setPendingAction(`mcp-reset-${target.id}`);
+    try {
+      const issued: McpTokenIssued = await resetUserMcpToken(target.id);
+      setMcpIssued({
+        username: target.username,
+        secret: issued.token,
+        mac: issued.setup_command_mac,
+        windows: issued.setup_command_windows,
+      });
+      setActionNotice(`已为 ${target.username} 生成新钥匙。`);
+      await loadUsers();
+    } catch (error) {
+      setActionError(formatUsersApiError(error, "重置 MCP 钥匙失败。"));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleMcpTokenToggle(target: ManagedUser) {
+    clearActionMessages();
+    if (!canManageTarget(target)) {
+      setActionError("当前账号不能管理该用户。");
+      return;
+    }
+    const disabled = target.mcp_token?.status === "disabled";
+    setPendingAction(`mcp-toggle-${target.id}`);
+    try {
+      if (disabled) {
+        await enableUserMcpToken(target.id);
+        setActionNotice(`已启用 ${target.username} 的 MCP 钥匙。`);
+      } else {
+        await disableUserMcpToken(target.id);
+        setActionNotice(`已停用 ${target.username} 的 MCP 钥匙,他的 Codex 立刻连不上。`);
+      }
+      await loadUsers();
+    } catch (error) {
+      setActionError(formatUsersApiError(error, "更新 MCP 钥匙状态失败。"));
     } finally {
       setPendingAction(null);
     }
@@ -1042,6 +1119,19 @@ export function UserManagementPanel() {
         </div>
       ) : null}
 
+      {mcpIssued ? (
+        <McpSecretBanner
+          onClose={() => setMcpIssued(null)}
+          payload={{
+            username: mcpIssued.username,
+            secret: mcpIssued.secret,
+            initialPassword: mcpIssued.initialPassword,
+            setupCommandMac: mcpIssued.mac,
+            setupCommandWindows: mcpIssued.windows,
+          }}
+        />
+      ) : null}
+
       {resetTarget && canManageTarget(resetTarget) ? (
         <>
           <button
@@ -1077,7 +1167,7 @@ export function UserManagementPanel() {
           </label>
           <div className="users-inline-actions">
             <button
-              className="danger-button"
+              className="primary-button"
               disabled={isBusy}
               type="submit"
             >
@@ -1214,9 +1304,13 @@ export function UserManagementPanel() {
                               size={15}
                             />
                           ) : null}
-                          {target.display_name || target.username}
+                          {formatDisplayName(
+                            target.nickname,
+                            target.display_name || target.username,
+                          )}
                         </strong>
-                        {target.display_name && target.display_name !== target.username ? (
+                        {(target.display_name || target.username) !==
+                        target.username ? (
                           <span className="users-login-name">{target.username}</span>
                         ) : null}
                         {isSelf ? <span>当前账号</span> : null}
@@ -1272,14 +1366,11 @@ export function UserManagementPanel() {
 
                           {canManageRow && target.is_active ? (
                             <button
-                              className="secondary-button"
+                              className="icon-button"
                               disabled={actionDisabled}
                               onClick={() => void handleDisable(target)}
-                              title={
-                                isSelf
-                                  ? "不能停用当前账号"
-                                  : "停用用户"
-                              }
+                              title={isSelf ? "不能停用当前账号" : "停用用户"}
+                              aria-label="停用用户"
                               type="button"
                             >
                               {pendingAction === `disable-${target.id}` ? (
@@ -1291,13 +1382,14 @@ export function UserManagementPanel() {
                               ) : (
                                 <PowerOff aria-hidden="true" size={17} />
                               )}
-                              停用
                             </button>
                           ) : canManageRow ? (
                             <button
-                              className="secondary-button"
+                              className="icon-button"
                               disabled={isBusy}
                               onClick={() => void handleEnable(target)}
+                              title="启用用户"
+                              aria-label="启用用户"
                               type="button"
                             >
                               {pendingAction === `enable-${target.id}` ? (
@@ -1309,47 +1401,20 @@ export function UserManagementPanel() {
                               ) : (
                                 <Power aria-hidden="true" size={17} />
                               )}
-                              启用
-                            </button>
-                          ) : null}
-
-                          {canManageRow &&
-                          !target.is_active &&
-                          isOwnerRole(currentUser?.role) ? (
-                            <button
-                              className="danger-button"
-                              disabled={isBusy}
-                              onClick={() => void handlePurge(target)}
-                              title="彻底删除（仅限已停用账号）"
-                              type="button"
-                            >
-                              {pendingAction === `purge-${target.id}` ? (
-                                <LoaderCircle
-                                  className="spin"
-                                  aria-hidden="true"
-                                  size={17}
-                                />
-                              ) : (
-                                <Trash2 aria-hidden="true" size={17} />
-                              )}
-                              删除
                             </button>
                           ) : null}
 
                           {canManageRow ? (
                             <button
-                              className="danger-button"
+                              className="icon-button"
                               disabled={actionDisabled}
                               onClick={() => {
                                 clearActionMessages();
                                 setResetTarget(target);
                                 setResetPassword("");
                               }}
-                              title={
-                                isSelf
-                                  ? "不能重置当前账号密码"
-                                  : "重置密码"
-                              }
+                              title={isSelf ? "不能重置当前账号密码" : "重置密码"}
+                              aria-label="重置密码"
                               type="button"
                             >
                               {rowPending &&
@@ -1362,7 +1427,64 @@ export function UserManagementPanel() {
                               ) : (
                                 <KeyRound aria-hidden="true" size={17} />
                               )}
-                              重置
+                            </button>
+                          ) : null}
+
+                          {canManageRow && !target.is_bot ? (
+                            <>
+                              <button
+                                className="icon-button"
+                                disabled={actionDisabled}
+                                onClick={() => void handleMcpTokenReset(target)}
+                                title={`重置 MCP 钥匙${target.mcp_token?.has_token ? `（当前 ${target.mcp_token.token_prefix}…）` : "（尚未生成）"}`}
+                                aria-label="重置 MCP 钥匙"
+                                type="button"
+                              >
+                                {pendingAction === `mcp-reset-${target.id}` ? (
+                                  <LoaderCircle className="spin" aria-hidden="true" size={17} />
+                                ) : (
+                                  <Fingerprint aria-hidden="true" size={17} />
+                                )}
+                              </button>
+                              <button
+                                className={`icon-button${target.mcp_token?.status === "disabled" ? "" : ` ${styles.iconDanger}`}`}
+                                disabled={actionDisabled}
+                                onClick={() => void handleMcpTokenToggle(target)}
+                                title={target.mcp_token?.status === "disabled" ? "启用 MCP 钥匙" : "停用 MCP 钥匙（他的 Codex 立刻连不上）"}
+                                aria-label={target.mcp_token?.status === "disabled" ? "启用 MCP 钥匙" : "停用 MCP 钥匙"}
+                                type="button"
+                              >
+                                {pendingAction === `mcp-toggle-${target.id}` ? (
+                                  <LoaderCircle className="spin" aria-hidden="true" size={17} />
+                                ) : target.mcp_token?.status === "disabled" ? (
+                                  <ShieldCheck aria-hidden="true" size={17} />
+                                ) : (
+                                  <ShieldOff aria-hidden="true" size={17} />
+                                )}
+                              </button>
+                            </>
+                          ) : null}
+
+                          {canManageRow &&
+                          !target.is_active &&
+                          isOwnerRole(currentUser?.role) ? (
+                            <button
+                              className={`icon-button ${styles.iconDanger}`}
+                              disabled={isBusy}
+                              onClick={() => void handlePurge(target)}
+                              title="彻底删除（仅限已停用账号）"
+                              aria-label="彻底删除"
+                              type="button"
+                            >
+                              {pendingAction === `purge-${target.id}` ? (
+                                <LoaderCircle
+                                  className="spin"
+                                  aria-hidden="true"
+                                  size={17}
+                                />
+                              ) : (
+                                <Trash2 aria-hidden="true" size={17} />
+                              )}
                             </button>
                           ) : null}
                         </div>
@@ -1467,6 +1589,20 @@ export function UserManagementPanel() {
             <div>
               <dt>状态</dt>
               <dd>{expandedUser.is_active ? "正常" : "已停用"}</dd>
+            </div>
+            <div>
+              <dt>MCP 钥匙</dt>
+              <dd>
+                {expandedUser.is_bot
+                  ? "机器人不发"
+                  : !expandedUser.mcp_token?.has_token
+                    ? "尚未生成"
+                    : `${expandedUser.mcp_token.status === "disabled" ? "已停用" : "正常"} · ${expandedUser.mcp_token.token_prefix}…${
+                        expandedUser.mcp_token.last_used_at
+                          ? ` · 上次使用 ${new Date(expandedUser.mcp_token.last_used_at).toLocaleString("zh-CN")}`
+                          : ""
+                      }`}
+              </dd>
             </div>
             <div>
               <dt>创建时间</dt>

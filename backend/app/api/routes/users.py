@@ -5,12 +5,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ...core.roles import list_standard_role_metadata, normalize_role
+from ...core.roles import is_owner_role, list_standard_role_metadata, normalize_role
 from ...db.session import get_db
 from ...models.organization import OrganizationRecord
 from ...models.user import User
 from ...schemas.common import ListResponse
 from ...schemas.user import (
+    McpTokenIssueResponse,
+    McpTokenLogItem,
+    McpTokenLogResponse,
+    McpTokenSummary,
+    UserCreateResponse,
     BotCreate,
     PasswordResetRequest,
     UserCreate,
@@ -22,6 +27,11 @@ from ...schemas.user import (
     user_management_role_metadata,
 )
 from ...services.data_isolation import without_org_data_isolation
+from ...services.org_membership_service import (
+    OrgMembershipConflictError,
+    add_org_member,
+)
+from ...schemas.org_membership import OrgMemberAddRequest
 from ...services.user_management_service import (
     BotOperationNotAllowedError,
     DuplicateUsernameError,
@@ -42,6 +52,7 @@ from ...services.user_management_service import (
     reset_managed_user_password,
     update_managed_user,
 )
+from ...services import mcp_token_service
 from ...services.api_stability import (
     api_snapshot_key,
     degraded_snapshot,
@@ -162,8 +173,14 @@ def _organization_name_map(
     return {row.org_id: row.org_name for row in rows}
 
 
-def _display_name_map(db: Session, users: list[User]) -> dict[int, str]:
-    """中文显示名来自 C19 资料(机器人注册时写的「霓旌」这类),登录名只是账号。"""
+def _display_name_map(
+    db: Session, users: list[User]
+) -> dict[int, tuple[str | None, str | None, str | None]]:
+    """中文显示名 + 昵称 + 头像都来自 C19 资料;登录名只是账号。
+
+    返回 {user_id: (display_name, nickname, avatar_ref)},用户管理据此显示
+    「昵称(真名)」;「接入钥匙」总览据此显示头像。
+    """
     from ...models.c19 import C19ProfileRecord
 
     user_ids = [user.id for user in users if user.id is not None]
@@ -171,17 +188,23 @@ def _display_name_map(db: Session, users: list[User]) -> dict[int, str]:
         return {}
     with without_org_data_isolation():
         rows = db.execute(
-            select(C19ProfileRecord.user_id, C19ProfileRecord.display_name).where(
-                C19ProfileRecord.user_id.in_(user_ids)
-            )
+            select(
+                C19ProfileRecord.user_id,
+                C19ProfileRecord.display_name,
+                C19ProfileRecord.nickname,
+                C19ProfileRecord.avatar_ref,
+            ).where(C19ProfileRecord.user_id.in_(user_ids))
         ).all()
-    return {int(user_id): name for user_id, name in rows if name}
+    return {
+        int(user_id): (name, nickname, avatar_ref)
+        for user_id, name, nickname, avatar_ref in rows
+    }
 
 
 def _user_response(
     user: User,
     organization_names: dict[str, str],
-    display_names: dict[int, str] | None = None,
+    display_names: dict[int, tuple[str | None, str | None, str | None]] | None = None,
 ) -> UserResponse:
     response = UserResponse.model_validate(user)
     if response.organization_id:
@@ -190,8 +213,34 @@ def _user_response(
             response.organization_id,
         )
     if display_names:
-        response.display_name = display_names.get(user.id)
+        entry = display_names.get(user.id)
+        if entry is not None:
+            display_name, nickname, avatar_ref = entry
+            if display_name:
+                response.display_name = display_name
+            response.nickname = nickname
+            response.avatar_url = avatar_ref or None
     return response
+
+
+def _with_mcp_token(response: UserResponse, summary: dict | None) -> UserResponse:
+    response.mcp_token = McpTokenSummary.model_validate(
+        summary or mcp_token_service.token_summary(None)
+    )
+    return response
+
+
+def _issue_response(issued: mcp_token_service.IssuedToken) -> McpTokenIssueResponse:
+    commands = mcp_token_service.install_commands(issued.token)
+    return McpTokenIssueResponse(
+        token=issued.token,
+        summary=McpTokenSummary.model_validate(mcp_token_service.token_summary(issued.row)),
+        setup_command_mac=commands["mac"],
+        setup_command_windows=commands["windows"],
+        server_name=mcp_token_service.MCP_SERVER_NAME,
+        server_url=mcp_token_service.mcp_endpoint_url(),
+        verify_hint=mcp_token_service.VERIFY_HINT,
+    )
 
 
 def require_user_manager(user: User = Depends(get_current_user)) -> User:
@@ -244,9 +293,15 @@ def users(
             )
         organization_names = _organization_name_map(db, result.items)
         display_names = _display_name_map(db, result.items)
+        token_summaries = mcp_token_service.summaries_for_users(
+            db, [item.id for item in result.items]
+        )
         response = ListResponse(
             items=[
-                _user_response(item, organization_names, display_names)
+                _with_mcp_token(
+                    _user_response(item, organization_names, display_names),
+                    token_summaries.get(item.id),
+                )
                 for item in result.items
             ],
             count=result.count,
@@ -282,7 +337,7 @@ def users(
 
 @router.post(
     "",
-    response_model=UserResponse,
+    response_model=UserCreateResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def user_create(
@@ -290,9 +345,9 @@ def user_create(
     request: Request,
     db: Session = Depends(get_db),
     owner: User = Depends(require_user_manager),
-) -> UserResponse:
+) -> UserCreateResponse:
     try:
-        user = create_managed_user(
+        user, initial_password = create_managed_user(
             db,
             payload=payload,
             actor=owner,
@@ -300,7 +355,47 @@ def user_create(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
+    # C18H: give a non-owner user an active org membership so they can actually
+    # enter business modules — the org-context middleware reads memberships, not
+    # users.organization_id. add_org_member also syncs the C19 affiliation. This
+    # is the correct entry point (create_managed_user itself stays membership-free
+    # by design). owner has organization_id=None → skip.
+    if user.organization_id is not None:
+        membership_role = (
+            "admin" if normalize_role(user.role) == "super_admin" else "member"
+        )
+        try:
+            add_org_member(
+                db,
+                org_id=user.organization_id,
+                payload=OrgMemberAddRequest(
+                    user_id=str(user.id), role=membership_role
+                ),
+                actor=owner,
+                audit=get_audit_context(request),
+            )
+        except OrgMembershipConflictError:
+            pass  # already a member — idempotent
+    # 每个真人账号自动配一把 MCP 个人钥匙;明文与初始密码一起只回给创建者一次。
+    mcp_token_secret: str | None = None
+    if not user.is_bot:
+        issued = mcp_token_service.mint_token(
+            db, user=user, actor=owner, audit=get_audit_context(request), reason="user_create"
+        )
+        db.commit()
+        mcp_token_secret = issued.token
+    base = _with_mcp_token(
+        _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user])),
+        mcp_token_service.token_summary(mcp_token_service.get_token_row(db, user.id)),
+    )
+    # Surface the one-time initial password to the creator (returned once only).
+    return UserCreateResponse.model_validate(
+        {
+            **base.model_dump(),
+            "initial_password": initial_password,
+            "mcp_token_secret": mcp_token_secret,
+        }
+    )
 
 
 @router.post(
@@ -343,6 +438,61 @@ def user_roles(
     )
 
 
+@router.get("/mcp-token-log", response_model=McpTokenLogResponse)
+def users_mcp_token_log(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_user_manager),
+) -> McpTokenLogResponse:
+    """「接入钥匙」总览的操作记录:谁在什么时候发/重置/停用/启用了谁的钥匙。
+
+    静态路径必须声明在 ``/{user_id}`` 之前(FastAPI 按声明顺序匹配,家规)。
+    owner 看全部;super_admin 只看目标在本组织的记录。
+    """
+    from ...models.operation_log import OperationLog
+
+    with without_org_data_isolation():
+        rows = db.scalars(
+            select(OperationLog)
+            .where(OperationLog.action.like("mcp_token.%"))
+            .order_by(OperationLog.id.desc())
+            .limit(limit * 3 if not is_owner_role(actor.role) else limit)
+        ).all()
+        ids: set[int] = set()
+        for row in rows:
+            for raw in (row.actor_id, row.target_id):
+                if raw and str(raw).isdigit():
+                    ids.add(int(raw))
+        users_by_id = {
+            u.id: u
+            for u in db.scalars(select(User).where(User.id.in_(ids or {0}))).all()
+        }
+    actor_org = _actor_org_id(actor)
+    items: list[McpTokenLogItem] = []
+    for row in rows:
+        target = users_by_id.get(int(row.target_id)) if str(row.target_id or "").isdigit() else None
+        if not is_owner_role(actor.role):
+            if target is None or target.organization_id != actor_org:
+                continue
+        who = users_by_id.get(int(row.actor_id)) if str(row.actor_id or "").isdigit() else None
+        items.append(
+            McpTokenLogItem(
+                id=row.id,
+                action=row.action,
+                actor_id=row.actor_id,
+                actor_username=who.username if who else None,
+                target_id=row.target_id,
+                target_username=target.username if target else None,
+                details=row.details if isinstance(row.details, dict) else None,
+                ip_address=row.ip_address,
+                created_at=row.created_at,
+            )
+        )
+        if len(items) >= limit:
+            break
+    return McpTokenLogResponse(items=items, count=len(items))
+
+
 @router.get("/{user_id}", response_model=UserResponse)
 def user_detail(
     user_id: int,
@@ -358,7 +508,10 @@ def user_detail(
     except Exception as exc:
         _raise_user_management_error(exc)
     _ensure_user_visible(actor, user)
-    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
+    return _with_mcp_token(
+        _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user])),
+        mcp_token_service.token_summary(mcp_token_service.get_token_row(db, user.id)),
+    )
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
@@ -420,6 +573,55 @@ def user_disable(
     except Exception as exc:
         _raise_user_management_error(exc)
     return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
+
+
+@router.post("/{user_id}/mcp-token-reset", response_model=McpTokenIssueResponse)
+def user_mcp_token_reset(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_user_manager),
+) -> McpTokenIssueResponse:
+    """管理者给某人换一把新钥匙(明文只回这一次,由管理者转交)。"""
+    try:
+        issued = mcp_token_service.reset_token_for_user(
+            db, user_id=user_id, actor=owner, audit=get_audit_context(request)
+        )
+    except Exception as exc:
+        _raise_user_management_error(exc)
+    return _issue_response(issued)
+
+
+@router.post("/{user_id}/mcp-token-disable", response_model=McpTokenSummary)
+def user_mcp_token_disable(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_user_manager),
+) -> McpTokenSummary:
+    try:
+        row = mcp_token_service.disable_token_for_user(
+            db, user_id=user_id, actor=owner, audit=get_audit_context(request)
+        )
+    except Exception as exc:
+        _raise_user_management_error(exc)
+    return McpTokenSummary.model_validate(mcp_token_service.token_summary(row))
+
+
+@router.post("/{user_id}/mcp-token-enable", response_model=McpTokenSummary)
+def user_mcp_token_enable(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    owner: User = Depends(require_user_manager),
+) -> McpTokenSummary:
+    try:
+        row = mcp_token_service.enable_token_for_user(
+            db, user_id=user_id, actor=owner, audit=get_audit_context(request)
+        )
+    except Exception as exc:
+        _raise_user_management_error(exc)
+    return McpTokenSummary.model_validate(mcp_token_service.token_summary(row))
 
 
 @router.post("/{user_id}/enable", response_model=UserResponse)

@@ -92,6 +92,7 @@ from .api.routes.reviews import router as reviews_router
 from .api.routes.rw import router as rw_router
 from .api.routes.result_normalization import router as result_normalization_router
 from .api.routes.security_firewall import router as security_firewall_router
+from .api.routes.profile import router as profile_router
 from .api.routes.users import router as users_router
 from .api.routes.webhook_gateway import router as webhook_gateway_router
 from .api.routes.workflow_registry import router as workflow_registry_router
@@ -1083,6 +1084,7 @@ app.include_router(cs_public_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(w_siteops_public_router, prefix=PUBLIC_API_PREFIX)
 
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(profile_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(arcade_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)

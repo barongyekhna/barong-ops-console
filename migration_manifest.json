@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260821_03_factory_org_type",
+  "alembic_head": "20260828_01_mcp_access_tokens",
   "environment": "staging",
-  "expected_alembic_head": "20260821_03_factory_org_type",
+  "expected_alembic_head": "20260828_01_mcp_access_tokens",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 101,
-  "migration_hash": "c2bf0208b81a3a9b95b76af4d8ad88877773eae3fc0abb29df18567399e2bf03",
+  "migration_count": 104,
+  "migration_hash": "25a492750a4b027f3a0fa71fa34de1b4def4ba68babbb8f0769fe5dd2fcffb34",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -108,9 +108,12 @@
     "20260813_01_users_is_bot",
     "20260821_01_mfg_inventory_tables",
     "20260821_02_mfg_permissions",
-    "20260821_03_factory_org_type"
+    "20260821_03_factory_org_type",
+    "20260822_01_backfill_orgscoped_org_id",
+    "20260823_01_user_profile_settings",
+    "20260828_01_mcp_access_tokens"
   ],
-  "migration_order_checksum": "82db2b8285ad3e0c9aced2256e2f191a066dd8c62696f4969508321a854e6385",
+  "migration_order_checksum": "1c7d1aff655ba1d96087c12451f832f43987c1f23fb9c805f3f462d7c902c8da",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -818,6 +821,27 @@
       "down_revision": "20260821_02_mfg_permissions",
       "path": "backend/alembic/versions/20260821_03_factory_org_type.py",
       "version": "20260821_03_factory_org_type"
+    },
+    {
+      "applied_at": "2026-08-22T00:00:00Z",
+      "checksum": "85a083852b8bbb6ea07991cfd629639e9315a662207514781a5e20b300be8664",
+      "down_revision": "20260821_03_factory_org_type",
+      "path": "backend/alembic/versions/20260822_01_backfill_orgscoped_org_id.py",
+      "version": "20260822_01_backfill_orgscoped_org_id"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "faf09f83a122b782137ccba36b3e15796684fae6bcc72efb541fe60f12a8b5fe",
+      "down_revision": "20260822_01_backfill_orgscoped_org_id",
+      "path": "backend/alembic/versions/20260823_01_user_profile_settings.py",
+      "version": "20260823_01_user_profile_settings"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "3a8c6e12f0493b8af37f7ab4ea20ad7bb38db4f8856846012945e814b28936dc",
+      "down_revision": "20260823_01_user_profile_settings",
+      "path": "backend/alembic/versions/20260828_01_mcp_access_tokens.py",
+      "version": "20260828_01_mcp_access_tokens"
     }
   ]
 }

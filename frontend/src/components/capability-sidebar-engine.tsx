@@ -44,6 +44,10 @@ const C_SYSTEM_MODULE_ORDER = [
     module_key: "admin.users",
   },
   {
+    label: "接入钥匙",
+    module_key: "admin.mcp_keys",
+  },
+  {
     label: "控制台",
     module_key: "core.dashboard",
   },

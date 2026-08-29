@@ -200,6 +200,7 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["admin.users", "账号与组织"],
   ["admin.organizations", "账号与组织"],
   ["admin.permissions", "账号与组织"],
+  ["admin.mcp_keys", "账号与组织"],
   ["k.product_knowledge", "业务处理"],
   ["r.analysis", "业务处理"],
   ["r.warehouse", "业务处理"],
@@ -228,6 +229,7 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.users", "用户管理"],
   ["admin.organizations", "组织管理"],
   ["admin.permissions", "权限管理"],
+  ["admin.mcp_keys", "接入钥匙"],
   ["k.product_knowledge", "产品知识库"],
   ["r.analysis", "R-A 产品分析中心"],
   ["r.warehouse", "R-W 产品数据仓库"],
@@ -256,6 +258,7 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["admin.users", 10],
   ["admin.organizations", 20],
   ["admin.permissions", 30],
+  ["admin.mcp_keys", 35],
   ["k.product_knowledge", 10],
   ["r.warehouse", 12],
   ["r.analysis", 13],
@@ -367,7 +370,8 @@ function isOrganizationListModule(moduleKey: string) {
 }
 
 function isPermissionManagementModule(moduleKey: string) {
-  return moduleKey === "admin.permissions";
+  // 权限管理 与 接入钥匙 同一套可见性:owner / super_admin 可见,其他角色隐藏
+  return moduleKey === "admin.permissions" || moduleKey === "admin.mcp_keys";
 }
 
 function missingPermissionText(

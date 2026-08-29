@@ -1,5 +1,6 @@
 from .artifact import Artifact
 from .auth_session import AuthSession
+from .mcp_access_token import McpAccessToken
 from .approval import (
     ApprovalDecisionRecord,
     ApprovalRequestRecord,
@@ -15,6 +16,7 @@ from .c19 import (
     C19FriendRequestRecord,
     C19ProfileRecord,
     C19RelationshipRecord,
+    UserAvatarRecord,
     C19UserBlockRecord,
 )
 from .contact_identity import ContactIdentityRecord
@@ -147,6 +149,7 @@ __all__ = [
     "Artifact",
     "AuditLogRecord",
     "AuthSession",
+    "McpAccessToken",
     "AutomationJob",
     "CallbackStateRecord",
     "CallbackStateTransitionRecord",
@@ -156,6 +159,7 @@ __all__ = [
     "C19ConversationUserSettingRecord",
     "C19FriendRequestRecord",
     "C19ProfileRecord",
+    "UserAvatarRecord",
     "C19RelationshipRecord",
     "C19UserBlockRecord",
     "ContactIdentityRecord",

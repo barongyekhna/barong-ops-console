@@ -66,6 +66,10 @@ const ALLOWED_USER_ACTIONS = new Set([
   "disable",
   "enable",
   "reset-password",
+  // MCP 个人钥匙(owner / super_admin 管别人的):重置(明文只回一次)/ 停用 / 启用
+  "mcp-token-reset",
+  "mcp-token-disable",
+  "mcp-token-enable",
 ]);
 const ALLOWED_PERMISSION_PATHS = new Set([
   "permissions/me",
@@ -412,6 +416,10 @@ function isAllowedUsersPath(method: string, path: string[]) {
   // POST /users/bots —— 注册数字员工(2026-08-22 拍板:机器人必须在用户管理里注册)
   if (path.length === 2 && path[1] === "bots") {
     return method === "POST";
+  }
+  // GET /users/mcp-token-log  接入钥匙操作记录(后端 owner/super_admin 门)
+  if (path.length === 2 && path[1] === "mcp-token-log") {
+    return method === "GET";
   }
 
   // DELETE /users/{id} —— 彻底删除已停用账号
@@ -2543,6 +2551,33 @@ function withApiLayer(layer: BackendApiLayer, requestedPath: string) {
   return `${apiLayerPrefix(layer)}/${requestedPath}`;
 }
 
+function isAllowedProfilePath(method: string, path: string[]) {
+  if (path[0] !== "profile") {
+    return false;
+  }
+  // GET / PATCH /profile/me  — read or update own nickname / theme
+  if (path.length === 2 && path[1] === "me") {
+    return method === "GET" || method === "PATCH";
+  }
+  // GET /profile/me/mcp         — own MCP personal-token status (never the secret)
+  // POST /profile/me/mcp/reset  — mint/reset own token; secret returned once
+  if (path.length === 3 && path[1] === "me" && path[2] === "mcp") {
+    return method === "GET";
+  }
+  if (path.length === 4 && path[1] === "me" && path[2] === "mcp" && path[3] === "reset") {
+    return method === "POST";
+  }
+  // POST /profile/me/avatar  — upload own avatar (multipart)
+  if (path.length === 3 && path[1] === "me" && path[2] === "avatar") {
+    return method === "POST";
+  }
+  // GET /profile/avatar/{user_id}  — serve any member's avatar image
+  if (path.length === 3 && path[1] === "avatar") {
+    return method === "GET";
+  }
+  return false;
+}
+
 export function getBackendApiPath(method: string, path: string[]) {
   const requestedPath = path.join("/");
 
@@ -2582,6 +2617,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedRwPath(method, path) ||
     isAllowedArcadePath(method, path) ||
     isAllowedNotificationsPath(method, path) ||
+    isAllowedProfilePath(method, path) ||
     isAllowedGeoPath(method, path) ||
     isAllowedSeoPath(method, path) ||
     isAllowedContentDeskPath(method, path) ||
