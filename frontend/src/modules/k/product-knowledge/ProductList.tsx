@@ -29,6 +29,7 @@ import {
 } from "react";
 
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
+import type { GenerationJob } from "./api";
 
 import {
   approveProductSellingPoints,
@@ -43,6 +44,7 @@ import {
   generateProductCopyBatch,
   generateProductImageBriefBatch,
   generateProductSellingPoints,
+  getGenerationJobs,
   getLatestWorkflow,
   getMediaAssets,
   getProductReadiness,
@@ -75,6 +77,13 @@ import type {
 } from "./types";
 
 const PRODUCT_LIST_PAGE_SIZE = 25;
+// 卖点三阶段任务的轮询间隔。与 CopyArtDirection / BrandAuditPanel 同一量级。
+const SELLING_POINTS_POLL_MS = 4000;
+
+/** 任务还在队列里或正在跑。 */
+function isSellingPointsJobActive(job: GenerationJob | null): boolean {
+  return job?.status === "pending" || job?.status === "running";
+}
 const K_ROSTER_READINESS_CONCURRENCY = 6;
 
 function formatDate(value: string) {
@@ -149,13 +158,28 @@ function formatError(error: unknown, fallback: string) {
       ? rawStatus
       : null;
 
-  if (status !== null) {
-    if (status === 403) {
+  const detail =
+    error instanceof ProductKnowledgeApiError || error instanceof Error
+      ? String(error.message ?? "").trim()
+      : "";
+
+  if (status === 403) {
+    // 403 不都是「你没权限」。2026-08-31 体检：owner 点上架拿到的是
+    // `C18G rejected raw SQL without an org_id filter.`（后端自己的 bug），
+    // 界面却说「当前账号暂未开通该操作权限」——于是 owner 去找超管开权限，
+    // 开到天上也没用。把服务端故障说成配置问题，只会拖长定位时间。
+    //
+    // 只有后端确实在讲权限时才这么说；讲别的就把原话带出来，让人照着查。
+    const looksLikePermission =
+      /permission|forbidden|not allowed|无权|权限/i.test(detail);
+    if (looksLikePermission || !detail) {
       return "当前账号暂未开通该操作权限。";
     }
+    return `服务端拒绝了这次操作（403）：${detail}`;
   }
-  if (error instanceof ProductKnowledgeApiError || error instanceof Error) {
-    return error.message;
+
+  if (detail) {
+    return detail;
   }
 
   return fallback;
@@ -269,6 +293,17 @@ export function ProductListFull() {
     Record<string, ProductReadinessState>
   >({});
   const attemptedReadinessRef = useRef<Set<string>>(new Set());
+  // 卖点生成已改成后台三阶段任务(bullets → zh → copy)。这里存最新一条
+  // selling_points job,前端靠它的 stage 分步显示、驱动进度条、并在
+  // 三步走完前挡住「提交卖点」。
+  const [sellingPointsJobByProductId, setSellingPointsJobByProductId] = useState<
+    Record<string, GenerationJob | null>
+  >({});
+  const sellingPointsTimersRef = useRef<Record<string, number>>({});
+  // 记住每个产品上次已经拉取过的 stage:只有 stage 真的变了才去拉卖点数据,
+  // 否则每 4 秒换一次对象引用会把运营正在编辑的内容冲掉。
+  const sellingPointsStageRef = useRef<Record<string, string>>({});
+  const sellingPointsMountedRef = useRef(true);
   const [deleteCandidate, setDeleteCandidate] =
     useState<ProductKnowledgeListItem | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -436,13 +471,92 @@ export function ProductListFull() {
     }
   }, []);
 
+  const refreshSellingPoints = useCallback(async (productId: string) => {
+    const sellingPoints = await getProductSellingPoints(productId);
+    if (!sellingPointsMountedRef.current) {
+      return;
+    }
+    setSellingPointsByProductId((current) => {
+      if (!sellingPoints) {
+        const { [productId]: _removed, ...rest } = current;
+        return rest;
+      }
+
+      return { ...current, [productId]: sellingPoints };
+    });
+  }, []);
+
+  const pollSellingPointsJob = useCallback(
+    async (productId: string) => {
+      if (!sellingPointsMountedRef.current) {
+        return;
+      }
+      try {
+        const jobs = await getGenerationJobs(productId);
+        if (!sellingPointsMountedRef.current) {
+          return;
+        }
+        const job =
+          jobs.find((item) => item.job_type === "selling_points") ?? null;
+        setSellingPointsJobByProductId((current) => ({
+          ...current,
+          [productId]: job,
+        }));
+        if (!job) {
+          return;
+        }
+
+        // 只在阶段真的推进时才去拉卖点 —— 每轮都拉会不停替换对象引用,
+        // 把运营正在编辑的内容冲掉。
+        const stage = String(job.stage ?? "");
+        if (stage && sellingPointsStageRef.current[productId] !== stage) {
+          sellingPointsStageRef.current[productId] = stage;
+          await refreshSellingPoints(productId);
+        }
+
+        if (job.status === "completed" || job.status === "failed") {
+          // 收尾:三步走完后 readiness / 流程状态也跟着变了。
+          await loadWorkflowRuntime(productId);
+          return;
+        }
+
+        const timer = window.setTimeout(
+          () => void pollSellingPointsJob(productId),
+          SELLING_POINTS_POLL_MS,
+        );
+        sellingPointsTimersRef.current[productId] = timer;
+      } catch (error) {
+        if (!sellingPointsMountedRef.current) {
+          return;
+        }
+        setSellingPointsError(formatError(error, "卖点生成进度查询失败。"));
+      }
+    },
+    [loadWorkflowRuntime, refreshSellingPoints],
+  );
+
+  // 卸载时收掉所有在途轮询计时器。
+  useEffect(() => {
+    sellingPointsMountedRef.current = true;
+    const timers = sellingPointsTimersRef.current;
+    return () => {
+      sellingPointsMountedRef.current = false;
+      for (const timer of Object.values(timers)) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     if (!openProductId) {
       return;
     }
 
     void loadWorkflowRuntime(openProductId);
-  }, [loadWorkflowRuntime, openProductId]);
+    // 打开产品时接上在途的卖点生成任务 —— 这就是「刷新页面不丢」:
+    // 生成跑在后台,浏览器断开只是不看了,回来还能接着看进度。
+    void pollSellingPointsJob(openProductId);
+  }, [loadWorkflowRuntime, openProductId, pollSellingPointsJob]);
 
   // 名册进度灯：为当前页产品拉取 readiness（ref 记录已尝试，失败也不重拉）。
   useEffect(() => {
@@ -765,22 +879,24 @@ export function ProductListFull() {
       return;
     }
 
-    setGeneratingProductId(openProduct.id);
+    const productId = openProduct.id;
     setSellingPointsError("");
 
     try {
-      const sellingPoints = await generateProductSellingPoints(openProduct.id);
-      setSellingPointsByProductId((current) => ({
+      // 立即返回:后端只是把任务排进队列,真正的生成在 k-worker 里跑。
+      const result = await generateProductSellingPoints(productId);
+      const job = result.jobs[0] ?? null;
+      setSellingPointsJobByProductId((current) => ({
         ...current,
-        [openProduct.id]: sellingPoints,
+        [productId]: job,
       }));
-      await loadWorkflowRuntime(openProduct.id);
+      // 重置 stage 游标,好让新一轮的第一步结果能被拉下来。
+      sellingPointsStageRef.current[productId] = "";
+      void pollSellingPointsJob(productId);
     } catch (error) {
       setSellingPointsError(
-        formatError(error, "卖点生成失败。"),
+        formatError(error, "卖点生成任务提交失败。"),
       );
-    } finally {
-      setGeneratingProductId(null);
     }
   }
 
@@ -1179,7 +1295,13 @@ export function ProductListFull() {
           </div>
 
           <ProductDetail
-            isGeneratingSellingPoints={generatingProductId === openProduct.id}
+            isGeneratingSellingPoints={
+              // 生成已改成后台任务:忙不忙看 job,不再看请求有没有返回。
+              // (generatingProductId 现在只服务于「提交卖点」那条路径。)
+              isSellingPointsJobActive(
+                sellingPointsJobByProductId[openProduct.id] ?? null,
+              )
+            }
             isSavingProductInfo={savingProductId === openProduct.id}
             isWorkflowBusy={workflowBusyAction !== null}
             mediaAssets={mediaByProductId[openProduct.id] ?? []}
@@ -1218,6 +1340,9 @@ export function ProductListFull() {
             product={openProduct}
             readiness={readinessByProductId[openProduct.id] ?? null}
             sellingPoints={sellingPointsByProductId[openProduct.id] ?? null}
+            sellingPointsJob={
+              sellingPointsJobByProductId[openProduct.id] ?? null
+            }
             productInfoSaveError={productSaveError}
             sellingPointsError={sellingPointsError}
             workflow={workflowByProductId[openProduct.id] ?? null}
@@ -1474,7 +1599,7 @@ export function ProductListFull() {
                                 type="button"
                               >
                                 <ImagePlus aria-hidden="true" size={15} />
-                                Create Image
+                                创建图片
                               </button>
                               <button
                                 className="secondary-button"

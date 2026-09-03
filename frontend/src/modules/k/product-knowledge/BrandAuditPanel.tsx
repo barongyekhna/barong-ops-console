@@ -8,6 +8,7 @@ import {
   getGenerationJobs,
   getProduct,
   ignoreBrandFinding,
+  setBrandAuditOverride,
   runBrandAudit,
 } from "./api";
 import styles from "./ProductKnowledge.module.css";
@@ -60,6 +61,12 @@ type BrandAudit = {
   image_violations?: ImageViolation[];
   ignored_findings?: string[];
   errors?: string[];
+  operator_override?: {
+    enabled?: boolean;
+    by?: string | null;
+    at?: string | null;
+    reason?: string;
+  } | null;
 };
 
 const POLL_MS = 6000;
@@ -73,9 +80,39 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyFp, setBusyFp] = useState<string | null>(null);
+  const [overriding, setOverriding] = useState(false);
 
   const mounted = useRef(true);
   const timer = useRef<number | null>(null);
+
+  const overridden = Boolean(audit?.operator_override?.enabled);
+
+  /** 人工放行：审查结论从此不再拥有否决权（2026-08-11 用户拍板的规矩）。 */
+  const handleOverride = async (enabled: boolean) => {
+    setOverriding(true);
+    setError(null);
+    try {
+      const result = await setBrandAuditOverride(productId, enabled);
+      if (mounted.current) {
+        setAudit((current) =>
+          current
+            ? {
+                ...current,
+                operator_override: result.operator_override as BrandAudit["operator_override"],
+              }
+            : current,
+        );
+      }
+    } catch (overrideError) {
+      if (mounted.current) {
+        setError(errorMessage(overrideError, "人工放行失败，请重试。"));
+      }
+    } finally {
+      if (mounted.current) {
+        setOverriding(false);
+      }
+    }
+  };
 
   const handleIgnore = async (
     fingerprint: string,
@@ -222,7 +259,18 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
             className={styles.copyReviewHint}
             style={{ display: "flex", alignItems: "center", gap: 6 }}
           >
-            {audit.clean ? (
+            {overridden ? (
+              <>
+                <ShieldCheck aria-hidden="true" color="#e3a93c" size={17} />
+                <strong>已人工放行</strong> —— 审查结论仅供参考，不再拦截上架
+                {audit.operator_override?.by
+                  ? `（${audit.operator_override.by}`
+                  : "（"}
+                {audit.operator_override?.at
+                  ? ` ${audit.operator_override.at.slice(0, 19).replace("T", " ")}）`
+                  : "）"}
+              </>
+            ) : audit.clean ? (
               <>
                 <ShieldCheck aria-hidden="true" color="#0f9d58" size={17} />
                 <strong>通过</strong> —— 未检出任何第三方品牌（
@@ -238,6 +286,25 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
               </>
             )}
           </p>
+
+          {/* 人工放行：这个控制台里人的命令高于任何一道程序。审查器是 AI，
+              它不真正了解产品——花洒手柄上的 "STOP"（一键止水标识）会被判成
+              品牌字样。运营者看过图做了决定，就不该再被程序拦住。 */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+            <button
+              className="secondary-button"
+              disabled={overriding}
+              onClick={() => void handleOverride(!overridden)}
+              type="button"
+            >
+              {overridden ? "撤销人工放行" : "人工放行上架（忽略全部审查结论）"}
+            </button>
+            <span className={styles.copyReviewHint} style={{ margin: 0, fontSize: 12.5 }}>
+              {overridden
+                ? "审查照跑照显示，但不再有否决权。撤销后重新按审查结论把关。"
+                : "AI 判不准时用它：一键放行这个产品的全部审查结论，直接允许上架。"}
+            </span>
+          </div>
           {hasProblems ? (
             <ul className={styles.copyReviewHint} style={{ margin: 0, paddingLeft: 18 }}>
               {textViolations.map((violation, index) => {

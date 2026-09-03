@@ -471,3 +471,6 @@ export type KWorkflowExportResponse = {
   execution: KWorkflowExecution;
   report: KWorkflowReport;
 };
+
+/** 风险词的人工决策。没有第三种值——不点就是没审，不让提交。 */
+export type RiskDecisionValue = "approve" | "reject";
