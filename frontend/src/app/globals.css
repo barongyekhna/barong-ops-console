@@ -7,8 +7,16 @@
       所有选择器必须限定在该作用域内,防止跨页泄漏。
    3. 行号会漂移,用注释块标题搜索定位。
    ---------------------------------------------------------------------
-   现有层(按追加顺序):
-   - 基础设计令牌 + 组件基座 (:root 变量/布局/表单/表格,文件前半部)
+   现有层(按追加顺序，与文件里的 ===== 标记块一一对应):
+
+   [基座 —— 三代叠加，全部**无作用域**，后写的赢]
+   - 基座 · 第一代 —— 设计令牌 + 组件基座 (:root/布局/表单/表格)
+   - 基座 · 第二代 —— Unified calm SaaS design layer
+   - 基座 · 第三代 —— Stripe + Linear 参考实现
+     ↑ `.topbar` / `.sidebar` / `.page-content` 在这三代里各被重定义一次。
+       **不要回头合并它们**(家规第 1 条)——要改皮肤请在文件末尾追加新层。
+
+   [有作用域的皮肤层，按追加顺序]
    - Aesthetic finish layer · 科技感抛光(纯视觉)
    - DARK MODE · OS 配色门控的整站深色主题
    - LOGIN · 指挥中心科幻风 (.login-page)
@@ -19,6 +27,26 @@
    - 权限管理 · 复用 .mm-page 底座 (.pm-page)
    - 控制台小游戏「深空空战」面板 (.cc-arcade)
    - R-A 指挥舱皮肤 (.ra-command)
+   - CS 客服中心 · 双分队收件箱 (.cs-*)
+   - K 作图工作台 (2026-08-04)
+   - THEME · LIGHT LAYER(功能页浅色) (2026-08-23)
+   - COCKPIT ACCENT SHIFT(深色强调色) (2026-08-23)
+   - VPN 连接中心 (core.vpn)
+   - 组织切换器 (2026-09-01)
+   - 对外动作二次确认 (2026-09-01)
+   - 用户管理 · 创建抽屉表单改单列 (2026-09-01)
+
+   ---------------------------------------------------------------------
+   2026-09-03 校准：此前目录只登记了 11 层，文件里实际有 21 层 ——
+   漏登记的 8 层里包括 K 作图工作台、VPN、两个 2026-08-23 的主题层。
+   目录漏登记不会让样式失效，但会让「靠标题搜索定位」这条家规失灵：
+   要改的层根本不在名单上，人就只能在 8600 行里翻。
+   ===================================================================== */
+
+/* =====================================================================
+   基座 · 第一代 —— 设计令牌 + 组件基座
+   ---------------------------------------------------------------------
+   :root 变量、布局、表单、表格。**无作用域**，后面两代基座会覆盖它。
    ===================================================================== */
 
 :root {
@@ -253,40 +281,6 @@ textarea:focus-visible {
   border-radius: 6px;
 }
 
-.brand-mark-large {
-  width: 46px;
-  height: 46px;
-  flex-basis: 46px;
-}
-
-.session-screen {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  color: var(--muted);
-  background: var(--canvas);
-}
-
-.session-panel {
-  width: min(100%, 430px);
-  padding: 32px;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 18px 50px rgb(20 25 23 / 8%);
-}
-
-.session-panel h1 {
-  margin: 12px 0 8px;
-  font-size: 1.5rem;
-}
-
-.session-panel p {
-  margin: 0 0 24px;
-  color: var(--muted);
-}
 
 .primary-button,
 .secondary-button,
@@ -369,37 +363,6 @@ textarea:focus-visible {
   font-size: 0.78rem;
 }
 
-.login-page {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(440px, 1.1fr);
-  background: #f8f9f8;
-}
-
-.login-identity {
-  position: relative;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
-  padding: clamp(32px, 5vw, 72px);
-  color: #ffffff;
-  background-color: #151817;
-  border-right: 1px solid #2c322f;
-}
-
-.login-identity::after {
-  position: absolute;
-  right: -100px;
-  bottom: 20%;
-  width: 280px;
-  height: 1px;
-  content: "";
-  background: #5ee4b9;
-  transform: rotate(-38deg);
-  transform-origin: center;
-}
 
 .login-brand,
 .brand-lockup {
@@ -408,10 +371,6 @@ textarea:focus-visible {
   gap: 12px;
 }
 
-.login-brand {
-  position: relative;
-  z-index: 1;
-}
 
 .login-brand strong,
 .brand-lockup strong {
@@ -419,9 +378,6 @@ textarea:focus-visible {
   line-height: 1;
 }
 
-.login-brand strong {
-  font-size: 1.15rem;
-}
 
 .login-brand small,
 .brand-lockup small {
@@ -432,80 +388,6 @@ textarea:focus-visible {
   line-height: 1;
 }
 
-.identity-copy {
-  position: relative;
-  z-index: 1;
-  max-width: 520px;
-}
-
-.system-label {
-  display: block;
-  margin-bottom: 18px;
-  color: #5ee4b9;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
-.identity-copy h1 {
-  max-width: 480px;
-  margin: 0;
-  font-size: 3.4rem;
-  font-weight: 680;
-  line-height: 0.98;
-  letter-spacing: 0;
-}
-
-.signal-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 34px;
-  color: #bbc3c0;
-  font-size: 0.82rem;
-}
-
-.signal-line span {
-  width: 8px;
-  height: 8px;
-  background: #5ee4b9;
-  border-radius: 50%;
-  box-shadow: 0 0 0 5px rgb(94 228 185 / 12%);
-}
-
-.build-label {
-  position: relative;
-  z-index: 1;
-  color: #7f8985;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.login-panel {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 40px;
-  background: #f8f9f8;
-}
-
-.login-panel-inner {
-  width: min(100%, 420px);
-}
-
-.login-panel-inner h2 {
-  margin: 12px 0 8px;
-  font-size: 2rem;
-  line-height: 1.1;
-}
-
-.login-intro {
-  margin: 0 0 32px;
-  color: var(--muted);
-}
 
 .login-form {
   display: grid;
@@ -597,23 +479,6 @@ textarea:focus-visible {
   border-radius: 6px;
 }
 
-.login-button {
-  width: 100%;
-  min-height: 50px;
-  gap: 9px;
-  color: #ffffff;
-  background: #171b19;
-  border-radius: 6px;
-  font-weight: 750;
-  transition:
-    background 160ms ease,
-    transform 160ms ease;
-}
-
-.login-button:hover:not(:disabled) {
-  background: var(--signal-dark);
-  transform: translateY(-1px);
-}
 
 .force-reset-page {
   min-height: 100vh;
@@ -954,15 +819,6 @@ textarea:focus-visible {
   flex-wrap: wrap;
 }
 
-.release-badge {
-  color: var(--signal-dark);
-  border-left: 1px solid var(--line);
-  padding-left: 10px;
-  font-size: 0.68rem;
-  font-weight: 760;
-  line-height: 1.2;
-  white-space: nowrap;
-}
 
 .menu-button {
   display: none;
@@ -1173,36 +1029,6 @@ textarea:focus-visible {
   line-height: 1.6;
 }
 
-.capability-requirements {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin: 0;
-}
-
-.capability-requirements div {
-  min-width: 0;
-  padding: 12px;
-  background: #f7f9f8;
-  border: 1px solid #e3e7e5;
-  border-radius: 6px;
-}
-
-.capability-requirements dt {
-  color: var(--muted);
-  font-size: 0.62rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.capability-requirements dd {
-  margin: 6px 0 0;
-  overflow-wrap: anywhere;
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.4;
-}
 
 .capability-empty-action {
   display: flex;
@@ -1235,11 +1061,6 @@ textarea:focus-visible {
   border-radius: 6px;
 }
 
-.permission-denied-icon-muted {
-  color: #355249;
-  background: #e7f3ee;
-  border-color: #b8d5c9;
-}
 
 .permission-denied h2 {
   margin: 0 0 6px;
@@ -1254,40 +1075,6 @@ textarea:focus-visible {
   line-height: 1.6;
 }
 
-.ops-dashboard {
-  display: grid;
-  gap: 20px;
-}
-
-.ops-dashboard-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: clamp(20px, 3vw, 28px);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.ops-dashboard-header h2 {
-  margin: 6px 0 0;
-  font-size: 1.1rem;
-}
-
-.ops-dashboard-header p {
-  max-width: 780px;
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.55;
-}
-
-.ops-metric-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
-  gap: 10px;
-}
 
 .ops-metric-card,
 .ops-panel {
@@ -1297,15 +1084,6 @@ textarea:focus-visible {
   border-radius: 8px;
 }
 
-.ops-metric-card {
-  display: grid;
-  gap: 7px;
-  padding: 14px;
-}
-
-.ops-metric-card svg {
-  color: var(--signal-dark);
-}
 
 .ops-metric-card span,
 .ops-source {
@@ -1316,22 +1094,6 @@ textarea:focus-visible {
   text-transform: uppercase;
 }
 
-.ops-metric-card strong {
-  overflow-wrap: anywhere;
-  font-size: 1.15rem;
-}
-
-.ops-metric-card small {
-  color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.4;
-}
-
-.ops-dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
 
 .ops-panel {
   display: grid;
@@ -1923,15 +1685,6 @@ textarea:focus-visible {
   line-height: 1.45;
 }
 
-.product-button-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.product-button-row-bottom {
-  align-self: end;
-}
 
 .product-notice {
   color: #185a47;
@@ -2247,56 +2000,6 @@ textarea:focus-visible {
   border: 1px solid #bee5d7;
 }
 
-.users-alert-warning {
-  color: #775b12;
-  background: #fff8e4;
-  border: 1px solid #e9d28a;
-}
-
-.users-role-catalog-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.users-role-group {
-  min-width: 0;
-}
-
-.users-role-group h4 {
-  margin: 0 0 10px;
-  color: var(--ink);
-  font-size: 0.82rem;
-}
-
-.users-role-group ul {
-  display: grid;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--line);
-}
-
-.users-role-group li {
-  min-width: 0;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.users-role-group li span {
-  display: block;
-  color: var(--ink);
-  font-size: 0.8rem;
-  font-weight: 800;
-}
-
-.users-role-group li p {
-  margin: 5px 0 0;
-  color: var(--muted);
-  font-size: 0.76rem;
-  line-height: 1.5;
-}
 
 .users-inline-actions {
   display: flex;
@@ -2455,12 +2158,6 @@ textarea:focus-visible {
   gap: 12px;
 }
 
-.permissions-panel {
-  display: grid;
-  gap: 18px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-}
 
 .permissions-product-stack,
 .permissions-group-section {
@@ -2606,152 +2303,11 @@ textarea:focus-visible {
   font-size: 0.72rem;
 }
 
-.permissions-owner-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 15px;
-  color: #16382e;
-  background: #e8f7f1;
-  border: 1px solid #bee5d7;
-  border-radius: 6px;
-}
-
-.permissions-owner-note h4,
-.permissions-section-heading h4 {
-  margin: 0;
-  font-size: 0.92rem;
-}
-
-.permissions-owner-note p,
-.permissions-section-heading p {
-  max-width: 720px;
-  margin: 6px 0 0;
-  color: var(--muted);
-  font-size: 0.8rem;
-  line-height: 1.55;
-}
-
-.permissions-grant-section,
-.permissions-assignment-section {
-  display: grid;
-  gap: 14px;
-}
-
-.permissions-grant-form,
-.permissions-edit-form {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  align-items: start;
-}
-
-.permissions-search-field,
-.permissions-reason-field,
-.permissions-risk-box,
-.permissions-submit-button {
-  grid-column: 1 / -1;
-}
-
-.permissions-enabled-field {
-  align-self: end;
-}
-
-.permissions-checkbox-line {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #3f4743;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.permissions-checkbox-line input {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--signal-dark);
-}
-
-.permissions-risk-box {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 13px 15px;
-  color: #76510f;
-  background: #fff8e4;
-  border: 1px solid #e9d28a;
-  border-radius: 6px;
-}
-
-.permissions-risk-box strong {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 0.8rem;
-  line-height: 1.45;
-}
 
 .permissions-empty {
   min-height: 110px;
 }
 
-.permissions-table-scroll {
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.permissions-table {
-  width: 100%;
-  min-width: 1120px;
-  border-collapse: collapse;
-  font-size: 0.78rem;
-}
-
-.permissions-table th,
-.permissions-table td {
-  padding: 13px 14px;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--line);
-}
-
-.permissions-table th {
-  color: var(--muted);
-  background: #f7f9f8;
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.permissions-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-
-.permissions-table td {
-  min-width: 150px;
-}
-
-.permissions-table td:first-child {
-  min-width: 250px;
-}
-
-.permissions-table td strong,
-.permissions-table td span {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-.permissions-table td strong {
-  font-size: 0.82rem;
-}
-
-.permissions-table td span {
-  margin-top: 5px;
-  color: var(--muted);
-  line-height: 1.45;
-}
 
 .permissions-risk-badge,
 .permissions-effective {
@@ -2778,17 +2334,6 @@ textarea:focus-visible {
   border-color: #e2bcbc;
 }
 
-.permissions-effective-on {
-  color: #087c5e;
-  background: #e5f6ef;
-  border: 1px solid #bde7d6;
-}
-
-.permissions-effective-off {
-  color: #76510f;
-  background: #fff8e4;
-  border: 1px solid #e9d28a;
-}
 
 .permissions-table td .users-status,
 .permissions-table td .permissions-risk-badge,
@@ -2813,14 +2358,6 @@ textarea:focus-visible {
   color: #9f2f2f;
 }
 
-.permissions-table td .permissions-effective-off {
-  color: #76510f;
-}
-
-.permissions-action-stack {
-  display: grid;
-  gap: 10px;
-}
 
 .approval-console,
 .approval-detail-shell {
@@ -2878,13 +2415,6 @@ textarea:focus-visible {
   border-radius: 8px;
 }
 
-.approval-section-control_plane {
-  border-left: 4px solid #7357a6;
-}
-
-.approval-section-feature {
-  border-left: 4px solid var(--signal-dark);
-}
 
 .approval-section-icon {
   width: 36px;
@@ -2982,24 +2512,6 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
-.approval-status-pending {
-  color: #76510f;
-  background: #fff8e4;
-  border-color: #e9d28a;
-}
-
-.approval-status-approved,
-.approval-status-auto_approved {
-  color: #087c5e;
-  background: #e5f6ef;
-  border-color: #bde7d6;
-}
-
-.approval-status-rejected {
-  color: #9f2f2f;
-  background: #fff1f1;
-  border-color: #e2bcbc;
-}
 
 .approval-empty {
   min-height: 138px;
@@ -3432,11 +2944,13 @@ textarea:focus-visible {
   height: 40px;
 }
 
-.permissions-edit-row td {
-  background: #f7f9f8;
-}
 
-/* Unified calm SaaS design layer. Existing page classes inherit these tokens. */
+/* =====================================================================
+   基座 · 第二代 —— Unified calm SaaS design layer
+   ---------------------------------------------------------------------
+   在第一代之上重写了一遍卡片/表单/表格的观感。现有页面类继承这里的令牌。
+   **无作用域**：选择器直接落在通用类名上，所以它同时也是第一代的覆盖层。
+   ===================================================================== */
 .brand-mark {
   color: inherit;
   background: transparent;
@@ -3457,28 +2971,6 @@ textarea:focus-visible {
   flex: 0 0 34px;
 }
 
-.session-loading-panel {
-  display: grid;
-  justify-items: start;
-  gap: 10px;
-}
-
-.session-loading-logo {
-  margin-bottom: 4px;
-}
-
-.build-label {
-  display: inline-flex;
-  width: 72px;
-  height: 72px;
-  opacity: 0.32;
-  letter-spacing: 0;
-}
-
-.brand-watermark {
-  width: 100%;
-  height: 100%;
-}
 
 .eyebrow,
 .navigation-label,
@@ -3586,20 +3078,6 @@ textarea:focus-visible {
   border-color: var(--color-line);
 }
 
-.login-identity::after {
-  background: var(--color-primary);
-  opacity: 0.42;
-}
-
-.login-panel,
-.session-panel,
-.force-reset-card {
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: 1px solid var(--color-line);
-  box-shadow: var(--shadow-card);
-  backdrop-filter: blur(18px);
-}
 
 .field-group label,
 .field-group > span:first-child {
@@ -4137,27 +3615,7 @@ svg.spin {
 }
 
 @media (max-width: 900px) {
-  .login-page {
-    grid-template-columns: 1fr;
-  }
 
-  .login-identity {
-    min-height: 38vh;
-    padding: 28px;
-  }
-
-  .identity-copy {
-    margin: 56px 0;
-  }
-
-  .identity-copy h1 {
-    font-size: 2.6rem;
-  }
-
-  .login-panel {
-    min-height: 62vh;
-    padding: 48px 24px;
-  }
 
   .console-layout {
     display: block;
@@ -4180,9 +3638,6 @@ svg.spin {
     display: inline-flex;
   }
 
-  .ops-metric-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 
   .ops-dashboard-grid,
   .observability-grid {
@@ -4342,7 +3797,14 @@ svg.spin {
   }
 }
 
-/* Strict reference implementation: Stripe + Linear SaaS dashboard system. */
+/* =====================================================================
+   基座 · 第三代 —— Stripe + Linear 参考实现
+   ---------------------------------------------------------------------
+   又一次整体重写，同样**无作用域**，覆盖前两代。`.topbar` / `.sidebar` /
+   `.page-content` 这几个类在前 5102 行里各被无作用域地重定义三次，
+   就是这三代叠出来的 —— 谁生效取决于谁写在后面。
+   **别回头改它们**（家规第 1 条），要改皮肤请在文件末尾追加新层。
+   ===================================================================== */
 :root {
   color-scheme: light;
   --color-canvas: #f7f9fc;
@@ -4452,11 +3914,6 @@ p {
   border-radius: 12px;
 }
 
-.brand-mark-large {
-  width: 48px;
-  height: 48px;
-  flex-basis: 48px;
-}
 
 .topbar-brand-mark {
   width: 36px;
@@ -4540,15 +3997,6 @@ p {
   flex-wrap: wrap;
 }
 
-.release-badge {
-  color: #0f766e;
-  border-left: 1px solid #cbd5e1;
-  padding-left: 10px;
-  font-size: 12px;
-  font-weight: 760;
-  line-height: 1.2;
-  white-space: nowrap;
-}
 
 .eyebrow {
   color: #64748b;
@@ -4725,11 +4173,6 @@ p {
   gap: 24px;
 }
 
-.metrics-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
 
 .metric-card {
   min-width: 0;
@@ -4757,19 +4200,6 @@ p {
   line-height: 1.4;
 }
 
-.dashboard-main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(340px, 0.9fr);
-  gap: 24px;
-  align-items: start;
-}
-
-.modules-section {
-  min-width: 0;
-  display: grid;
-  gap: 18px;
-  padding: 20px;
-}
 
 .dashboard-section-heading,
 .activity-feed-heading,
@@ -4796,11 +4226,6 @@ p {
   font-size: 12px;
 }
 
-.module-card-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
 
 .module-card {
   min-width: 0;
@@ -4977,18 +4402,6 @@ svg.spin {
   background: #f7f9fc;
 }
 
-.login-identity {
-  background: #0f172a;
-  border-right: 1px solid rgb(148 163 184 / 16%);
-}
-
-.login-identity::after {
-  display: none;
-}
-
-.login-panel {
-  background: #f7f9fc;
-}
 
 .login-panel-inner,
 .session-panel,
@@ -5000,10 +4413,6 @@ svg.spin {
   box-shadow: 0 16px 40px rgb(15 23 42 / 8%);
 }
 
-.login-panel-inner {
-  width: min(100%, 420px);
-  padding: 32px;
-}
 
 .login-panel-inner h2,
 .force-reset-heading h1,
@@ -5029,14 +4438,7 @@ svg.spin {
 }
 
 @media (max-width: 1100px) {
-  .metrics-row,
-  .module-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 
-  .dashboard-main-grid {
-    grid-template-columns: 1fr;
-  }
 
   .topbar-search {
     display: none;
@@ -5072,10 +4474,6 @@ svg.spin {
 }
 
 @media (max-width: 640px) {
-  .metrics-row,
-  .module-card-grid {
-    grid-template-columns: 1fr;
-  }
 
   .topbar {
     min-height: 72px;
@@ -5085,9 +4483,6 @@ svg.spin {
     font-size: 22px;
   }
 
-  .release-badge {
-    font-size: 10px;
-  }
 
   .topbar-action {
     display: none;
@@ -5241,9 +4636,6 @@ html {
   box-shadow: inset -1px 0 0 rgb(255 255 255 / 4%);
 }
 
-.login-identity {
-  background: linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #131c34 100%);
-}
 
 /* Brand wordmark: subtle ink gradient. */
 .brand-lockup strong,
@@ -5280,21 +4672,7 @@ html {
 }
 
 /* --- Login: converge the stray mint accents to the indigo system --- */
-.system-label {
-  color: var(--accent-soft);
-}
 
-.signal-line span {
-  background: var(--accent-bright);
-  box-shadow: 0 0 0 5px rgb(99 102 241 / 14%);
-}
-
-.identity-copy h1 {
-  background: linear-gradient(180deg, #ffffff 0%, #c7d2fe 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
 
 /* --- Module toggle: a touch of glow when active --- */
 .module-toggle input:checked + span {
@@ -5341,7 +4719,7 @@ textarea:focus-visible {
    and dark text token is flipped here so contrast is guaranteed.
    Visual only; honors prefers-reduced-motion. No heavy blur on cards.
    ================================================================= */
-@media (prefers-color-scheme: dark) {
+@media all { /* H6 QA2026-08-22: 强制全站深色cockpit(原prefers-color-scheme,导致浅OS半明半暗) */
   :root {
     color-scheme: dark;
     --color-canvas: #0b1020;
@@ -5656,10 +5034,6 @@ textarea:focus-visible {
     color: #e8edf7;
   }
 
-  .release-badge {
-    color: var(--neon);
-    border-left-color: rgb(148 163 184 / 22%);
-  }
 
   .eyebrow,
   .metric-card span,
@@ -5822,11 +5196,6 @@ textarea:focus-visible {
     border: 1px solid rgb(56 189 248 / 26%);
   }
 
-  .permissions-owner-note {
-    color: #cdd7ea;
-    background: rgb(255 255 255 / 4%);
-    border: 1px solid rgb(148 163 184 / 16%);
-  }
 
   /* ---- Toggle ---- */
   .module-toggle span {
@@ -5858,126 +5227,26 @@ textarea:focus-visible {
   }
 
   /* ---- Login identity converged accents ---- */
-  .system-label {
-    color: #a5b4fc;
-  }
 
-  .signal-line span {
-    background: #818cf8;
-    box-shadow: 0 0 0 5px rgb(99 102 241 / 14%);
-  }
 
-  .login-intro,
-  .session-panel p {
-    color: #9aa6bd;
-  }
 }
 
 /* =====================================================================
    LOGIN · 指挥中心科幻风 (command-center redesign)
    追加层 · 全部限定 .login-page 作用域 · 末层覆盖 · 无功能代码改动
    ===================================================================== */
-.login-page {
-  --lx-cyan: #39d4ff;
-  --lx-amber: #ffb13b;
-  --lx-green: #4dffa1;
-  --lx-red: #ff6b8a;
-  --lx-ink: #d6e8f6;
-  --lx-dim: #7d95ae;
-  --lx-line: rgb(120 200 255 / 16%);
-  --lx-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
-  position: relative;
-  grid-template-columns: minmax(380px, 1fr) minmax(440px, 0.9fr);
-  color: var(--lx-ink);
-  background-color: #04070e;
-  background-image:
-    radial-gradient(680px 460px at 84% -12%, rgb(255 130 45 / 12%), transparent 60%),
-    radial-gradient(820px 560px at 6% 114%, rgb(57 212 255 / 12%), transparent 60%),
-    linear-gradient(rgb(120 200 255 / 5%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(120 200 255 / 5%) 1px, transparent 1px),
-    radial-gradient(150% 130% at 50% 38%, #071018 0%, #04070e 74%);
-  background-size: 100% 100%, 100% 100%, 34px 34px, 34px 34px, 100% 100%;
-  overflow: hidden;
-}
 
 /* 漂移闪烁的星场 */
-.login-page::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(1.4px 1.4px at 12% 18%, #fff, transparent),
-    radial-gradient(1px 1px at 24% 62%, #cfe0ff, transparent),
-    radial-gradient(1.6px 1.6px at 39% 30%, #fff, transparent),
-    radial-gradient(1px 1px at 53% 74%, #bfe6ff, transparent),
-    radial-gradient(1.3px 1.3px at 66% 22%, #fff, transparent),
-    radial-gradient(1px 1px at 78% 58%, #d8ecff, transparent),
-    radial-gradient(1.5px 1.5px at 88% 34%, #fff, transparent),
-    radial-gradient(1px 1px at 17% 84%, #cfe0ff, transparent),
-    radial-gradient(1.2px 1.2px at 45% 90%, #fff, transparent),
-    radial-gradient(1px 1px at 72% 88%, #bfe6ff, transparent),
-    radial-gradient(1.3px 1.3px at 33% 48%, #fff, transparent),
-    radial-gradient(1px 1px at 61% 46%, #d8ecff, transparent),
-    radial-gradient(1.5px 1.5px at 94% 74%, #fff, transparent),
-    radial-gradient(1px 1px at 6% 40%, #cfe0ff, transparent);
-  animation: lxTwinkle 5.5s ease-in-out infinite;
-}
 @keyframes lxTwinkle { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
 
 /* 左栏:品牌 / 标识,透明露出深空 */
-.login-page .login-identity {
-  min-height: 100vh;
-  color: var(--lx-ink);
-  background: transparent;
-  border-right: 1px solid var(--lx-line);
-  box-shadow: inset -30px 0 60px -50px rgb(57 212 255 / 50%);
-  overflow: hidden;
-}
 /* 横向扫描线 */
-.login-page .login-identity::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 2px;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.6;
-  background: linear-gradient(90deg, transparent, rgb(57 212 255 / 55%), transparent);
-  box-shadow: 0 0 14px rgb(57 212 255 / 50%);
-  animation: lxScan 7s linear infinite;
-}
 @keyframes lxScan { 0% { top: -2%; } 100% { top: 102%; } }
 /* 巨大虚化的凤凰水印(彩蛋:悬停会"点燃") */
-.login-page .login-identity::after {
-  content: "";
-  position: absolute;
-  right: -8%;
-  bottom: -6%;
-  width: min(560px, 60%);
-  height: min(560px, 60%);
-  z-index: 0;
-  pointer-events: none;
-  display: block;
-  background: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
-  opacity: 0.32;
-  mix-blend-mode: screen;
-  filter: drop-shadow(0 0 34px rgb(255 140 50 / 55%));
-  transition: opacity 0.6s ease, filter 0.6s ease;
-  animation: lxFloat 8s ease-in-out infinite;
-}
 @keyframes lxFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
-.login-page .login-identity:hover::after {
-  opacity: 0.6;
-  filter: drop-shadow(0 0 52px rgb(255 120 30 / 90%)) saturate(1.3);
-}
 
 /* 品牌标记 → 透明凤凰 + 辉光 */
 .login-page .brand-logo-image { display: none; }
-.login-page .login-brand { position: relative; z-index: 2; }
 .login-page .brand-mark {
   width: 46px;
   height: 46px;
@@ -5989,106 +5258,14 @@ textarea:focus-visible {
   border: 1px solid rgb(255 177 59 / 40%);
   box-shadow: 0 0 18px rgb(255 150 50 / 35%), inset 0 0 12px rgb(255 140 40 / 20%);
 }
-.login-page .brand-mark-large { width: 54px; height: 54px; }
-.login-page .login-brand strong { color: #ffe7c6; font-size: 1.2rem; letter-spacing: 0.5px; }
-.login-page .login-brand small {
-  color: var(--lx-amber);
-  font-family: var(--lx-mono);
-  font-size: 0.62rem;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-}
 
 /* 标题区 */
-.login-page .identity-copy { z-index: 2; }
-.login-page .system-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  color: var(--lx-cyan);
-  font-family: var(--lx-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.28em;
-  background: rgb(57 212 255 / 6%);
-  border: 1px solid rgb(57 212 255 / 35%);
-  border-radius: 20px;
-  box-shadow: 0 0 16px rgb(57 212 255 / 15%);
-}
-.login-page .system-label::before { content: "◣"; }
-.login-page .identity-copy h1 {
-  color: #eafaff;
-  font-size: clamp(2.4rem, 4.2vw, 3.6rem);
-  letter-spacing: -0.5px;
-  text-shadow: 0 0 34px rgb(57 212 255 / 28%);
-}
-.login-page .signal-line {
-  color: var(--lx-dim);
-  font-family: var(--lx-mono);
-  letter-spacing: 0.04em;
-}
-.login-page .signal-line span {
-  background: var(--lx-cyan);
-  box-shadow: 0 0 0 4px rgb(57 212 255 / 14%), 0 0 12px var(--lx-cyan);
-  animation: lxBlink 1.4s infinite;
-}
 @keyframes lxBlink { 50% { opacity: 0.3; } }
 
 /* 遥测读数(彩蛋,替换原水印槽) */
-.login-page .brand-watermark { display: none; }
-.login-page .build-label {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: auto;
-  height: auto;
-  opacity: 1;
-  color: var(--lx-dim);
-  font-family: var(--lx-mono);
-  font-size: 0.64rem;
-  letter-spacing: 0.14em;
-}
-.login-page .build-label::before {
-  content: "";
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--lx-green);
-  box-shadow: 0 0 8px var(--lx-green);
-  animation: lxBlink 1.6s infinite;
-}
-.login-page .build-label::after {
-  content: "UPLINK STABLE · NODES 7/7 · SECTOR DEEP-SPACE · BUILD v3.1.0";
-}
 
 /* 右栏:表单做成玻璃 HUD 卡 */
-.login-page .login-panel { background: transparent; }
-.login-page .login-panel-inner {
-  position: relative;
-  width: min(100%, 430px);
-  padding: 34px 32px 30px;
-  background: linear-gradient(180deg, rgb(10 18 30 / 66%), rgb(6 12 22 / 60%));
-  border: 1px solid var(--lx-line);
-  border-radius: 14px;
-  backdrop-filter: blur(14px);
-  box-shadow: 0 30px 80px -30px rgb(0 0 0 / 80%), inset 0 1px 0 rgb(255 255 255 / 5%);
-}
 /* HUD 四角括号 */
-.login-page .login-panel-inner::before,
-.login-page .login-panel-inner::after {
-  content: "";
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--lx-cyan);
-  opacity: 0.8;
-  filter: drop-shadow(0 0 5px rgb(57 212 255 / 50%));
-}
-.login-page .login-panel-inner::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
-.login-page .login-panel-inner::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
 
 .login-page .eyebrow {
   display: inline-block;
@@ -6097,22 +5274,6 @@ textarea:focus-visible {
   font-size: 0.64rem;
   letter-spacing: 0.28em;
   text-transform: uppercase;
-}
-.login-page .login-panel-inner h2 {
-  color: #eafaff;
-  letter-spacing: -0.3px;
-  text-shadow: 0 0 24px rgb(57 212 255 / 20%);
-}
-.login-page .login-intro { color: var(--lx-dim); }
-.login-page .login-intro::after {
-  content: "● SECURE CHANNEL · AES-256 ENCRYPTED";
-  display: block;
-  margin-top: 10px;
-  color: var(--lx-green);
-  font-family: var(--lx-mono);
-  font-size: 0.6rem;
-  letter-spacing: 0.18em;
-  animation: lxBlink 2.6s infinite;
 }
 
 /* 表单控件 */
@@ -6154,108 +5315,23 @@ textarea:focus-visible {
   letter-spacing: 0.03em;
 }
 
-.login-page .login-button {
-  min-height: 52px;
-  color: #03121a;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
-  border: 1px solid rgb(57 212 255 / 60%);
-  border-radius: 9px;
-  box-shadow: 0 0 0 1px rgb(57 212 255 / 20%), 0 10px 30px -8px rgb(57 212 255 / 50%), inset 0 1px 0 rgb(255 255 255 / 40%);
-  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease, background 0.16s ease;
-}
-.login-page .login-button svg { color: #03121a; }
-.login-page .login-button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  filter: brightness(1.08);
-  background: linear-gradient(180deg, #7cebff, #2bb6e6);
-  box-shadow: 0 0 0 1px rgb(57 212 255 / 40%), 0 16px 40px -8px rgb(57 212 255 / 65%), inset 0 1px 0 rgb(255 255 255 / 50%);
-}
-.login-page .login-button:active:not(:disabled) { transform: translateY(0); }
-.login-page .login-button:disabled { filter: saturate(0.6) brightness(0.9); }
 
 /* 响应式:窄屏堆叠 */
-@media (max-width: 880px) {
-  .login-page { grid-template-columns: 1fr; }
-  .login-page .login-identity {
-    min-height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--lx-line);
-    box-shadow: none;
-  }
-  .login-page .login-identity::after { width: 300px; height: 300px; opacity: 0.28; }
-  .login-page .login-panel { min-height: auto; padding: 28px 20px 52px; }
-  .login-page .identity-copy h1 { font-size: 2.2rem; }
-}
 
 /* ---------------------------------------------------------------------
    LOGIN · 科幻大片元素:星云 / 行星 / 掠过的飞船 (纯 CSS,无照片)
    --------------------------------------------------------------------- */
 /* 流动星云 */
-.login-page::after {
-  content: "";
-  position: absolute;
-  inset: -12%;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(closest-side at 22% 30%, rgb(124 92 255 / 30%), transparent 70%),
-    radial-gradient(closest-side at 70% 64%, rgb(0 180 220 / 24%), transparent 70%),
-    radial-gradient(closest-side at 46% 82%, rgb(210 70 180 / 18%), transparent 72%),
-    radial-gradient(closest-side at 84% 22%, rgb(80 120 255 / 22%), transparent 70%);
-  background-repeat: no-repeat;
-  filter: blur(46px) saturate(1.15);
-  opacity: 0.6;
-  mix-blend-mode: screen;
-  animation: lxNebula 28s ease-in-out infinite alternate;
-}
 @keyframes lxNebula {
   0% { transform: translate(0, 0) scale(1); }
   100% { transform: translate(26px, -20px) scale(1.08); }
 }
 
 /* 确保表单浮在场景之上 */
-.login-page .login-panel { position: relative; z-index: 1; }
-.login-page .login-panel-inner { z-index: 2; }
 
 /* 带边缘光的行星 */
-.login-page .login-panel::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  pointer-events: none;
-  width: 440px;
-  height: 440px;
-  right: -150px;
-  bottom: -170px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 26%, rgb(150 190 255 / 55%), transparent 24%),
-    radial-gradient(circle at 50% 50%, #26406e 0%, #14233f 52%, #060b16 100%);
-  box-shadow:
-    inset 30px -24px 70px rgb(0 0 0 / 72%),
-    inset -8px 8px 26px rgb(120 170 255 / 35%),
-    0 0 90px rgb(70 130 230 / 22%);
-  animation: lxFloat 12s ease-in-out infinite;
-}
 
 /* 掠过舷窗的飞船(内嵌 SVG) */
-.login-page .login-panel::after {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  pointer-events: none;
-  width: 214px;
-  height: 94px;
-  top: 12%;
-  left: -260px;
-  background: url("/assets/brand/starship.svg") center / contain no-repeat;
-  filter: drop-shadow(-16px 0 18px rgb(57 212 255 / 45%));
-  opacity: 0;
-  animation: lxCruise 24s linear infinite;
-}
 @keyframes lxCruise {
   0% { transform: translateX(0); opacity: 0; }
   6% { opacity: 0.95; }
@@ -6986,14 +6062,6 @@ textarea:focus-visible {
   text-transform: uppercase;
 }
 .cc-arcade-title strong { color: #eafaff; font-size: 14px; }
-.cc-arcade-meta {
-  display: flex;
-  gap: 14px;
-  color: var(--sh-dim, #7d95ae);
-  font: 600 11px ui-monospace, monospace;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
 
 .cc-arcade-stage { position: relative; line-height: 0; }
 .cc-arcade-canvas {
@@ -7026,8 +6094,6 @@ textarea:focus-visible {
   text-shadow: 0 0 26px rgb(57 212 255 / 42%);
 }
 .cc-arcade-overlay > span { color: var(--sh-dim, #7d95ae); font-size: 13px; }
-.cc-arcade-legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
-.cc-arcade-legend em { font-style: normal; font: 700 12px ui-monospace, monospace; }
 .cc-arcade-btn {
   margin-top: 6px;
   display: inline-flex;
@@ -7046,7 +6112,6 @@ textarea:focus-visible {
 .cc-arcade-btn:hover { filter: brightness(1.08); }
 
 /* 游戏厅：菜单 + 卡片 + 退出 + HUD 条 */
-.cc-arcade-hint { color: var(--sh-dim, #7d95ae); font: 600 11px ui-monospace, monospace; }
 .cc-arcade-exit {
   display: inline-flex;
   align-items: center;
@@ -7805,15 +6870,6 @@ textarea:focus-visible {
 }
 .cs-detail-grid a:hover { text-decoration: underline; }
 .cs-detail-wide { grid-column: 1 / -1; }
-.cs-full-message {
-  margin: 0 0 14px;
-  color: #dcecf7;
-  font-size: 13px;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.cs-mailto-button { width: fit-content; text-decoration: none; }
 .cs-conversation-section { padding: 0; overflow: hidden; }
 .cs-conversation-section > h3 { padding: 16px 16px 0; }
 .cs-conversation-line {
@@ -7987,6 +7043,254 @@ textarea:focus-visible {
   .cs-drawer-body { padding-right: 14px; padding-left: 14px; }
   .cs-detail-drawer { width: 100%; }
 }
+
+/* ==========================================================================
+   K 作图工作台（2026-08-04）
+   换路后整套作图操作收进浮窗：圈产品 → 工作原理 → 出图。
+   K 产品详情页只留一个入口按钮，页面反而变短。
+   ========================================================================== */
+
+.k-studio {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  /* 浮窗容器是 max-height:92vh + overflow:hidden，内容超出会被直接裁掉且滚
+     不动。这里**不依赖**从父级传下来的高度——父级用的是 max-height 而不是
+     height，这条链传不可靠（实测滚不动）。直接自己按视口约束，内容区自己滚。
+     min-height:0 不能省——flex 子项默认 min-height:auto，不给 0 的话内部的
+     overflow 根本不会生效。 */
+  flex: 1;
+  min-height: 0;
+  max-height: 86vh;
+  padding: 20px 22px 22px;
+}
+
+.k-studio-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  justify-content: space-between;
+  /* 浮窗的关闭按钮是 absolute 定位在右上角(34px 见方 + 14px 边距 = 占掉
+     右侧 48px)。.k-studio 自带 22px 内边距，这里再补出差额即可。 */
+  padding-right: 34px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border, #2a2f3a);
+}
+
+.k-studio-eyebrow {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.k-studio-head h2 {
+  margin: 4px 0 0;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.k-studio-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.k-studio-steps button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 3px;
+}
+
+.k-studio-steps button:hover { border-color: rgba(159, 211, 86, 0.6); }
+
+.k-studio-steps button.is-on {
+  font-weight: 600;
+  color: #10131a;
+  background: #9fd356;
+  border-color: #9fd356;
+}
+
+.k-studio-steps button em {
+  font-style: normal;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.k-studio-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  /* 双保险：即便父级高度没传下来，这条也保证内容区自己能滚 */
+  max-height: 70vh;
+  overflow-y: auto;
+  /* 滚动条别贴着内容 */
+  padding-right: 4px;
+}
+
+/* flex column + overflow 的经典坑：子项默认 flex-shrink:1，空间不够时
+   不会溢出、而是被压扁。画笔那块自带 overflow:hidden，被压扁的结果就是
+   底图被裁掉一半；同时因为内容被压到刚好放下，压根不产生溢出，滚动条也
+   不出现。必须禁止收缩，让内容真的超出去，滚动才有意义。 */
+.k-studio-body > * { flex-shrink: 0; }
+
+.k-studio-muted { margin: 0; font-size: 13.5px; opacity: 0.7; }
+
+.k-studio-error,
+.k-studio-notice,
+.k-studio-warn {
+  margin: 0;
+  padding: 10px 13px;
+  font-size: 13.5px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+
+.k-studio-error { color: #ffb4b4; background: rgba(229, 72, 77, 0.12); border-color: rgba(229, 72, 77, 0.4); }
+.k-studio-notice { color: #bfe89a; background: rgba(159, 211, 86, 0.12); border-color: rgba(159, 211, 86, 0.35); }
+.k-studio-warn { color: #f0cf8a; background: rgba(227, 169, 60, 0.12); border-color: rgba(227, 169, 60, 0.4); }
+
+/* 底图选择 */
+.k-studio-plates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 12px;
+}
+
+.k-studio-plate {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 3px;
+}
+
+.k-studio-plate.is-on { border-color: #9fd356; box-shadow: 0 0 0 1px #9fd356 inset; }
+.k-studio-plate img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+
+.k-studio-plate-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.k-studio-plate-meta em { font-style: normal; opacity: 0.6; }
+.k-studio-plate-meta em.is-done { color: #9fd356; opacity: 1; }
+
+.k-studio-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* 画笔 */
+.k-maskbrush {
+  overflow: hidden;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 3px;
+}
+
+.k-maskbrush-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #2a2f3a);
+}
+
+.k-maskbrush-bar .secondary-button.is-on {
+  font-weight: 600;
+  color: #10131a;
+  background: #9fd356;
+  border-color: #9fd356;
+}
+
+.k-maskbrush-size {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 12.5px;
+  opacity: 0.8;
+}
+
+.k-maskbrush-size input { width: 104px; accent-color: #9fd356; }
+
+.k-maskbrush-cov {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.k-maskbrush-cov.is-ok { color: #9fd356; opacity: 1; }
+
+.k-maskbrush-stage { display: flex; justify-content: center; padding: 14px; }
+
+.k-maskbrush-stage { align-items: flex-start; }
+
+.k-maskbrush-holder {
+  position: relative;
+  display: inline-block;   /* 贴合图片实际尺寸，canvas 才能精确覆盖 */
+  max-width: 100%;
+  line-height: 0;
+}
+
+/* 竖版底图很高（preview 就有 1280px），必须同时限宽和限高，
+   否则画笔区把浮窗撑爆。canvas 用 inset:0 跟着 img 的实际尺寸走。 */
+.k-maskbrush-holder img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(520px, 100%);
+  max-height: 44vh;
+}
+
+.k-maskbrush-holder canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.k-maskbrush-hint {
+  margin: 0;
+  padding: 11px 14px 13px;
+  font-size: 13px;
+  line-height: 1.65;
+  opacity: 0.75;
+  border-top: 1px solid var(--border, #2a2f3a);
+}
+
+.k-maskbrush-hint em { font-style: normal; opacity: 0.75; }
+
+@media (max-width: 620px) {
+  .k-studio-steps { width: 100%; }
+  .k-studio-steps button { flex: 1; justify-content: center; }
+}
+
+/* ── 数字员工标记 ────────────────────────────────────────────────
+   员工名单里一眼看出这一行不是人。跟 C19 通讯里的徽章同色系。 */
+
 /* 用户管理:中文显示名 + 机器人图标(取代白底黑字徽章) */
 .users-name-cell {
   display: inline-flex;
@@ -8107,10 +7411,6 @@ textarea:focus-visible {
   background: radial-gradient(60% 120% at 8% 50%, var(--cc-vpn-glow, transparent) 0%, transparent 70%);
   opacity: 0.35; transition: opacity 0.6s ease;
 }
-.cc-vpn-bar-connected { --cc-vpn-glow: rgb(77 255 161 / 45%); --cc-vpn-lamp: var(--cc-green); }
-.cc-vpn-bar-connecting, .cc-vpn-bar-disconnecting { --cc-vpn-glow: rgb(255 177 59 / 40%); --cc-vpn-lamp: var(--cc-amber); }
-.cc-vpn-bar-disconnected, .cc-vpn-bar-browser { --cc-vpn-glow: rgb(125 149 174 / 20%); --cc-vpn-lamp: var(--cc-dim); }
-.cc-vpn-bar-error { --cc-vpn-glow: rgb(255 107 138 / 40%); --cc-vpn-lamp: var(--cc-red); }
 
 .cc-vpn-bar-identity { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .cc-vpn-lamp { position: relative; width: 34px; height: 34px; flex: none; display: grid; place-items: center; }
@@ -8200,4 +7500,172 @@ textarea:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .cc-vpn-lamp-core, .cc-vpn-lamp-ring, .cc-vpn-wave span, .cc-vpn-node-dot.on { animation: none !important; }
+}
+
+/* =====================================================================
+   组织切换器（2026-09-01）
+   多组织账号的身份切换入口。体检发现 auth_session.active_org_id 那条
+   解析分支是死代码，多组织用户被整站 403 且前端没有任何自救出口 ——
+   这是补上的那个出口。单组织账号不渲染，不占地方。
+   按本文件家规：只在末尾追加新层，不回头改旧层。
+   ===================================================================== */
+.org-switcher {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.org-switcher-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 6px 10px;
+  border: 1px solid rgb(148 163 184 / 28%);
+  border-radius: 8px;
+  background: rgb(15 23 42 / 45%);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.org-switcher-trigger:hover {
+  border-color: rgb(56 214 232 / 55%);
+}
+
+.org-switcher-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-switcher-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 260px;
+  padding: 6px;
+  border: 1px solid rgb(148 163 184 / 24%);
+  border-radius: 10px;
+  background: rgb(9 14 26 / 98%);
+  box-shadow: 0 18px 40px rgb(2 6 16 / 55%);
+}
+
+.org-switcher-hint {
+  padding: 6px 10px 8px;
+  color: rgb(148 163 184);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.org-switcher-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.org-switcher-option:hover:not(:disabled) {
+  background: rgb(56 214 232 / 12%);
+}
+
+.org-switcher-option:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.org-switcher-option-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-switcher-option-meta {
+  color: rgb(148 163 184);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.org-switcher-error {
+  padding: 8px 10px;
+  color: rgb(255 138 128);
+  font-size: 12px;
+}
+
+/* =====================================================================
+   对外动作二次确认（2026-09-01）
+   九个「会真的对外产生后果」的按钮以前全是 onClick 直连，没有确认也没有预览：
+   客服发信（不可撤回）、GEO/SEO 发布（写线上）、H 跳转整表覆盖、W-S 运费同步。
+   刻意不用 window.confirm —— 那是浏览器灰框，说不清会影响什么，
+   而且某些浏览器设置下会被直接屏蔽，操作会静默发生。
+   ===================================================================== */
+.outbound-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(2 6 16 / 68%);
+}
+
+.outbound-confirm-dialog {
+  width: min(460px, 100%);
+  padding: 22px 24px 18px;
+  border: 1px solid rgb(148 163 184 / 26%);
+  border-radius: 12px;
+  background: rgb(11 17 30 / 99%);
+  box-shadow: 0 26px 60px rgb(2 6 16 / 62%);
+}
+
+.outbound-confirm-dialog h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.outbound-confirm-consequence {
+  margin: 0 0 12px;
+  color: rgb(226 232 240);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.outbound-confirm-details {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  color: rgb(148 163 184);
+  font-size: 12.5px;
+  line-height: 1.8;
+}
+
+.outbound-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* =====================================================================
+   用户管理:创建抽屉里的表单改成单列(2026-09-01)
+   `.users-form-grid` 在 2210 行定义成 `repeat(5, minmax(150px, 1fr))` ——
+   那是给整页宽表单写的。后来表单被搬进 `.um-drawer`(宽度 min(420px, 94vw)),
+   6739 行的抽屉版只重设了 display 和 gap,**没有重设列数**,
+   于是 5 列 × 150px + 4 × 14px = 806px 塞进 420px 的抽屉里。
+   抽屉是 overflow:auto,所以它横向滚——「组织」下拉排在最右边,
+   落在视口外,四个分辨率下都一样看不见,人以为这个字段不存在。
+   ===================================================================== */
+.users-page .um-drawer .users-form-grid {
+  grid-template-columns: 1fr;
 }
