@@ -136,6 +136,22 @@ def _owner_org(db: Session, *, user_id: str) -> str | None:
     return row
 
 
+def _organization_is_active(db: Session, *, org_id: str) -> bool:
+    """该组织存在且未被停用。
+
+    与 HTTP 路径的 `_resolve_org` 对齐：那边用 `user.organization_id` 兜底时
+    也会先确认 `organization.status == "active"`，否则继续往下找。
+    """
+    return (
+        db.scalar(
+            select(OrganizationRecord.org_id).where(
+                OrganizationRecord.org_id == org_id,
+                OrganizationRecord.status == "active",
+            )
+        )
+        is not None
+    )
+
 def resolve_execution_org_id(
     db: Session,
     *,
@@ -143,20 +159,37 @@ def resolve_execution_org_id(
     request: Request | None = None,
     explicit_org_id: str | None = None,
 ) -> str:
+    # 显式指定 / 请求态 / 隔离上下文：这三个是「当前这次调用明确说了是哪个组织」，
+    # 优先级最高，没有歧义。
     for candidate in (
         explicit_org_id,
         _request_state_value(request, "org_id", "active_org_id", "session_org_id"),
         getattr(current_org_data_isolation_context(), "org_id", None),
-        getattr(user, "organization_id", None),
     ):
         if candidate is not None and str(candidate).strip():
             return str(candidate).strip()
 
     if user is not None:
         user_id = str(user.id)
+        # **membership 必须排在 user.organization_id 前面。**
+        # 2026-08-31 体检：这里原本先读 `user.organization_id`（一列裸字符串，
+        # 无外键约束、不保证与 org_memberships 同步），而 HTTP 路径
+        # （middleware/org_context.py 的 _resolve_org）先看唯一 active membership。
+        # 同一个用户前台算出一个组织、后台任务算出另一个 —— 而 GEO/SEO/P 的发布
+        # 全靠 worker 跑（worker 场景 request=None，正好落到这一段），
+        # 算错组织就是内容发到错的站。这里的顺序与 HTTP 路径保持一致。
         membership_org_id = _single_active_membership_org(db, user_id=user_id)
         if membership_org_id is not None:
             return membership_org_id
+
+        # 兼容位：只有在拿不到 membership 时才用它，且该组织必须是 active 的
+        # （HTTP 路径同样会校验 organization.status == "active"）。
+        legacy_org_id = getattr(user, "organization_id", None)
+        if legacy_org_id is not None and str(legacy_org_id).strip():
+            candidate = str(legacy_org_id).strip()
+            if _organization_is_active(db, org_id=candidate):
+                return candidate
+
         owner_org_id = _owner_org(db, user_id=user_id)
         if owner_org_id is not None:
             return owner_org_id

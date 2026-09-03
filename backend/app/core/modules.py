@@ -210,7 +210,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
     ),
     _manifest(
         module_key="communication.im",
-        display_name="C19 Communication",
+        display_name="通讯",
         description=(
             "Global communication, friendship, group chat, messaging, assets, "
             "and Moments available to every active authenticated user. "
@@ -606,6 +606,38 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
                 action="read",
                 label="Read API key management module",
                 description="View API key management module metadata and entry point.",
+                risk_level="medium",
+                menu_policy="hide_when_denied",
+            ),
+        ),
+        denied_behavior="hide_when_denied",
+        data_boundary=_data_boundary(reads=("credential_registry",)),
+    ),
+    _manifest(
+        module_key="admin.mcp_keys",
+        display_name="接入钥匙",
+        description="MCP 个人钥匙总览：每个真人账号一把，认人、可停、跨模块通用。",
+        category="admin",
+        status="sealed",
+        lifecycle="sealed",
+        route_namespace="/mcp-keys",
+        api_namespace="/mcp-keys",
+        navigation=_navigation(
+            group="Registry",
+            label="接入钥匙",
+            icon="KeyRound",
+            order=27,
+            owner_only=True,
+        ),
+        required_permissions=("modules.read",),
+        permission_manifest=(
+            _permission(
+                module_key="admin.mcp_keys",
+                permission_key="modules.read",
+                category="admin",
+                action="read",
+                label="查看接入钥匙",
+                description="查看 MCP 个人钥匙的签发与使用状况（不含密钥本身）。",
                 risk_level="medium",
                 menu_policy="hide_when_denied",
             ),

@@ -7,6 +7,7 @@ from typing import Iterable
 from sqlalchemy import Engine, inspect, text
 
 from ..core.environments import is_production_like
+from ..services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 PRODUCTION_COMPATIBILITY_BASELINE_REVISIONS = frozenset(
     (
@@ -55,7 +56,7 @@ def _current_revisions(engine: Engine) -> tuple[str, ...]:
     with engine.connect() as connection:
         if not inspect(connection).has_table("alembic_version"):
             return ()
-        rows = connection.execute(text("select version_num from alembic_version"))
+        rows = connection.execute(text("select version_num from alembic_version"), execution_options=SKIP_ORG_DATA_ISOLATION)
         return _normalize(row[0] for row in rows)
 
 
