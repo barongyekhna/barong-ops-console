@@ -23,6 +23,7 @@ from ...c19.identity_sync_service import sync_profile_for_user
 from ...m_series.inventory.service import resolve_factory_context
 from .agent import ensure_nijing_agent
 from .constants import AGENT_BIO, AGENT_DISPLAY_NAME, AGENT_JOB_TITLE, AGENT_USERNAME, PASSWORD_ENV
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 MIN_PASSWORD_LENGTH = 12
 LOCK_ID = 803081893
@@ -60,7 +61,7 @@ def bootstrap(db: Session, *, password: str) -> dict:
     if len(password) < MIN_PASSWORD_LENGTH:
         raise BootstrapError(f"{PASSWORD_ENV} 至少 {MIN_PASSWORD_LENGTH} 位。")
     if db.get_bind().dialect.name == "postgresql":
-        db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": LOCK_ID})
+        db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": LOCK_ID}, execution_options=SKIP_ORG_DATA_ISOLATION)
     try:
         password_hash = hash_password(password)
     except ValueError:

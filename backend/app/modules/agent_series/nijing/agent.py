@@ -37,7 +37,10 @@ def agent_spec() -> dict:
         "review_types": [],
         "error_codes": ["AGENT_LOGIN_FAILED", "AGENT_AI_UNAVAILABLE", "AGENT_REPLY_FAILED"],
         "healthcheck_config": {"type": "db_table", "target": "mfg_documents"},
-        "rollback_policy": "单据不可删;错单用反向盘点调整冲销",
+        "rollback_policy": {
+            "strategy": "none",
+            "reason": "单据不可删；错单用反向盘点调整冲销",
+        },
         "allowed_module_ids": ["mfg.inventory"],
         "allowed_workflow_ids": [],
     }

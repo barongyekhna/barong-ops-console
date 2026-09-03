@@ -62,6 +62,31 @@ def _handle_stop(signum: int, frame: FrameType | None) -> None:
     _LOGGER.info("收到停止信号,处理完当前这轮就退出")
 
 
+def _heartbeat(*, success: bool, error: str = "") -> None:
+    """记一次业务心跳。**任何异常都不许冒出去** —— 监控不该拖垮被监控的人。"""
+    try:
+        from ....db.session import SessionLocal
+        from ....services.worker_heartbeat import record_failure, record_success
+
+        with SessionLocal() as db:
+            if success:
+                record_success(
+                    db,
+                    worker_name="nijing-worker",
+                    module_key="agent.nijing",
+                    expected_interval_seconds=900,
+                )
+            else:
+                record_failure(
+                    db,
+                    worker_name="nijing-worker",
+                    module_key="agent.nijing",
+                    error=error,
+                    expected_interval_seconds=900,
+                )
+    except Exception:  # noqa: BLE001
+        pass
+
 def _sleep_interruptible(seconds: float, should_stop) -> None:
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline and not should_stop():
@@ -176,7 +201,14 @@ class NijingWorker:
                 busy = False
             except httpx.HTTPError as exc:
                 _LOGGER.warning("控制台暂时够不着: %s", exc)
+                # 2026-08-31 那一周,她的日志里全是这句,而没有任何人看得到——
+                # 因为她上报「我够不着控制台」的通道**就是控制台**。
+                # 现在它会落进心跳表,由一个不依赖控制台的脚本读走。
+                _heartbeat(success=False, error=f"控制台够不着: {exc!r}")
                 busy = False
+            else:
+                # 走完一轮没抛异常 = 这一轮干成了。
+                _heartbeat(success=True)
             if not busy:
                 _sleep_interruptible(interval, should_stop)
 
