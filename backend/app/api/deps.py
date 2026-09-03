@@ -10,6 +10,7 @@ from ..core.session_cookies import get_session_id_from_request
 from ..db.session import get_db
 from ..models.user import User
 from ..schemas.common import contains_runtime_address_data
+from ..schemas.user import must_change_password_required
 from ..services.event_collector import emit_event, set_current_event_context
 from ..services.auth_service import (
     AuditContext,
@@ -170,7 +171,19 @@ def get_current_session(
 def get_current_user(
     current_session: AuthenticatedSession = Depends(get_current_session),
 ) -> User:
-    return current_session.user
+    user = current_session.user
+    # Force a password change before any business endpoint is usable. /auth/me
+    # (fast identity), /auth/logout and /auth/change-password do NOT depend on
+    # get_current_user, so the user can still read their status, change the
+    # password, and log out — everything else is blocked until they do.
+    if must_change_password_required(
+        role=user.role, must_change_password=user.must_change_password
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required before continuing.",
+        )
+    return user
 
 
 def require_owner(
@@ -345,6 +358,11 @@ def require_rbac(module: str, action: str):
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
+        # M2 (QA 2026-08-22): the platform owner is global and must never be
+        # denied a platform-RBAC gate (owner was getting 403 on /operation-logs
+        # AUDIT/admin). Only non-owner roles go through the permission engine.
+        if is_owner_role(user.role):
+            return user
         decision = PermissionDecisionEngine(db, request=request).decide_platform_metadata(
             UnifiedPermissionRequest(
                 user_id=user.id,
