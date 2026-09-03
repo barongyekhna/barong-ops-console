@@ -37,7 +37,15 @@ import {
   type FrontendPermissions,
 } from "@/lib/permissions";
 
-type CapabilityUiState = "loading" | "ready" | "degraded" | "fallback";
+// "unauthorized" 与 "degraded" 必须分开：前者是「你没这个权限」，
+// 后者是「系统这次没拿全数据」。以前两者都渲染成「部分信息待刷新」，
+// 于是被整站 403 的用户只看到「稍后刷新」，不知道该找谁开权限。
+type CapabilityUiState =
+  | "loading"
+  | "ready"
+  | "degraded"
+  | "unauthorized"
+  | "fallback";
 
 type CapabilityStateContextValue = FrontendCapabilityGraph & {
   bootstrap: CapabilityBootstrapResult | null;
@@ -272,28 +280,51 @@ function createContextValue({
         source: graph.executionState.source,
       };
   const isFallbackMode = authStatus !== "authenticated";
+
+  // 三种「不 ok」不是一回事，不能折叠成一个布尔（2026-08-31 体检）：
+  //  · deferred：后端有意不在批量 bootstrap 里查（status 204 + deferred 标记）。
+  //    这 4 项恒定存在，折进降级就成了永远亮着的假警报。
+  //  · 401/403：用户没权限。以前也显示成「部分信息待刷新」，于是 owner 被整站 403
+  //    时只看到「稍后刷新」，不知道自己没权限、该找谁，只会以为系统卡了。
+  //  · 其它：才是真的降级。
+  const bootstrapResults = [
+    bootstrap?.registryResult,
+    bootstrap?.moduleAccessResult,
+    bootstrap?.moduleControlResult,
+    bootstrap?.adapterRegistryResult,
+    bootstrap?.adapterAccessResult,
+    bootstrap?.executionRegistryResult,
+    bootstrap?.executionAccessResult,
+    bootstrap?.readinessResult,
+    bootstrap?.productionResult,
+    bootstrap?.policiesResult,
+  ];
+  const realFailures = bootstrapResults.filter(
+    (result) =>
+      result != null &&
+      result.ok === false &&
+      // 有意不查的不算失败
+      (result as { deferred?: boolean }).deferred !== true,
+  );
+  const hasPermissionFailure = realFailures.some((result) => {
+    const status = (result as { status?: number }).status;
+    return status === 401 || status === 403;
+  });
+  const isUnauthorized = authStatus === "authenticated" && hasPermissionFailure;
   const isDegraded =
     authStatus === "authenticated" &&
-    Boolean(
-      loadError ||
-        bootstrap?.registryResult.ok === false ||
-        bootstrap?.moduleAccessResult.ok === false ||
-        bootstrap?.moduleControlResult.ok === false ||
-        bootstrap?.adapterRegistryResult.ok === false ||
-        bootstrap?.adapterAccessResult.ok === false ||
-        bootstrap?.executionRegistryResult.ok === false ||
-        bootstrap?.executionAccessResult.ok === false ||
-        bootstrap?.readinessResult.ok === false ||
-        bootstrap?.productionResult.ok === false ||
-        bootstrap?.policiesResult.ok === false,
-    );
+    !isUnauthorized &&
+    Boolean(loadError || realFailures.length > 0);
+
   const uiState: CapabilityUiState = isLoading
     ? "loading"
     : isFallbackMode
       ? "fallback"
-      : isDegraded
-        ? "degraded"
-        : "ready";
+      : isUnauthorized
+        ? "unauthorized"
+        : isDegraded
+          ? "degraded"
+          : "ready";
 
   return {
     ...graph,

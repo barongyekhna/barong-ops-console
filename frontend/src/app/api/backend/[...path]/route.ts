@@ -12,11 +12,16 @@ const ALLOWED_PUBLIC_GET_PATHS = new Set([
   "health",
   "auth/context",
   "auth/me",
+  // 组织切换器的下拉数据。挂在 public 前缀下是因为它不能要求「先有组织上下文」——
+  // 那正是要切换的东西（鸡生蛋）。端点自身仍然要求已登录。
+  "auth/organizations",
 ]);
 const ALLOWED_PUBLIC_POST_PATHS = new Set([
   "auth/change-password",
   "auth/login",
   "auth/logout",
+  // 切换当前会话的组织。同上，不能要求先有组织上下文。
+  "auth/switch-organization",
 ]);
 const ALLOWED_APP_LIST_PATHS = new Set([
   "dashboard/activity",

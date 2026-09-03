@@ -44,7 +44,7 @@
   align-items: center;
   gap: 7px;
   padding: 0 10px;
-  color: #166534;
+  color: #4dffa1;
   background: var(--color-success-soft);
   border: 1px solid rgb(22 163 74 / 18%);
   border-radius: 6px;
@@ -298,7 +298,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: white;
+  background: #0d1826;
 }
 
 .imageZoomWrap {
@@ -317,7 +317,7 @@
   padding: 10px;
   place-items: center;
   pointer-events: none;
-  background: #ffffff;
+  background: #0d1826;
   border: 1px solid rgb(15 23 42 / 18%);
   border-radius: 8px;
   box-shadow: 0 18px 46px rgb(15 23 42 / 24%);
@@ -327,7 +327,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  background: #ffffff;
+  background: #0d1826;
 }
 
 .productCell span,
@@ -357,8 +357,8 @@
   gap: 5px;
   min-height: 24px;
   padding: 0 7px;
-  color: #14532d;
-  background: #dcfce7;
+  color: #4dffa1;
+  background: rgba(77,255,161,0.1);
   border: 1px solid rgb(22 163 74 / 35%);
   border-radius: 5px;
   font: inherit;
@@ -368,7 +368,7 @@
 }
 
 .copyState {
-  color: #166534 !important;
+  color: #4dffa1 !important;
   font-size: 0.66rem !important;
   font-weight: 800;
 }
@@ -378,8 +378,8 @@
   width: fit-content;
   align-items: center;
   padding: 2px 6px;
-  color: #075985 !important;
-  background: #e0f2fe;
+  color: #5fe3ff !important;
+  background: rgba(57,212,255,0.1);
   border: 1px solid rgb(2 132 199 / 22%);
   border-radius: 5px;
   font-size: 0.68rem !important;
@@ -402,14 +402,14 @@
 }
 
 .fbaFeeTag {
-  color: #7c2d12;
-  background: #ffedd5;
+  color: #ff859c;
+  background: rgba(255,177,59,0.14);
   border: 1px solid rgb(234 88 12 / 34%);
 }
 
 .fbaFeeMissingTag {
-  color: #854d0e;
-  background: #fef9c3;
+  color: #ffb13b;
+  background: rgba(255,177,59,0.1);
   border: 1px solid rgb(202 138 4 / 34%);
 }
 
@@ -440,7 +440,7 @@
   width: fit-content;
   align-items: center;
   padding: 3px 7px;
-  color: #166534;
+  color: #4dffa1;
   background: var(--color-success-soft);
   border: 1px solid rgb(22 163 74 / 18%);
   border-radius: 5px;
@@ -449,8 +449,8 @@
 }
 
 .rejectBadge {
-  color: #991b1b;
-  background: #fee2e2;
+  color: #ff6b8a;
+  background: rgba(255,107,138,0.12);
   border-color: rgb(220 38 38 / 28%);
   cursor: help;
 }
@@ -461,7 +461,7 @@
   align-items: center;
   margin-left: 6px;
   padding: 2px 6px;
-  color: #ffffff !important;
+  color: #0d1826 !important;
   background: #dc2626;
   border: 1px solid #b91c1c;
   border-radius: 5px;
@@ -496,7 +496,7 @@
 }
 
 .warningBadge {
-  color: #92400e;
+  color: #ffb13b;
   background: var(--color-warning-soft);
   border-color: rgb(217 119 6 / 20%);
 }
@@ -724,7 +724,7 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  color: #92400e;
+  color: #ffb13b;
   background: var(--color-warning-soft);
   border: 1px solid rgb(217 119 6 / 22%);
   border-radius: 8px;
@@ -806,7 +806,7 @@
 .table tbody tr:hover td { background: rgb(57 212 255 / 5%); }
 .productPreview { background: rgb(4 10 18 / 60%); }
 /* 电商产品图保留白底才看得清 */
-.productPreview img, .imageZoomPreview img { background: #ffffff; }
+.productPreview img, .imageZoomPreview img { background: #0d1826; }
 .imageZoomPreview { background: #0a1420; border-color: rgb(120 200 255 / 30%); box-shadow: 0 18px 46px rgb(0 0 0 / 60%); position: fixed !important; }
 
 /* 标签统一到 mm 调色板 */
@@ -817,7 +817,7 @@
 .fbaFeeMissingTag { color: #d9b06a; background: rgb(255 177 59 / 8%); border-color: rgb(255 177 59 / 24%); }
 .badge { color: #4dffa1; background: rgb(77 255 161 / 10%); border-color: rgb(77 255 161 / 28%); }
 .rejectBadge { color: #ff6b8a; background: rgb(255 107 138 / 10%); border-color: rgb(255 107 138 / 30%); }
-.lithiumTag { color: #fff !important; background: #d43d5c; border-color: #ff6b8a; }
+.lithiumTag { color: #0d1826 !important; background: #d43d5c; border-color: #ff6b8a; }
 .warningBadge { color: #ffb13b; background: rgb(255 177 59 / 10%); border-color: rgb(255 177 59 / 30%); }
 .warningMessage { color: #ffb13b; background: rgb(255 177 59 / 10%); border-color: rgb(255 177 59 / 28%); }
 

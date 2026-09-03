@@ -125,7 +125,11 @@ export function StoreTypeWorkspace() {
 
   const minReady = data?.min_ready_items ?? 30;
   const all = data?.store_types ?? [];
-  const visible = showEmpty ? all : all.filter((entry) => entry.total_items > 0);
+  // 没货就先折叠——但有待审候选客户的店型绝不折叠(否则 40 个待处理线索被
+  // 「没货」标签盖住,人根本看不到)。判据 = 有货 或 有待审线索。
+  const visible = showEmpty
+    ? all
+    : all.filter((entry) => entry.total_items > 0 || entry.prospects_new > 0);
   const hiddenCount = all.length - visible.length;
 
   return (

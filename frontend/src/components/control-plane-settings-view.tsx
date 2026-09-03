@@ -29,6 +29,7 @@ import {
 } from "@/lib/profile-api";
 
 import styles from "./control-plane-settings-view.module.css";
+import { RELEASE_VERSION } from "@/lib/release-metadata";
 
 type Tab = "appearance" | "profile" | "about";
 
@@ -38,7 +39,7 @@ const THEME_OPTIONS: {
   desc: string;
   icon: typeof Sun;
 }[] = [
-  { key: "light", label: "白天", desc: "浅色界面", icon: Sun },
+  { key: "light", label: "白天", desc: "浅色界面(逐页迁移中)", icon: Sun },
   { key: "dark", label: "黑夜", desc: "深色驾驶舱(默认)", icon: Moon },
   { key: "system", label: "跟随系统", desc: "随设备自动切换", icon: Monitor },
 ];
@@ -218,7 +219,9 @@ export function ControlPlaneSettingsView() {
         <section className={styles.panel}>
           <h2 className={styles.h2}>主题</h2>
           <p className={styles.hint}>
-            浅色模式作用于功能页;工作台驾驶舱与登录页始终保持深色。
+            浅色模式还在逐页迁移:已经改用统一配色的页面会变浅,
+            其余页面(大多数模块页)仍是深色,切过去会看到深浅混排。
+            工作台驾驶舱与登录页按设计始终保持深色。
           </p>
           <div className={styles.themeGrid}>
             {THEME_OPTIONS.map((option) => {
@@ -433,7 +436,8 @@ export function ControlPlaneSettingsView() {
           </div>
           <LegalDocView doc={LEGAL_DOCS[aboutDoc]} />
           <p className={styles.version}>
-            涌龙麟 · 火凤凰内部运营平台 · © 2026 Barong Yekhna
+            涌龙麟 · 火凤凰内部运营平台 · 版本 {RELEASE_VERSION} · © 2026 Barong
+            Yekhna
           </p>
         </section>
       ) : null}

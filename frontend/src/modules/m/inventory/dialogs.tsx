@@ -110,9 +110,14 @@ export function ItemDialog({
     onDone,
   );
   const title = kind === "product" ? "新建成品" : "新建物料";
+  const kindHint =
+    kind === "product"
+      ? "正在新建「成品」（可配 BOM、能被生产）。要建原料/配件请到「物料」页新建。"
+      : "正在新建「物料」（原料/配件，用于成品的 BOM）。要建成品请到「成品」页新建。";
   return (
     <Dialog title={title} onClose={onClose}>
       <div className={styles.form}>
+        <p className={styles.label} style={{ opacity: 0.75 }}>{kindHint}</p>
         <div className={styles.row}>
           <label className={styles.field}>
             <span className={styles.label}>编码（唯一）</span>

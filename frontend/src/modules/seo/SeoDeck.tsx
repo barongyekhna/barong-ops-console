@@ -27,6 +27,7 @@ import {
   type SeoJob,
   type SeoTopic,
 } from "./facts/api";
+import { OutboundConfirm } from "@/components/outbound-confirm";
 
 const GOLD = "#d9a441";
 const BLUE = "#6aa6e8";
@@ -88,6 +89,8 @@ export function SeoDeck() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const [publishJobs, setPublishJobs] = useState<PublishJob[]>([]);
+  // 发布是写线上站点，点之前先让人看清推几篇。
+  const [pendingPublish, setPendingPublish] = useState(false);
   const [monitorRows, setMonitorRows] = useState<MonitorRow[]>([]);
 
   const reload = useCallback(async () => {
@@ -496,6 +499,27 @@ export function SeoDeck() {
   const publishTab = (
     <div style={{ display: "grid", gap: 12 }}>
       <div style={card}>
+        {pendingPublish ? (
+          <OutboundConfirm
+            busy={busy}
+            confirmLabel="确认发布"
+            consequence={
+              "会把选中的文章推到 barongyekhna.com。首次推送落草稿，" +
+              "还要你在 WordPress 后台点发布才会真正对外可见。"
+            }
+            details={[`本次推送 ${selected.size} 篇`, "工艺文进 /factory/，C 端博文进 /posts/"]}
+            onCancel={() => setPendingPublish(false)}
+            onConfirm={() => {
+              setPendingPublish(false);
+              void run(async () => {
+                const result = await publishItems([...selected]);
+                setSelected(new Set());
+                return `发布单 ${result.job_id} 已派出（${result.status}）。`;
+              });
+            }}
+            title="确认发布到线上站点？"
+          />
+        ) : null}
         <div style={{ color: MUTED, fontSize: 12, marginBottom: 10 }}>
           首次推送**刻意落草稿**，等你在 WordPress 里人工发布。
           工艺文进 /factory/，C 端博文进 /posts/，两边分类不同，
@@ -504,13 +528,7 @@ export function SeoDeck() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button
             disabled={busy || selected.size === 0}
-            onClick={() =>
-              void run(async () => {
-                const result = await publishItems([...selected]);
-                setSelected(new Set());
-                return `发布单 ${result.job_id} 已派出（${result.status}）。`;
-              })
-            }
+            onClick={() => setPendingPublish(true)}
             style={primary}
             type="button"
           >

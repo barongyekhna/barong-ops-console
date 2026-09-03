@@ -43,8 +43,8 @@ function feedErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 403) return "这条朋友圈已因关系或可见范围变化而不可读。";
-    if (error.status === 404) return "朋友圈运行时不可用。";
-    if (error.status === 422) return "朋友圈游标已失效，正在从最新内容恢复。";
+    if (error.status === 404) return "朋友圈暂时打不开，请稍后再试。";
+    if (error.status === 422) return "朋友圈已更新，正在刷新到最新。";
     if (error.status === 429) return "朋友圈同步过于频繁，请稍后再试。";
     if (error.status >= 500) return "朋友圈服务暂时不可用。";
     return error.message || "朋友圈读取失败。";
@@ -198,7 +198,7 @@ export function C19MomentsPanel({
       const visited = new Set<string>();
       for (let pageNumber = 0; pageNumber < MAX_EVENT_DRAIN_PAGES; pageNumber += 1) {
         if (!activeRef.current || !isCurrent()) return;
-        if (visited.has(cursor)) throw new Error("朋友圈事件游标发生循环。");
+        if (visited.has(cursor)) throw new Error("朋友圈同步出现问题，请刷新。");
         visited.add(cursor);
         const page = await listC19MomentEvents({ cursor, limit: EVENT_LIMIT });
         if (!activeRef.current || !isCurrent()) return;
@@ -213,7 +213,7 @@ export function C19MomentsPanel({
           return;
         }
         if (!page.next_cursor || page.next_cursor === cursor) {
-          throw new Error("朋友圈事件游标未能向前推进。");
+          throw new Error("朋友圈同步出现问题，请刷新。");
         }
         cursor = page.next_cursor;
       }
@@ -259,7 +259,7 @@ export function C19MomentsPanel({
         return;
       }
       if (page.next_cursor === requestedCursor) {
-        throw new Error("朋友圈分页游标未能向前推进。");
+        throw new Error("朋友圈加载出现问题，请刷新。");
       }
       setMoments((current) => mergeC19MomentFeed(current, page.moments, "append"));
       setFeedCursor(page.next_cursor);
@@ -397,7 +397,7 @@ export function C19MomentsPanel({
       pollInFlight = true;
       try {
         if (!eventCursorRef.current) await recoverCursor();
-        if (!eventCursorRef.current) throw new Error("朋友圈事件尾游标尚未就绪。");
+        if (!eventCursorRef.current) throw new Error("朋友圈同步尚未就绪，请稍候。");
         await drainEventPages(
           eventCursorRef.current,
           () => !stopped && polling && !streamConnecting,
@@ -683,7 +683,7 @@ export function C19MomentsPanel({
     connectionMode === "live"
       ? "朋友圈实时连接"
       : connectionMode === "polling"
-        ? "朋友圈恢复模式"
+        ? "备用连接"
         : connectionMode === "connecting"
           ? "正在连接朋友圈"
           : "朋友圈连接中断";

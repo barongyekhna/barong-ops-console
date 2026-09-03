@@ -38,6 +38,13 @@ const REJECT_REASONS = [
   "其他",
 ];
 
+
+function describeReason(reason: unknown) {
+  if (reason instanceof Error) {
+    return reason.message;
+  }
+  return String(reason);
+}
 export function ProspectWorkspace() {
   const [data, setData] = useState<ProspectList | null>(null);
   const [queries, setQueries] = useState<ProspectQuery[]>([]);
@@ -57,7 +64,12 @@ export function ProspectWorkspace() {
     setLoading(true);
     setError(null);
     try {
-      const [list, queryList, quotaState] = await Promise.all([
+      // allSettled 而不是 all：三份数据互相独立，取到哪份就渲染哪份。
+      // 2026-08-31 体检：候选客户接口 403 时，Promise.all 整体 reject，
+      // 于是模板和额度这两份**已经成功取到**的数据被一起丢掉，页面显示
+      // 「还没有查询模板」——而实际有 14 条。用户照着提示点「灌入默认模板」
+      // 就会重复灌一遍种子数据。一个请求的失败不该抹掉另一个请求的成功。
+      const [listResult, queryResult, quotaResult] = await Promise.allSettled([
         getProspects({
           status: statusFilter,
           country: countryFilter,
@@ -67,11 +79,29 @@ export function ProspectWorkspace() {
         getProspectQueries(),
         getQuota(),
       ]);
-      setData(list);
-      setQueries(queryList);
-      setQuota(quotaState);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+
+      if (listResult.status === "fulfilled") {
+        setData(listResult.value);
+      }
+      if (queryResult.status === "fulfilled") {
+        setQueries(queryResult.value);
+      }
+      if (quotaResult.status === "fulfilled") {
+        setQuota(quotaResult.value);
+      }
+
+      // 只报真正失败的那几份，并说清楚是哪一份 —— 而不是把整页打成空白。
+      const failures: string[] = [];
+      if (listResult.status === "rejected") {
+        failures.push(`候选客户：${describeReason(listResult.reason)}`);
+      }
+      if (queryResult.status === "rejected") {
+        failures.push(`查询模板：${describeReason(queryResult.reason)}`);
+      }
+      if (quotaResult.status === "rejected") {
+        failures.push(`今日额度：${describeReason(quotaResult.reason)}`);
+      }
+      setError(failures.length > 0 ? failures.join("；") : null);
     } finally {
       setLoading(false);
     }

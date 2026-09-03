@@ -57,7 +57,7 @@ function interactionErrorMessage(error: unknown) {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 403 || error.status === 404) return "这条朋友圈已不可用。";
     if (error.status === 409) return error.message || "互动状态发生冲突。";
-    if (error.status === 410) return "原互动幂等编号已经失效。";
+    if (error.status === 410) return "这条操作已失效，请刷新后重试。";
     if (error.status === 422) return error.message || "评论内容不符合规则。";
     if (error.status === 429) return "操作太频繁，请稍后再试。";
     if (error.status >= 500) return "朋友圈互动服务暂时不可用。";
@@ -195,7 +195,7 @@ export function C19MomentCard({
           setCommentsCursor(null);
           setCommentsLoaded(false);
           setShowComments(false);
-          setError("评论游标已失效，请重新展开评论。");
+          setError("评论已更新，请重新展开评论。");
         } else if (!removeIfUnavailable(requestError)) {
           setError(interactionErrorMessage(requestError));
         }
@@ -242,7 +242,7 @@ export function C19MomentCard({
           setLikesCursor(null);
           setLikesLoaded(false);
           setShowLikes(false);
-          setError("点赞游标已失效，请重新展开点赞成员。");
+          setError("点赞已更新，请重新展开查看。");
         } else if (!removeIfUnavailable(requestError)) {
           setError(interactionErrorMessage(requestError));
         }

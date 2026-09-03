@@ -64,7 +64,7 @@ function publicationErrorMessage(error: unknown) {
     if (error.status === 403 || error.status === 404) {
       return "当前朋友圈草稿或可见范围已不可用。";
     }
-    if (error.status === 409) return error.message || "朋友圈幂等状态发生冲突。";
+    if (error.status === 409) return error.message || "这条动态似乎已发布，请刷新后查看。";
     if (error.status === 413) return "图片或朋友圈内容超过服务端限制。";
     if (error.status === 415) return "所选图片类型不受支持。";
     if (error.status === 422) return error.message || "朋友圈内容不符合发布规则。";
@@ -104,7 +104,7 @@ function requireMatchingAsset(
     asset.sha256_hex !== pending.sha256Hex
   ) {
     throw new C19AssetTransferError(
-      "资产服务返回的朋友圈图片快照不一致，已停止发布。",
+      "图片校验不一致，已停止发布，请重新选择。",
     );
   }
 }
@@ -282,7 +282,7 @@ export function C19MomentComposer({
           controller.signal,
         );
         if (draft.client_moment_id !== current.clientMomentId) {
-          throw new Error("朋友圈草稿幂等响应不一致，已停止发布。");
+          throw new Error("这条动态似乎已发布，请刷新后查看。");
         }
         if (current.momentId && current.momentId !== draft.moment_id) {
           throw new Error("朋友圈草稿编号发生冲突，已停止发布。");
@@ -305,7 +305,7 @@ export function C19MomentComposer({
             pendingImage = updateImage(index, {
               progress: 0,
               status: "hashing",
-              statusText: "本机计算 SHA-256",
+              statusText: "正在准备图片",
             });
             const sha256Hex = await sha256C19File(
               pendingImage.file,
@@ -314,7 +314,7 @@ export function C19MomentComposer({
             pendingImage = updateImage(index, { sha256Hex });
           }
           const sha256Hex = pendingImage.sha256Hex;
-          if (!sha256Hex) throw new Error("朋友圈图片校验失败。");
+          if (!sha256Hex) throw new Error("图片准备失败，请重试。");
 
           pendingImage = updateImage(index, {
             progress: 0,
@@ -337,7 +337,7 @@ export function C19MomentComposer({
             throw new Error("朋友圈图片草稿范围不一致，已停止发布。");
           }
           if (pendingImage.assetId && pendingImage.assetId !== intent.asset.asset_id) {
-            throw new Error("朋友圈图片幂等响应不一致，已停止发布。");
+            throw new Error("这张图片似乎已发送，请刷新后查看。");
           }
           pendingImage = updateImage(index, { assetId: intent.asset.asset_id });
           let remoteAsset = intent.asset;
@@ -385,7 +385,7 @@ export function C19MomentComposer({
             pendingImage = updateImage(index, {
               progress: 100,
               status: "scanning",
-              statusText: "隔离扫描与格式校验中",
+              statusText: "正在检查图片",
             });
             await waitForC19AssetPoll(controller.signal);
             remoteAsset = await getC19MomentAssetStatus(
@@ -405,7 +405,7 @@ export function C19MomentComposer({
         }
 
         const assetIds = current.images.map((image) => {
-          if (!image.assetId) throw new Error("朋友圈图片缺少服务端编号。");
+          if (!image.assetId) throw new Error("图片还没上传完，请稍候重试。");
           return image.assetId;
         });
         const published = await publishC19Moment(
@@ -562,7 +562,13 @@ export function C19MomentComposer({
                 type="checkbox"
               />
               <span>{affiliation.org_name}</span>
-              <small>{affiliation.role}</small>
+              <small>
+                {affiliation.role === "owner"
+                  ? "负责人"
+                  : affiliation.role === "admin"
+                    ? "管理员"
+                    : "成员"}
+              </small>
             </label>
           ))}
         </fieldset>
@@ -616,7 +622,7 @@ export function C19MomentComposer({
       {error ? <div className={styles.runtimeError} role="alert">{error}</div> : null}
       {pending && error ? (
         <div className={styles.retryNotice}>
-          <span>重试会复用同一草稿、图片和发布幂等编号，不会制造重复朋友圈。</span>
+          <span>重试不会重复发布这条动态。</span>
           <button
             disabled={isPublishing}
             onClick={() => {
@@ -647,7 +653,7 @@ export function C19MomentComposer({
         {isPublishing ? "安全发布中…" : pending ? "安全重试" : "发布朋友圈"}
       </button>
       <small className={styles.composerBoundary}>
-        图片按选择顺序逐张直传隔离资产服务；JSON 代理不接触图片字节。
+        图片会按选择顺序逐张上传，发布前会自动检查。
       </small>
     </form>
   );

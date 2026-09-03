@@ -109,9 +109,21 @@ function writeStoredAuthSession(session: StoredAuthSession) {
   }
 
   try {
+    // **绝不把会话令牌写进 localStorage。**
+    // 2026-08-31 体检：这里原本存的是完整的 { sessionToken } 明文，而同一次登录
+    // 的 cookie 是 HttpOnly + Secure、30 天有效。任何一次 XSS 只要一行
+    // localStorage.getItem 就能把令牌拿走，HttpOnly 的保护被完全抵消 ——
+    // 而控制台里渲染外部文本的地方不少（通知正文、C19 消息、K 的 AI 产出）。
+    //
+    // 鉴权本来就不依赖它：前端代理会把浏览器的 Cookie 原样转发给后端
+    // （api/backend/[...path]/route.ts 里 headers.set("Cookie", cookie)），
+    // 读取方拿不到令牌时只是不设 x-session-token 头，cookie 照常完成鉴权。
+    // 这里只留「登录过」和用户信息这类非机密字段，供刷新时快速回显。
+    const { sessionToken: _omitted, ...safeFields } = session;
+    void _omitted;
     window.localStorage.setItem(
       AUTH_SESSION_STORAGE_KEY,
-      JSON.stringify(session),
+      JSON.stringify(safeFields),
     );
   } catch {
     // Browser storage can be unavailable; the HttpOnly cookie still carries auth.
@@ -132,13 +144,14 @@ function clearStoredAuthSession() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [initialAuthSession] = useState(readStoredAuthSession);
-  const [status, setStatus] = useState<AuthStatus>(() =>
-    initialAuthSession ? "authenticated" : "checking",
-  );
-  const [user, setUser] = useState<AuthenticatedUser | null>(() =>
-    initialAuthSession?.user ?? null,
-  );
+  // Deterministic initial state: identical on the server render and the client's
+  // first render so hydration matches. Reading localStorage in these
+  // initializers caused a React #418 hydration mismatch on EVERY page (server
+  // saw no session → "checking"; client saw the stored session →
+  // "authenticated"). The persisted session is restored after mount, in an
+  // effect (see below), which is the only safe place to touch localStorage.
+  const [status, setStatus] = useState<AuthStatus>("checking");
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const previousPathnameRef = useRef(pathname);
   const authSnapshotRef = useRef<{
     status: AuthStatus;
@@ -147,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionCheckAbortControllerRef = useRef<AbortController | null>(null);
   const sessionCheckGenerationRef = useRef(0);
   const loginInFlightRef = useRef<Promise<AuthLoginResult> | null>(null);
-  const sessionTokenRef = useRef(initialAuthSession?.sessionToken ?? null);
+  const sessionTokenRef = useRef<string | null>(null);
   authSnapshotRef.current = { status, user };
 
   const abortSessionCheck = useCallback((message: string) => {
@@ -245,6 +258,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
   }, [abortSessionCheck, clearSession, pathname, resetAuthState]);
+
+  // Restore any persisted session AFTER mount (never during render — see the
+  // deterministic initial state above). Runs before the refresh effect below,
+  // so sessionTokenRef is populated first and refresh takes the fast
+  // "supplemental" validation path instead of a full "checking" reload.
+  useEffect(() => {
+    const stored = readStoredAuthSession();
+    if (stored) {
+      sessionTokenRef.current = stored.sessionToken;
+      if (stored.user) {
+        setUser(stored.user);
+      }
+      setStatus("authenticated");
+    }
+  }, []);
 
   useEffect(() => {
     void refresh();

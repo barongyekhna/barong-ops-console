@@ -36,6 +36,7 @@ import {
   type GeoJob,
   type GeoTopicCandidate,
 } from "./api";
+import { OutboundConfirm } from "@/components/outbound-confirm";
 
 /* ------------------------------------------------------------------ tokens */
 
@@ -143,6 +144,9 @@ export function GeoContentDeck() {
   const [publishBusy, setPublishBusy] = useState(false);
   const [backlink, setBacklink] = useState<GeoBacklinkState | null>(null);
   const [backlinkBusy, setBacklinkBusy] = useState(false);
+  // 两个「会真的写到线上站点」的动作，点之前先让人看清影响几篇/几个产品页。
+  const [pendingPublish, setPendingPublish] = useState(false);
+  const [pendingBacklinks, setPendingBacklinks] = useState(false);
   const [monitor, setMonitor] = useState<GeoMonitorState | null>(null);
   const [monitorBusy, setMonitorBusy] = useState<string | null>(null);
 
@@ -378,8 +382,9 @@ export function GeoContentDeck() {
     }
   }
 
-  async function handlePublish() {
+  async function doPublish() {
     if (!selectedId) return;
+    setPendingPublish(false);
     setPublishBusy(true);
     setError(null);
     try {
@@ -392,7 +397,8 @@ export function GeoContentDeck() {
     }
   }
 
-  async function handleBacklinks() {
+  async function doBacklinks() {
+    setPendingBacklinks(false);
     setBacklinkBusy(true);
     setError(null);
     try {
@@ -1101,7 +1107,7 @@ export function GeoContentDeck() {
                       只发已批准的；首发落草稿，你在 WP 后台点发布
                     </span>
                     <button
-                      onClick={() => void handlePublish()}
+                      onClick={() => setPendingPublish(true)}
                       disabled={publishBusy || !publish?.ready}
                       style={PRIMARY_BTN}
                     >
@@ -1111,6 +1117,25 @@ export function GeoContentDeck() {
                     </button>
                   </div>
                   <div style={SECTION_BODY}>
+                    {pendingPublish ? (
+                      <OutboundConfirm
+                        busy={publishBusy}
+                        confirmLabel="确认发布"
+                        consequence={
+                          "会把已批准的文章推到 barongyekhna.com。首发落 WP 草稿，" +
+                          "重复发布会原地更新同一批文章（不会建重复）。"
+                        }
+                        details={[
+                          `本次推送 ${publish?.publishable_count ?? 0} 篇（共 ${publish?.total_count ?? 0} 篇）`,
+                          "未批准的不会被推送",
+                        ]}
+                        onCancel={() => setPendingPublish(false)}
+                        onConfirm={() => {
+                          void doPublish();
+                        }}
+                        title="确认发布到线上站点？"
+                      />
+                    ) : null}
                     {publish && publish.jobs.some((j) => j.status === "success") ? (
                       <div
                         style={{
@@ -1182,6 +1207,89 @@ export function GeoContentDeck() {
                   </div>
                 </section>
   
+                {/* 产品页反链：把指南的链接写回 Woo 产品页描述。
+                    这块的后端端点、API、handler 一直都在，只是没有入口——
+                    `backlink` 每次进页面都查了却没人渲染。2026-09-01 补上。 */}
+                <section style={CARD}>
+                  <div style={{ ...SECTION_TOGGLE, cursor: "default" }}>
+                    <strong>产品页反链</strong>
+                    {backlink ? (
+                      <span style={COUNT_PILL}>{backlink.target_count} 个产品页</span>
+                    ) : null}
+                    <span style={{ marginLeft: "auto", fontSize: 12, opacity: 0.55 }}>
+                      把已发布的指南链接写回产品页描述
+                    </span>
+                    <button
+                      onClick={() => setPendingBacklinks(true)}
+                      disabled={backlinkBusy || !backlink || backlink.target_count === 0}
+                      style={PRIMARY_BTN}
+                    >
+                      {backlinkBusy ? "派单中…" : "同步反链"}
+                    </button>
+                  </div>
+                  <div style={SECTION_BODY}>
+                    {pendingBacklinks ? (
+                      <OutboundConfirm
+                        busy={backlinkBusy}
+                        confirmLabel="确认同步"
+                        consequence={
+                          "会改写线上 Woo 产品页的描述，把指南链接加进去。" +
+                          "改的是已上线的销售页面，请确认指南本身已经发布。"
+                        }
+                        details={(backlink?.targets ?? [])
+                          .slice(0, 8)
+                          .map(
+                            (t) =>
+                              `${t.sku ?? `Woo #${t.woo_product_id}`} · ${t.guide_count} 条指南`,
+                          )}
+                        onCancel={() => setPendingBacklinks(false)}
+                        onConfirm={() => {
+                          void doBacklinks();
+                        }}
+                        title={`确认给 ${backlink?.target_count ?? 0} 个产品页写入反链？`}
+                      />
+                    ) : null}
+                    {backlink && backlink.skipped.length > 0 ? (
+                      <div style={{ ...BANNER, borderColor: `${GOLD}66`, background: `${GOLD}14` }}>
+                        <strong style={{ color: GOLD }}>跳过了 {backlink.skipped.length} 个：</strong>
+                        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 13 }}>
+                          {backlink.skipped.slice(0, 5).map((s, i) => (
+                            <li key={i}>{s}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {backlink && backlink.jobs.length > 0 ? (
+                      <ul style={{ ...RESET_LIST, gap: 6, marginTop: 10 }}>
+                        {backlink.jobs.slice(0, 5).map((j) => (
+                          <li key={j.job_id} style={ROW}>
+                            <span
+                              style={{
+                                ...BADGE,
+                                color:
+                                  j.status === "success"
+                                    ? GREEN
+                                    : j.status === "failed"
+                                      ? RED
+                                      : GOLD,
+                              }}
+                            >
+                              {j.status}
+                            </span>
+                            <span style={{ flex: 1, minWidth: 140, fontSize: 12.5, opacity: 0.85 }}>
+                              改写 {j.updated_count} 个产品页
+                              {j.finished_at ? `　·　${j.finished_at}` : ""}
+                              {j.error ? `　—　${j.error}` : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p style={HINT}>还没有同步过反链。</p>
+                    )}
+                  </div>
+                </section>
+
                 {/* 内链网：文章内链（自动）+ 产品页链接（人工，因为它是投放落地页）。
                     和 SeoDeck 挂的是同一个组件——内链网本来就是跨 GEO/SEO 的一件事。 */}
                 <section style={CARD}>

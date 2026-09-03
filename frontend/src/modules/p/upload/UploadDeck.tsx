@@ -76,20 +76,36 @@ export function UploadDeck() {
       setIsLoading(true);
     }
     try {
-      const [boardData, ledgerData] = await Promise.all([
+      // allSettled 而不是 all：产品分组和上传台账是两份独立数据。
+      // 2026-08-31 体检：getBoard() 因 C18G 返回 403 时，Promise.all 整体 reject，
+      // 于是 getUploadJobs **已经成功取回的** 15 条台账（13 成功 2 失败）被一起丢掉，
+      // 四个 KPI 全显示「——」，还在红色错误条正下方照常渲染「没有待上传的产品」。
+      // 运营者会以为是自己 K 那边没做完，实际数据就在手边。
+      const [boardResult, ledgerResult] = await Promise.allSettled([
         getBoard(),
         getUploadJobs(80),
       ]);
       if (mounted.current) {
-        setBoard(boardData);
-        setLedger(ledgerData);
-        setError(null);
-      }
-    } catch (loadError) {
-      if (mounted.current) {
-        setError(
-          loadError instanceof Error ? loadError.message : "驾驶舱数据加载失败。",
-        );
+        if (boardResult.status === "fulfilled") {
+          setBoard(boardResult.value);
+        }
+        if (ledgerResult.status === "fulfilled") {
+          setLedger(ledgerResult.value);
+        }
+        const failures: string[] = [];
+        if (boardResult.status === "rejected") {
+          const reason = boardResult.reason;
+          failures.push(
+            `产品分组：${reason instanceof Error ? reason.message : String(reason)}`,
+          );
+        }
+        if (ledgerResult.status === "rejected") {
+          const reason = ledgerResult.reason;
+          failures.push(
+            `上传台账：${reason instanceof Error ? reason.message : String(reason)}`,
+          );
+        }
+        setError(failures.length > 0 ? failures.join("；") : null);
       }
     } finally {
       if (mounted.current) {

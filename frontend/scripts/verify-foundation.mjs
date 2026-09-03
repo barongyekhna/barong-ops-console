@@ -106,7 +106,9 @@ for (const requiredUserModuleSignal of [
   "用户管理",
   "创建用户",
   "用户列表",
-  "UserPermissionsPanel",
+  // 2026-09-02 移除 "UserPermissionsPanel"：那个组件（1136 行）在整个 src 里
+  // 零 import、无路由、不在任何导航注册表 —— 唯一让它活着的就是这一行字符串
+  // 白名单。权限管理的真正入口是 /permissions 页，由 C06 那批断言守着。
   "DEFAULT_INITIAL_PASSWORD",
   "123456",
   "岗位",

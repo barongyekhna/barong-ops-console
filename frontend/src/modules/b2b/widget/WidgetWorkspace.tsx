@@ -12,6 +12,7 @@ import {
   publishWholesaleSite,
   pushWidgets,
 } from "./api";
+import { OutboundConfirm } from "@/components/outbound-confirm";
 
 const JOB_STATUS_LABELS: Record<string, string> = {
   queued: "排队中",
@@ -37,6 +38,8 @@ export function WidgetWorkspace() {
   const [site, setSite] = useState<WholesaleSiteStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // 重推会改写线上每一个产品页的小窗，点之前先说清楚影响多少个。
+  const [pendingPush, setPendingPush] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -145,6 +148,27 @@ export function WidgetWorkspace() {
       {error ? <p className={styles.error}>{error}</p> : null}
       {notice ? <p className={styles.notice}>{notice}</p> : null}
 
+      {pendingPush ? (
+        <OutboundConfirm
+          busy={busy}
+          confirmLabel="确认重推"
+          consequence={
+            "会把新的政策文案**改写进线上每一个产品页**的批发小窗。" +
+            "小窗上依旧不显示批发价，改的只是起订量/装箱数/交期和三条政策。"
+          }
+          details={[
+            `影响 ${live.length} 个线上有小窗的产品`,
+            `${missingPrice.length} 个缺批发价的不会出现小窗`,
+          ]}
+          onCancel={() => setPendingPush(false)}
+          onConfirm={() => {
+            setPendingPush(false);
+            void doPush();
+          }}
+          title="确认重推全部产品的批发小窗？"
+        />
+      ) : null}
+
       <section className={styles.panel}>
         <header className={styles.panelHead}>
           <h3>全量重推</h3>
@@ -157,7 +181,7 @@ export function WidgetWorkspace() {
         <button
           className={styles.primaryButton}
           disabled={busy || loading}
-          onClick={() => void doPush()}
+          onClick={() => setPendingPush(true)}
           type="button"
         >
           {busy ? "派单中…" : "重推全部产品"}

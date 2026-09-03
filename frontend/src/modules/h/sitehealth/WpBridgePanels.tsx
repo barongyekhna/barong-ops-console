@@ -26,6 +26,7 @@ import {
 import styles from "./HealthDeck.module.css";
 import { suggestRedirectTarget, toRedirectPath } from "./redirect-hint";
 import type { RedirectHandoff } from "./SiteHealthWorkspace";
+import { OutboundConfirm } from "@/components/outbound-confirm";
 
 type EditorRule = RedirectRule & { id: number };
 
@@ -70,6 +71,9 @@ export function RedirectManager({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 保存是**整表覆盖**：写进去的这一份就是线上的全部跳转规则，
+  // 不在列表里的旧规则会被删掉。所以点之前必须先说清楚。
+  const [pendingSave, setPendingSave] = useState(false);
   const [nextId, setNextId] = useState(1);
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
   // WordPress 那边**实际存着**的路径集合。用来区分「规则没生效」和「规则还没保存」——
@@ -155,7 +159,8 @@ export function RedirectManager({
     });
   };
 
-  const handleSave = async () => {
+  const doSave = async () => {
+    setPendingSave(false);
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -274,7 +279,7 @@ export function RedirectManager({
           <button
             className="primary-button"
             disabled={busy}
-            onClick={() => void handleSave()}
+            onClick={() => setPendingSave(true)}
             type="button"
           >
             {busy ? (
@@ -303,6 +308,24 @@ export function RedirectManager({
         </div>
       ) : null}
 
+      {pendingSave ? (
+        <OutboundConfirm
+          busy={busy}
+          confirmLabel="确认覆盖"
+          consequence={
+            "保存是**整表覆盖**——线上会变成下面这一份规则，不在列表里的旧跳转会被删掉。"
+          }
+          details={[
+            `本次写入 ${rules.length} 条规则`,
+            "插件只在 404 时才跳转，不影响还能打开的页面",
+          ]}
+          onCancel={() => setPendingSave(false)}
+          onConfirm={() => {
+            void doSave();
+          }}
+          title="确认覆盖线上跳转表？"
+        />
+      ) : null}
       <section className={styles.panel} aria-label="WordPress 跳转规则">
         {rules.length === 0 ? (
           <div className={styles.emptyHint}>还没有跳转规则，点「添加规则」开始。</div>

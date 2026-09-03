@@ -1,44 +1,55 @@
 "use client";
 
-import { Logo } from "@/components/brand-logo";
+import Link from "next/link";
+
 import { LoginForm } from "@/components/login-form";
+
+import styles from "./login.module.css";
 
 export function LoginScreen() {
   return (
-    <main className="login-page">
-      <section className="login-identity">
-        <div className="login-brand">
-          <span className="brand-mark brand-mark-large">
-            <Logo decorative />
+    <main className={styles.page}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className={styles.dragon} src="/assets/brand/circuit-dragon.svg" alt="" aria-hidden="true" />
+      <div className={styles.veil} />
+
+      <div className={styles.stage}>
+        <section className={styles.brand}>
+          <span className={styles.phx}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/assets/brand/phoenix-gold.png" alt="涌龙麟 火凤凰" />
           </span>
-          <span>
-            <strong>Barong</strong>
-            <small>运营工作台</small>
-          </span>
-        </div>
+          <span className={styles.eyebrow}>涌 · 龙 · 麟</span>
+          <p className={styles.latin}>Barong&nbsp;&nbsp;Yekhna</p>
+          <p className={styles.tagline}>
+            I will see this great vision,
+            <br />
+            in which the bush does not burn.
+          </p>
+        </section>
 
-        <div className="identity-copy">
-          <span className="system-label">安全访问</span>
-          <h1>运营工作台</h1>
-          <div className="signal-line">
-            <span />
-            登录后进入你的组织空间
-          </div>
-        </div>
-
-        <span className="build-label" aria-hidden="true">
-          <Logo className="brand-watermark" decorative />
-        </span>
-      </section>
-
-      <section className="login-panel">
-        <div className="login-panel-inner">
-          <span className="eyebrow">登录</span>
-          <h2>进入工作台</h2>
-          <p className="login-intro">使用已分配的账号登录。</p>
+        <section className={styles.card}>
+          <h2 className={styles.cardHead}>登录</h2>
+          <p className={styles.cardSub}>Access · 火凤凰指挥中心</p>
           <LoginForm />
+          <div className={styles.foot}>
+            <span className={styles.footCy} />
+            会话加密 · 30 天免掉线
+          </div>
+        </section>
+      </div>
+
+      <footer className={styles.footbar}>
+        <span>仅限授权人员访问 · 所有操作全程留痕</span>
+        <div className={styles.footbarR}>
+          <Link href="/terms">使用规范</Link>
+          <span className={styles.sep}>·</span>
+          <Link href="/privacy">隐私政策</Link>
+          <span className={styles.sep}>·</span>
+          <Link href="/support">技术支持</Link>
+          <span className={styles.cr}>© 2026 涌龙麟 · Barong Yekhna</span>
         </div>
-      </section>
+      </footer>
     </main>
   );
 }

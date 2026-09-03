@@ -8,8 +8,12 @@ FROM dependencies AS verification
 
 COPY frontend/ ./
 COPY tests/frontend/ ./tests/frontend/
+# 有三条测试要读 deploy/nginx/ 下的线上配置模板（校验 SSE 的 X-Real-IP、
+# VPN 与 W-S 机器端点的 location 精确匹配）。以前构建里 npm test 跑 0 条，
+# 缺这个目录也没人发现；闸门修好后它们会因 ENOENT 直接挡住构建。
+COPY deploy/nginx/ ./deploy/nginx/
 RUN ln -s . frontend \
-    && npm run test \
+    && npm run test:ci \
     && rm frontend
 RUN npm run verify
 RUN npm run typecheck

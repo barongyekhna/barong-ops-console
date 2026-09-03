@@ -13,8 +13,8 @@
 .momentComposer,
 .feedColumn,
 .momentCard {
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-line, #dbe3ee);
+  background: var(--color-surface, #0d1826);
+  border: 1px solid var(--color-line, #1c2f47);
   border-radius: 18px;
   box-shadow: 0 14px 36px rgb(15 23 42 / 5%);
 }
@@ -49,7 +49,7 @@
 
 .composerHeading span,
 .feedHeading > div:first-child > span {
-  color: #0369a1;
+  color: #39d4ff;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -58,19 +58,19 @@
 
 .composerHeading h3,
 .feedHeading h3 {
-  color: #0f172a;
+  color: #dce9f7;
   margin: 0;
 }
 
 .composerHeading h3 { font-size: 18px; }
-.composerHeading > svg { color: #0284c7; }
+.composerHeading > svg { color: #1a90c4; }
 
 .momentComposer textarea,
 .commentForm textarea {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 11px;
-  color: #0f172a;
+  color: #dce9f7;
   font: inherit;
   line-height: 1.5;
   outline: none;
@@ -81,18 +81,18 @@
 
 .momentComposer textarea:focus,
 .commentForm textarea:focus {
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 3px rgb(56 189 248 / 14%);
+  border-color: #39d4ff;
+  box-shadow: 0 0 0 3px rgb(57 212 255 / 16%);
 }
 
 .momentComposer textarea:disabled,
 .commentForm textarea:disabled {
-  background: #f8fafc;
+  background: #0a1524;
   cursor: not-allowed;
 }
 
 .characterCount {
-  color: #64748b;
+  color: #8299b4;
   font-size: 10px;
   margin-top: -8px;
   text-align: right;
@@ -100,7 +100,7 @@
 
 .visibilityPicker,
 .audiencePicker {
-  border: 1px solid #e2e8f0;
+  border: 1px solid #1c2f47;
   border-radius: 12px;
   display: flex;
   flex-wrap: wrap;
@@ -111,7 +111,7 @@
 
 .visibilityPicker legend,
 .audiencePicker legend {
-  color: #475569;
+  color: #8299b4;
   font-size: 11px;
   font-weight: 800;
   padding: 0 4px;
@@ -120,10 +120,10 @@
 .visibilityPicker label,
 .audiencePicker label {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 9px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   font-size: 11px;
@@ -132,7 +132,7 @@
 }
 
 .audiencePicker label { flex: 1 1 140px; }
-.audiencePicker small { color: #64748b; }
+.audiencePicker small { color: #8299b4; }
 
 .visibilityPicker label:has(input:disabled) {
   cursor: not-allowed;
@@ -159,10 +159,10 @@
 .retryNotice button,
 .runtimeError button {
   align-items: center;
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 9px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -186,17 +186,17 @@
   opacity: 0.48;
 }
 
-.addImagesButton { background: #f8fafc; }
+.addImagesButton { background: #0a1524; }
 
 .publishButton {
-  background: #0f172a;
-  border-color: #0f172a;
-  color: #fff;
+  background: #dce9f7;
+  border-color: #dce9f7;
+  color: #0d1826;
   width: 100%;
 }
 
 .composerBoundary {
-  color: #64748b;
+  color: #8299b4;
   font-size: 10px;
   line-height: 1.45;
   text-align: center;
@@ -209,8 +209,8 @@
 
 .selectedMomentImages article {
   align-items: center;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 10px;
   display: grid;
   gap: 8px;
@@ -232,24 +232,24 @@
 }
 
 .selectedMomentImages strong {
-  color: #0f172a;
+  color: #dce9f7;
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.selectedMomentImages span { color: #64748b; font-size: 9px; }
+.selectedMomentImages span { color: #8299b4; font-size: 9px; }
 .selectedMomentImages progress { height: 5px; width: 100%; }
 
 .selectedMomentImages article > button,
 .deleteMomentButton,
 .commentRow > button {
   align-items: center;
-  background: #fff;
-  border: 1px solid #fecaca;
+  background: #0d1826;
+  border: 1px solid #4a2230;
   border-radius: 8px;
-  color: #b91c1c;
+  color: #ff6b8a;
   cursor: pointer;
   display: inline-flex;
   height: 30px;
@@ -263,10 +263,10 @@
 
 .retryNotice {
   align-items: flex-start;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
+  background: #241a05;
+  border: 1px solid #4a3410;
   border-radius: 10px;
-  color: #9a3412;
+  color: #ffb13b;
   flex-direction: column;
   font-size: 10px;
   padding: 9px;
@@ -281,7 +281,7 @@
 
 .feedHeading {
   align-items: flex-start;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #1c2f47;
   padding-bottom: 15px;
 }
 
@@ -293,7 +293,7 @@
 }
 
 .feedHeading p {
-  color: #64748b;
+  color: #8299b4;
   font-size: 12px;
   margin: 0;
 }
@@ -305,10 +305,10 @@
 
 .feedRuntime > span {
   align-items: center;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
+  background: #0b1f18;
+  border: 1px solid #2f7a52;
   border-radius: 999px;
-  color: #047857;
+  color: #4dffa1;
   display: inline-flex;
   font-size: 10px;
   font-weight: 800;
@@ -318,15 +318,15 @@
 
 .feedRuntime > span[data-mode="polling"],
 .feedRuntime > span[data-mode="connecting"] {
-  background: #eff6ff;
-  border-color: #bfdbfe;
-  color: #1d4ed8;
+  background: #0e2036;
+  border-color: #2a5573;
+  color: #39d4ff;
 }
 
 .feedRuntime > span[data-mode="offline"] {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: #240d12;
+  border-color: #4a2230;
+  color: #ff6b8a;
 }
 
 .momentList { display: grid; gap: 14px; }
@@ -344,10 +344,10 @@
 
 .momentAvatar {
   align-items: center;
-  background: linear-gradient(135deg, #e0f2fe, #dbeafe);
-  border: 1px solid #bae6fd;
+  background: linear-gradient(135deg, #0e2438, #0e2438);
+  border: 1px solid #2a5573;
   border-radius: 12px;
-  color: #075985;
+  color: #39d4ff;
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 12px;
@@ -365,12 +365,12 @@
   width: 100%;
 }
 
-.momentHeader strong { color: #0f172a; font-size: 14px; }
-.momentHeader > div > span { color: #64748b; font-size: 10px; line-height: 1.4; }
+.momentHeader strong { color: #dce9f7; font-size: 14px; }
+.momentHeader > div > span { color: #8299b4; font-size: 10px; line-height: 1.4; }
 .deleteMomentButton { margin-left: auto; }
 
 .momentContent {
-  color: #1e293b;
+  color: #c2d4e8;
   font-size: 14px;
   line-height: 1.65;
   margin: 0;
@@ -402,7 +402,7 @@
 }
 
 .momentImageButton {
-  background: #f1f5f9;
+  background: #0c1a2b;
   border: 0;
   border-radius: 10px;
   cursor: pointer;
@@ -431,7 +431,7 @@
   background: rgb(15 23 42 / 72%);
   bottom: 6px;
   border-radius: 7px;
-  color: #fff;
+  color: #0d1826;
   display: inline-flex;
   font-size: 9px;
   gap: 4px;
@@ -443,10 +443,10 @@
 .momentImagePlaceholder {
   align-items: center;
   aspect-ratio: 1;
-  background: #f1f5f9;
-  border: 1px dashed #cbd5e1;
+  background: #0c1a2b;
+  border: 1px dashed #24384f;
   border-radius: 10px;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   flex-direction: column;
   font-size: 10px;
@@ -457,10 +457,10 @@
 }
 
 .momentImagePlaceholder button {
-  background: #fff;
-  border: 1px solid #cbd5e1;
+  background: #0d1826;
+  border: 1px solid #24384f;
   border-radius: 7px;
-  color: #334155;
+  color: #b3c6dc;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -470,13 +470,13 @@
 
 .imageLoading,
 .inlineError {
-  color: #64748b;
+  color: #8299b4;
   display: block;
   font-size: 9px;
   margin-top: 4px;
 }
 
-.inlineError { color: #b45309; }
+.inlineError { color: #ffb13b; }
 
 .lightbox {
   align-items: center;
@@ -505,10 +505,10 @@
 
 .lightboxToolbar button {
   align-items: center;
-  background: rgb(255 255 255 / 94%);
+  background: rgb(13 24 38 / 94%);
   border: 0;
   border-radius: 9px;
-  color: #0f172a;
+  color: #dce9f7;
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -519,23 +519,23 @@
 }
 
 .momentActions {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid #1c2f47;
   justify-content: flex-start;
   padding-top: 11px;
 }
 
 .momentActions .likedButton {
-  background: #fff1f2;
-  border-color: #fecdd3;
-  color: #be123c;
+  background: #240d12;
+  border-color: #4a2230;
+  color: #ff6b8a;
 }
 
 .likesPanel,
 .commentsPanel {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: #0a1524;
+  border: 1px solid #1c2f47;
   border-radius: 11px;
-  color: #64748b;
+  color: #8299b4;
   display: grid;
   font-size: 11px;
   gap: 8px;
@@ -544,17 +544,17 @@
 
 .likeNames {
   align-items: flex-start;
-  color: #334155;
+  color: #b3c6dc;
   display: flex;
   gap: 6px;
   line-height: 1.5;
 }
 
-.likeNames svg { color: #e11d48; flex: 0 0 auto; margin-top: 1px; }
+.likeNames svg { color: #ff6b8a; flex: 0 0 auto; margin-top: 1px; }
 
 .commentRow {
   align-items: flex-start;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid #1c2f47;
   display: flex;
   gap: 9px;
   justify-content: space-between;
@@ -563,9 +563,9 @@
 
 .commentRow:last-of-type { border-bottom: 0; }
 .commentRow > div { display: grid; gap: 2px; min-width: 0; }
-.commentRow strong { color: #0369a1; font-size: 11px; }
-.commentRow p { color: #334155; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-.commentRow time { color: #94a3b8; font-size: 9px; }
+.commentRow strong { color: #39d4ff; font-size: 11px; }
+.commentRow p { color: #b3c6dc; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.commentRow time { color: #6b83a0; font-size: 9px; }
 .commentRow > button { flex: 0 0 auto; height: 26px; width: 26px; }
 
 .commentForm {
@@ -576,7 +576,7 @@
 }
 
 .commentForm textarea { min-height: 52px; resize: vertical; }
-.cancelCommentRetry { border-color: #fed7aa; color: #9a3412; justify-self: start; }
+.cancelCommentRetry { border-color: #4a3410; color: #ffb13b; justify-self: start; }
 .moreCommentsButton { justify-self: start; }
 
 .runtimeError,
@@ -589,15 +589,15 @@
 }
 
 .runtimeError {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: #240d12;
+  border-color: #4a2230;
+  color: #ff6b8a;
 }
 
 .runtimeWarning {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
+  background: #241a05;
+  border-color: #4a3410;
+  color: #ffb13b;
 }
 
 .runtimeError button {
@@ -610,10 +610,10 @@
 
 .feedState {
   align-items: center;
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
+  background: #0a1524;
+  border: 1px dashed #24384f;
   border-radius: 12px;
-  color: #64748b;
+  color: #8299b4;
   display: flex;
   font-size: 12px;
   gap: 7px;

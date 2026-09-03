@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { ModuleRegistryProductView } from "@/components/module-registry-product-view";
-
+// M7 (QA 2026-08-22): duplicate of /module-control — redirect to the canonical.
 export default function AdminModulesPage() {
-  return <ModuleRegistryProductView />;
+  redirect("/module-control");
 }

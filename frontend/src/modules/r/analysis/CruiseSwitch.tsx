@@ -48,8 +48,13 @@ export function CruiseSwitch() {
 
   const paused = state.paused;
   const usage = state.today;
+  // 与 LiveDeck 同口径:有上限显示 used/上限,无上限(有意不设闸)显示 used·无上限。
   const providerText = usage.providers
-    .map((p) => `${p.label} ${p.used}`)
+    .map((p) =>
+      p.unlimited
+        ? `${p.label} ${p.used}·无上限`
+        : `${p.label} ${p.used}/${p.budget}`,
+    )
     .join(" · ");
 
   return (

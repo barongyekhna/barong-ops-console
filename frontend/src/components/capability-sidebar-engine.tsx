@@ -80,8 +80,6 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "mfg.",
 ] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
-const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
-const R_SERIES_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
 const R_WAREHOUSE_MODULE_KEY = "r.warehouse";
 const R_ANALYSIS_MODULE_KEY = "r.analysis";
 const CS_CUSTOMER_SERVICE_MODULE_KEY = "cs.customer_service";
@@ -166,31 +164,6 @@ function moduleAccessAllows(
   return capabilitySidebarVisible(fallbackItem);
 }
 
-function isRestrictedProductModule(moduleId: string) {
-  const normalized = moduleId.trim().toLowerCase();
-  return (
-    normalized.startsWith("r.") ||
-    normalized.startsWith("k.") ||
-    normalized.startsWith("i.") ||
-    normalized.startsWith("p.") ||
-    // F/H/W/GEO 系列与产品系列同规：只在国际贸易组织下展示（死命令）。
-    normalized.startsWith("f.") ||
-    normalized.startsWith("h.") ||
-    normalized.startsWith("w.") ||
-    normalized.startsWith("cs.") ||
-    normalized.startsWith("b2b.") ||
-    normalized.startsWith("geo.") ||
-    normalized.startsWith("seo.") ||
-    normalized.startsWith("content.") ||
-    normalized === "business.products" ||
-    normalized.includes("product")
-  );
-}
-
-function isProductKnowledgeOrg(organization: ModuleControlOrgGroup) {
-  return organization.org_name.trim() === PRODUCT_KNOWLEDGE_ORG_NAME;
-}
-
 function isRSeriesModule(moduleId: string) {
   return moduleId.trim().toLowerCase().startsWith("r.");
 }
@@ -201,10 +174,6 @@ function isRWarehouseModule(moduleId: string) {
 
 function isRAnalysisModule(moduleId: string) {
   return moduleId.trim().toLowerCase() === R_ANALYSIS_MODULE_KEY;
-}
-
-function isRSeriesOrg(organization: ModuleControlOrgGroup) {
-  return organization.org_name.trim() === R_SERIES_ORG_NAME;
 }
 
 function isActiveModuleControlState(module: ModuleControlState) {
@@ -229,9 +198,9 @@ function rSeriesSidebarAllows({
   if (!isRSeriesModule(module.module_id)) {
     return null;
   }
-  if (!isRSeriesOrg(organization)) {
-    return false;
-  }
+  // 组织归属由后端判定：R 系列在 INTL_TRADE_ONLY_MODULE_KEYS 里，
+  // 非国际贸易组织的成员在模块清单里根本拿不到这些条目。
+  // 这里原本还按组织中文名再判一次——第二套真相源，改个组织名就失效。
   if (!item?.route_bound) {
     return false;
   }
@@ -352,12 +321,11 @@ function scopedOrganizationGroups({
             if (rSeriesAllowed !== null) {
               return rSeriesAllowed;
             }
-            if (
-              isRestrictedProductModule(module.module_id) &&
-              !isProductKnowledgeOrg(organization)
-            ) {
-              return false;
-            }
+            // 「哪些模块只属于国际贸易组织」由后端 INTL_TRADE_ONLY_MODULE_KEYS
+            // 判定，非该组织成员在模块清单里根本拿不到这些条目。
+            // 这里以前还有一层前端遮罩，靠比对组织中文名实现——既是第二套真相源
+            // （后端漏了 k./i./p. 就只在前端被遮，敲 URL 照样进），改个组织名还会
+            // 整套失效。2026-08-31 收敛成后端一套。
             if (!moduleAccessAllows(moduleAccessByKey, module.module_id, item)) {
               return false;
             }
@@ -575,13 +543,19 @@ export function CapabilitySidebarEngine({
     0,
   );
   const visibleSidebarCount = cSystemItems.length + organizationModuleCount + 1;
+  // 三种状态说三句不同的话（2026-08-31）。
+  // 以前「没权限」和「真降级」都渲染成「部分信息待刷新」，而那句话又因为
+  // 4 个有意 deferred 的 bootstrap 项被折进降级判定，从登录第一秒起就永远亮着 ——
+  // 一个永远亮的警报等于没有警报，真出事时没人会当回事。
   const footerLabel = isLoading
     ? "正在加载工作台"
     : uiState === "fallback"
       ? "准备中"
-      : uiState === "degraded"
-        ? "部分信息待刷新"
-        : `${visibleSidebarCount} 个功能区`;
+      : uiState === "unauthorized"
+        ? "这个账号没有部分模块的权限"
+        : uiState === "degraded"
+          ? "部分信息没取到，稍后自动重试"
+          : `${visibleSidebarCount} 个功能区`;
 
   return (
     <>

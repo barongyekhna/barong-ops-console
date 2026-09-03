@@ -26,8 +26,8 @@
 }
 
 .tab[data-active="true"] {
-  border-color: #2dd4cd;
-  color: #2dd4cd;
+  border-color: #4dffa1;
+  color: #4dffa1;
   background: rgba(45, 212, 205, 0.07);
 }
 
@@ -73,13 +73,13 @@
 .notice {
   margin: 0;
   font-size: 0.8rem;
-  color: #2dd4a0;
+  color: #4dffa1;
 }
 
 .errorNote {
   margin: 0;
   font-size: 0.8rem;
-  color: #e5484d;
+  color: #ff6b8a;
 }
 
 .empty {
@@ -119,7 +119,7 @@
   height: 64px;
   object-fit: contain;
   border-radius: 6px;
-  background: #fff;
+  background: #0d1826;
   border: 1px solid var(--color-line);
   flex-shrink: 0;
 }
@@ -170,7 +170,7 @@
 }
 
 .statusBadge[data-kind="approved"] {
-  color: #2dd4a0;
+  color: #4dffa1;
   border: 1px solid rgba(45, 212, 160, 0.5);
 }
 
@@ -199,7 +199,7 @@
 }
 
 .keywordChip[data-primary="true"] {
-  color: #2dd4cd;
+  color: #4dffa1;
   border-color: rgba(45, 212, 205, 0.55);
 }
 
@@ -217,8 +217,8 @@
 .opusNote {
   margin: 0;
   font-size: 0.76rem;
-  color: #f5a524;
-  border-left: 2px solid #f5a524;
+  color: #ffb13b;
+  border-left: 2px solid #ffb13b;
   padding-left: 8px;
   line-height: 1.55;
 }
@@ -246,17 +246,17 @@
 
 .actionButton[data-kind="primary"] {
   border-color: rgba(45, 212, 205, 0.55);
-  color: #2dd4cd;
+  color: #4dffa1;
 }
 
 .actionButton[data-kind="approve"]:hover {
-  border-color: #2dd4a0;
-  color: #2dd4a0;
+  border-color: #4dffa1;
+  color: #4dffa1;
 }
 
 .actionButton[data-kind="reject"]:hover {
-  border-color: #ff7b72;
-  color: #ff7b72;
+  border-color: #ff6b8a;
+  color: #ff6b8a;
 }
 
 .actionButton:disabled {

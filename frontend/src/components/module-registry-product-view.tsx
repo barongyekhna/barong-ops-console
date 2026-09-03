@@ -361,8 +361,12 @@ function ReadOnlyModuleRegistryView() {
 }
 
 function runtimeStatusLabel(status: string) {
+  // 这个值目前只反映开关状态，不反映健康（后端 _runtime_status_for_enabled 就是
+  // enabled 的别名，唯一能写出 "error" 的函数零调用点）。所以措辞只说开关，
+  // 不说「运行中」——那会让人以为系统在测它，而它并没有。
+  // 真健康信号等业务心跳那一轮接上来之后，再把「异常」这个词还回来。
   if (status === "active") {
-    return "运行中";
+    return "已启用";
   }
   if (status === "error") {
     return "异常";
@@ -984,12 +988,15 @@ function OwnerModuleControlCenter() {
           <strong>{moduleCount}</strong>
         </div>
         <div>
-          <span>运行中</span>
+          <span>已启用</span>
           <strong>{activeModuleCount}</strong>
         </div>
         <div>
-          <span>异常</span>
-          <strong>{errorModuleCount}</strong>
+          {/* 这个数字目前恒为 0：没有任何地方会把模块标成 error。
+              保留它是为了将来接上真实健康信号，但先别用「异常」这个词
+              让人以为系统在替他盯着。 */}
+          <span>已停用</span>
+          <strong>{moduleCount - activeModuleCount}</strong>
         </div>
         <div>
           <span>密钥</span>

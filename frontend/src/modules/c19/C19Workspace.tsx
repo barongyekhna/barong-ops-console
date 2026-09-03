@@ -1004,7 +1004,12 @@ export function C19Workspace() {
                           )}
                           <span className={styles.sessionMeta}>
                             <span className={styles.sessionTopLine}>
-                              <strong>{name}</strong>
+                              <strong>
+                                {name}
+                                {conversation.direct_peer?.is_bot ? (
+                                  <em className={styles.sessionBotTag}>机器人</em>
+                                ) : null}
+                              </strong>
                               <time>
                                 {sessionTimeLabel(
                                   preview?.at ?? conversation.updated_at,
@@ -1283,13 +1288,16 @@ export function C19Workspace() {
                                 {friendUserIds.has(profile.user_id) && !isSelf ? (
                                   <em className={styles.profileFriendTag}>好友</em>
                                 ) : null}
+                                {profile.is_bot ? (
+                                  <em className={styles.profileBotTag}>机器人</em>
+                                ) : null}
                               </strong>
                               <small>
                                 {profile.affiliations.length > 0
                                   ? profile.affiliations
                                       .map((affiliation) => affiliation.org_name)
                                       .join(" · ")
-                                  : profile.bio || "基础通讯用户"}
+                                  : profile.bio || "暂未加入组织"}
                               </small>
                             </span>
                           </button>
@@ -1329,7 +1337,13 @@ export function C19Workspace() {
                               <strong>{summary.display_name}</strong>
                               <span>
                                 {incoming ? "向你发起申请" : "你发出的申请"} ·{" "}
-                                {request.status}
+                                {request.status === "pending"
+                                  ? "待处理"
+                                  : request.status === "accepted"
+                                    ? "已通过"
+                                    : request.status === "rejected"
+                                      ? "已拒绝"
+                                      : "已取消"}
                               </span>
                               {request.request_message ? (
                                 <p>{request.request_message}</p>
@@ -1683,7 +1697,7 @@ function ConversationInfoDrawer({
           <span>
             <strong>
               {profileByUserId.get(peerUserId)?.display_name ??
-                `成员 #${peerUserId}`}
+                "未命名成员"}
             </strong>
             <small>查看名片</small>
           </span>
@@ -1778,7 +1792,7 @@ function ConversationInfoDrawer({
                     />
                     <span>
                       <strong>
-                        {profile?.display_name ?? `成员 #${member.user_id}`}
+                        {profile?.display_name ?? "未命名成员"}
                         {member.user_id === selfUserId ? (
                           <em className={styles.profileSelfTag}>我</em>
                         ) : null}

@@ -11,6 +11,8 @@ export type C19Profile = {
   user_id: number;
   display_name: string;
   avatar_ref: string | null;
+  /** 数字员工(如白苏婉)。截图流传出去时不能被当成真人说的话。 */
+  is_bot?: boolean;
   bio: string | null;
   affiliations: C19Affiliation[];
   created_at?: string;
@@ -32,6 +34,7 @@ export type C19ProfileSummary = {
   user_id: number;
   display_name: string;
   avatar_ref: string | null;
+  is_bot?: boolean;
 };
 
 export type C19FriendRequestStatus =
@@ -117,6 +120,7 @@ export type C19DirectPeer = {
   user_id: number;
   display_name: string;
   avatar_ref: string | null;
+  is_bot?: boolean;
 };
 
 export type C19ConversationSummary = {

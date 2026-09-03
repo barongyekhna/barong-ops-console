@@ -7,10 +7,10 @@ import { useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { ApiError, ApiRequestAbortedError, ApiTimeoutError } from "@/lib/api";
 
-const LOGIN_AUTH_ERROR =
-  "登录失败，请检查账号和密码。";
-const LOGIN_BACKEND_ERROR =
-  "登录服务暂未响应，请重试。";
+import styles from "./login.module.css";
+
+const LOGIN_AUTH_ERROR = "登录失败，请检查账号和密码。";
+const LOGIN_BACKEND_ERROR = "登录服务暂未响应，请重试。";
 const LOGIN_ERROR = "登录未完成，请重试。";
 const LOGIN_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -34,21 +34,16 @@ export function LoginForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     if (isSubmittingRef.current) {
       return;
     }
-
     isSubmittingRef.current = true;
-
     setError("");
     setIsSubmitting(true);
-
     try {
       const result = await login(username.trim(), password, {
         timeoutMs: LOGIN_REQUEST_TIMEOUT_MS,
       });
-
       router.replace(
         result.requirePasswordChange ? "/force-password-reset" : "/dashboard",
       );
@@ -67,55 +62,57 @@ export function LoginForm() {
   }
 
   return (
-    <form className="login-form" onSubmit={handleSubmit}>
-      <div className="field-group">
-        <label htmlFor="username">账号</label>
-        <div className="input-shell">
-          <UserRound aria-hidden="true" size={18} />
+    <form className={styles.form} onSubmit={handleSubmit}>
+      <div className={styles.field}>
+        <label htmlFor="username">用户名</label>
+        <div className={styles.inputShell}>
           <input
             autoComplete="username"
             autoFocus
             id="username"
             name="username"
             onChange={(event) => setUsername(event.target.value)}
+            placeholder="请输入用户名"
             required
             type="text"
             value={username}
           />
+          <span className={styles.icon}>
+            <UserRound aria-hidden="true" size={17} />
+          </span>
         </div>
       </div>
 
-      <div className="field-group">
+      <div className={styles.field}>
         <label htmlFor="password">密码</label>
-        <div className="input-shell">
-          <LockKeyhole aria-hidden="true" size={18} />
+        <div className={styles.inputShell}>
           <input
             autoComplete="current-password"
             id="password"
             name="password"
             onChange={(event) => setPassword(event.target.value)}
+            placeholder="••••••••••••"
             required
             type="password"
             value={password}
           />
+          <span className={styles.icon}>
+            <LockKeyhole aria-hidden="true" size={17} />
+          </span>
         </div>
       </div>
 
-      <div aria-live="polite" className="form-message">
+      <div aria-live="polite" className={styles.message}>
         {error}
       </div>
 
-      <button
-        className="login-button"
-        disabled={isSubmitting}
-        type="submit"
-      >
+      <button className={styles.submit} disabled={isSubmitting} type="submit">
         {isSubmitting ? (
-          <LoaderCircle className="spin" aria-hidden="true" size={18} />
+          <LoaderCircle className="spin" aria-hidden="true" size={17} />
         ) : (
-          <ArrowRight aria-hidden="true" size={18} />
+          <ArrowRight aria-hidden="true" size={17} />
         )}
-        {isSubmitting ? "正在登录" : "登录"}
+        {isSubmitting ? "正在登录" : "登 录"}
       </button>
     </form>
   );

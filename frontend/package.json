@@ -7,6 +7,8 @@
     "build": "next build && node scripts/prepare-standalone-runtime.mjs",
     "start": "next start --hostname 0.0.0.0",
     "test": "cd .. && node --test tests/frontend/*.test.mjs",
+    "_comment_test_ci": "容器里 WORKDIR 已经是 /app、测试就在 /app/tests/frontend；而 npm 以 package.json 所在目录为 cwd，test 脚本里的 cd .. 会落到 /，glob 匹配不到任何文件，node --test 报 0 条并 exit 0 —— 构建闸门形同虚设。",
+    "test:ci": "node --test tests/frontend/*.test.mjs",
     "test:unit": "cd .. && node --test tests/frontend/*.test.mjs",
     "typecheck": "node scripts/clean-next-dev-types.mjs && tsc --noEmit",
     "verify": "node scripts/verify-foundation.mjs"

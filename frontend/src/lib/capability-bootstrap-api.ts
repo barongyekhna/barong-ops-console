@@ -66,6 +66,9 @@ type CapabilityBootstrapEntry = {
   status?: number | null;
   data?: unknown;
   detail?: unknown;
+  // 后端标记「这一项是有意不在批量里查的」（status 204）。
+  // 不是故障，不能算进降级判定。
+  deferred?: boolean;
 };
 
 type CapabilityBootstrapPayload = {
@@ -193,7 +196,20 @@ function dataOrError<T>(
     return fromResponse(entry.data);
   }
 
-  return fromError(entryError(entry));
+  // 把 deferred / status 一并带到结果上。
+  // 2026-08-31：这里原本只把 entry 压成「成功值」或「失败值」两种形状，
+  // status 和 deferred 在这一步就丢了 —— 于是上层无从区分
+  // 「有意不查」「没权限」「真出故障」，只能把它们一律当成降级，
+  // 侧边栏那句提示也就永远亮着。
+  const result = fromError(entryError(entry));
+  if (result != null && typeof result === "object") {
+    return {
+      ...(result as Record<string, unknown>),
+      deferred: entry?.deferred === true,
+      status: entry?.status ?? null,
+    } as T;
+  }
+  return result;
 }
 
 async function fallbackCapabilityBootstrap(

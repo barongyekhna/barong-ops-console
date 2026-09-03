@@ -6,10 +6,12 @@ import styles from "./Outreach.module.css";
 import {
   type EmailDraft,
   type EmailTemplate,
+  type Suppression,
   backfillEmails,
   addSuppression,
   generateDrafts,
   getDrafts,
+  getSuppressions,
   getTemplates,
   patchDraft,
   patchTemplate,
@@ -20,6 +22,9 @@ export function OutreachWorkspace() {
   const [drafts, setDrafts] = useState<EmailDraft[]>([]);
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [openTemplate, setOpenTemplate] = useState<string | null>(null);
+  // 「永不再发」名单。存的必须是**完整邮箱**——名单看得见，家规才核对得了。
+  const [suppressions, setSuppressions] = useState<Suppression[]>([]);
+  const [suppressionInput, setSuppressionInput] = useState("");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -30,12 +35,27 @@ export function OutreachWorkspace() {
     setLoading(true);
     setError(null);
     try {
-      const [draftList, templateList] = await Promise.all([
-        getDrafts("draft"),
-        getTemplates(),
-      ]);
-      setDrafts(draftList);
-      setTemplates(templateList);
+      // allSettled 而不是 all：三件事互相独立，一件失败不该把另外两件
+      // **已经取回来的**结果一起丢掉（那会让界面显示"还没有模板"）。
+      const [draftResult, templateResult, suppressionResult] =
+        await Promise.allSettled([
+          getDrafts("draft"),
+          getTemplates(),
+          getSuppressions(),
+        ]);
+      if (draftResult.status === "fulfilled") setDrafts(draftResult.value);
+      if (templateResult.status === "fulfilled") setTemplates(templateResult.value);
+      if (suppressionResult.status === "fulfilled") {
+        setSuppressions(suppressionResult.value);
+      }
+      const failures = [draftResult, templateResult, suppressionResult]
+        .filter((result) => result.status === "rejected")
+        .map((result) =>
+          (result as PromiseRejectedResult).reason instanceof Error
+            ? ((result as PromiseRejectedResult).reason as Error).message
+            : String((result as PromiseRejectedResult).reason),
+        );
+      setError(failures.length ? failures.join("；") : null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -113,6 +133,19 @@ export function OutreachWorkspace() {
       });
       await patchDraft(draft.id, { status: "skipped" });
       return `已加入永不再发：${draft.to_email}`;
+    });
+
+  // 手动拉黑：对方在别的渠道说「别发了」（电话里、LinkedIn 上）时用。
+  const doSuppressManual = () =>
+    withBusy(async () => {
+      const email = suppressionInput.trim().toLowerCase();
+      if (!email.includes("@")) {
+        throw new Error("要填完整邮箱地址，不是域名——按域名会连坐掉一大片无辜的人。");
+      }
+      await addSuppression({ email, source: "manual" });
+      setSuppressionInput("");
+      setSuppressions(await getSuppressions());
+      return `已加入永不再发：${email}`;
     });
 
   const doSaveTemplate = (template: EmailTemplate) =>
@@ -225,6 +258,55 @@ export function OutreachWorkspace() {
                       别再发了
                     </button>
                   ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className={styles.panel}>
+        <h3>永不再发名单（{suppressions.length}）</h3>
+        <p className={styles.hint}>
+          名单里存的是<strong>完整邮箱</strong>，不是域名——很多小店老板用的就是
+          gmail/outlook，按域名拉黑会连坐掉一大片无辜的人。
+          在这个名单上的地址，系统<strong>再也生成不出</strong>给他的草稿。
+        </p>
+        <div className={styles.toolbar}>
+          <input
+            className={styles.textarea}
+            onChange={(event) => setSuppressionInput(event.target.value)}
+            placeholder="someone@example.com"
+            style={{ minWidth: 260, height: 34 }}
+            value={suppressionInput}
+          />
+          <button
+            className={styles.ghostButton}
+            disabled={busy || !suppressionInput.trim()}
+            onClick={() => void doSuppressManual()}
+            type="button"
+          >
+            加入名单
+          </button>
+        </div>
+        {!suppressions.length ? (
+          <p className={styles.empty}>
+            名单是空的。有人说「别发了」时，在上面那封草稿上点「加入永不再发」。
+          </p>
+        ) : (
+          <ul className={styles.templateList}>
+            {suppressions.map((item) => (
+              <li className={styles.template} key={item.id}>
+                <div className={styles.draftHead} style={{ padding: "10px 12px" }}>
+                  <strong>{item.email}</strong>
+                  <span className={styles.muted}>
+                    {item.source === "reply"
+                      ? "对方回信说别发了"
+                      : item.source === "manual"
+                        ? "手动加入"
+                        : item.source}
+                    {item.note ? ` · ${item.note}` : ""}
+                  </span>
                 </div>
               </li>
             ))}

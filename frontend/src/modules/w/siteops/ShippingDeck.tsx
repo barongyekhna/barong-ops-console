@@ -48,6 +48,7 @@ import {
   ProductSourcesPanel,
 } from "./ProductSourcesPanel";
 import styles from "./ShippingDeck.module.css";
+import { OutboundConfirm } from "@/components/outbound-confirm";
 
 type ActiveTab =
   | "orders"
@@ -256,6 +257,8 @@ export function ShippingDeck() {
   const [loading, setLoading] = useState(true);
   const [boardLoading, setBoardLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  // 「保存并同步到 Woo」经 n8n 直接写线上运费类别，改的是买家结账时看到的运费。
+  const [pendingClassSync, setPendingClassSync] = useState<ClassDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [simulation, setSimulation] =
@@ -846,6 +849,28 @@ export function ShippingDeck() {
 
   return (
     <div className={styles.deck}>
+      {pendingClassSync ? (
+        <OutboundConfirm
+          busy={busy !== null}
+          confirmLabel="确认保存并同步"
+          consequence={
+            "会经 n8n **直接写入线上 WooCommerce** 的运费类别，" +
+            "买家结账时看到的运费会立刻按新规则算。"
+          }
+          details={[
+            `运费类别：${pendingClassSync.name || pendingClassSync.slug}（slug ${pendingClassSync.slug}）`,
+            `${pendingClassSync.zone_rates.filter((rate) => rate.zone_name.trim()).length} 个区域费率`,
+            "slug 必须与 Woo 后台完全一致，否则会在 Woo 里建出一个新类别",
+          ]}
+          onCancel={() => setPendingClassSync(null)}
+          onConfirm={() => {
+            const row = pendingClassSync;
+            setPendingClassSync(null);
+            void handleSaveClass(row, true);
+          }}
+          title="确认把这个运费类别同步到线上？"
+        />
+      ) : null}
       <div className={styles.statRow}>
         <div className={styles.statCard} data-tone="failed">
           <span className={styles.statLabel}>待填单号</span>
@@ -1841,7 +1866,7 @@ export function ShippingDeck() {
                                 !row.slug.trim() ||
                                 !row.name.trim()
                               }
-                              onClick={() => void handleSaveClass(row, true)}
+                              onClick={() => setPendingClassSync(row)}
                               type="button"
                             >
                               保存并同步到 Woo

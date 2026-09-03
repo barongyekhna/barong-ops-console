@@ -133,7 +133,14 @@ export function NodePanel({
           );
         })}
         {sorted.length === 0 ? (
-          <li className="cc-vpn-node-empty">还没有登记任何节点。</li>
+          <li className="cc-vpn-node-empty">
+            {/* 取不到数据时不许说「还没有登记任何节点」——那是在断言一件我们
+                并不知道的事。2026-08-31 体检：后端一条 /vpn 路由都没有，
+                接口全 404，页面却把「接口不存在」渲染成「你还没配节点」，
+                于是任何人（包括 owner）都会以为是自己配错了。
+                而 VPN 实际有两个在跑的节点。 */}
+            {error ? "节点列表没取到，上面是原因。" : "还没有登记任何节点。"}
+          </li>
         ) : null}
       </ul>
     </article>

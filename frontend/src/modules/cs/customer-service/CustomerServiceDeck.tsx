@@ -23,6 +23,7 @@ import {
 } from "react";
 
 import { isApiAbortError } from "@/lib/api";
+import { OutboundConfirm } from "@/components/outbound-confirm";
 
 import {
   EMPTY_CS_SUMMARY,
@@ -160,6 +161,8 @@ export function CustomerServiceDeck() {
   const [saved, setSaved] = useState(false);
   const [replyBody, setReplyBody] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
+  // 待确认的回信。对外动作必须先让人看清代价再点。
+  const [pendingReply, setPendingReply] = useState(false);
   const [replyError, setReplyError] = useState("");
   const drawerRef = useRef<HTMLElement>(null);
 
@@ -413,9 +416,20 @@ export function CustomerServiceDeck() {
     }
   }
 
-  async function handleReply() {
+  function handleReply() {
+    // 只弹确认，不发送。邮件发出即不可撤回，而这个按钮以前是 onClick 直连
+    // sendCSReply —— 后端收到就立刻 POST 到 WP relay 真发（"Send exactly once"）。
+    // 2026-08-31 体检时收件箱里 4 条有 2 条是 SEO 垃圾推销，误点等于向垃圾
+    // 发送方确认 service@ 是活邮箱。
     const body = replyBody.trim();
     if (!detail || sendingReply || !body) return;
+    setPendingReply(true);
+  }
+
+  async function doSendReply() {
+    const body = replyBody.trim();
+    if (!detail || sendingReply || !body) return;
+    setPendingReply(false);
 
     const messageId = detail.id;
     const previousStatus = detail.status;
@@ -864,6 +878,25 @@ export function CustomerServiceDeck() {
                         {sendingReply ? "发送中" : "发送回复"}
                       </button>
                     </div>
+                    {pendingReply && detail ? (
+                      <OutboundConfirm
+                        busy={sendingReply}
+                        confirmLabel="确认发送"
+                        consequence={
+                          "邮件一旦发出**不可撤回**。请确认收件人是真实买家 —— " +
+                          "对垃圾推销回信等于向对方确认这个邮箱是活的。"
+                        }
+                        details={[
+                          `收件人：${detail.email ?? "(未知)"}`,
+                          `正文 ${replyBody.trim().length} 字`,
+                        ]}
+                        onCancel={() => setPendingReply(false)}
+                        onConfirm={() => {
+                          void doSendReply();
+                        }}
+                        title="确认给买家发送这封回信？"
+                      />
+                    ) : null}
                     <small className="cs-reply-boundary-note">
                       买家的回信会送达 service@ 邮箱(Titan),暂不回流控制台
                     </small>
