@@ -71,3 +71,25 @@ backend/app/modules/p_series/wordpress/plugins/barong-hookdump.php
 
 # GEO working photos (harvested/incoming/webp) — tens of MB of binaries, stay on disk.
 geo-photos/
+
+# 真密钥文件的「备份/变体」。上面那几条是**精确文件名**,不覆盖
+# `.env.production.bak-...` 这类。2026-09-02 实地发现两个这样的文件躺在工作树里:
+# 未被跟踪、但也未被忽略 —— 分别含 13 行和 9 行密钥,且与当时生产 100% 相同,
+# 一次 `git add -A` 就会连同明文密码提交进备份仓库。
+# 这是个多头共用的工作树,所以「没人会那么做」不成立。
+.env.production.*
+!.env.production.example
+.env.staging.*
+!.env.staging.example
+.env.*.bak
+.env.*.bak-*
+
+# 运行时与构建产物 —— 2026-09-03 补。这些目录此前「未跟踪但也未忽略」,
+# 一次 `git add -A` 就会把它们连同 216MB 的客户端安装包一起提交进来。
+#
+# `migration_manifest.json` **不在此列**:它是被有意跟踪的校验清单,
+# `scripts/staging_stabilization.py` 读它核对 alembic head。
+_uploads/
+var/
+tmp/
+releases/
