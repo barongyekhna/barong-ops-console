@@ -36,8 +36,12 @@ def test_upload_bound_endpoint_wired() -> None:
     assert "/images/{asset_id}/upload-bound" in src
     assert "def set_image_upload_bound" in src
     assert '"upload_bound"' in src
-    # 助手:资产必须属于该产品
-    assert "def _image_asset_for_product" in src
+    # 助手:资产必须属于该产品。
+    # 2026-09-03：`_image_asset_for_product` 搬进了
+    # `services/media_service.py`，router 尾部 re-export 保留了名字。
+    # 这里改成断言「符号可用」而不是「这行字在这个文件里」—— 后者只证明
+    # 某个字符串的位置，它会因为纯粹的搬家而变红，也挡不住把函数体改空。
+    assert callable(router._image_asset_for_product)
 
 
 def test_rework_accepts_uploaded_reference_asset() -> None:

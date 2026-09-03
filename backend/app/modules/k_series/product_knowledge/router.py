@@ -135,6 +135,107 @@ from .schemas import (
     ProductKnowledgeWorkflowStartRequest,
 )
 from .scope_shim import KScopeContext, apply_scope_filters
+from .services.images_service import (  # noqa: F401 - 兼容 re-export
+    KeywordEntry,
+    RiskTermEntry,
+    _db_image_bytes_from_metadata,
+    _decode_image_base64,
+    _detect_image_mime,
+    _k19_status_from_model,
+    _k20_status_from_model,
+    _keyword_entry,
+    _now,
+    _product_public_ref,
+    _product_variants_by_product_ids,
+    _risk_entry,
+    _store_image_review_snapshot,
+    _store_keyword_review_snapshot,
+    _validate_uploaded_image,
+    _variant_by_id,
+)
+from .services.product_repo import (  # noqa: F401 - 兼容 re-export
+    PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS,
+    ProductCreateIdempotencyRecord,
+    ProductReadinessResponse,
+    ProductSectionState,
+    _active_keyword_snapshot,
+    _canonical_payload,
+    _claim_product_create_idempotency,
+    _cleanup_product_create_idempotency,
+    _complete_product_create_idempotency,
+    _count_products,
+    _discard_product_create_idempotency,
+    _ensure_product_ready_for_approval,
+    _product_by_ref,
+    _product_create_fingerprint,
+    _product_full_ai_payload,
+    _product_read,
+    _product_readiness,
+    _product_variants,
+    _router_unique_product_key,
+    _section_state_from_marker,
+    _variant_by_sku,
+)
+from .services.media_service import (  # noqa: F401 - 兼容 re-export
+    MediaAssetRead,
+    RESERVED_MEDIA_METADATA_KEYS,
+    _active_media_snapshot,
+    _image_asset_for_product,
+    _image_dimensions,
+    _media_asset_file_info,
+    _media_asset_local_path,
+    _media_asset_read,
+    _media_asset_requires_local_file,
+    _media_storage_root,
+    _path_within_root,
+    _public_media_metadata,
+)
+from .services.selling_points_service import (  # noqa: F401 - 兼容 re-export
+    SellingPointBullet,
+    SellingPointsResponse,
+    _canonical_measurement_unit,
+    _contains_evidence_phrase,
+    _enrich_selling_points_chinese,
+    _evidence_syntax_is_valid,
+    _evidence_value_text,
+    _feature_source_is_trusted,
+    _humanize_selling_point_error,
+    _mark_selling_point_evidence_status,
+    _measurement_pairs,
+    _normalize_selling_points_response,
+    _normalized_evidence_text,
+    _selling_point_evidence_error,
+    _selling_point_evidence_snapshot,
+    _selling_point_review_error_message,
+    _selling_point_support_error,
+    _selling_points_evidence_payload,
+    _selling_points_response_from_payload,
+    _selling_points_snapshot,
+    _stored_selling_points_payload,
+    _structured_measurement_pairs,
+    _structured_spec_evidence_snapshot,
+    _supported_measurement_pairs,
+    _verified_feature_evidence_snapshot,
+)
+from .services.common import (  # noqa: F401 - 兼容 re-export
+    _product_ai_warnings,
+    _safe_string_list,
+    _source_text_hash,
+    _stable_payload_digest,
+    _strict_json_messages,
+)
+from .services.api_support import (
+    _execute_provider_json,
+    _execution_configuration_message,
+    _execution_context,
+    _execution_error_reason,
+    _gate_error,
+    _is_execution_configuration_error,
+    _require_k_permission,
+    _scope_context,
+    _structured_execution_error_detail,
+    _workflow_error,
+)
 from .sku_allocator import ensure_product_sku
 from .structured_specs import (
     apply_customer_translations,
@@ -188,6 +289,7 @@ from .image_render_jobs import (
     save_render_assets,
 )
 from .r_to_k_transfer import transfer_from_rw
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from .prompt_skills import (
     SELLING_POINTS_SKILL_VERSION,
     selling_points_instruction,
@@ -196,33 +298,6 @@ from .prompt_skills import (
 
 router = APIRouter(prefix="/k", tags=["k-product-knowledge"])
 logger = logging.getLogger(__name__)
-
-PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS = 20.0
-
-
-@dataclass
-class ProductCreateIdempotencyRecord:
-    fingerprint: str
-    lock: Lock
-    expires_at: float
-    product_id: UUID | None = None
-
-
-_product_create_idempotency_lock = Lock()
-_product_create_idempotency_records: dict[
-    str,
-    ProductCreateIdempotencyRecord,
-] = {}
-
-
-class KeywordEntry(BaseModel):
-    id: str
-    product_id: str
-    keyword: str
-    source: str
-    status: str
-    created_at: datetime
-    updated_at: datetime
 
 
 class KeywordEntryResponse(BaseModel):
@@ -249,18 +324,6 @@ class UpdateKeywordPayload(BaseModel):
     product_id: str | None = Field(default=None)
     source: str | None = Field(default=None, max_length=50)
     status: str | None = Field(default=None, max_length=50)
-
-
-class RiskTermEntry(BaseModel):
-    id: str
-    product_id: str
-    term: str
-    risk_level: str
-    category: str
-    source: str
-    status: str
-    created_at: datetime
-    updated_at: datetime
 
 
 class RiskTermResponse(BaseModel):
@@ -347,51 +410,30 @@ class ProviderExecutionResponse(BaseModel):
     output: dict[str, Any]
 
 
-class SellingPointBullet(BaseModel):
-    id: str | None = None
-    category: str
-    text: str
-    # 逐条中文对照(生成后由 DeepSeek 翻译填充,双语展示用,纯展示不参与证据)
-    text_zh: str | None = Field(default=None, max_length=1000)
-    importance_score: int | float
-    evidence: str | None = Field(default=None, max_length=512)
-    evidence_excerpt: str | None = Field(default=None, max_length=1000)
-    evidence_snapshot: dict[str, Any] | None = None
-    evidence_digest: str | None = Field(default=None, max_length=64)
-    verification_status: Literal["verified", "unverified"] = "unverified"
-    review_decision: Literal["candidate", "approve", "edit", "reject"] = "candidate"
+class GenerationJobItem(BaseModel):
+    job_id: str
+    product_id: str
+    job_type: str
+    status: str
+    error: str | None = None
+    skill_version: str | None = None
+    # 多阶段任务(卖点:bullets → zh → copy → done)的进度。单阶段任务恒为 None。
+    stage: str | None = None
+    stage_errors: dict[str, Any] | None = None
+    # 入队时命中去重、复用了在途任务(而不是新建)。前端据此知道
+    # "按钮没反应"其实是"已经在跑了"。
+    deduplicated: bool | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
 
 
-class SellingPointsResponse(BaseModel):
-    bullets: list[SellingPointBullet]
-    seo_keywords: list[str] = Field(default_factory=list)
-    market_tags: list[str] = Field(default_factory=list)
-    confidence_score: float = Field(ge=0.0, le=1.0)
-    source: str
-    marketing_copy: str | None = None
-    translated_version: str | None = None
-    chinese_translation: str | None = None
-    target_language: str | None = None
-    product_id: str | None = None
-    stored_event_id: str | None = None
+class GenerationEnqueueResponse(BaseModel):
+    batch_id: str
+    jobs: list[GenerationJobItem]
 
 
-class ProductSectionState(BaseModel):
-    submitted: bool
-    dirty: bool = False
-    status: Literal["submitted", "pending", "dirty", "blocked"] = "pending"
-    reason: str | None = None
-    current_digest: str | None = None
-    submitted_digest: str | None = None
-    count: int = 0
-    submitted_at: str | None = None
-
-
-class ProductReadinessResponse(BaseModel):
-    ready: bool
-    keywords: ProductSectionState
-    images: ProductSectionState
-    selling_points: ProductSectionState
+class GenerationJobsStatusResponse(BaseModel):
+    jobs: list[GenerationJobItem]
 
 
 class GenerateSellingPointsRequest(BaseModel):
@@ -432,29 +474,6 @@ class MediaAssetCreate(BaseModel):
     mime_type: str | None = Field(default=None, max_length=100)
     source: str | None = Field(default=IMAGE_SOURCE_MANUAL, max_length=100)
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class MediaAssetRead(BaseModel):
-    id: str
-    product_id: str
-    variant_sku: str | None
-    asset_type: str
-    asset_role: str
-    status: str
-    review_status: str
-    object_key: str | None
-    file_url_placeholder: str | None
-    file_url: str | None
-    thumbnail_url: str | None
-    preview_url: str | None
-    mime_type: str | None
-    width: int | None = None
-    height: int | None = None
-    file_size: int | None = None
-    source: str | None
-    metadata: dict[str, Any] | None
-    created_at: datetime
-    updated_at: datetime
 
 
 class MediaAssetListResponse(BaseModel):
@@ -498,68 +517,6 @@ def _raise_k_error(exc: KProductKnowledgeError) -> None:
     raise exc.to_http_exception() from exc
 
 
-def _require_k_permission(permission_key: str):
-    def dependency(
-        request: Request,
-        db: Session = Depends(get_db),
-        user: User = Depends(get_current_user),
-    ) -> User:
-        permissions = resolve_current_user_permission_info(db, user, request=request)
-        allowed_permission_keys = {permission_key}
-        if permission_key == PERMISSION_READ:
-            allowed_permission_keys.add(PERMISSION_PRODUCTS_READ)
-        if (
-            permissions.is_owner_full_access
-            or is_super_admin_role(user.role)
-            or allowed_permission_keys.intersection(permissions.permission_keys)
-        ):
-            return user
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Missing permission: {permission_key}",
-        )
-
-    return dependency
-
-
-def _scope_context(request: Request | None) -> KScopeContext:
-    org_id = None
-    if request is not None:
-        org_id = getattr(request.state, "org_id", None)
-        if org_id is None:
-            org_context = getattr(request.state, "org_context", None)
-            org_id = getattr(org_context, "org_id", None)
-    workspace_key = str(org_id).strip() if org_id else DEFAULT_WORKSPACE_KEY
-    return KScopeContext(
-        workspace_key=workspace_key,
-        business_context=DEFAULT_BUSINESS_CONTEXT,
-        scope_mode="production",
-    )
-
-
-def _canonical_payload(value: Any) -> str:
-    return json.dumps(
-        value,
-        default=str,
-        ensure_ascii=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-
-
-def _product_create_fingerprint(
-    payload: ProductKnowledgeCreate,
-    scope_context: KScopeContext,
-) -> str:
-    body = {
-        "business_context": scope_context.business_context,
-        "payload": payload.model_dump(mode="json"),
-        "scope_mode": scope_context.scope_mode,
-        "workspace_key": scope_context.workspace_key,
-    }
-    return hashlib.sha256(_canonical_payload(body).encode("utf-8")).hexdigest()
-
-
 def _product_create_idempotency_cache_key(
     request: Request,
     *,
@@ -581,126 +538,6 @@ def _product_create_idempotency_cache_key(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def _cleanup_product_create_idempotency(now: float) -> None:
-    expired_keys = [
-        key
-        for key, record in _product_create_idempotency_records.items()
-        if record.expires_at <= now and not record.lock.locked()
-    ]
-    for key in expired_keys:
-        _product_create_idempotency_records.pop(key, None)
-
-
-def _claim_product_create_idempotency(
-    *,
-    cache_key: str,
-    fingerprint: str,
-) -> ProductCreateIdempotencyRecord:
-    now = monotonic()
-    with _product_create_idempotency_lock:
-        _cleanup_product_create_idempotency(now)
-        record = _product_create_idempotency_records.get(cache_key)
-        if record is None:
-            record = ProductCreateIdempotencyRecord(
-                fingerprint=fingerprint,
-                lock=Lock(),
-                expires_at=now + PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS,
-            )
-            record.lock.acquire()
-            _product_create_idempotency_records[cache_key] = record
-            return record
-        if record.fingerprint != fingerprint:
-            raise KConflictError(
-                "Idempotency key was reused for a different product payload."
-            )
-
-    record.lock.acquire()
-    return record
-
-
-def _complete_product_create_idempotency(
-    *,
-    cache_key: str,
-    record: ProductCreateIdempotencyRecord,
-    product_id: UUID,
-) -> None:
-    with _product_create_idempotency_lock:
-        record.product_id = product_id
-        record.expires_at = monotonic() + PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS
-        _product_create_idempotency_records[cache_key] = record
-
-
-def _discard_product_create_idempotency(
-    *,
-    cache_key: str,
-    record: ProductCreateIdempotencyRecord,
-) -> None:
-    with _product_create_idempotency_lock:
-        if _product_create_idempotency_records.get(cache_key) is record:
-            _product_create_idempotency_records.pop(cache_key, None)
-
-
-def _product_variants(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> list[KProductKnowledgeVariant]:
-    return list(
-        db.scalars(
-            select(KProductKnowledgeVariant)
-            .where(KProductKnowledgeVariant.product_id == product.id)
-            .order_by(KProductKnowledgeVariant.created_at.asc())
-        )
-    )
-
-
-def _product_variants_by_product_ids(
-    db: Session,
-    product_ids: Sequence[UUID],
-) -> dict[UUID, list[KProductKnowledgeVariant]]:
-    if not product_ids:
-        return {}
-
-    grouped: dict[UUID, list[KProductKnowledgeVariant]] = {
-        product_id: [] for product_id in product_ids
-    }
-    variants = db.scalars(
-        select(KProductKnowledgeVariant)
-        .where(KProductKnowledgeVariant.product_id.in_(product_ids))
-        .order_by(
-            KProductKnowledgeVariant.product_id.asc(),
-            KProductKnowledgeVariant.created_at.asc(),
-        )
-    )
-    for variant in variants:
-        grouped.setdefault(variant.product_id, []).append(variant)
-    return grouped
-
-
-def _product_read(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> ProductKnowledgeRead:
-    variants = _product_variants(db, product)
-    return ProductKnowledgeRead.model_validate(product).model_copy(
-        update={
-            "main_keyword": product.primary_keyword,
-            "shipping_class": product.shipping_class,
-            "shipping_review_needed": product.shipping_review_needed,
-            "shipping_assignment": (
-                product.shipping_assignment_json
-                if isinstance(product.shipping_assignment_json, dict)
-                else None
-            ),
-            "contains_battery": product.contains_battery,
-            "variant_count": len(variants),
-            "variants": [
-                ProductKnowledgeVariantRead.model_validate(variant)
-                for variant in variants
-            ],
-        }
-    )
-
-
 def _product_list_item(
     db: Session,
     product: KProductKnowledgeProduct,
@@ -720,171 +557,6 @@ def _product_list_item(
     )
 
 
-def _count_products(
-    db: Session,
-    *,
-    scope_context: KScopeContext,
-    status_filter: str | None,
-    review_status: str | None,
-    q: str | None,
-) -> int:
-    query = apply_scope_filters(
-        select(func.count()).select_from(KProductKnowledgeProduct),
-        KProductKnowledgeProduct,
-        scope_context,
-    )
-    if status_filter is not None:
-        query = query.where(KProductKnowledgeProduct.product_status == status_filter)
-    if review_status is not None:
-        query = query.where(KProductKnowledgeProduct.review_status == review_status)
-    if q is not None and q.strip():
-        term = f"%{q.strip()}%"
-        query = query.where(
-            KProductKnowledgeProduct.product_key.ilike(term)
-            | KProductKnowledgeProduct.sku.ilike(term)
-            | KProductKnowledgeProduct.parent_sku.ilike(term)
-            | KProductKnowledgeProduct.source_record_id.ilike(term)
-            | KProductKnowledgeProduct.primary_keyword.ilike(term)
-            | KProductKnowledgeProduct.product_name_en.ilike(term)
-            | KProductKnowledgeProduct.brand_name.ilike(term)
-        )
-    return int(db.scalar(query) or 0)
-
-
-def _product_by_ref(
-    db: Session,
-    *,
-    product_ref: str,
-    scope_context: KScopeContext,
-    create_shell: bool = False,
-) -> KProductKnowledgeProduct:
-    normalized = product_ref.strip()
-    if not normalized:
-        raise KProductNotFoundError("K product reference is required.")
-    try:
-        return get_product(
-            db,
-            product_id=UUID(normalized),
-            scope_context=scope_context,
-        )
-    except (ValueError, KProductKnowledgeError):
-        pass
-
-    query = apply_scope_filters(
-        select(KProductKnowledgeProduct).where(
-            (KProductKnowledgeProduct.product_key == normalized)
-            | (KProductKnowledgeProduct.parent_sku == normalized)
-            | (KProductKnowledgeProduct.sku == normalized)
-            | (KProductKnowledgeProduct.source_record_id == normalized),
-        ),
-        KProductKnowledgeProduct,
-        scope_context,
-    )
-    product = db.scalar(query)
-    if product is not None:
-        return product
-    if not create_shell:
-        raise KProductNotFoundError(f"K product '{normalized}' was not found.")
-
-    product_key = _router_unique_product_key(db)
-    product = KProductKnowledgeProduct(
-        id=uuid4(),
-        workspace_key=scope_context.workspace_key,
-        business_context=scope_context.business_context,
-        scope_mode=scope_context.scope_mode,
-        organization_name=TARGET_ORGANIZATION_NAME,
-        product_key=product_key,
-        source_record_id=normalized,
-        product_status="draft",
-        product_type="simple_product",
-        review_status="draft",
-        canonical_language="en",
-        raw_input_text=f"Runtime shell for {normalized}",
-        raw_input_language="en",
-        source_system="k_adapter",
-    )
-    db.add(product)
-    issued_sku = ensure_product_sku(db, product, force_allocate=True)
-    default_variant_sku = f"{issued_sku}-SHELL"
-    db.add(
-        KProductKnowledgeVariant(
-            id=uuid4(),
-            product_id=product.id,
-            parent_sku=issued_sku,
-            variant_sku=default_variant_sku,
-            variant_hash="SHELL",
-            attributes_json={"default_variant": True, "shell_product": True},
-            image_folder=f"images/{product.product_key}/{default_variant_sku}",
-        )
-    )
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        raise KConflictError() from exc
-    return product
-
-
-def _router_unique_product_key(db: Session) -> str:
-    for _ in range(3):
-        product_key = str(uuid4())
-        exists = db.scalar(
-            select(KProductKnowledgeProduct.id)
-            .where(KProductKnowledgeProduct.product_key == product_key)
-            .limit(1)
-        )
-        if exists is None:
-            return product_key
-    raise KConflictError("Product creation conflicted; retry or check SKU data.")
-
-
-def _variant_by_sku(
-    db: Session,
-    *,
-    product: KProductKnowledgeProduct,
-    variant_sku: str | None,
-) -> KProductKnowledgeVariant:
-    normalized = (variant_sku or product.parent_sku or product.sku or "").strip()
-    if not normalized:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="variant_sku is required for image operations.",
-        )
-    variant = db.scalar(
-        select(KProductKnowledgeVariant)
-        .where(
-            KProductKnowledgeVariant.product_id == product.id,
-            KProductKnowledgeVariant.variant_sku == normalized,
-        )
-        .limit(1)
-    )
-    if variant is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Variant SKU was not found for this product.",
-        )
-    return variant
-
-
-def _variant_by_id(
-    db: Session,
-    *,
-    product: KProductKnowledgeProduct,
-    variant_id: UUID,
-) -> KProductKnowledgeVariant:
-    variant = db.get(KProductKnowledgeVariant, variant_id)
-    if variant is None or variant.product_id != product.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Variant was not found for this product.",
-        )
-    return variant
-
-
-def _product_public_ref(product: KProductKnowledgeProduct) -> str:
-    return product.product_key or str(product.id)
-
-
 def _k19_status_to_model(status_value: str | None) -> str:
     mapping = {
         "active": "approved",
@@ -893,32 +565,6 @@ def _k19_status_to_model(status_value: str | None) -> str:
         "archived": "removed",
     }
     return mapping.get((status_value or "active").strip().lower(), "candidate")
-
-
-def _k19_status_from_model(status_value: str) -> str:
-    mapping = {
-        "approved": "active",
-        "candidate": "suggested",
-        "removed": "archived",
-        "rejected": "archived",
-    }
-    return mapping.get(status_value, "suggested")
-
-
-def _keyword_entry(
-    db: Session,
-    keyword: KProductKnowledgeKeyword,
-) -> KeywordEntry:
-    product = db.get(KProductKnowledgeProduct, keyword.product_id)
-    return KeywordEntry(
-        id=str(keyword.id),
-        product_id=_product_public_ref(product) if product else str(keyword.product_id),
-        keyword=keyword.keyword_text,
-        source=keyword.source,
-        status=_k19_status_from_model(keyword.status),
-        created_at=keyword.created_at,
-        updated_at=keyword.updated_at,
-    )
 
 
 def _k20_status_to_model(status_value: str | None) -> str:
@@ -930,326 +576,10 @@ def _k20_status_to_model(status_value: str | None) -> str:
     return mapping.get((status_value or "active").strip().lower(), "candidate")
 
 
-def _k20_status_from_model(status_value: str) -> str:
-    mapping = {
-        "candidate": "active",
-        "confirmed": "resolved",
-        "false_positive": "ignored",
-        "removed": "ignored",
-    }
-    return mapping.get(status_value, "active")
-
-
-def _risk_entry(db: Session, risk: KProductKnowledgeRiskTerm) -> RiskTermEntry:
-    product = db.get(KProductKnowledgeProduct, risk.product_id)
-    risk_parts = (risk.risk_type or "marketing").split(":", 1)
-    risk_level = risk_parts[0] if len(risk_parts) == 2 else "low"
-    category = risk_parts[1] if len(risk_parts) == 2 else risk_parts[0]
-    return RiskTermEntry(
-        id=str(risk.id),
-        product_id=_product_public_ref(product) if product else str(risk.product_id),
-        term=risk.term_en,
-        risk_level=risk_level,
-        category=category,
-        source=risk.source,
-        status=_k20_status_from_model(risk.status),
-        created_at=risk.created_at,
-        updated_at=risk.updated_at,
-    )
-
-
-def _is_execution_configuration_error(code: str | None) -> bool:
-    return code in {
-        API_KEY_BINDING_MISSING_CODE,
-        API_KEY_INJECTION_FAILED_CODE,
-        MODULE_DISABLED_CODE,
-        MODULE_NOT_REGISTERED_CODE,
-        ORG_CONTEXT_REQUIRED_CODE,
-    }
-
-
-def _execution_configuration_message() -> str:
-    return (
-        "K module execution is not fully configured. The current user permission "
-        "is valid, but the module requires an active organization context and "
-        "usable API key binding."
-    )
-
-
-def _execution_error_reason(code: str | None) -> str:
-    if code == API_KEY_BINDING_MISSING_CODE:
-        return "missing_key"
-    if code == API_KEY_INJECTION_FAILED_CODE:
-        return "key_resolution_failed"
-    if code == ORG_CONTEXT_REQUIRED_CODE:
-        return "missing_context"
-    if code == MODULE_DISABLED_CODE:
-        return "module_disabled"
-    if code == MODULE_NOT_REGISTERED_CODE:
-        return "module_not_registered"
-    return "execution_error"
-
-
-def _structured_execution_error_detail(
-    *,
-    reason: str,
-    message: str,
-    code: str | None = None,
-    module_id: str | None = None,
-    org_id: str | None = None,
-    extra: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    detail: dict[str, Any] = {
-        "status": "failed",
-        "reason": reason,
-        "message": message,
-    }
-    if code is not None:
-        detail["code"] = code
-    if module_id is not None:
-        detail["module_id"] = module_id
-    if org_id is not None:
-        detail["org_id"] = org_id
-    if extra:
-        detail.update(extra)
-    return detail
-
-
-def _gate_error(exc: ModuleExecutionGateError) -> HTTPException:
-    is_configuration_error = _is_execution_configuration_error(exc.code)
-    status_code = status.HTTP_400_BAD_REQUEST if exc.code == ORG_CONTEXT_REQUIRED_CODE else (
-        status.HTTP_503_SERVICE_UNAVAILABLE
-        if is_configuration_error
-        else exc.status_code
-    )
-    message = (
-        _execution_configuration_message()
-        if is_configuration_error
-        else str(exc)
-    )
-    return HTTPException(
-        status_code=status_code,
-        detail=_structured_execution_error_detail(
-            reason=_execution_error_reason(exc.code),
-            code=exc.code,
-            message=message,
-            module_id=exc.module_id,
-            org_id=exc.org_id,
-        ),
-    )
-
-
-def _workflow_error(exc: KWorkflowExecutionError) -> HTTPException:
-    code = exc.error_report.get("code") if isinstance(exc.error_report, dict) else None
-    if _is_execution_configuration_error(code if isinstance(code, str) else None):
-        detail = dict(exc.error_report)
-        detail.setdefault("status", "failed")
-        detail.setdefault("reason", _execution_error_reason(code if isinstance(code, str) else None))
-        detail["message"] = _execution_configuration_message()
-        return HTTPException(
-            status_code=(
-                status.HTTP_400_BAD_REQUEST
-                if code == ORG_CONTEXT_REQUIRED_CODE
-                else status.HTTP_503_SERVICE_UNAVAILABLE
-            ),
-            detail=detail,
-        )
-    return HTTPException(status_code=exc.status_code, detail=exc.error_report)
-
-
-def _execution_context(
-    db: Session,
-    *,
-    request: Request,
-    user: User,
-    key_requirements: dict[str, str],
-):
-    try:
-        return require_module_execution_ready(
-            db,
-            module_id=MODULE_KEY,
-            user=user,
-            request=request,
-            key_requirements=key_requirements,
-        )
-    except ModuleExecutionGateError as exc:
-        raise _gate_error(exc) from exc
-
-
-def _execute_provider_json(
-    db: Session,
-    *,
-    context: ModuleExecutionContext,
-    provider: str,
-    task_type: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    del db
-    provider_db = SessionLocal()
-    try:
-        return AIExecutionRouter(provider_db).execute(
-            provider=provider,
-            task_type=task_type,  # type: ignore[arg-type]
-            payload=payload,
-            org=TARGET_ORGANIZATION_NAME,
-            module_id=MODULE_KEY,
-            execution_context=context,
-        )
-    except AIProviderExecutionError as exc:
-        provider_detail = exc.structured_error()
-        extra = provider_detail if isinstance(provider_detail, dict) else None
-        raise HTTPException(
-            status_code=exc.status_code,
-            detail=_structured_execution_error_detail(
-                reason="provider_error",
-                code=exc.code,
-                message=str(exc),
-                module_id=MODULE_KEY,
-                org_id=context.org_id,
-                extra={"provider_error": extra} if extra else None,
-            ),
-        ) from exc
-    except Exception as exc:
-        logger.exception("K provider execution failed provider=%s", provider)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=_structured_execution_error_detail(
-                reason="provider_error",
-                code="PROVIDER_EXECUTION_FAILED",
-                message="Provider execution failed.",
-                module_id=MODULE_KEY,
-                org_id=context.org_id,
-                extra={"provider": provider},
-            ),
-        ) from exc
-    finally:
-        provider_db.close()
-
-
-def _safe_string_list(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value if str(item).strip()]
-
-
-def _strict_json_messages(
-    *,
-    instruction: str,
-    payload: dict[str, Any],
-) -> list[dict[str, str]]:
-    return [
-        {"role": "system", "content": instruction},
-        {
-            "role": "user",
-            "content": json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True),
-        },
-    ]
-
-
 def _safe_filename(value: str | None) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", (value or "image").strip())
     cleaned = cleaned.strip(".-_")
     return cleaned[:180] or "image"
-
-
-def _media_storage_root() -> Path:
-    return Path(os.getenv("K_PRODUCT_MEDIA_STORAGE_DIR", "/var/lib/barong/k-media"))
-
-
-SUPPORTED_IMAGE_MIME_TYPES = {
-    "image/gif",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-}
-
-RESERVED_MEDIA_METADATA_KEYS = {
-    "content_sha256",
-    "db_content_base64",
-    "direct_binary_upload",
-    "preview_path",
-    "storage_path",
-    "storage_provider",
-    "storage_relative_path",
-    "thumbnail_path",
-}
-
-
-def _detect_image_mime(contents: bytes) -> str | None:
-    if contents.startswith(b"\xff\xd8\xff"):
-        return "image/jpeg"
-    if contents.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "image/png"
-    if contents.startswith((b"GIF87a", b"GIF89a")):
-        return "image/gif"
-    if (
-        len(contents) >= 12
-        and contents[0:4] == b"RIFF"
-        and contents[8:12] == b"WEBP"
-    ):
-        return "image/webp"
-    return None
-
-
-def _validate_uploaded_image(contents: bytes, declared_mime: str | None) -> str:
-    detected_mime = _detect_image_mime(contents)
-    if detected_mime is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file is not a supported image.",
-        )
-    normalized_declared = (declared_mime or "").split(";", 1)[0].strip().lower()
-    if normalized_declared and normalized_declared not in {
-        detected_mime,
-        "application/octet-stream",
-    }:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded image MIME type does not match the file contents.",
-        )
-    return detected_mime
-
-
-def _image_dimensions(contents: bytes) -> tuple[int | None, int | None]:
-    """Best-effort pixel dimensions. Metadata only — never fails an upload.
-
-    画廊/描述分流按纵横比走(画廊只放方形),所以手动上传也必须记下真实
-    像素尺寸,否则组包时无从判断该图是横版/竖版还是方形。
-    """
-    from io import BytesIO
-
-    try:
-        from PIL import Image
-
-        with Image.open(BytesIO(contents)) as img:
-            return int(img.width), int(img.height)
-    except Exception:  # noqa: BLE001 - dimensions are metadata, not a gate
-        logger.exception("Failed to read uploaded image dimensions")
-        return None, None
-
-
-def _decode_image_base64(value: str) -> bytes:
-    raw = value.strip()
-    if raw.startswith("data:"):
-        _, _, raw = raw.partition(",")
-    try:
-        return base64.b64decode(raw, validate=True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Image payload is not valid base64.",
-        ) from exc
-
-
-def _db_image_bytes_from_metadata(row: KProductKnowledgeMediaAsset) -> bytes | None:
-    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
-    encoded = metadata.get("db_content_base64")
-    if not isinstance(encoded, str) or not encoded.strip():
-        return None
-    try:
-        return base64.b64decode(encoded, validate=True)
-    except Exception:
-        return None
 
 
 def _safe_media_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
@@ -1258,46 +588,6 @@ def _safe_media_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         for key, value in metadata.items()
         if key not in RESERVED_MEDIA_METADATA_KEYS
     }
-
-
-def _public_media_metadata(metadata: Any) -> dict[str, Any] | None:
-    if not isinstance(metadata, dict):
-        return None
-    redacted = {
-        key: value
-        for key, value in metadata.items()
-        if key not in {"db_content_base64", "storage_path", "thumbnail_path", "preview_path"}
-    }
-    return redacted
-
-
-def _path_within_root(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
-
-
-def _media_asset_local_path(row: KProductKnowledgeMediaAsset) -> Path | None:
-    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
-    root = _media_storage_root().resolve(strict=False)
-    candidates: list[Path] = []
-    storage_path_value = metadata.get("storage_path")
-    if (
-        row.storage_provider == "local_filesystem"
-        or metadata.get("storage_provider") == "local_filesystem"
-    ) and storage_path_value:
-        candidates.append(Path(str(storage_path_value)))
-    if row.object_key:
-        candidates.append(root / row.object_key)
-
-    for candidate in candidates:
-        path = candidate if candidate.is_absolute() else root / candidate
-        resolved = path.resolve(strict=False)
-        if _path_within_root(resolved, root):
-            return resolved
-    return None
 
 
 def _write_k_media_file(object_key: str, contents: bytes) -> Path:
@@ -1362,1369 +652,8 @@ def _ensure_media_asset_derivative(
     return path
 
 
-def _media_asset_requires_local_file(row: KProductKnowledgeMediaAsset) -> bool:
-    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
-    return (
-        row.storage_provider == "local_filesystem"
-        or metadata.get("storage_provider") == "local_filesystem"
-        or metadata.get("direct_binary_upload") is True
-    )
-
-
-def _media_asset_file_info(row: KProductKnowledgeMediaAsset) -> dict[str, Any]:
-    path = _media_asset_local_path(row)
-    if path is None:
-        return {"file_available": False, "file_size": None}
-    try:
-        stat = path.stat()
-    except OSError:
-        return {"file_available": False, "file_size": None}
-    return {
-        "file_available": path.is_file(),
-        "file_size": stat.st_size if path.is_file() else None,
-    }
-
-
-def _product_full_ai_payload(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> dict[str, Any]:
-    variants = [
-        ProductKnowledgeVariantRead.model_validate(variant).model_dump(mode="json")
-        for variant in _product_variants(db, product)
-    ]
-    # 多变体产品的物理规格藏在 attributes_json.physical(2026-07-22 变体改造):
-    # 提到每个变体第一层,文案/卖点 AI 才看得见;否则自检误报"缺尺寸重量"。
-    for entry in variants:
-        raw_attrs = entry.get("attributes_json")
-        physical = raw_attrs.get("physical") if isinstance(raw_attrs, dict) else None
-        if isinstance(physical, dict):
-            if entry.get("dimensions") is None:
-                entry["dimensions"] = physical.get("dimensions")
-            if entry.get("weight") is None:
-                entry["weight"] = physical.get("weight")
-    variant_dimensions = [
-        {"variant_sku": entry.get("variant_sku"), **entry["dimensions"]}
-        for entry in variants
-        if isinstance(entry.get("dimensions"), dict)
-    ]
-    variant_weights = [
-        {"variant_sku": entry.get("variant_sku"), **entry["weight"]}
-        for entry in variants
-        if isinstance(entry.get("weight"), dict)
-    ]
-    attributes = [
-        {
-            "id": str(row.id),
-            "attribute_key": row.attribute_key,
-            "attribute_value_text": row.attribute_value_text,
-            "attribute_value_json": row.attribute_value_json,
-            "attribute_unit": row.attribute_unit,
-            "attribute_group": row.attribute_group,
-            "source": row.source,
-            "requires_review": row.requires_review,
-            "reviewed_by_user_id": (
-                str(row.reviewed_by_user_id) if row.reviewed_by_user_id else None
-            ),
-            "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
-        }
-        for row in db.scalars(
-            select(KProductKnowledgeAttribute)
-            .where(KProductKnowledgeAttribute.product_id == product.id)
-            .order_by(KProductKnowledgeAttribute.created_at.asc())
-        )
-    ]
-    keywords = [
-        {
-            "keyword": row.keyword_text,
-            "keyword_type": row.keyword_type,
-            "status": row.status,
-            "market": row.market,
-            "source": row.source,
-        }
-        for row in db.scalars(
-            select(KProductKnowledgeKeyword)
-            .where(KProductKnowledgeKeyword.product_id == product.id)
-            .order_by(KProductKnowledgeKeyword.created_at.asc())
-        )
-    ]
-    risk_terms = [
-        {
-            "term": row.term_en,
-            "status": row.status,
-            "risk_type": row.risk_type,
-            "risk_reason": row.risk_reason,
-        }
-        for row in db.scalars(
-            select(KProductKnowledgeRiskTerm)
-            .where(KProductKnowledgeRiskTerm.product_id == product.id)
-            .order_by(KProductKnowledgeRiskTerm.created_at.asc())
-        )
-    ]
-    return {
-        "product_id": str(product.id),
-        "product_key": product.product_key,
-        "sku": product.sku,
-        "parent_sku": product.parent_sku,
-        "name": product.product_name_en,
-        "title": product.product_name_en,
-        "brand_name": product.brand_name,
-        "manufacturer": product.manufacturer,
-        "product_type": product.product_type,
-        "market": product.target_market,
-        "target_market": product.target_market,
-        "target_language": product.canonical_language,
-        "main_keyword": product.primary_keyword,
-        "description": product.long_description_en or product.short_description_en,
-        "short_description": product.short_description_en,
-        "long_description": product.long_description_en,
-        "structured_specs_json": product.structured_specs_json,
-        "package_includes": product.package_includes_json,
-        "attributes": attributes,
-        "variants": variants,
-        "keywords": keywords,
-        "risk_terms": risk_terms,
-        "dimensions": (
-            product.dimensions_json
-            if product.dimensions_json is not None
-            else (
-                {"per_variant": variant_dimensions} if variant_dimensions else None
-            )
-        ),
-        "weight": (
-            product.weight_json
-            if product.weight_json is not None
-            else ({"per_variant": variant_weights} if variant_weights else None)
-        ),
-        "price": {
-            "regular_price": str(product.regular_price)
-            if product.regular_price is not None
-            else None,
-            "currency": product.price_currency,
-            # 多变体产品价格在变体上;逐变体给出,AI 不再报"价格缺失"
-            "variant_prices": [
-                {
-                    "variant_sku": entry.get("variant_sku"),
-                    "price": entry.get("price_override"),
-                }
-                for entry in variants
-                if entry.get("price_override") is not None
-            ],
-        },
-    }
-
-
-def _evidence_syntax_is_valid(evidence: str | None) -> bool:
-    value = str(evidence or "").strip()
-    return bool(
-        value == "operator_fact"
-        or (value.startswith("spec:") and value[5:].strip())
-        or (value.startswith("verified_feature:") and value[17:].strip())
-    )
-
-
 def _structured_spec_path_exists(specs: Any, path: str) -> bool:
     return _structured_spec_evidence_snapshot(specs, path) is not None
-
-
-def _evidence_value_text(value: Any, unit: Any = None) -> str:
-    if isinstance(value, (dict, list)):
-        rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
-    else:
-        rendered = str(value or "").strip()
-    clean_unit = str(unit or "").strip()
-    if clean_unit and not re.search(
-        rf"(?<![A-Za-z]){re.escape(clean_unit)}(?![A-Za-z])",
-        rendered,
-        re.IGNORECASE,
-    ):
-        return f"{rendered} {clean_unit}".strip()
-    return rendered
-
-
-def _structured_spec_evidence_snapshot(
-    specs: Any,
-    path: str,
-) -> dict[str, Any] | None:
-    if not isinstance(specs, dict):
-        return None
-    cleaned = path.strip().strip(".")
-    if not cleaned:
-        return None
-    canonical_additional = cleaned.casefold().startswith("additional_specs.")
-    if cleaned in {"schema_version", "source", "additional_specs"} or cleaned.startswith(
-        "source."
-    ):
-        return None
-    current: Any = specs
-    parent: Any = None
-    found = not canonical_additional
-    if found:
-        for segment in cleaned.split("."):
-            if isinstance(current, dict) and segment in current:
-                parent = current
-                current = current[segment]
-            else:
-                found = False
-                break
-    if found and current not in (None, "", [], {}):
-        unit = (
-            current.get("unit")
-            if isinstance(current, dict)
-            else None
-        ) or (parent.get("unit") if isinstance(parent, dict) else None)
-        label_en = ""
-        value_en: Any = None
-        if isinstance(current, dict):
-            raw_value = current.get("raw_value")
-            value = current.get("value")
-            if raw_value in (None, "") and value in (None, "", [], {}):
-                return None
-            label = str(current.get("source_label") or cleaned).strip()
-            # 运营用中文录规格,英文对照就在同一条记录上。快照必须一起带走,
-            # 否则下游只能看见中文,英文文案永远「找不到证据」(2026-08-03 修复)。
-            label_en = str(current.get("label_en") or "").strip()
-            value_en = current.get("value_en")
-            value_text = _evidence_value_text(
-                raw_value if raw_value not in (None, "") else value,
-                unit,
-            )
-        else:
-            label = cleaned
-            value = current
-            raw_value = current
-            value_text = _evidence_value_text(current)
-        return {
-            "evidence": f"spec:{cleaned}",
-            "kind": "spec",
-            "path": cleaned,
-            "label": label,
-            "label_en": label_en,
-            "value": value,
-            "value_en": value_en,
-            "raw_value": raw_value,
-            "unit": unit,
-            "value_text": value_text,
-        }
-    # Canonical additional-spec paths are bound only to the exact stable key.
-    # The legacy short form keeps its historical key/label aliases.
-    additional_lookup = cleaned
-    if canonical_additional:
-        additional_lookup = cleaned.split(".", 1)[1].strip().strip(".")
-        if not additional_lookup:
-            return None
-    normalized = re.sub(
-        r"[^a-z0-9]+", "_", additional_lookup.casefold()
-    ).strip("_")
-    for item in specs.get("additional_specs") or []:
-        if not isinstance(item, dict):
-            continue
-        if canonical_additional:
-            if str(item.get("key") or "") != additional_lookup:
-                continue
-        else:
-            aliases = {
-                str(item.get("key") or "").casefold(),
-                re.sub(
-                    r"[^a-z0-9]+",
-                    "_",
-                    str(item.get("label") or "").casefold(),
-                ).strip("_"),
-            }
-            if (
-                additional_lookup.casefold() not in aliases
-                and normalized not in aliases
-            ):
-                continue
-        raw_value = item.get("raw_value")
-        value = item.get("value")
-        if raw_value in (None, "") and value in (None, "", [], {}):
-            return None
-        value_text = _evidence_value_text(
-            raw_value if raw_value not in (None, "") else value,
-            item.get("unit"),
-        )
-        return {
-            "evidence": f"spec:{cleaned}",
-            "kind": "spec",
-            "path": str(item.get("key") or cleaned),
-            "label": str(item.get("label") or item.get("key") or cleaned),
-            "label_en": str(item.get("label_en") or "").strip(),
-            "value": value,
-            "value_en": item.get("value_en"),
-            "raw_value": raw_value,
-            "unit": item.get("unit"),
-            "value_text": value_text,
-        }
-    return None
-
-
-_TRUSTED_FEATURE_SOURCE_PREFIXES = (
-    "operator",
-    "manual",
-    "frontend",
-    "supplier",
-    "verified",
-    "crawler_verified",
-    "f_series",
-    "r_series",
-    "import",
-    "1688",
-)
-_UNTRUSTED_FEATURE_SOURCE_MARKERS = (
-    "ai",
-    "model",
-    "unverified",
-    "candidate",
-    "generated",
-    "claude",
-    "chatgpt",
-    "deepseek",
-)
-
-
-def _feature_source_is_trusted(source: Any) -> bool:
-    normalized = str(source or "").strip().casefold()
-    return bool(
-        normalized
-        and not any(marker in normalized for marker in _UNTRUSTED_FEATURE_SOURCE_MARKERS)
-        and any(
-            normalized == prefix
-            or normalized.startswith(f"{prefix}:")
-            or normalized.startswith(f"{prefix}_")
-            for prefix in _TRUSTED_FEATURE_SOURCE_PREFIXES
-        )
-    )
-
-
-def _selling_points_evidence_payload(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> dict[str, Any]:
-    """Claim-safe AI input: identities are separated from evidence sources."""
-
-    verified_features: list[dict[str, Any]] = []
-    for attribute in db.scalars(
-        select(KProductKnowledgeAttribute)
-        .where(KProductKnowledgeAttribute.product_id == product.id)
-        .order_by(KProductKnowledgeAttribute.created_at.asc())
-    ):
-        source = str(attribute.source or "").strip().casefold()
-        human_reviewed = bool(
-            attribute.reviewed_by_user_id is not None and attribute.reviewed_at is not None
-        )
-        trusted_source = _feature_source_is_trusted(source)
-        if attribute.requires_review or not (trusted_source or human_reviewed):
-            continue
-        value: Any = (
-            attribute.attribute_value_text
-            if attribute.attribute_value_text not in (None, "")
-            else attribute.attribute_value_json
-        )
-        verified_features.append(
-            {
-                "id": str(attribute.id),
-                "key": attribute.attribute_key,
-                "value": value,
-                "unit": attribute.attribute_unit,
-                "source": attribute.source,
-            }
-        )
-
-    approved_keywords = [
-        row.keyword_text
-        for row in db.scalars(
-            select(KProductKnowledgeKeyword)
-            .where(
-                KProductKnowledgeKeyword.product_id == product.id,
-                KProductKnowledgeKeyword.status == "approved",
-            )
-            .order_by(KProductKnowledgeKeyword.created_at.asc())
-        )
-    ]
-    package_includes = canonical_package_includes(
-        getattr(product, "package_includes_json", None),
-        product.structured_specs_json,
-    )
-    structured_specs = dict(product.structured_specs_json or {})
-    if package_includes:
-        # This compatibility projection makes ``spec:package_includes`` a real,
-        # resolvable evidence reference without changing the canonical K column.
-        structured_specs["package_includes"] = package_includes
-    return {
-        "identity": {
-            "product_id": str(product.id),
-            "product_key": product.product_key,
-            "sku": product.sku,
-            "name": product.product_name_en,
-            "product_type": product.product_type,
-            "target_market": product.target_market,
-            "target_language": product.canonical_language,
-            "main_keyword": product.primary_keyword,
-        },
-        "structured_specs_json": structured_specs,
-        "structured_specs_buyer_display": buyer_display_structured_specs(
-            structured_specs,
-            target_market=product.target_market or "US",
-        ),
-        "package_includes": package_includes,
-        "verified_features": verified_features,
-        "operator_facts": [product.manual_notes] if product.manual_notes else [],
-        # Keywords guide wording/search intent only; the prompt explicitly
-        # forbids using them as claim evidence.
-        "approved_non_risk_keywords": approved_keywords,
-    }
-
-
-def _verified_feature_evidence_snapshot(
-    db: Session,
-    product: KProductKnowledgeProduct,
-    feature_ref: str,
-) -> tuple[dict[str, Any] | None, str | None]:
-    normalized_ref = feature_ref.strip().casefold()
-    attributes = list(
-        db.scalars(
-            select(KProductKnowledgeAttribute).where(
-                KProductKnowledgeAttribute.product_id == product.id
-            )
-        )
-    )
-    for attribute in attributes:
-        if normalized_ref not in {
-            str(attribute.id).casefold(),
-            str(attribute.attribute_key or "").casefold(),
-        }:
-            continue
-        source = str(attribute.source or "").strip().casefold()
-        human_reviewed = bool(
-            attribute.reviewed_by_user_id is not None and attribute.reviewed_at is not None
-        )
-        trusted_source = _feature_source_is_trusted(source)
-        if attribute.requires_review or not (trusted_source or human_reviewed):
-            return None, (
-                "Verified feature must have an explicit trusted/operator source or "
-                f"completed human review: verified_feature:{feature_ref}"
-            )
-        raw_value: Any = (
-            attribute.attribute_value_text
-            if attribute.attribute_value_text not in (None, "")
-            else attribute.attribute_value_json
-        )
-        return {
-            "evidence": f"verified_feature:{feature_ref}",
-            "kind": "verified_feature",
-            "feature_id": str(attribute.id),
-            "key": attribute.attribute_key,
-            "value": raw_value,
-            "unit": attribute.attribute_unit,
-            "value_text": _evidence_value_text(raw_value, attribute.attribute_unit),
-            "source": attribute.source,
-        }, None
-    return None, f"Verified feature evidence was not found: verified_feature:{feature_ref}"
-
-
-def _selling_point_evidence_snapshot(
-    db: Session,
-    product: KProductKnowledgeProduct,
-    evidence: str | None,
-    *,
-    operator_excerpt: str | None = None,
-) -> tuple[dict[str, Any] | None, str | None]:
-    value = str(evidence or "").strip()
-    if not _evidence_syntax_is_valid(value):
-        return None, "Evidence must be spec:<field>, verified_feature:<id>, or operator_fact."
-    if value == "operator_fact":
-        excerpt = str(operator_excerpt or "").strip()
-        if not excerpt:
-            return None, "operator_fact requires a concrete evidence_excerpt supplied by the operator."
-        return {
-            "evidence": value,
-            "kind": "operator_fact",
-            "value_text": excerpt,
-        }, None
-    if value.startswith("spec:"):
-        structured_specs = dict(product.structured_specs_json or {})
-        package_includes = canonical_package_includes(
-            getattr(product, "package_includes_json", None),
-            product.structured_specs_json,
-        )
-        if package_includes:
-            structured_specs["package_includes"] = package_includes
-        snapshot = _structured_spec_evidence_snapshot(
-            structured_specs, value[5:]
-        )
-        if snapshot is None:
-            return None, f"Structured specification evidence was not found: {value}"
-        display_rows = buyer_display_structured_specs(
-            structured_specs,
-            target_market=product.target_market or "US",
-        ).get("rows") or []
-        display = next(
-            (
-                row
-                for row in display_rows
-                if isinstance(row, dict)
-                and (
-                    str(row.get("path") or "")
-                    == str(snapshot.get("path") or "")
-                    or str(row.get("path") or "").endswith(
-                        "." + str(snapshot.get("path") or "")
-                    )
-                )
-            ),
-            None,
-        )
-        if display is not None:
-            display_text = _evidence_value_text(
-                display.get("display_value"), display.get("display_unit")
-            )
-            snapshot["source_value_text"] = snapshot.get("value_text")
-            snapshot["buyer_display"] = display
-            snapshot["value_text"] = display_text
-        return snapshot, None
-    return _verified_feature_evidence_snapshot(db, product, value.split(":", 1)[1])
-
-
-def _selling_point_evidence_error(
-    db: Session,
-    product: KProductKnowledgeProduct,
-    evidence: str | None,
-) -> str | None:
-    # Syntax/existence helper retained for read-only status projection. The
-    # approval endpoint additionally validates the exact snapshot and claim.
-    if str(evidence or "").strip() == "operator_fact":
-        return None
-    _, error = _selling_point_evidence_snapshot(db, product, evidence)
-    return error
-
-
-# IPX0-8 / IP65 / IP67 / IP68 …… 枚举写不全,一律走正则(旧表只有 ip65/ip67,
-# IPX8 这种铁证反而被判「不支持防水」)。
-_IP_RATING_PATTERN = re.compile(r"\bip(?:x\d|\d[x\d])\b")
-# CE / RoHS / UL 这类认证与 IP 防护等级,本身就是「安全」主题的证据。
-_SAFETY_EVIDENCE_PATTERN = re.compile(
-    r"\b(?:ce|rohs|ul|etl|fcc|un38\s?3|ipx?\d)\b|认证|防水等级|安规|3c"
-)
-
-# 证据的 label 常是运营录入的中文,卖点是英文写的 —— 词表必须双语,
-# 否则「续航」撑不起 runtime、「防水等级」撑不起 waterproof。
-# 每一项可以是字面词,也可以是正则(正则直接在归一化文本上匹配)。
-_EVIDENCE_TOPIC_TERMS: tuple[tuple[str, tuple[Any, ...]], ...] = (
-    (
-        "wind",
-        ("wind", "windproof", "wind-resistant", "wind resistant", "防风", "抗风"),
-    ),
-    (
-        "water",
-        (
-            "waterproof",
-            "water-resistant",
-            "water resistant",
-            # 不收 "submersible":那是泵的类型(潜水泵),不是防水声称,
-            # 收了会把「Submersible pump draws water from…」这种句子误杀。
-            "防水",
-            "防泼水",
-            "浸没",
-            "潜水",
-            _IP_RATING_PATTERN,
-        ),
-    ),
-    ("indoor", ("indoor", "indoors", "home use", "室内", "家用")),
-    ("safety", ("safe", "safety", "hazard-free", "安全", "安规")),
-    (
-        "runtime",
-        (
-            "runtime",
-            "run time",
-            "battery life",
-            "hours",
-            "hour",
-            "续航",
-            "工作时间",
-            "使用时间",
-            "运行时间",
-        ),
-    ),
-    ("ignition", ("ignition", "ignite", "piezo", "lighter-free", "点火")),
-    ("weight", ("lightweight", "weight", "weighs", "lb", "kg", "重量", "净重")),
-    (
-        "size",
-        (
-            "compact",
-            "dimensions",
-            "dimension",
-            "folded",
-            "inch",
-            "cm",
-            "尺寸",
-            "规格",
-            "折叠",
-        ),
-    ),
-    (
-        "material",
-        ("material", "steel", "aluminum", "aluminium", "abs", "材质", "材料"),
-    ),
-    (
-        "certification",
-        ("certified", "certification", "ce", "rohs", "ul", "认证"),
-    ),
-)
-
-_MEASUREMENT_NUMBER_PATTERN = (
-    r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]+)?|\.[0-9]+"
-)
-_CLAIM_MEASUREMENT_PATTERN = re.compile(
-    rf"(?<![A-Za-z0-9.,])(?P<number>{_MEASUREMENT_NUMBER_PATTERN})\s*"
-    r"(?P<unit>millimeters?|millimetres?|centimeters?|centimetres?|"
-    r"kilograms?|grams?|milliliters?|millilitres?|liters?|litres?|"
-    r"inches?|quarts?|ounces?|pounds?|mm|cm|kg|ml|qt|oz|lb|in|g|l)\b",
-    flags=re.IGNORECASE,
-)
-
-_MEASUREMENT_UNIT_ALIASES = {
-    "millimeter": "mm",
-    "millimeters": "mm",
-    "millimetre": "mm",
-    "millimetres": "mm",
-    "centimeter": "cm",
-    "centimeters": "cm",
-    "centimetre": "cm",
-    "centimetres": "cm",
-    "kilogram": "kg",
-    "kilograms": "kg",
-    "gram": "g",
-    "grams": "g",
-    "milliliter": "ml",
-    "milliliters": "ml",
-    "millilitre": "ml",
-    "millilitres": "ml",
-    "liter": "l",
-    "liters": "l",
-    "litre": "l",
-    "litres": "l",
-    "inch": "in",
-    "inches": "in",
-    "quart": "qt",
-    "quarts": "qt",
-    "ounce": "oz",
-    "ounces": "oz",
-    "pound": "lb",
-    "pounds": "lb",
-}
-_CONVERTIBLE_MEASUREMENT_UNITS = frozenset({"mm", "cm", "kg", "g", "ml", "l"})
-_MEASUREMENT_UNIT_DIMENSIONS = {
-    "mm": "length",
-    "cm": "length",
-    "in": "length",
-    "kg": "mass",
-    "g": "mass",
-    "lb": "mass",
-    "oz": "mass",
-    "ml": "volume",
-    "l": "volume",
-    "qt": "volume",
-}
-
-
-def _canonical_measurement_unit(value: Any) -> str:
-    cleaned = str(value or "").strip().casefold()
-    return _MEASUREMENT_UNIT_ALIASES.get(cleaned, cleaned)
-
-
-def _measurement_pairs(value: Any) -> set[tuple[str, str]]:
-    pairs: set[tuple[str, str]] = set()
-    for match in _CLAIM_MEASUREMENT_PATTERN.finditer(str(value or "")):
-        numbers = evidence_number_tokens(match.group("number"))
-        if not numbers:
-            continue
-        pairs.add(
-            (
-                next(iter(numbers)),
-                _canonical_measurement_unit(match.group("unit")),
-            )
-        )
-    return pairs
-
-
-_STRUCTURED_MEASUREMENT_KEYS = frozenset(
-    {
-        "value",
-        "width",
-        "height",
-        "length",
-        "depth",
-        "diameter",
-        "thickness",
-        "capacity",
-    }
-)
-
-
-def _structured_measurement_pairs(
-    value: Any,
-    *,
-    default_unit: Any = None,
-) -> set[tuple[str, str]]:
-    """结构化数值里的「数字+单位」配对。
-
-    verified_feature 的重量/尺寸存成嵌套字典
-    (``{"unit": "lb", "value": 2.67, "source": {"unit": "g", "value": 1211}}``),
-    只靠正则扫 JSON 文本永远配不出「2.67 lb」—— 凡是带单位的重量/尺寸卖点
-    都会被判「证据里没有这个数字+单位」(2026-08-03 修复)。
-    每个数字只跟它所在那一层声明的单位绑定,不放宽门禁。
-    """
-
-    pairs: set[tuple[str, str]] = set()
-    if isinstance(value, list):
-        for item in value:
-            pairs.update(
-                _structured_measurement_pairs(item, default_unit=default_unit)
-            )
-        return pairs
-    if not isinstance(value, dict):
-        return pairs
-    local_unit = _canonical_measurement_unit(value.get("unit") or default_unit)
-    for key, item in value.items():
-        if isinstance(item, (dict, list)):
-            pairs.update(_structured_measurement_pairs(item, default_unit=local_unit))
-            continue
-        if key not in _STRUCTURED_MEASUREMENT_KEYS:
-            continue
-        if isinstance(item, bool) or not isinstance(item, (int, float, str)):
-            continue
-        if local_unit not in _MEASUREMENT_UNIT_DIMENSIONS:
-            continue
-        pairs.update(
-            (number, local_unit) for number in evidence_number_tokens(item)
-        )
-    return pairs
-
-
-def _supported_measurement_pairs(snapshot: dict[str, Any]) -> set[tuple[str, str]]:
-    """Bind factual and buyer-display numbers to their verified units."""
-
-    explicit_pairs: set[tuple[str, str]] = set()
-    for key in ("value", "raw_value", "value_text"):
-        explicit_pairs.update(_measurement_pairs(snapshot.get(key)))
-    for key in ("value", "raw_value"):
-        explicit_pairs.update(
-            _structured_measurement_pairs(
-                snapshot.get(key), default_unit=snapshot.get("unit")
-            )
-        )
-
-    source_unit = _canonical_measurement_unit(snapshot.get("unit"))
-    if source_unit not in _CONVERTIBLE_MEASUREMENT_UNITS:
-        pairs = set(explicit_pairs)
-        for number, explicit_unit in explicit_pairs:
-            if explicit_unit not in _CONVERTIBLE_MEASUREMENT_UNITS:
-                continue
-            converted = imperial_measurement(number, explicit_unit)
-            if converted is None:
-                continue
-            rendered, converted_unit = converted
-            pairs.update(
-                (converted_number, converted_unit)
-                for converted_number in evidence_number_tokens(rendered)
-            )
-        return pairs
-
-    metric_value = snapshot.get("value")
-    if metric_value in (None, "", [], {}):
-        metric_value = snapshot.get("raw_value")
-
-    pairs = {
-        (number, source_unit)
-        for number in evidence_number_tokens(metric_value)
-    }
-    source_dimension = _MEASUREMENT_UNIT_DIMENSIONS[source_unit]
-    pairs.update(
-        pair
-        for pair in explicit_pairs
-        if _MEASUREMENT_UNIT_DIMENSIONS.get(pair[1]) == source_dimension
-    )
-
-    converted = imperial_measurement(metric_value, source_unit)
-    if converted is not None:
-        rendered, converted_unit = converted
-        pairs.update(
-            (number, converted_unit)
-            for number in evidence_number_tokens(rendered)
-        )
-    else:
-        for number in evidence_number_tokens(metric_value):
-            scalar = imperial_measurement(number, source_unit)
-            if scalar is None:
-                continue
-            rendered, converted_unit = scalar
-            pairs.update(
-                (converted_number, converted_unit)
-                for converted_number in evidence_number_tokens(rendered)
-            )
-    return pairs
-
-
-def _normalized_evidence_text(value: Any) -> str:
-    # 保留中文:运营者证据摘录常直接摘自中文原始描述(2026-07-22 修复:
-    # 原来只留 ASCII,中文摘录被洗成空串,operator_fact 全军覆没)。
-    return re.sub(r"[^a-z0-9一-鿿]+", " ", str(value or "").casefold()).strip()
-
-
-def _contains_evidence_phrase(haystack: str, phrase: Any) -> bool:
-    # 正则项(如 IP 防护等级)直接在归一化文本上匹配。
-    if isinstance(phrase, re.Pattern):
-        return bool(phrase.search(haystack))
-    needle = _normalized_evidence_text(phrase)
-    if not needle:
-        return False
-    # 中文不分词,词边界永远匹配不上(「防水等级」里找不到「防水」),按子串比。
-    if contains_cjk(needle):
-        return needle in haystack
-    return bool(re.search(rf"(?:^|\s){re.escape(needle)}(?:$|\s)", haystack))
-
-
-def _enrich_selling_points_chinese(
-    db: Session,
-    *,
-    context: Any,
-    response: "SellingPointsResponse",
-) -> "SellingPointsResponse":
-    """生成后的中文兜底翻译:逐条卖点 text_zh + 整体 chinese_translation。
-
-    已经带中文的字段不重翻;全部齐整则零调用直接返回。
-    """
-
-    needs_bullets = any(
-        not str(bullet.text_zh or "").strip() for bullet in response.bullets
-    )
-    needs_blob = not str(response.chinese_translation or "").strip()
-    if not response.bullets or (not needs_bullets and not needs_blob):
-        return response
-
-    payload: dict[str, Any] = {
-        "task": "selling_points_translation",
-        "bullets": [bullet.text for bullet in response.bullets],
-        "marketing_copy": response.marketing_copy
-        or response.translated_version
-        or "",
-    }
-    payload["messages"] = _strict_json_messages(
-        instruction=(
-            "You are a bilingual ecommerce copywriter. Translate the given "
-            "English selling-point bullets into Simplified Chinese one by one, "
-            "faithful and natural for a Chinese seller reviewing them. Return "
-            'STRICT JSON: {"bullets_zh": ["...", ...], "chinese_translation": '
-            '"..."}. bullets_zh must contain exactly one Chinese line per input '
-            "bullet, in order. chinese_translation is a Chinese version of the "
-            "marketing copy (or a concise Chinese summary of the bullets when "
-            "no copy is given)."
-        ),
-        payload=payload,
-    )
-    # 出网前结束事务,避免 idle-in-transaction 超时(与主生成调用同款姿势)
-    db.rollback()
-    out = _execute_provider_json(
-        db,
-        context=context,
-        provider="deepseek",
-        task_type="selling_points_translation",
-        payload=payload,
-    )
-    raw_zh = out.get("bullets_zh")
-    bullets_zh = raw_zh if isinstance(raw_zh, list) else []
-    new_bullets = []
-    for index, bullet in enumerate(response.bullets):
-        zh = (
-            str(bullets_zh[index]).strip()
-            if index < len(bullets_zh) and isinstance(bullets_zh[index], str)
-            else ""
-        )
-        if zh and not str(bullet.text_zh or "").strip():
-            new_bullets.append(bullet.model_copy(update={"text_zh": zh}))
-        else:
-            new_bullets.append(bullet)
-    blob = out.get("chinese_translation")
-    chinese_translation = response.chinese_translation
-    if not str(chinese_translation or "").strip() and isinstance(blob, str):
-        chinese_translation = blob.strip() or chinese_translation
-    return response.model_copy(
-        update={"bullets": new_bullets, "chinese_translation": chinese_translation}
-    )
-
-
-def _selling_point_support_error(
-    bullet: SellingPointBullet,
-    snapshot: dict[str, Any],
-    *,
-    package_includes: Any = None,
-    structured_specs: dict[str, Any] | None = None,
-) -> str | None:
-    claim = _normalized_evidence_text(bullet.text)
-    # 中文 label 与英文对照(label_en/value_en/买家展示行)一起进证据文本,
-    # 中文规格才撑得住英文卖点。
-    buyer_display = snapshot.get("buyer_display")
-    if not isinstance(buyer_display, dict):
-        buyer_display = {}
-    fact = _normalized_evidence_text(
-        " ".join(
-            str(source.get(key) or "")
-            for source, keys in (
-                (snapshot, ("path", "label", "label_en", "key", "value_text", "value_en")),
-                (buyer_display, ("label", "display_value", "display_unit")),
-            )
-            for key in keys
-        )
-    )
-    operator_bridge = (
-        _normalized_evidence_text(bullet.evidence_excerpt)
-        if snapshot.get("kind") == "operator_fact"
-        else ""
-    )
-    support = f"{fact} {operator_bridge}".strip()
-
-    claim_numbers = evidence_number_tokens(bullet.text)
-    support_numbers = evidence_number_tokens(
-        " ".join(
-            str(snapshot.get(key) or "")
-            for key in (
-                "path",
-                "label",
-                "key",
-                "value_text",
-                "value",
-                "raw_value",
-            )
-        )
-    )
-    metric_value = snapshot.get("value")
-    if metric_value in (None, "", [], {}):
-        metric_value = snapshot.get("raw_value")
-    support_numbers.update(
-        imperial_equivalent_number_tokens(metric_value, snapshot.get("unit"))
-    )
-    claimed_measurements = _measurement_pairs(bullet.text)
-    supported_measurements = _supported_measurement_pairs(snapshot)
-    support_numbers.update(number for number, _unit in supported_measurements)
-    package_items = canonical_package_includes(package_includes, structured_specs)
-    if re.search(r"\b\d+\s*(?:-|\s)?\s*(?:piece|pieces|pc|pcs)\b", claim):
-        support_numbers.add(str(len(package_items)))
-    unsupported_numbers = sorted(claim_numbers - support_numbers)
-    if unsupported_numbers:
-        return "Claim contains numbers absent from the current evidence: " + ", ".join(unsupported_numbers)
-
-    unsupported_measurements = sorted(claimed_measurements - supported_measurements)
-    if unsupported_measurements:
-        rendered = ", ".join(
-            f"{number} {unit}" for number, unit in unsupported_measurements
-        )
-        return (
-            "Claim contains number/unit pairs absent from the current evidence: "
-            + rendered
-        )
-
-    # 英文主题词匹配只适用于结构化证据(spec/verified_feature)。
-    # operator_fact 的摘录多为中文原文,人工逐条批准本身即是背书,
-    # 强行用英文词表比对必然误杀(2026-07-22 修复)。
-    if snapshot.get("kind") != "operator_fact":
-        for topic, terms in _EVIDENCE_TOPIC_TERMS:
-            claim_has_topic = any(
-                _contains_evidence_phrase(claim, term) for term in terms
-            )
-            if not claim_has_topic:
-                continue
-            if any(_contains_evidence_phrase(support, term) for term in terms):
-                continue
-            # 防护等级与认证(IPX8 / CE / RoHS / UL)本身就是安全证据,
-            # 不必在证据文本里再出现「安全」二字(用户 2026-08-03 拍板)。
-            if topic == "safety" and _SAFETY_EVIDENCE_PATTERN.search(support):
-                continue
-            return f"Evidence does not support the claim topic '{topic}'."
-
-    if snapshot.get("kind") == "operator_fact" and not operator_bridge:
-        return "operator_fact requires a concrete evidence_excerpt."
-    package_error = package_claim_error(
-        bullet.text,
-        package_includes=package_includes,
-        structured_specs=structured_specs,
-    )
-    if package_error:
-        return package_error
-    return None
-
-
-_EVIDENCE_TOPIC_LABELS_ZH = {
-    "wind": "防风",
-    "water": "防水",
-    "indoor": "室内使用",
-    "safety": "安全",
-    "runtime": "续航",
-    "ignition": "点火",
-    "weight": "重量",
-    "size": "尺寸",
-    "material": "材质",
-    "certification": "认证",
-}
-
-
-def _humanize_selling_point_error(error: str) -> str:
-    """把门禁的英文判词翻成运营看得懂、能照着改的中文。
-
-    判词本体保持英文不动(既有测试逐字断言),中文化只发生在返回给人看的这一层。
-    """
-
-    value = str(error or "").strip()
-    topic = re.match(r"Evidence does not support the claim topic '(.+)'\.$", value)
-    if topic:
-        name = _EVIDENCE_TOPIC_LABELS_ZH.get(topic.group(1), topic.group(1))
-        return (
-            f"文案里说了「{name}」,但绑的这条证据跟{name}无关。"
-            f"请改绑一条能证明{name}的规格,或把{name}的说法从文案里去掉。"
-        )
-    numbers = re.match(
-        r"Claim contains numbers absent from the current evidence: (.+)$", value
-    )
-    if numbers:
-        return f"文案里的数字 {numbers.group(1)} 在这条证据里找不到,请改数字或换证据。"
-    pairs = re.match(
-        r"Claim contains number/unit pairs absent from the current evidence: (.+)$",
-        value,
-    )
-    if pairs:
-        return (
-            f"文案里的「{pairs.group(1)}」在这条证据里找不到(数字或单位对不上),"
-            "请改文案或换证据。"
-        )
-    if value == "operator_fact requires a concrete evidence_excerpt.":
-        return "选了「运营自证」就必须填一段具体的证据摘录(工厂原话/资料原文)。"
-    missing_spec = re.match(
-        r"Structured specification evidence was not found: (.+)$", value
-    )
-    if missing_spec:
-        return f"找不到这条规格字段:{missing_spec.group(1)},请重新选一条证据。"
-    missing_feature = re.match(
-        r"Verified feature evidence was not found: (.+)$", value
-    )
-    if missing_feature:
-        return f"找不到这条已验证属性:{missing_feature.group(1)},请重新选一条证据。"
-    if value.startswith("Evidence must be spec:"):
-        return (
-            "证据格式不对,只能填 spec:<规格字段>、verified_feature:<属性 ID> "
-            "或 operator_fact。"
-        )
-    if value == "Every candidate must be approved, edited, or rejected.":
-        return "这条还没做决定,请选通过 / 编辑后通过 / 拒绝。"
-    duplicate = re.match(r"Duplicate selling-point id: (.+)$", value)
-    if duplicate:
-        return f"卖点 id 重复了:{duplicate.group(1)}。"
-    components = re.match(r"Unsupported package component\(s\): (.+)$", value)
-    if components:
-        return (
-            f"文案提到了配件 {components.group(1)},但包装清单里没有,"
-            "请补进包装清单或从文案里去掉。"
-        )
-    piece = re.match(r"(\d+)-piece claim requires a verified piece_count\.$", value)
-    if piece:
-        return f"写了「{piece.group(1)} 件套」,但包装清单没有可核对的件数。"
-    mismatch = re.match(
-        r"(\d+)-piece claim does not match verified piece count \((\d+)\)\.$", value
-    )
-    if mismatch:
-        return (
-            f"写了「{mismatch.group(1)} 件套」,但包装清单实际是 "
-            f"{mismatch.group(2)} 件。"
-        )
-    return value
-
-
-def _selling_point_review_error_message(
-    review_errors: list[dict[str, Any]],
-    *,
-    limit: int = 5,
-) -> str:
-    """一次把问题说全 —— 只报第一条会让人反复提交反复撞墙。"""
-
-    lines = [f"卖点证据审批未通过(共 {len(review_errors)} 条问题):"]
-    for item in review_errors[:limit]:
-        text = str(item.get("text") or "").strip()
-        if len(text) > 40:
-            text = text[:40] + "…"
-        head = f"第 {int(item.get('index', 0)) + 1} 条"
-        if text:
-            head = f"{head}「{text}」"
-        lines.append(f"{head}:{_humanize_selling_point_error(str(item.get('error')))}")
-    if len(review_errors) > limit:
-        lines.append(f"另有 {len(review_errors) - limit} 条问题未列出。")
-    return "\n".join(lines)
-
-
-def _mark_selling_point_evidence_status(
-    db: Session,
-    product: KProductKnowledgeProduct,
-    response: SellingPointsResponse,
-) -> SellingPointsResponse:
-    bullets = []
-    for bullet in response.bullets:
-        snapshot, error = _selling_point_evidence_snapshot(
-            db,
-            product,
-            bullet.evidence,
-            operator_excerpt=bullet.evidence_excerpt,
-        )
-        support_error = (
-            _selling_point_support_error(
-                bullet,
-                snapshot,
-                package_includes=getattr(product, "package_includes_json", None),
-                structured_specs=product.structured_specs_json,
-            )
-            if snapshot is not None
-            else None
-        )
-        # ``operator_fact`` becomes verified only when the operator explicitly
-        # approves/edits the row at the manual gate below.
-        operator_attestation_pending = bullet.evidence == "operator_fact"
-        bullets.append(
-            bullet.model_copy(
-                update={
-                    "verification_status": (
-                        "unverified"
-                        if error or support_error or operator_attestation_pending
-                        else "verified"
-                    )
-                }
-            )
-        )
-    return response.model_copy(update={"bullets": bullets})
-
-
-def _normalize_selling_points_response(
-    provider_output: dict[str, Any],
-    *,
-    product: KProductKnowledgeProduct | None = None,
-    source: str,
-    stored_event_id: UUID | None = None,
-) -> SellingPointsResponse:
-    def _first_present_from(record: dict[str, Any], *keys: str) -> Any:
-        for key in keys:
-            value = record.get(key)
-            if value:
-                return value
-        return None
-
-    def _first_present(*keys: str) -> Any:
-        return _first_present_from(provider_output, *keys)
-
-    raw_bullets = _first_present(
-        "bullets",
-        "selling_points",
-        "high_conversion_selling_points",
-        "structured_bullet_points",
-        "bullet_points",
-        "conversion_selling_points",
-        "conversion_bullets",
-        "value_propositions",
-        "卖点",
-        "转化卖点",
-    ) or []
-    if isinstance(raw_bullets, dict):
-        raw_bullets = _first_present_from(
-            raw_bullets,
-            "items",
-            "bullets",
-            "points",
-            "selling_points",
-            "structured_bullet_points",
-        ) or list(raw_bullets.values())
-    bullets: list[SellingPointBullet] = []
-    if isinstance(raw_bullets, list):
-        for index, raw in enumerate(raw_bullets, start=1):
-            if isinstance(raw, dict):
-                text = str(
-                    raw.get("text")
-                    or raw.get("copy")
-                    or raw.get("point")
-                    or raw.get("headline")
-                    or raw.get("benefit")
-                    or raw.get("value_proposition")
-                    or raw.get("卖点")
-                    or raw.get("文案")
-                    or ""
-                ).strip()
-                category = str(
-                    raw.get("category")
-                    or raw.get("type")
-                    or raw.get("theme")
-                    or raw.get("类别")
-                    or "conversion"
-                ).strip()
-                score_raw = (
-                    raw.get("importance_score")
-                    or raw.get("score")
-                    or raw.get("priority")
-                    or raw.get("权重")
-                    or 1
-                )
-                evidence = str(raw.get("evidence") or "").strip() or None
-                evidence_excerpt = (
-                    str(raw.get("evidence_excerpt") or raw.get("proof") or "").strip()
-                    or None
-                )
-            else:
-                text = str(raw).strip()
-                category = "conversion"
-                score_raw = index
-                evidence = None
-                evidence_excerpt = None
-            if not text:
-                continue
-            try:
-                score = float(score_raw)
-            except (TypeError, ValueError):
-                score = float(index)
-            bullets.append(
-                SellingPointBullet(
-                    id=(
-                        str(raw.get("id")).strip()
-                        if isinstance(raw, dict) and raw.get("id")
-                        else f"sp-{index}"
-                    ),
-                    category=category or "conversion",
-                    text=text,
-                    importance_score=score,
-                    evidence=evidence,
-                    evidence_excerpt=evidence_excerpt,
-                    # Provider claims are candidates. Syntax is not proof and
-                    # only the product-aware/manual gate may mark them verified.
-                    verification_status="unverified",
-                )
-            )
-    if not bullets and isinstance(provider_output.get("content"), str):
-        bullets.append(
-            SellingPointBullet(
-                category="marketing",
-                text=str(provider_output["content"]).strip(),
-                importance_score=1,
-                verification_status="unverified",
-            )
-        )
-    if not bullets:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=_structured_execution_error_detail(
-                reason="provider_error",
-                code="SELLING_POINTS_EMPTY",
-                message="DeepSeek selling points response did not include usable bullet points.",
-                module_id=MODULE_KEY,
-            ),
-        )
-
-    confidence_raw = provider_output.get("confidence_score") or provider_output.get("confidence") or 0.8
-    try:
-        confidence = max(0.0, min(1.0, float(confidence_raw)))
-    except (TypeError, ValueError):
-        confidence = 0.8
-    return SellingPointsResponse(
-        bullets=bullets,
-        seo_keywords=_safe_string_list(
-            _first_present("seo_keywords", "keywords", "search_keywords", "关键词")
-        ),
-        market_tags=_safe_string_list(
-            _first_present("market_tags", "tags", "audience_tags", "市场标签")
-        ),
-        confidence_score=confidence,
-        source=source,
-        marketing_copy=(
-            _first_present("marketing_copy", "copy", "conversion_copy", "营销文案")
-            if isinstance(
-                _first_present("marketing_copy", "copy", "conversion_copy", "营销文案"),
-                str,
-            )
-            else None
-        ),
-        translated_version=(
-            _first_present("translated_version", "localized_copy", "translation")
-            if isinstance(
-                _first_present("translated_version", "localized_copy", "translation"),
-                str,
-            )
-            else None
-        ),
-        chinese_translation=(
-            _first_present(
-                "chinese_translation",
-                "zh_translation",
-                "translated_version_zh",
-                "chinese_version",
-                "中文翻译",
-                "中文版本",
-            )
-            if isinstance(
-                _first_present(
-                    "chinese_translation",
-                    "zh_translation",
-                    "translated_version_zh",
-                    "chinese_version",
-                    "中文翻译",
-                    "中文版本",
-                ),
-                str,
-            )
-            else None
-        ),
-        target_language=(
-            str(provider_output.get("target_language"))
-            if provider_output.get("target_language")
-            else product.canonical_language if product else None
-        ),
-        product_id=str(product.id) if product else None,
-        stored_event_id=str(stored_event_id) if stored_event_id else None,
-    )
-
-
-def _media_asset_read(
-    row: KProductKnowledgeMediaAsset,
-    *,
-    product_ref: str | None = None,
-    include_metadata: bool = False,
-) -> MediaAssetRead:
-    file_url = (
-        row.file_url_placeholder
-        if row.file_url_placeholder and not row.object_key
-        else f"/k/media/{row.id}/file"
-    )
-    thumbnail_url = (
-        row.file_url_placeholder
-        if row.file_url_placeholder and not row.object_key
-        else f"/k/media/{row.id}/thumbnail"
-    )
-    preview_url = (
-        row.file_url_placeholder
-        if row.file_url_placeholder and not row.object_key
-        else f"/k/media/{row.id}/preview"
-    )
-    return MediaAssetRead(
-        id=str(row.id),
-        product_id=product_ref or str(row.product_id),
-        variant_sku=row.variant_sku,
-        asset_type=row.asset_type,
-        asset_role=row.asset_role,
-        status=row.status,
-        review_status=row.review_status,
-        object_key=row.object_key,
-        file_url_placeholder=row.file_url_placeholder,
-        file_url=file_url,
-        thumbnail_url=thumbnail_url,
-        preview_url=preview_url,
-        mime_type=row.mime_type,
-        width=row.width,
-        height=row.height,
-        file_size=row.file_size,
-        source=row.source,
-        metadata=_public_media_metadata(row.metadata_json) if include_metadata else None,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
 
 
 def _organic_results(value: Any) -> list[SERPItem]:
@@ -2747,411 +676,6 @@ def _organic_results(value: Any) -> list[SERPItem]:
             )
         )
     return items
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _source_text_hash(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _stable_payload_digest(value: Any) -> str:
-    return _source_text_hash(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
-    )
-
-
-def _product_ai_warnings(product: KProductKnowledgeProduct) -> dict[str, Any]:
-    return (
-        dict(product.ai_warnings_json)
-        if isinstance(product.ai_warnings_json, dict)
-        else {}
-    )
-
-
-def _active_keyword_snapshot(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> dict[str, Any]:
-    rows = list(
-        db.scalars(
-            select(KProductKnowledgeKeyword)
-            .where(
-                KProductKnowledgeKeyword.product_id == product.id,
-                ~KProductKnowledgeKeyword.status.in_(("removed", "rejected")),
-            )
-            .order_by(
-                KProductKnowledgeKeyword.keyword_text.asc(),
-                KProductKnowledgeKeyword.keyword_type.asc(),
-                KProductKnowledgeKeyword.source.asc(),
-            )
-        )
-    )
-    items = [
-        {
-            "keyword": row.keyword_text.strip().lower(),
-            "keyword_type": row.keyword_type,
-            "language_code": row.language_code,
-            "market": row.market,
-            "source": row.source,
-            "status": row.status,
-        }
-        for row in rows
-        if row.keyword_text and row.keyword_text.strip()
-    ]
-    payload = {"count": len(items), "items": items}
-    return {**payload, "digest": _stable_payload_digest(payload)}
-
-
-def _active_media_snapshot(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> dict[str, Any]:
-    rows = list(
-        db.scalars(
-            select(KProductKnowledgeMediaAsset)
-            .where(
-                KProductKnowledgeMediaAsset.product_id == product.id,
-                KProductKnowledgeMediaAsset.status != "removed",
-            )
-            .order_by(
-                KProductKnowledgeMediaAsset.variant_sku.asc(),
-                KProductKnowledgeMediaAsset.object_key.asc(),
-                KProductKnowledgeMediaAsset.id.asc(),
-            )
-        )
-    )
-    items = []
-    usable_count = 0
-    for row in rows:
-        file_info = _media_asset_file_info(row)
-        requires_local_file = _media_asset_requires_local_file(row)
-        file_available = (
-            file_info["file_available"]
-            if requires_local_file
-            else bool(row.file_url_placeholder or row.object_key)
-        )
-        if file_available:
-            usable_count += 1
-        items.append(
-            {
-                "asset_role": row.asset_role,
-                "asset_type": row.asset_type,
-                "file_available": file_available,
-                "file_size": file_info["file_size"] or row.file_size,
-                "id": str(row.id),
-                "object_key": row.object_key,
-                "review_status": row.review_status,
-                "source": row.source,
-                "status": row.status,
-                "storage_provider": row.storage_provider,
-                "variant_sku": row.variant_sku,
-            }
-        )
-    payload = {"active_count": len(items), "count": usable_count, "items": items}
-    return {**payload, "digest": _stable_payload_digest(payload)}
-
-
-def _stored_selling_points_payload(
-    product: KProductKnowledgeProduct,
-    *,
-    approved_only: bool = False,
-) -> dict[str, Any] | None:
-    approved = product.selling_points_approved_json
-    if isinstance(approved, dict):
-        return approved
-    if approved_only:
-        return None
-    candidates = product.selling_points_candidates_json
-    if isinstance(candidates, dict):
-        return candidates
-    # Read-only compatibility for records written before the evidence columns.
-    payload = _product_ai_warnings(product).get("selling_points")
-    return payload if isinstance(payload, dict) else None
-
-
-def _selling_points_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any]:
-    payload = _stored_selling_points_payload(product, approved_only=True)
-    if payload is None:
-        empty = {"count": 0, "payload": None}
-        return {**empty, "digest": _stable_payload_digest(empty)}
-    bullets = payload.get("bullets")
-    count = len(bullets) if isinstance(bullets, list) else 0
-    stable_payload = {
-        "bullets": bullets if isinstance(bullets, list) else [],
-        "chinese_translation": payload.get("chinese_translation"),
-        "confidence_score": payload.get("confidence_score"),
-        "market_tags": _safe_string_list(payload.get("market_tags")),
-        "marketing_copy": payload.get("marketing_copy"),
-        "product_id": str(product.id),
-        "seo_keywords": _safe_string_list(payload.get("seo_keywords")),
-        "source": payload.get("source"),
-        "target_language": payload.get("target_language"),
-        "translated_version": payload.get("translated_version"),
-        "review_status": payload.get("review_status"),
-    }
-    snapshot_payload = {"count": count, "payload": stable_payload}
-    return {
-        **snapshot_payload,
-        "digest": _stable_payload_digest(snapshot_payload),
-    }
-
-
-def _section_state_from_marker(
-    marker: Any,
-    snapshot: dict[str, Any],
-    *,
-    digest_key: str,
-    min_count: int,
-    missing_reason: str,
-    count_reason: str,
-    submitted_statuses: set[str],
-) -> ProductSectionState:
-    current_digest = str(snapshot.get("digest") or "")
-    count = int(snapshot.get("count") or 0)
-    if count < min_count:
-        return ProductSectionState(
-            submitted=False,
-            dirty=False,
-            status="blocked",
-            reason=count_reason,
-            current_digest=current_digest,
-            count=count,
-        )
-
-    if not isinstance(marker, dict):
-        return ProductSectionState(
-            submitted=False,
-            dirty=False,
-            status="pending",
-            reason=missing_reason,
-            current_digest=current_digest,
-            count=count,
-        )
-
-    submitted_digest = str(marker.get(digest_key) or marker.get("digest") or "")
-    marker_status = str(marker.get("status") or "")
-    submitted_at = (
-        str(marker.get("submitted_at") or marker.get("approved_at"))
-        if marker.get("submitted_at") or marker.get("approved_at")
-        else None
-    )
-    if marker_status not in submitted_statuses or not submitted_digest:
-        return ProductSectionState(
-            submitted=False,
-            dirty=False,
-            status="pending",
-            reason=missing_reason,
-            current_digest=current_digest,
-            submitted_digest=submitted_digest or None,
-            count=count,
-            submitted_at=submitted_at,
-        )
-    if submitted_digest != current_digest:
-        return ProductSectionState(
-            submitted=False,
-            dirty=True,
-            status="dirty",
-            reason="板块内容已修改，需要重新提交。",
-            current_digest=current_digest,
-            submitted_digest=submitted_digest,
-            count=count,
-            submitted_at=submitted_at,
-        )
-
-    return ProductSectionState(
-        submitted=True,
-        dirty=False,
-        status="submitted",
-        current_digest=current_digest,
-        submitted_digest=submitted_digest,
-        count=count,
-        submitted_at=submitted_at,
-    )
-
-
-def _product_readiness(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> ProductReadinessResponse:
-    warnings = _product_ai_warnings(product)
-    keywords = _section_state_from_marker(
-        warnings.get("keyword_review"),
-        _active_keyword_snapshot(db, product),
-        digest_key="keyword_digest",
-        min_count=1,
-        missing_reason="关键词尚未提交。",
-        count_reason="请至少保留一个非风险关键词。",
-        submitted_statuses={"submitted", "approved"},
-    )
-    images = _section_state_from_marker(
-        warnings.get("image_review"),
-        _active_media_snapshot(db, product),
-        digest_key="media_digest",
-        min_count=5,
-        missing_reason="图片尚未提交。",
-        count_reason="请至少提交 5 张图片。",
-        submitted_statuses={"submitted", "approved"},
-    )
-    selling_points = _section_state_from_marker(
-        warnings.get("selling_points_review"),
-        _selling_points_snapshot(product),
-        digest_key="selling_points_digest",
-        min_count=1,
-        missing_reason="卖点尚未提交。",
-        count_reason="请先生成并提交卖点。",
-        submitted_statuses={"submitted", "approved"},
-    )
-    return ProductReadinessResponse(
-        ready=keywords.submitted and images.submitted and selling_points.submitted,
-        keywords=keywords,
-        images=images,
-        selling_points=selling_points,
-    )
-
-
-def _store_keyword_review_snapshot(
-    db: Session,
-    *,
-    product: KProductKnowledgeProduct,
-    execution: Any | None = None,
-    user: User | None = None,
-) -> ProductSectionState:
-    snapshot = _active_keyword_snapshot(db, product)
-    if int(snapshot.get("count") or 0) < 1:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_structured_execution_error_detail(
-                reason="invalid_state",
-                code="KEYWORD_SECTION_INCOMPLETE",
-                message="At least one active non-risk keyword is required before submitting keywords.",
-                module_id=MODULE_KEY,
-            ),
-        )
-    reviewed_at = _now().isoformat()
-    marker = {
-        "status": "submitted",
-        "submitted_at": reviewed_at,
-        "keyword_digest": snapshot["digest"],
-        "keyword_count": snapshot["count"],
-        "submitted_by_user_id": (
-            str(_user_uuid(user)) if user is not None and _user_uuid(user) else None
-        ),
-    }
-    if execution is not None:
-        marker["execution_id"] = str(execution.id)
-    product.ai_warnings_json = {**_product_ai_warnings(product), "keyword_review": marker}
-    if execution is not None and isinstance(execution.risk_approval_log_json, dict):
-        execution.risk_approval_log_json = {
-            **execution.risk_approval_log_json,
-            "keyword_digest": snapshot["digest"],
-            "keyword_count": snapshot["count"],
-        }
-        db.add_all([product, execution])
-    else:
-        db.add(product)
-    db.flush()
-    return _product_readiness(db, product).keywords
-
-
-def _store_image_review_snapshot(
-    db: Session,
-    *,
-    product: KProductKnowledgeProduct,
-    user: User,
-) -> ProductSectionState:
-    snapshot = _active_media_snapshot(db, product)
-    if int(snapshot.get("count") or 0) < 5:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=_structured_execution_error_detail(
-                reason="missing_context",
-                code="IMAGE_SECTION_INCOMPLETE",
-                message="At least 5 active images are required before submitting images.",
-                module_id=MODULE_KEY,
-            ),
-        )
-    submitted_at = _now().isoformat()
-    product.ai_warnings_json = {
-        **_product_ai_warnings(product),
-        "image_review": {
-            "status": "submitted",
-            "submitted_at": submitted_at,
-            "submitted_by_user_id": str(_user_uuid(user)) if _user_uuid(user) else None,
-            "media_digest": snapshot["digest"],
-            "media_count": snapshot["count"],
-        },
-    }
-    db.add(product)
-    db.flush()
-    return _product_readiness(db, product).images
-
-
-def _selling_points_response_from_payload(
-    product: KProductKnowledgeProduct,
-    payload: dict[str, Any],
-) -> SellingPointsResponse:
-    return SellingPointsResponse(
-        bullets=[
-            SellingPointBullet.model_validate(bullet)
-            for bullet in payload.get("bullets", [])
-            if isinstance(bullet, dict)
-        ],
-        seo_keywords=_safe_string_list(payload.get("seo_keywords")),
-        market_tags=_safe_string_list(payload.get("market_tags")),
-        confidence_score=float(payload.get("confidence_score") or 1),
-        source=str(payload.get("source") or "manual_review"),
-        marketing_copy=(
-            str(payload["marketing_copy"])
-            if isinstance(payload.get("marketing_copy"), str)
-            else None
-        ),
-        translated_version=(
-            str(payload["translated_version"])
-            if isinstance(payload.get("translated_version"), str)
-            else None
-        ),
-        chinese_translation=(
-            str(payload["chinese_translation"])
-            if isinstance(payload.get("chinese_translation"), str)
-            else None
-        ),
-        target_language=(
-            str(payload["target_language"])
-            if isinstance(payload.get("target_language"), str)
-            else product.canonical_language
-        ),
-        product_id=str(product.id),
-    )
-
-
-def _ensure_product_ready_for_approval(
-    db: Session,
-    product: KProductKnowledgeProduct,
-) -> None:
-    readiness = _product_readiness(db, product)
-    if readiness.ready:
-        return
-    blockers = {
-        "keywords": readiness.keywords.model_dump(mode="json"),
-        "images": readiness.images.model_dump(mode="json"),
-        "selling_points": readiness.selling_points.model_dump(mode="json"),
-    }
-    raise HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail=_structured_execution_error_detail(
-            reason="invalid_state",
-            code="PRODUCT_SECTIONS_NOT_SUBMITTED",
-            message=(
-                "Product info can only be saved after keywords, images, and "
-                "selling points are submitted without later modifications."
-            ),
-            module_id=MODULE_KEY,
-            extra={"sections": blockers},
-        ),
-    )
 
 
 @router.get("/products", response_model=ProductKnowledgeListResponse)
@@ -4081,15 +1605,31 @@ def k19_keyword_archive(
 @router.get("/risks", response_model=RiskListResponse)
 @router.get("/risk", response_model=RiskListResponse)
 def k20_risks(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_READ)),
 ) -> RiskListResponse:
+    """品牌风险词台账。
+
+    ``k_product_knowledge_risk_terms`` 没有租户列，隔离只能靠 join 父产品表。
+    2026-08-31 体检：这条以前是裸的 select + order_by，**零 scope**，制造组织的
+    超管一个 GET 就能读到国际贸易的全部 50 条风险词——等于把关键词策略和踩雷
+    记录摊给另一家公司。
+    """
     del user
+    scope = _scope_context(request)
     rows = list(
         db.scalars(
-            select(KProductKnowledgeRiskTerm).order_by(
-                KProductKnowledgeRiskTerm.updated_at.desc()
+            select(KProductKnowledgeRiskTerm)
+            .join(
+                KProductKnowledgeProduct,
+                KProductKnowledgeProduct.id == KProductKnowledgeRiskTerm.product_id,
             )
+            .where(
+                KProductKnowledgeProduct.workspace_key == scope.workspace_key,
+                KProductKnowledgeProduct.business_context == scope.business_context,
+            )
+            .order_by(KProductKnowledgeRiskTerm.updated_at.desc())
         )
     )
     return RiskListResponse(
@@ -4631,14 +2171,24 @@ def generate_selling_points(
 
 @router.post(
     "/products/{product_id}/selling-points/generate",
-    response_model=SellingPointsResponse,
+    response_model=GenerationEnqueueResponse,
 )
 def generate_product_selling_points(
     product_id: UUID,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
-) -> SellingPointsResponse:
+):
+    """把卖点生成排进后台队列,立即返回。
+
+    2026-08-03 之前这里是同步跑完两次串行 DeepSeek 调用才返回,实测中位数
+    100s、最慢 903s,运营只能干等且刷新即丢。现在走 ``k_generation_jobs``
+    三阶段(bullets → zh → copy),前端轮 ``/generation-jobs`` 看进度。
+
+    前置校验仍留在这里当场拦:排了队再失败的话,运营要等一分钟才知道
+    自己少填了主关键词。
+    """
+
     try:
         product = get_product(
             db,
@@ -4657,182 +2207,15 @@ def generate_product_selling_points(
                 module_id=MODULE_KEY,
             ),
         )
-    context = _execution_context(
+    # key / 模块门禁干跑一次,让配置类错误当场以结构化 4xx 返回,
+    # 而不是变成 90 秒后 job 行里的一串字符串。
+    _execution_context(
         db,
         request=request,
         user=user,
         key_requirements={"deepseek": "deepseek"},
     )
-    key = context.key_for_step("deepseek")
-    product_payload = _selling_points_evidence_payload(db, product)
-    customer_translation_requests = pending_customer_translation_requests(
-        product.structured_specs_json
-    )
-    scope_context = _scope_context(request)
-    source_name = key.name
-    db.rollback()
-    ai_payload = {
-        "product": product_payload,
-        "module_id": MODULE_KEY,
-        "task": "selling_points",
-        "provider": "deepseek",
-        "task_type": "selling_points",
-        "selling_points_skill": selling_points_skill_context(),
-        "customer_translation_requests": customer_translation_requests,
-        "required_output": [
-            "high_conversion_selling_points",
-            "structured_bullet_points",
-            "marketing_optimized_copy",
-            "translated_version",
-            "chinese_translation",
-            *(["customer_translations"] if customer_translation_requests else []),
-        ],
-    }
-    ai_payload["messages"] = _strict_json_messages(
-        instruction=selling_points_instruction(),
-        payload=ai_payload,
-    )
-    provider_output = _execute_provider_json(
-        db,
-        context=context,
-        provider="deepseek",
-        task_type="selling_points",
-        payload=ai_payload,
-    )
-    try:
-        product = get_product(
-            db,
-            product_id=product_id,
-            scope_context=scope_context,
-        )
-    except KProductKnowledgeError as exc:
-        _raise_k_error(exc)
-    if customer_translation_requests:
-        translated_specs, translated_package = apply_customer_translations(
-            product.structured_specs_json,
-            provider_output,
-        )
-        if translated_specs is not None:
-            product.structured_specs_json = translated_specs
-        if translated_package:
-            product.package_includes_json = translated_package
-        # Translation is a one-shot, source-digest-bound operation.  Persist
-        # both successes and failed request IDs before parsing the unrelated
-        # selling-point envelope, so a malformed selling response cannot cause
-        # the same supplier text to be sent for translation again next time.
-        if translated_specs is not None:
-            invalidate_evidence_outputs(product)
-            db.add(product)
-            db.commit()
-            try:
-                product = get_product(
-                    db,
-                    product_id=product_id,
-                    scope_context=scope_context,
-                )
-            except KProductKnowledgeError as exc:
-                _raise_k_error(exc)
-    try:
-        response = _normalize_selling_points_response(
-            provider_output,
-            product=product,
-            source=source_name,
-        )
-        response = _mark_selling_point_evidence_status(db, product, response)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=_structured_execution_error_detail(
-                reason="provider_error",
-                code="AI_RESPONSE_SCHEMA_MISMATCH",
-                message="AI provider response did not match selling-points schema.",
-                module_id=MODULE_KEY,
-                org_id=context.org_id,
-                extra={"provider": source_name},
-            ),
-        ) from exc
-    # 双语展示(2026-07-22 用户拍板恢复):主生成偶尔漏 chinese_translation,
-    # 这里用专门的 DeepSeek 翻译调用兜底,并给每条卖点配逐条中文对照。
-    try:
-        response = _enrich_selling_points_chinese(db, context=context, response=response)
-    except Exception:  # noqa: BLE001 - 翻译失败绝不阻塞卖点生成
-        logger.exception(
-            "selling points zh enrichment failed product=%s", product.id
-        )
-    output_payload = response.model_dump(mode="json")
-    event = KProductKnowledgeAIEvent(
-        id=uuid4(),
-        product_id=product.id,
-        event_type="selling_points_generation",
-        provider=source_name,
-        provider_model="deepseek-v4-pro",
-        prompt_version=SELLING_POINTS_SKILL_VERSION,
-        input_hash=_source_text_hash(json.dumps(product_payload, sort_keys=True, default=str)),
-        output_summary_json={
-            "bullet_count": len(response.bullets),
-            "target_language": response.target_language,
-            "target_market": product.target_market,
-        },
-        output_payload_json=output_payload,
-        status="succeeded",
-        created_by_user_id=_user_uuid(user),
-        updated_by_user_id=_user_uuid(user),
-    )
-    invalidate_evidence_outputs(product)
-    product.deepseek_structured_output_json = {
-        **(product.deepseek_structured_output_json or {}),
-        "selling_points_generation": provider_output,
-    }
-    output_payload["review_status"] = "candidate"
-    output_payload["generated_at"] = _now().isoformat()
-    product.selling_points_candidates_json = output_payload
-    prior_warnings = _product_ai_warnings(product)
-    product.ai_warnings_json = {
-        **{
-            key: value
-            for key, value in prior_warnings.items()
-            if key != "selling_points_review"
-        },
-        "selling_points": output_payload,
-    }
-    latest_execution = KWorkflowOrchestratorV2(db).latest_execution_for_product(
-        product_id=product.id,
-        scope_context=_scope_context(request),
-    )
-    if latest_execution is not None:
-        latest_execution.trace_json = [
-            *(latest_execution.trace_json or []),
-            {
-                "step": "selling_points_generation",
-                "status": "completed",
-                "timestamp": _now().isoformat(),
-                "output_summary": {
-                    "bullet_count": len(response.bullets),
-                    "provider": source_name,
-                },
-            },
-        ]
-        latest_execution.execution_gate_logs_json = [
-            *(latest_execution.execution_gate_logs_json or []),
-            {
-                "gate": "workflow_state_machine_v2",
-                "status": "allowed",
-                "details": {
-                    "event": "selling_points_generated",
-                    "state": "SELLING_POINTS_GENERATED",
-                    "step": "selling_points_generation",
-                    "closed_loop": True,
-                },
-                "timestamp": _now().isoformat(),
-            },
-        ]
-        db.add(latest_execution)
-    db.add_all([product, event])
-    db.commit()
-    db.refresh(event)
-    return response.model_copy(update={"stored_event_id": str(event.id)})
+    return _enqueue_generation([product_id], "selling_points", request, db, user)
 
 
 @router.get(
@@ -5108,11 +2491,30 @@ def list_media_assets(
     user: User = Depends(_require_k_permission(PERMISSION_READ)),
 ) -> MediaAssetListResponse:
     del user
+    # k_product_knowledge_media_assets 没有租户列，隔离靠 join 父产品表。
+    # 2026-08-31 体检：这条以前只 where(status != "removed")，**零 scope**，
+    # 制造组织超管能枚举国际贸易全部 117 条产品图元数据（SKU、变体色号、
+    # 渲染管线存储路径）。图片字节没漏是因为 /media/{id}/file 逐条校验，
+    # 但清单本身就是情报。
+    scope = _scope_context(request)
+    _scoped_media = (
+        select(KProductKnowledgeMediaAsset.id)
+        .join(
+            KProductKnowledgeProduct,
+            KProductKnowledgeProduct.id == KProductKnowledgeMediaAsset.product_id,
+        )
+        .where(
+            KProductKnowledgeProduct.workspace_key == scope.workspace_key,
+            KProductKnowledgeProduct.business_context == scope.business_context,
+        )
+    )
     query = select(KProductKnowledgeMediaAsset).where(
-        KProductKnowledgeMediaAsset.status != "removed"
+        KProductKnowledgeMediaAsset.status != "removed",
+        KProductKnowledgeMediaAsset.id.in_(_scoped_media),
     )
     count_query = select(func.count()).select_from(KProductKnowledgeMediaAsset).where(
-        KProductKnowledgeMediaAsset.status != "removed"
+        KProductKnowledgeMediaAsset.status != "removed",
+        KProductKnowledgeMediaAsset.id.in_(_scoped_media),
     )
     if product_id:
         product = _product_by_ref(
@@ -5294,28 +2696,6 @@ def upload_product_media_asset(
     db.commit()
     db.refresh(row)
     return _media_asset_read(row, product_ref=_product_public_ref(product))
-
-
-def _image_asset_for_product(
-    db: Session,
-    *,
-    product: KProductKnowledgeProduct,
-    asset_id: UUID,
-) -> KProductKnowledgeMediaAsset:
-    asset = (
-        db.query(KProductKnowledgeMediaAsset)
-        .filter(
-            KProductKnowledgeMediaAsset.id == asset_id,
-            KProductKnowledgeMediaAsset.product_id == product.id,
-        )
-        .one_or_none()
-    )
-    if asset is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Image asset not found for this product.",
-        )
-    return asset
 
 
 class ImageUploadBoundRequest(BaseModel):
@@ -5561,26 +2941,6 @@ def bind_product_image(
     return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
 
 
-class GenerationJobItem(BaseModel):
-    job_id: str
-    product_id: str
-    job_type: str
-    status: str
-    error: str | None = None
-    skill_version: str | None = None
-    started_at: str | None = None
-    finished_at: str | None = None
-
-
-class GenerationEnqueueResponse(BaseModel):
-    batch_id: str
-    jobs: list[GenerationJobItem]
-
-
-class GenerationJobsStatusResponse(BaseModel):
-    jobs: list[GenerationJobItem]
-
-
 class ProductGenerateBatchRequest(BaseModel):
     product_ids: list[UUID]
 
@@ -5659,6 +3019,11 @@ class BrandAuditIgnoreRequest(BaseModel):
     term: str | None = None
     position: int | None = None
     category: str | None = None
+    # 图片指纹自 2026-08-31 起含 asset_id：忽略绑定到具体那一张图，
+    # 重渲出新图就不再继承旧的放行。
+    asset_id: str | None = None
+    # 放行理由。留痕用，不做强制——但空理由会原样记进台账。
+    reason: str = ""
 
 
 @router.post("/products/{product_id}/brand-audit/ignore")
@@ -5671,7 +3036,11 @@ def product_knowledge_brand_audit_ignore(
 ) -> dict[str, Any]:
     """人工放行/撤销一条品牌审查发现(误报或已人工确认保留)。被忽略的发现不再
     阻塞上架;errors 永不可忽略。审查重跑会结转忽略清单。"""
-    from .brand_guard import brand_finding_fingerprint, set_brand_finding_ignored
+    from .brand_guard import (
+        _audit_violation_fingerprints as _brand_audit_fingerprints,
+        brand_finding_fingerprint,
+        set_brand_finding_ignored,
+    )
 
     product = get_product(
         db, product_id=product_id, scope_context=_scope_context(request)
@@ -5683,13 +3052,265 @@ def product_knowledge_brand_audit_ignore(
             "term": payload.term,
             "position": payload.position,
             "category": payload.category,
+            "asset_id": payload.asset_id,
         },
     )
+    # 只允许忽略「当前审查结论里真实存在」的发现。
+    # 以前不校验，等于可以对一个还不存在的违规预先放行——下次那个位号出什么问题
+    # 都自动放行。撤销(ignored=False)不设限：那永远是收紧方向。
+    if payload.ignored:
+        audit_now = (
+            product.brand_audit_json
+            if isinstance(product.brand_audit_json, dict)
+            else {}
+        )
+        known = set(
+            _brand_audit_fingerprints(
+                audit_now.get("text_violations") or [],
+                audit_now.get("image_violations") or [],
+            )
+        )
+        if fingerprint not in known:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="只能忽略当前审查结论里已存在的发现；请先重跑品牌审查。",
+            )
     audit = set_brand_finding_ignored(
-        db, product=product, fingerprint=fingerprint, ignored=payload.ignored
+        db,
+        product=product,
+        fingerprint=fingerprint,
+        ignored=payload.ignored,
+        user=user,
+        reason=payload.reason,
     )
     db.commit()
     return {"brand_audit_json": audit, "fingerprint": fingerprint}
+
+
+class OperatingModelUpdateRequest(BaseModel):
+    """运营者手改的「这个产品怎么工作」。"""
+
+    how_it_works: str = ""
+    hard_constraints: list[str] = Field(default_factory=list)
+    forbidden_depictions: list[str] = Field(default_factory=list)
+    buyer_personas: list[str] = Field(default_factory=list)
+
+
+@router.put("/products/{product_id}/operating-model")
+def product_knowledge_update_operating_model(
+    product_id: UUID,
+    payload: OperatingModelUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> dict[str, Any]:
+    """人工修正产品的工作原理/物理约束/买家画像。
+
+    存在 image_instruction_json["operating_model"]（零迁移）。置
+    edited_by_user=True 后，重新生成作图指令不会再用 AI 推导覆盖它 —— 人工
+    纠正永远权威（见 workflow_engine._resolve_operating_model）。
+    """
+    from sqlalchemy.orm.attributes import flag_modified
+
+    product = get_product(
+        db, product_id=product_id, scope_context=_scope_context(request)
+    )
+    brief = (
+        dict(product.image_instruction_json)
+        if isinstance(product.image_instruction_json, dict)
+        else {}
+    )
+    previous = brief.get("operating_model")
+    previous = previous if isinstance(previous, dict) else {}
+
+    def _clean(values: list[str]) -> list[str]:
+        out: list[str] = []
+        for item in values:
+            text_value = str(item).strip()[:300]
+            if text_value and text_value not in out:
+                out.append(text_value)
+        return out[:8]
+
+    brief["operating_model"] = {
+        **previous,
+        "how_it_works": payload.how_it_works.strip()[:1200],
+        "hard_constraints": _clean(payload.hard_constraints),
+        "forbidden_depictions": _clean(payload.forbidden_depictions),
+        "buyer_personas": _clean(payload.buyer_personas),
+        "edited_by_user": True,
+        "edited_at": datetime.now(UTC).isoformat(),
+    }
+    product.image_instruction_json = brief
+    flag_modified(product, "image_instruction_json")
+    product.updated_by_user_id = user.id
+    db.add(product)
+    db.commit()
+    return {"operating_model": brief["operating_model"]}
+
+
+@router.get("/products/{product_id}/image-plates")
+def product_knowledge_list_image_plates(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> dict[str, Any]:
+    """能当作图底板的实拍图，带姿态与「是否已圈产品」。
+
+    浮窗第一步用它：列出底图，标出哪些还没刷蒙版。没刷的图不会被当底板，
+    所以不存在「忘了刷导致出错」——最多是可用场景少几个。
+    """
+    del user
+    from .brand_guard import (
+        POSE_NONE,
+        product_operating_model,
+        reference_kind_usable,
+        reference_pose,
+    )
+    from .image_render_jobs import product_mask_by_plate
+
+    product = get_product(
+        db, product_id=product_id, scope_context=_scope_context(request)
+    )
+    operating_model = product_operating_model(product)
+    classification = operating_model.get("reference_classification")
+    classification = classification if isinstance(classification, dict) else {}
+    masks = product_mask_by_plate(db, product)
+
+    rows = db.scalars(
+        select(KProductKnowledgeMediaAsset)
+        .where(
+            KProductKnowledgeMediaAsset.product_id == product.id,
+            KProductKnowledgeMediaAsset.asset_role == "reference",
+            KProductKnowledgeMediaAsset.status == "available",
+            KProductKnowledgeMediaAsset.asset_type == "image",
+        )
+        .order_by(KProductKnowledgeMediaAsset.created_at.asc())
+    ).all()
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        key = str(row.object_key or "")
+        pose = reference_pose(operating_model, key)
+        usable = reference_kind_usable(classification.get(key))
+        if not usable or pose == POSE_NONE:
+            continue  # 证书/纯文字页当不了底板
+        mask = masks.get(str(row.id))
+        # 图片响应头是 max-age=31536000, immutable —— 那个前提是「URL 唯一
+        # 标识内容」。参考图被原地修过(2026-08-03 串图修复)，URL 不变内容变了，
+        # 浏览器连硬刷新都不会回源，六张缩略图会一直显示成同一张旧图。
+        # 挂上内容指纹，内容一变 URL 就变，缓存自动失效。
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        version = str(meta.get("content_sha256") or "")[:12] or str(row.updated_at)
+        items.append(
+            {
+                "asset_id": str(row.id),
+                "pose": pose,
+                "has_mask": mask is not None,
+                "mask_asset_id": str(mask.id) if mask is not None else None,
+                "width": row.width,
+                "height": row.height,
+                "file_url": f"/k/media/{row.id}/file?v={version}",
+                "preview_url": f"/k/media/{row.id}/preview?v={version}",
+                # 列表缩略图走 320px 派生图。用 preview(1280px) 铺一屏
+                # 会一次拉好几 MB，首次打开明显发卡。
+                "thumbnail_url": f"/k/media/{row.id}/thumbnail?v={version}",
+            }
+        )
+    return {
+        "items": items,
+        "masked_count": sum(1 for item in items if item["has_mask"]),
+    }
+
+
+class ProductMaskUpdateRequest(BaseModel):
+    """画笔导出的 PNG（data URL 或裸 base64）。"""
+
+    mask_png_base64: str = Field(min_length=32)
+
+
+@router.put("/products/{product_id}/image-plates/{asset_id}/mask")
+def product_knowledge_put_plate_mask(
+    product_id: UUID,
+    asset_id: UUID,
+    payload: ProductMaskUpdateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> dict[str, Any]:
+    """保存某张底图的「产品保护区」蒙版（覆盖式，一张底图只留一份）。"""
+    from .image_render_jobs import store_product_mask_asset
+
+    product = get_product(
+        db, product_id=product_id, scope_context=_scope_context(request)
+    )
+    plate = _image_asset_for_product(db, product=product, asset_id=asset_id)
+
+    raw = payload.mask_png_base64.strip()
+    if raw.startswith("data:"):
+        raw = raw.split(",", 1)[-1]
+    try:
+        contents = base64.b64decode(raw, validate=True)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="蒙版不是有效的 base64 PNG。",
+        ) from exc
+
+    try:
+        mask = store_product_mask_asset(
+            db, product=product, plate_asset=plate, contents=contents, user=user
+        )
+    except KImageRenderError as exc:
+        _raise_render_error(exc)
+    db.commit()
+    return {
+        "asset_id": str(plate.id),
+        "mask_asset_id": str(mask.id),
+        "bytes": len(contents),
+    }
+
+
+class BrandAuditOverrideRequest(BaseModel):
+    """人工放行：审查结论不再拥有否决权。"""
+
+    enabled: bool = True
+    reason: str = ""
+
+
+@router.post("/products/{product_id}/brand-audit/override")
+def product_knowledge_brand_audit_override(
+    product_id: UUID,
+    payload: BrandAuditOverrideRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> dict[str, Any]:
+    """人工放行整个产品的品牌审查（**高于一切 fail-closed 规则**）。
+
+    2026-08-11 用户拍板：审查器是 AI，它不真正了解产品——花洒手柄上的
+    "STOP"（一键止水标识）被判成品牌字样，"panda pump"（产品描述）被判成商标。
+    运营者看过图、做了决定之后，这个控制台里不允许任何一道程序再拦他。
+
+    打开后审查照跑、结论照存照显示，只是不再挡上架。开关留痕（谁/何时/为何）。
+    """
+    from .brand_guard import set_operator_override
+
+    product = get_product(
+        db, product_id=product_id, scope_context=_scope_context(request)
+    )
+    audit = set_operator_override(
+        db,
+        product=product,
+        enabled=payload.enabled,
+        user=user,
+        reason=payload.reason,
+    )
+    db.commit()
+    return {
+        "brand_audit_json": audit,
+        "operator_override": audit.get("operator_override"),
+    }
 
 
 @router.post(
@@ -6281,6 +3902,7 @@ def product_knowledge_category_search(
             "ORDER BY is_leaf DESC, level ASC, full_path ASC LIMIT :limit"
         ),
         {"q": q, "like": f"%{q}%", "limit": limit},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     return CategorySearchResponse(
         tree=table.replace("k_category_", ""),
@@ -6614,3 +4236,17 @@ def product_knowledge_update_faq(
         faq_quality=mcj["faq_quality"],
         faq_schema_eligible=bool(cleaned),
     )
+
+
+# ---------------------------------------------------------------------------
+# 兼容 re-export（2026-09-03 起，剥 service 层时保留）
+# ---------------------------------------------------------------------------
+#
+# 上面那些 `_xxx` 已经搬到 `services/api_support.py`，这里用 import 把名字
+# 保留在本模块的命名空间里 —— 22 个存量测试文件直接 `from ...router import _xxx`，
+# 少一个名字整份测试文件会以 ImportError 崩掉（不是某条断言变红），
+# 在一堆输出里很容易被误读成「环境问题」。
+#
+# 兼容面由 `tests/backend/test_k_router_route_inventory.py` 逐个符号钉住。
+# 全部剥完后单独一个提交改测试的 import、删掉这一层。
+__all__ = [name for name in dir() if not name.startswith("__")]
