@@ -37,7 +37,7 @@ STAGING_INTEGRATION_REPORT_FILE = REPOSITORY_ROOT / "staging_integration_report.
 ROLLBACK_DRILL_REPORT_FILE = REPOSITORY_ROOT / "rollback_drill_report.json"
 STAGING_OBSERVABILITY_REPORT_FILE = REPOSITORY_ROOT / "staging_observability_report.json"
 
-EXPECTED_ALEMBIC_HEAD = "20260828_01_mcp_access_tokens"
+EXPECTED_ALEMBIC_HEAD = "20260902_02_index_storage_events_record_id"
 PINNED_COMPOSE_VERSION = "1.29.2"
 STAGING_PROJECT = "barong-ops-console-staging"
 STAGING_FRONTEND_URL = "http://127.0.0.1:3100"
@@ -1000,12 +1000,11 @@ def build_observability_report() -> dict[str, Any]:
     migration_source = "\n".join(
         read_text(REPOSITORY_ROOT / entry["path"]) for entry in migration["migrations"]
     )
-    alerting_source = read_text(
-        REPOSITORY_ROOT / "backend" / "app" / "services" / "alerting.py"
-    )
-    anomaly_source = read_text(
-        REPOSITORY_ROOT / "backend" / "app" / "services" / "anomaly_detection.py"
-    )
+    # 2026-09-01：告警与异常检测（services/alerting.py、services/anomaly_detection.py）
+    # 已随 C17 末端一起删除——它们只有测试引用，anomaly_events / ops_alerts /
+    # ops_alert_deliveries 三张表在生产库里全是 0 行，compose 里也没有任何启动项。
+    # 这里原来是 read_text() 把这两份**源码当数据文件**读、再做字符串断言，
+    # import 检查抓不到这种引用，删文件会让这个脚本崩在 read_text 上。
     storage_source = read_text(
         REPOSITORY_ROOT / "backend" / "app" / "services" / "storage_layer.py"
     )
@@ -1016,24 +1015,9 @@ def build_observability_report() -> dict[str, Any]:
             if "event_streams" in migration_source and "class DBStorageAdapter" in storage_source
             else "failed",
         },
-        {
-            "id": "anomaly_events_generation",
-            "status": "passed"
-            if "anomaly_events" in migration_source and "AnomalyEventRecord" in anomaly_source
-            else "failed",
-        },
-        {
-            "id": "alert_pipeline_trigger",
-            "status": "passed"
-            if "event_streams -> anomaly_events -> alert_engine -> sink" in alerting_source
-            else "failed",
-        },
-        {
-            "id": "ops_alerts_persistence",
-            "status": "passed"
-            if "ops_alerts" in migration_source and "OpsAlertRecord" in alerting_source
-            else "failed",
-        },
+        # anomaly_events_generation / alert_pipeline_trigger / ops_alerts_persistence
+        # 三项随告警与异常检测一起移除（2026-09-01）。这些检查断言的是一段
+        # 从未在生产上运行过的链路，留着只会给出「通过」的假信号。
         {
             "id": "observability_tables_in_locked_migration_chain",
             "status": "passed"
