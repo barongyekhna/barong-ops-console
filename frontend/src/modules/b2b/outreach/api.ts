@@ -1,8 +1,13 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+import { b2bRequest } from "../api-base";
+
+/**
+ * 补邮箱和生成草稿都是**同步**的：backfill 逐家抓官网联系页,
+ * generate 逐条跑 AI 写稿,耗时随 limit 线性增长。默认 15 秒不够。
+ */
+const SLOW_BATCH_TIMEOUT_MS = 300_000;
+
 const LABEL = "B2B 开发信";
 
 export type EmailTemplate = {
@@ -29,103 +34,49 @@ export type EmailDraft = {
   store_name: string;
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) headers.set("Content-Type", "application/json");
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = typeof body.detail === "string" ? body.detail : "";
-    } catch {
-      // Ignore non-JSON error bodies.
-    }
-    throw new Error(detail || `${LABEL}（${response.status}）`);
-  }
-  return (await response.json()) as T;
-}
-
 export async function getTemplates(): Promise<EmailTemplate[]> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/email-templates`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<EmailTemplate[]>(response);
+    return b2bRequest<EmailTemplate[]>("/b2b/email-templates", LABEL);
 }
 
 export async function seedTemplates(): Promise<{ added: number }> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/email-templates/seed`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<{ added: number }>(response);
+    return b2bRequest<{ added: number }>("/b2b/email-templates/seed", LABEL, { method: "POST" });
 }
 
 export async function patchTemplate(
   id: string,
   payload: { subject?: string; body?: string; active?: boolean },
 ): Promise<EmailTemplate> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/email-templates/${encodeURIComponent(id)}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
-  );
-  return readJson<EmailTemplate>(response);
+    return b2bRequest<EmailTemplate>(
+      `/b2b/email-templates/${encodeURIComponent(id)}`,
+      LABEL,
+      { body: payload, method: "PATCH" },
+    );
 }
 
 export async function backfillEmails(payload: {
   limit: number;
   only_fit: boolean;
 }): Promise<{ checked: number; found: number; message: string }> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/prospect-emails/backfill`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
+  return b2bRequest<{ checked: number; found: number; message: string }>(
+    "/b2b/prospect-emails/backfill",
+    LABEL,
+    { body: payload, method: "POST", timeoutMs: SLOW_BATCH_TIMEOUT_MS },
   );
-  return readJson<{ checked: number; found: number; message: string }>(response);
 }
 
 export async function getDrafts(status = "draft"): Promise<EmailDraft[]> {
   const query = new URLSearchParams({ status });
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/email-drafts?${query.toString()}`,
-    { cache: "no-store", headers: buildHeaders() },
-  );
-  return readJson<EmailDraft[]>(response);
+    return b2bRequest<EmailDraft[]>(`/b2b/email-drafts?${query.toString()}`, LABEL);
 }
 
 export async function generateDrafts(payload: {
   kind: string;
   limit: number;
 }): Promise<{ created: number; skipped: number; message: string }> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/email-drafts/generate`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<{ created: number; skipped: number; message: string }>(
-    response,
+  return b2bRequest<{ created: number; skipped: number; message: string }>(
+    "/b2b/email-drafts/generate",
+    LABEL,
+    { body: payload, method: "POST", timeoutMs: SLOW_BATCH_TIMEOUT_MS },
   );
 }
 
@@ -133,16 +84,11 @@ export async function patchDraft(
   id: string,
   payload: { subject?: string; body?: string; status?: string },
 ): Promise<EmailDraft> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/email-drafts/${encodeURIComponent(id)}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
-  );
-  return readJson<EmailDraft>(response);
+    return b2bRequest<EmailDraft>(
+      `/b2b/email-drafts/${encodeURIComponent(id)}`,
+      LABEL,
+      { body: payload, method: "PATCH" },
+    );
 }
 
 export type Suppression = {
@@ -155,11 +101,7 @@ export type Suppression = {
 
 /** 「永不再发」名单。说过别发了的人，系统里再也生成不出给他的草稿。 */
 export async function getSuppressions(): Promise<Suppression[]> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/suppressions`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<Suppression[]>(response);
+    return b2bRequest<Suppression[]>("/b2b/suppressions", LABEL);
 }
 
 export async function addSuppression(payload: {
@@ -167,10 +109,5 @@ export async function addSuppression(payload: {
   source?: string;
   note?: string;
 }): Promise<Suppression> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/suppressions`, {
-    method: "POST",
-    headers: buildHeaders(true),
-    body: JSON.stringify(payload),
-  });
-  return readJson<Suppression>(response);
+    return b2bRequest<Suppression>("/b2b/suppressions", LABEL, { body: payload, method: "POST" });
 }

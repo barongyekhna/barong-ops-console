@@ -1,8 +1,22 @@
 "use client";
 
+import { requestWithLabel } from "@/lib/labelled-api";
+
+/**
+ * 同步跑外部服务的接口的超时预算。
+ * `POST /f/runs` 后端注释写着「展开子树 → 逐类目 Serper 收割 (+1688 找货)」，
+ * 画像生成同理 —— 都是当场等结果，不是派单。默认 15 秒必然不够。
+ */
+const SLOW_HARVEST_TIMEOUT_MS = 300_000;
+
+// 下面这两个只剩候选图片代理在用 —— 那处**保留裸 fetch**：它要的是 blob，
+// 而 apiRequest 的契约是「返回解析后的 JSON」。
 const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+
+function buildHeaders() {
+  return new Headers({ Accept: "application/json" });
+}
+
 
 export type TreeNode = {
   id: string;
@@ -113,93 +127,58 @@ export type CandidateCreatePayload = {
   notes?: string;
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response, label: string): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = body?.detail ? `：${body.detail}` : "";
-    } catch {
-      // 忽略非 JSON 错误体
-    }
-    throw new Error(`${label}（${response.status}）${detail}`);
-  }
-  return (await response.json()) as T;
-}
-
 export async function getTree(parentId?: string): Promise<TreeResponse> {
   const query = parentId ? `?parent_id=${encodeURIComponent(parentId)}` : "";
-  const response = await fetch(`${API_PROXY_BASE}/f/categories/tree${query}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<TreeResponse>(response, "类目树加载失败");
+  return requestWithLabel<TreeResponse>(
+    `/f/categories/tree${query}`,
+    "类目树加载失败",
+  );
 }
 
 export async function searchTree(q: string): Promise<TreeResponse> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/f/categories/search?q=${encodeURIComponent(q)}`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel<TreeResponse>(
+    `/f/categories/search?q=${encodeURIComponent(q)}`,
+    "类目搜索失败",
   );
-  return readJson<TreeResponse>(response, "类目搜索失败");
 }
 
 export async function getProfile(categoryId: string): Promise<ProfileResponse> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/f/categories/${encodeURIComponent(categoryId)}/profile`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel<ProfileResponse>(
+    `/f/categories/${encodeURIComponent(categoryId)}/profile`,
+    "类目画像加载失败",
   );
-  return readJson<ProfileResponse>(response, "类目画像加载失败");
 }
 
 export async function generateProfile(
   categoryId: string,
 ): Promise<ProfileResponse> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/f/categories/${encodeURIComponent(categoryId)}/profile`,
-    { cache: "no-store", headers: buildHeaders(true), method: "POST" },
+  return requestWithLabel<ProfileResponse>(
+    `/f/categories/${encodeURIComponent(categoryId)}/profile`,
+    "类目画像生成失败",
+    { method: "POST", timeoutMs: SLOW_HARVEST_TIMEOUT_MS },
   );
-  return readJson<ProfileResponse>(response, "类目画像生成失败");
 }
 
 export async function createRun(
   categoryIds: string[],
   mode: RunMode = "full",
 ): Promise<RunItem> {
-  const response = await fetch(`${API_PROXY_BASE}/f/runs`, {
-    body: JSON.stringify({ category_ids: categoryIds, mode }),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<RunItem>(response, "富化运行发起失败");
+  return requestWithLabel<RunItem>(
+    "/f/runs",
+    "富化运行发起失败",
+    {
+      body: { category_ids: categoryIds, mode },
+      method: "POST",
+      timeoutMs: SLOW_HARVEST_TIMEOUT_MS,
+    },
+  );
 }
 
 export async function getRuns(limit = 20): Promise<{ runs: RunItem[] }> {
-  const response = await fetch(`${API_PROXY_BASE}/f/runs?limit=${limit}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<{ runs: RunItem[] }>(response, "运行台账加载失败");
+  return requestWithLabel<{ runs: RunItem[] }>(
+    `/f/runs?limit=${limit}`,
+    "运行台账加载失败",
+  );
 }
 
 export async function getKeywords(params: {
@@ -211,24 +190,21 @@ export async function getKeywords(params: {
   if (params.categoryId) query.set("category_id", params.categoryId);
   if (params.status) query.set("status", params.status);
   query.set("limit", String(params.limit ?? 200));
-  const response = await fetch(
-    `${API_PROXY_BASE}/f/keywords?${query.toString()}`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel(
+    `/f/keywords?${query.toString()}`,
+    "关键词加载失败",
   );
-  return readJson(response, "关键词加载失败");
 }
 
 export async function reviewKeyword(
   keywordId: string,
   status: "candidate" | "approved" | "rejected",
 ): Promise<KeywordItem> {
-  const response = await fetch(`${API_PROXY_BASE}/f/keywords/${keywordId}`, {
-    body: JSON.stringify({ status }),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "PATCH",
-  });
-  return readJson<KeywordItem>(response, "关键词审核失败");
+  return requestWithLabel<KeywordItem>(
+    `/f/keywords/${keywordId}`,
+    "关键词审核失败",
+    { body: { status }, method: "PATCH" },
+  );
 }
 
 export async function getCandidates(params: {
@@ -240,23 +216,20 @@ export async function getCandidates(params: {
   if (params.categoryId) query.set("category_id", params.categoryId);
   if (params.status) query.set("status", params.status);
   query.set("limit", String(params.limit ?? 100));
-  const response = await fetch(
-    `${API_PROXY_BASE}/f/candidates?${query.toString()}`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel(
+    `/f/candidates?${query.toString()}`,
+    "候选池加载失败",
   );
-  return readJson(response, "候选池加载失败");
 }
 
 export async function createCandidate(
   payload: CandidateCreatePayload,
 ): Promise<CandidateItem> {
-  const response = await fetch(`${API_PROXY_BASE}/f/candidates`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<CandidateItem>(response, "候选创建失败");
+  return requestWithLabel<CandidateItem>(
+    "/f/candidates",
+    "候选创建失败",
+    { body: payload, method: "POST" },
+  );
 }
 
 export async function reviewCandidate(
@@ -264,23 +237,21 @@ export async function reviewCandidate(
   action: "approve" | "reject" | "reopen",
   notes?: string,
 ): Promise<CandidateItem> {
-  const response = await fetch(`${API_PROXY_BASE}/f/candidates/${candidateId}`, {
-    body: JSON.stringify({ action, notes }),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "PATCH",
-  });
-  return readJson<CandidateItem>(response, "候选审核失败");
+  return requestWithLabel<CandidateItem>(
+    `/f/candidates/${candidateId}`,
+    "候选审核失败",
+    { body: { action, notes }, method: "PATCH" },
+  );
 }
 
 export async function importCandidateToK(
   candidateId: string,
 ): Promise<{ product_id: string; deduped: boolean }> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/f/candidates/${candidateId}/import-to-k`,
-    { cache: "no-store", headers: buildHeaders(), method: "POST" },
+  return requestWithLabel(
+    `/f/candidates/${candidateId}/import-to-k`,
+    "搬进 K 失败",
+    { method: "POST" },
   );
-  return readJson(response, "搬进 K 失败");
 }
 
 // 候选图片走后端代理（服务端回源 alicdn + 磁盘缓存，绕防盗链并提速）。
@@ -326,18 +297,15 @@ export type MarketRef = {
 export async function getMarketRefs(
   categoryId: string,
 ): Promise<{ category_id: string; groups: Record<string, MarketRef[]> }> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/f/categories/${encodeURIComponent(categoryId)}/market-refs`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel(
+    `/f/categories/${encodeURIComponent(categoryId)}/market-refs`,
+    "市场参考加载失败",
   );
-  return readJson(response, "市场参考加载失败");
 }
 
 export async function getQuota(): Promise<QuotaResponse> {
-  const response = await fetch(`${API_PROXY_BASE}/f/quota`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<QuotaResponse>(response, "额度加载失败");
+  return requestWithLabel<QuotaResponse>(
+    "/f/quota",
+    "额度加载失败",
+  );
 }

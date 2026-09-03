@@ -10,72 +10,16 @@ import type {
 } from "./types";
 import { apiRequest } from "@/lib/api";
 
+/**
+ * 出图的超时预算。两个接口都是**同步等模型返回**（gpt-image-2 出一张
+ * 几十秒起步，多张更久），不是派单。收口前它们一个超时都没有；
+ * `lib/api.ts` 给非 GET 的默认值是 15 秒，照默认走这两个按钮必然失败。
+ */
+const IMAGE_GENERATION_TIMEOUT_MS = 300_000;
+
+// 只剩给媒体库文件/缩略图/预览拼 URL 在用（不是发请求）。
 const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
-
-class IImageApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "IImageApiError";
-  }
-}
-
-function readAccessToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-}
-
-function buildHeaders(hasBody = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  const accessToken = readAccessToken();
-
-  if (hasBody) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
-
-  return headers;
-}
-
-async function errorMessage(response: Response) {
-  try {
-    const payload = (await response.json()) as { detail?: unknown };
-    if (typeof payload.detail === "string") {
-      return payload.detail;
-    }
-    if (
-      payload.detail &&
-      typeof payload.detail === "object" &&
-      "message" in payload.detail
-    ) {
-      const detail = payload.detail as Record<string, unknown>;
-      return typeof detail.message === "string" ? detail.message : "I 图片请求失败。";
-    }
-  } catch {
-    // Keep fallback stable for non-JSON responses.
-  }
-
-  return "I 图片请求失败。";
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    throw new IImageApiError(await errorMessage(response), response.status);
-  }
-  return (await response.json()) as T;
-}
 
 export function imageDataUrl(candidate: Pick<IImageCandidate, "image_base64" | "mime_type">) {
   return `data:${candidate.mime_type};base64,${candidate.image_base64}`;
@@ -90,14 +34,11 @@ export async function generateImages(payload: {
   variant_id?: string | null;
   origin_context?: "i_direct" | "k_handoff";
 }): Promise<IGenerateResponse> {
-  const response = await fetch(`${API_PROXY_BASE}/i/images/generate`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return apiRequest<IGenerateResponse>("/i/images/generate", {
+    body: payload,
     method: "POST",
+    timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
   });
-
-  return readJson<IGenerateResponse>(response);
 }
 
 export async function editImages(payload: {
@@ -128,14 +69,15 @@ export async function editImages(payload: {
     formData.append("files", file);
   }
 
-  const response = await fetch(`${API_PROXY_BASE}/i/images/edit`, {
+  // FormData 直接交给 apiRequest：它不会 JSON.stringify，也不会手动设
+  // Content-Type（multipart 的 boundary 由 fetch 自己按 FormData 生成，
+  // 手动设就没了）。并发上传也不会再被 in-flight 去重合并 ——
+  // 这两条都是 2026-09-02 收口时先补进 lib/api.ts + request-cache.ts 的。
+  return apiRequest<IEditResponse>("/i/images/edit", {
     body: formData,
-    cache: "no-store",
-    headers: buildHeaders(),
     method: "POST",
+    timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
   });
-
-  return readJson<IEditResponse>(response);
 }
 
 export async function saveToMediaLibrary(payload: {

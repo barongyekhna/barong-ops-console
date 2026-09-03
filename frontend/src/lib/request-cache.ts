@@ -40,6 +40,24 @@ function stableJson(value: unknown): string {
     .join(",")}}`;
 }
 
+// 只有纯对象、数组和标量能被 stableJson 稳定序列化。FormData / Blob / File /
+// URLSearchParams 这类走到 `Object.keys()` 一律是空的,两个内容完全不同的上传
+// 会算出同一个 `body:{}` —— 然后撞进下面那段 **对所有方法都生效** 的 in-flight
+// 去重里,第二个上传直接拿到第一个的结果。那不是缓存失效,是数据错乱。
+// 所以这类 body 一律给一个每次调用都不同的 key:既进不了缓存,也合并不了。
+let unstableBodySeq = 0;
+
+function isStablySerializable(value: unknown): boolean {
+  if (value === null || typeof value !== "object") {
+    return true;
+  }
+  if (Array.isArray(value)) {
+    return true;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 function normalizePath(path: string) {
   const url = new URL(path, "https://frontend.local");
   const searchParams = Array.from(url.searchParams.entries()).sort(
@@ -154,6 +172,14 @@ export function getFrontendRequestCacheKey(
   } = {},
 ) {
   const method = (options.method ?? "GET").toUpperCase();
+  if (
+    method !== "GET" &&
+    options.body !== undefined &&
+    !isStablySerializable(options.body)
+  ) {
+    unstableBodySeq += 1;
+    return `${method} ${normalizePath(path)} unstable:${unstableBodySeq}`;
+  }
   const bodyKey =
     method === "GET" || options.body === undefined
       ? ""

@@ -10,6 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
+import { apiRequest } from "@/lib/api";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 import { useAuth } from "@/components/auth-provider";
@@ -562,23 +563,16 @@ function ProductsTable({
     setBusyAsin(asin);
     setTransferMsg("");
     try {
-      const token =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem("barong_ops_access_token")
-          : null;
-      const res = await fetch("/api/backend/k/products/import-from-r", {
+      // 那段读 `barong_ops_access_token` 拼 Bearer 的代码是死的：全仓 19 处
+      // getItem、0 处 setItem，代理 route.ts 也不读 Authorization。
+      // 认证一直靠同源 Cookie，收口后升级成 Cookie + X-Session-Token。
+      const data = await apiRequest<{
+        created?: unknown[];
+        skipped?: unknown[];
+      }>("/k/products/import-from-r", {
+        body: { asins: [asin], channel: transferChannel },
         method: "POST",
-        cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ asins: [asin], channel: transferChannel }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(typeof data?.detail === "string" ? data.detail : "搬运失败");
-      }
       const group = transferChannel === "amazon" ? "亚马逊" : "独立站";
       if (data.created?.length) {
         setTransferMsg(`${asin} 已搬入 K · ${group}分组`);

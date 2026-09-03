@@ -1,8 +1,16 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+import { requestWithLabel } from "@/lib/labelled-api";
+
+/**
+ * 运单刷新的超时预算。
+ *
+ * 后端 `TRACK17_TIMEOUT_SECONDS = 15` —— **和 `lib/api.ts` 给非 GET 的默认
+ * 超时一模一样**。两边相等意味着前端可能在后端还没用完自己那 15 秒时就掐断，
+ * 是必然偶发的失败。留出余量,让后端先超时并给出人话，而不是前端先放弃。
+ */
+const TRACK_REFRESH_TIMEOUT_MS = 45_000;
+
 
 export type ShippingOrigin = "cn_direct" | "us_stock";
 export type ShippingSyncStatus = "draft" | "pending" | "synced" | "failed";
@@ -283,117 +291,72 @@ export type ShippingProductPatchResult = {
   review_needed: boolean;
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response, label: string): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = body?.detail ? `：${body.detail}` : "";
-    } catch {
-      // 忽略非 JSON 错误体
-    }
-    throw new Error(`${label}（${response.status}）${detail}`);
-  }
-  return (await response.json()) as T;
-}
-
 export type ShippingZoneOption = {
   id: number;
   name: string;
 };
 
 export async function getShippingZones(): Promise<ShippingZoneOption[]> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/zones`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<ShippingZoneOption[]>(response, "配送区域");
+  return requestWithLabel<ShippingZoneOption[]>(
+    "/w/shipping/zones",
+    "配送区域",
+  );
 }
 
 export async function getShippingClasses(): Promise<ShippingClass[]> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/classes`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<ShippingClass[]>(response, "运费模板");
+  return requestWithLabel<ShippingClass[]>(
+    "/w/shipping/classes",
+    "运费模板",
+  );
 }
 
 export async function createShippingClass(
   payload: ShippingClassCreatePayload,
 ): Promise<ShippingClass> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/classes`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<ShippingClass>(response, "新增模板");
+  return requestWithLabel<ShippingClass>(
+    "/w/shipping/classes",
+    "新增模板",
+    { body: payload, method: "POST" },
+  );
 }
 
 export async function patchShippingClass(
   id: string,
   payload: ShippingClassPatchPayload,
 ): Promise<ShippingClass> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/classes/${id}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "PATCH",
-  });
-  return readJson<ShippingClass>(response, "保存");
+  return requestWithLabel<ShippingClass>(
+    `/w/shipping/classes/${id}`,
+    "保存",
+    { body: payload, method: "PATCH" },
+  );
 }
 
 export async function syncShippingClass(id: string): Promise<unknown> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/shipping/classes/${id}/sync`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "POST",
-    },
+  return requestWithLabel<unknown>(
+    `/w/shipping/classes/${id}/sync`,
+    "同步到 Woo",
+    { method: "POST" },
   );
-  return readJson<unknown>(response, "同步到 Woo");
 }
 
 export async function deleteShippingClass(
   id: string,
 ): Promise<{ deleted: boolean; dispatched: boolean }> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/classes/${id}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "DELETE",
-  });
-  return readJson(response, "删除模板");
+  return requestWithLabel(
+    `/w/shipping/classes/${id}`,
+    "删除模板",
+    { method: "DELETE" },
+  );
 }
 
 export async function getOrders(
   filter: WOrderFilter = "all",
 ): Promise<WOrdersResponse> {
   const query = new URLSearchParams({ filter });
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/orders?${query.toString()}`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel<WOrdersResponse>(
+    `/w/orders?${query.toString()}`,
+    "订单与物流",
   );
-  return readJson<WOrdersResponse>(response, "订单与物流");
 }
 
 export function normalizeProductSourceSku(sku: string) {
@@ -417,11 +380,10 @@ export async function getProductSources(
     query: query.trim(),
     page: String(normalizedPage),
   });
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/sources?${search.toString()}`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel<ProductSourcesResponse>(
+    `/w/sources?${search.toString()}`,
+    "货源库",
   );
-  return readJson<ProductSourcesResponse>(response, "货源库");
 }
 
 export async function upsertProductSource(
@@ -430,135 +392,107 @@ export async function upsertProductSource(
 ): Promise<ProductSource> {
   const normalizedSku = normalizeProductSourceSku(sku);
   if (!normalizedSku) throw new Error("SKU 不能为空");
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/sources/${encodeURIComponent(normalizedSku)}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PUT",
-    },
+  return requestWithLabel<ProductSource>(
+    `/w/sources/${encodeURIComponent(normalizedSku)}`,
+    "保存货源",
+    { body: payload, method: "PUT" },
   );
-  return readJson<ProductSource>(response, "保存货源");
 }
 
 export async function deleteProductSource(sku: string): Promise<void> {
   const normalizedSku = normalizeProductSourceSku(sku);
   if (!normalizedSku) throw new Error("SKU 不能为空");
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/sources/${encodeURIComponent(normalizedSku)}`,
-    { cache: "no-store", headers: buildHeaders(), method: "DELETE" },
+  // 后端返 204（无响应体）。`lib/api.ts` 认这个状态并返回 undefined，
+  // 所以这里不用再自己判一次 —— 收口前每个 DELETE 都得手写这一行。
+  await requestWithLabel<unknown>(
+    `/w/sources/${encodeURIComponent(normalizedSku)}`,
+    "删除货源",
+    { method: "DELETE" },
   );
-  if (response.status === 204) return;
-  await readJson<unknown>(response, "删除货源");
 }
 
 export async function patchOrderTracking(
   id: string,
   payload: { tracking_number: string | null; carrier_code: number | null },
 ): Promise<TrackingUpdateResponse> {
-  const response = await fetch(`${API_PROXY_BASE}/w/orders/${id}/tracking`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "PATCH",
-  });
-  return readJson<TrackingUpdateResponse>(response, "保存运单号");
+  return requestWithLabel<TrackingUpdateResponse>(
+    `/w/orders/${id}/tracking`,
+    "保存运单号",
+    { body: payload, method: "PATCH" },
+  );
 }
 
 export async function refreshOrderTracking(
   id: string,
 ): Promise<TrackingRefreshResponse> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/orders/${id}/refresh-tracking`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "POST",
-    },
+  return requestWithLabel<TrackingRefreshResponse>(
+    `/w/orders/${id}/refresh-tracking`,
+    "刷新轨迹",
+    { method: "POST", timeoutMs: TRACK_REFRESH_TIMEOUT_MS },
   );
-  return readJson<TrackingRefreshResponse>(response, "刷新轨迹");
 }
 
 export async function getShippingRules(): Promise<ShippingRule[]> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/rules`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<ShippingRule[]>(response, "分配规则");
+  return requestWithLabel<ShippingRule[]>(
+    "/w/shipping/rules",
+    "分配规则",
+  );
 }
 
 export async function createShippingRule(
   payload: ShippingRuleCreatePayload,
 ): Promise<ShippingRule> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/rules`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<ShippingRule>(response, "新增规则");
+  return requestWithLabel<ShippingRule>(
+    "/w/shipping/rules",
+    "新增规则",
+    { body: payload, method: "POST" },
+  );
 }
 
 export async function patchShippingRule(
   id: string,
   payload: ShippingRulePatchPayload,
 ): Promise<ShippingRule> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/rules/${id}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "PATCH",
-  });
-  return readJson<ShippingRule>(response, "保存");
+  return requestWithLabel<ShippingRule>(
+    `/w/shipping/rules/${id}`,
+    "保存",
+    { body: payload, method: "PATCH" },
+  );
 }
 
 export async function deleteShippingRule(id: string): Promise<void> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/rules/${id}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
+  await requestWithLabel<unknown>(`/w/shipping/rules/${id}`, "删除", {
     method: "DELETE",
   });
-  if (response.status === 204) return;
-  await readJson<unknown>(response, "删除");
 }
 
 export async function simulateShipping(
   payload: ShippingSimulationPayload,
 ): Promise<ShippingSimulationResult> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/simulate`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<ShippingSimulationResult>(response, "试算");
+  return requestWithLabel<ShippingSimulationResult>(
+    "/w/shipping/simulate",
+    "试算",
+    { body: payload, method: "POST" },
+  );
 }
 
 export async function assignShipping(
   productId: string,
   force = false,
 ): Promise<ShippingAssignResult> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/shipping/assign/${productId}`,
-    {
-      body: JSON.stringify({ force }),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
+  return requestWithLabel<ShippingAssignResult>(
+    `/w/shipping/assign/${productId}`,
+    "重算",
+    { body: { force }, method: "POST" },
   );
-  return readJson<ShippingAssignResult>(response, "重算");
 }
 
 export async function assignAllShipping(): Promise<ShippingAssignAllResult> {
-  const response = await fetch(`${API_PROXY_BASE}/w/shipping/assign-all`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "POST",
-  });
-  return readJson<ShippingAssignAllResult>(response, "重算全部");
+  return requestWithLabel<ShippingAssignAllResult>(
+    "/w/shipping/assign-all",
+    "重算全部",
+    { method: "POST" },
+  );
 }
 
 export async function getShippingBoard(
@@ -566,25 +500,19 @@ export async function getShippingBoard(
   limit = 500,
 ): Promise<ShippingBoardResponse> {
   const query = new URLSearchParams({ filter, limit: String(limit) });
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/shipping/board?${query.toString()}`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel<ShippingBoardResponse>(
+    `/w/shipping/board?${query.toString()}`,
+    "产品台账",
   );
-  return readJson<ShippingBoardResponse>(response, "产品台账");
 }
 
 export async function patchShippingProduct(
   productId: string,
   payload: ShippingProductPatchPayload,
 ): Promise<ShippingProductPatchResult> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/w/shipping/products/${productId}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
+  return requestWithLabel<ShippingProductPatchResult>(
+    `/w/shipping/products/${productId}`,
+    "产品台账",
+    { body: payload, method: "PATCH" },
   );
-  return readJson<ShippingProductPatchResult>(response, "产品台账");
 }

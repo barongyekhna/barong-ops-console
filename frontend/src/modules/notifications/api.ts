@@ -1,8 +1,20 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
+// 通知的接口层。请求一律走 `lib/api.ts` —— 超时、GET 重试、路由切换取消、
+// 401 派发、中文错误兜底、并发闸门都在那里，本文件不再自造。
+//
+// 2026-09-02 收口前这里有一整套复制品：自己的 API_PROXY_BASE、自己的
+// readJson、自己的 NotificationApiError，以及一段读 `barong_ops_access_token`
+// 拼 `Authorization: Bearer` 的代码 —— 那段是**死代码**：全仓 19 处 getItem、
+// 0 处 setItem，代理 route.ts 也根本不读 Authorization（只认 x-session-token
+// 和 cookie）。它能工作靠的是同源 Cookie，跟这个头无关。
+//
+// `/notifications` 在 request-cache 的 cacheTtlForPath 里 TTL=0（不缓存），
+// 所以两处轮询不需要 bypassCache。
+
+import { apiRequest } from "@/lib/api";
+
 const NOTIFICATIONS_PATH = "/notifications";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 
 export type NotificationLevel = "info" | "success" | "warning" | "error";
 export type NotificationStatus = "unread" | "read" | "archived";
@@ -31,54 +43,6 @@ export type NotificationListResult = {
   offset: number;
 };
 
-export class NotificationApiError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "NotificationApiError";
-  }
-}
-
-function readAccessToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-}
-
-function buildHeaders(hasBody = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  const token = readAccessToken();
-  if (hasBody) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    let message = `请求失败（${response.status}）`;
-    try {
-      const detail = (await response.json())?.detail;
-      if (typeof detail === "string" && detail) {
-        message = detail;
-      }
-    } catch {
-      // keep default message
-    }
-    throw new NotificationApiError(message, response.status);
-  }
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  return (await response.json()) as T;
-}
-
 export async function getNotifications(options?: {
   status?: NotificationStatus;
   level?: NotificationLevel;
@@ -91,44 +55,30 @@ export async function getNotifications(options?: {
   if (options?.limit != null) params.set("limit", String(options.limit));
   if (options?.offset != null) params.set("offset", String(options.offset));
   const query = params.toString();
-  const path = query ? `${NOTIFICATIONS_PATH}?${query}` : NOTIFICATIONS_PATH;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<NotificationListResult>(response);
+  return apiRequest<NotificationListResult>(
+    query ? `${NOTIFICATIONS_PATH}?${query}` : NOTIFICATIONS_PATH,
+  );
 }
 
 export async function getUnreadCount(): Promise<number> {
-  const path = `${NOTIFICATIONS_PATH}/unread-count`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  const data = await readJson<{ unread: number }>(response);
+  const data = await apiRequest<{ unread: number }>(
+    `${NOTIFICATIONS_PATH}/unread-count`,
+  );
   return data.unread ?? 0;
 }
 
 export async function markNotificationRead(id: number): Promise<number> {
-  const path = `${NOTIFICATIONS_PATH}/${id}/read`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  const data = await readJson<{ updated: number }>(response);
+  const data = await apiRequest<{ updated: number }>(
+    `${NOTIFICATIONS_PATH}/${id}/read`,
+    { method: "POST" },
+  );
   return data.updated ?? 0;
 }
 
 export async function markAllNotificationsRead(): Promise<number> {
-  const path = `${NOTIFICATIONS_PATH}/read-all`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  const data = await readJson<{ updated: number }>(response);
+  const data = await apiRequest<{ updated: number }>(
+    `${NOTIFICATIONS_PATH}/read-all`,
+    { method: "POST" },
+  );
   return data.updated ?? 0;
 }

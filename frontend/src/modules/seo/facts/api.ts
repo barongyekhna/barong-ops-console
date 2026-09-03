@@ -1,8 +1,21 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+import { requestWithLabel } from "@/lib/labelled-api";
+
+/**
+ * 当场打外部服务的接口的超时预算。
+ *
+ * `lib/api.ts` 给非 GET 的默认值是 15 秒。这个模块里有几条**不是派单、
+ * 是同步等结果**（后端 docstring 里写着的）：选题雷达和可攻度打 Serper，
+ * 重写/解读同步等 AI 返回（SEO 那条注释直说「**同步**——排队那条路是坏的」），
+ * 枢纽页重建和簇发布连着打 WP.com，阵地巡检逐条问句打 Serper。
+ * 收口前它们一个超时都没有；照默认值收口这些按钮会集体失效。
+ *
+ * 派单类（返回 job_id 就走）保持默认：`/topics/{id}/generate`、`/publishes`、
+ * `/clusters/{id}/generate`、`/backlinks`。
+ */
+const SLOW_EXTERNAL_TIMEOUT_MS = 300_000;
+
 
 export type CraftFact = {
   id: string;
@@ -57,91 +70,55 @@ export type FactDraft = {
   change_reason?: string | null;
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response, label: string): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = typeof body?.detail === "string" ? `：${body.detail}` : "";
-    } catch {
-      detail = "";
-    }
-    throw new Error(`${label}（${response.status}）${detail}`);
-  }
-  return (await response.json()) as T;
-}
-
 export async function listFacts(): Promise<FactsState> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/facts`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson(response, "工艺事实库加载失败");
+  return requestWithLabel(
+    "/seo/facts",
+    "工艺事实库加载失败",
+  );
 }
 
 export async function createFact(draft: FactDraft): Promise<CraftFact> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/facts`, {
-    body: JSON.stringify(draft),
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "新增工艺事实失败");
+  return requestWithLabel(
+    "/seo/facts",
+    "新增工艺事实失败",
+    { body: draft, method: "POST" },
+  );
 }
 
 export async function updateFact(
   factId: string,
   draft: FactDraft,
 ): Promise<CraftFact & { version_bumped: boolean; note: string | null }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/facts/${factId}`, {
-    body: JSON.stringify(draft),
-    headers: buildHeaders(true),
-    method: "PATCH",
-  });
-  return readJson(response, "保存工艺事实失败");
+  return requestWithLabel(
+    `/seo/facts/${factId}`,
+    "保存工艺事实失败",
+    { body: draft, method: "PATCH" },
+  );
 }
 
 export async function approveFact(factId: string): Promise<CraftFact> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/facts/${factId}/approve`, {
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "批准失败");
+  return requestWithLabel(
+    `/seo/facts/${factId}/approve`,
+    "批准失败",
+    { method: "POST" },
+  );
 }
 
 export async function retireFact(factId: string): Promise<CraftFact> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/facts/${factId}/retire`, {
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "停用失败");
+  return requestWithLabel(
+    `/seo/facts/${factId}/retire`,
+    "停用失败",
+    { method: "POST" },
+  );
 }
 
 export async function factRevisions(
   factId: string,
 ): Promise<{ revisions: FactRevision[] }> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/seo/facts/${factId}/revisions`,
-    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  return requestWithLabel(
+    `/seo/facts/${factId}/revisions`,
+    "版本历史加载失败",
   );
-  return readJson(response, "版本历史加载失败");
 }
 
 /* ------------------------------------------------------- 选题 · 关键词雷达 */
@@ -182,31 +159,28 @@ export async function listTopics(): Promise<{
   topics: SeoTopic[];
   last_run: RadarRun | null;
 }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/topics`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson(response, "选题队列加载失败");
+  return requestWithLabel(
+    "/seo/topics",
+    "选题队列加载失败",
+  );
 }
 
 export async function runRadar(extra: string[]): Promise<RadarRun> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/topics/radar`, {
-    body: JSON.stringify({ extra_keywords: extra }),
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "雷达跑批失败");
+  return requestWithLabel(
+    "/seo/topics/radar",
+    "雷达跑批失败",
+    { body: { extra_keywords: extra }, method: "POST", timeoutMs: SLOW_EXTERNAL_TIMEOUT_MS },
+  );
 }
 
 export async function probeTerrain(
   topicId: string,
 ): Promise<{ attackability: number | null; terrain: string | null }> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/seo/topics/${topicId}/terrain`,
-    { headers: buildHeaders(true), method: "POST" },
+  return requestWithLabel(
+    `/seo/topics/${topicId}/terrain`,
+    "可攻度探测失败",
+    { method: "POST", timeoutMs: SLOW_EXTERNAL_TIMEOUT_MS },
   );
-  return readJson(response, "可攻度探测失败");
 }
 
 export async function setTopicStatus(
@@ -214,20 +188,19 @@ export async function setTopicStatus(
   status: string,
   rejectedReason?: string,
 ): Promise<{ status: string }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/topics/${topicId}`, {
-    body: JSON.stringify({ status, rejected_reason: rejectedReason ?? null }),
-    headers: buildHeaders(true),
-    method: "PATCH",
-  });
-  return readJson(response, "更新选题失败");
+  return requestWithLabel(
+    `/seo/topics/${topicId}`,
+    "更新选题失败",
+    { body: { status, rejected_reason: rejectedReason ?? null }, method: "PATCH" },
+  );
 }
 
 export async function generateArticle(topicId: string): Promise<unknown> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/seo/topics/${topicId}/generate`,
-    { headers: buildHeaders(true), method: "POST" },
+  return requestWithLabel(
+    `/seo/topics/${topicId}/generate`,
+    "排队生成失败",
+    { method: "POST" },
   );
-  return readJson(response, "排队生成失败");
 }
 
 /* ------------------------------------------------------------------ 内容 */
@@ -281,32 +254,29 @@ export async function listItems(): Promise<{
   items: SeoItem[];
   jobs: SeoJob[];
 }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/items`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson(response, "内容加载失败");
+  return requestWithLabel(
+    "/seo/items",
+    "内容加载失败",
+  );
 }
 
 export async function reviewItem(
   itemId: string,
   reviewStatus: string,
 ): Promise<{ review_status: string }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/items/${itemId}/review`, {
-    body: JSON.stringify({ review_status: reviewStatus }),
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "审核失败");
+  return requestWithLabel(
+    `/seo/items/${itemId}/review`,
+    "审核失败",
+    { body: { review_status: reviewStatus }, method: "POST" },
+  );
 }
 
 export async function reviseItem(itemId: string): Promise<unknown> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/items/${itemId}/revise`, {
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "排队重写失败");
+  return requestWithLabel(
+    `/seo/items/${itemId}/revise`,
+    "排队重写失败",
+    { method: "POST", timeoutMs: SLOW_EXTERNAL_TIMEOUT_MS },
+  );
 }
 
 /* ------------------------------------------------------------------ 发布 */
@@ -322,34 +292,31 @@ export type PublishJob = {
 };
 
 export async function listPublishes(): Promise<{ jobs: PublishJob[] }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/publishes`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson(response, "发布记录加载失败");
+  return requestWithLabel(
+    "/seo/publishes",
+    "发布记录加载失败",
+  );
 }
 
 export async function publishItems(
   itemIds: string[],
 ): Promise<{ job_id: string; status: string }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/publishes`, {
-    body: JSON.stringify({ item_ids: itemIds }),
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "派发布单失败");
+  return requestWithLabel(
+    "/seo/publishes",
+    "派发布单失败",
+    { body: { item_ids: itemIds }, method: "POST" },
+  );
 }
 
 export async function rebuildFactoryIndex(): Promise<{
   url: string | null;
   excluded_category_ids: string | null;
 }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/factory-index`, {
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "重建 /factory/ 枢纽页失败");
+  return requestWithLabel(
+    "/seo/factory-index",
+    "重建 /factory/ 枢纽页失败",
+    { method: "POST", timeoutMs: SLOW_EXTERNAL_TIMEOUT_MS },
+  );
 }
 
 /* ------------------------------------------------------------------ 监测 */
@@ -366,21 +333,19 @@ export async function getMonitor(): Promise<{
   watched: number;
   rows: MonitorRow[];
 }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/monitor`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson(response, "监测面板加载失败");
+  return requestWithLabel(
+    "/seo/monitor",
+    "监测面板加载失败",
+  );
 }
 
 export async function seedMonitor(): Promise<{
   added: number;
   topics_rescored: number;
 }> {
-  const response = await fetch(`${API_PROXY_BASE}/seo/monitor/seed`, {
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson(response, "灌入监测名单失败");
+  return requestWithLabel(
+    "/seo/monitor/seed",
+    "灌入监测名单失败",
+    { method: "POST", timeoutMs: SLOW_EXTERNAL_TIMEOUT_MS },
+  );
 }

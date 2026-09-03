@@ -662,13 +662,12 @@ export function ImageSystemWorkspace() {
         ).reference_image_url;
         if (referenceUrl) {
           setMode("edit");
-          const token =
-            typeof window !== "undefined"
-              ? window.localStorage.getItem("barong_ops_access_token")
-              : null;
+          // 取的是 blob，**保留裸 fetch** —— apiRequest 的契约是返回解析后的
+          // JSON。原来这里还拼了 `Authorization: Bearer`，那是死代码
+          // （全仓 0 处 setItem，代理也不读这个头），认证靠同源 Cookie。
           fetch(`/api/backend/k/products/${productId}/reference-image`, {
             cache: "no-store",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            credentials: "include",
           })
             .then((response) => (response.ok ? response.blob() : null))
             .then((blob) => {

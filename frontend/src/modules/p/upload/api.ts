@@ -1,8 +1,10 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+import { requestWithLabel } from "@/lib/labelled-api";
+
+// 收口时口径从 `${label}（${status}）` 换成 B 式 `${label}（${status}）：${detail}`。
+// 是**加信息不是减**：原来后端给的人话被整个丢掉，只剩一个状态码。
+
 
 export type UploadJob = {
   job_id: string;
@@ -30,34 +32,11 @@ export type UploadJobsResult = {
   summary: UploadJobsSummary;
 };
 
-function buildHeaders() {
-  const headers = new Headers({ Accept: "application/json" });
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response, label: string): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    throw new Error(`${label}（${response.status}）`);
-  }
-  return (await response.json()) as T;
-}
-
 export async function getUploadJobs(limit = 50): Promise<UploadJobsResult> {
-  const response = await fetch(`${API_PROXY_BASE}/p/uploads?limit=${limit}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<UploadJobsResult>(response, "上架台账加载失败");
+  return requestWithLabel<UploadJobsResult>(
+    `/p/uploads?limit=${limit}`,
+    "上架台账加载失败",
+  );
 }
 
 export type BoardProduct = {
@@ -78,12 +57,10 @@ export type BoardResult = {
 };
 
 export async function getBoard(): Promise<BoardResult> {
-  const response = await fetch(`${API_PROXY_BASE}/p/products/board`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<BoardResult>(response, "产品分组加载失败");
+  return requestWithLabel<BoardResult>(
+    "/p/products/board",
+    "产品分组加载失败",
+  );
 }
 
 export type FaqRecheckResult = {
@@ -97,29 +74,19 @@ export type FaqRecheckResult = {
 };
 
 export async function recheckFaq(productId: string): Promise<FaqRecheckResult> {
-  const headers = buildHeaders();
-  headers.set("Content-Type", "application/json");
-  const response = await fetch(
-    `${API_PROXY_BASE}/p/products/${productId}/faq-recheck`,
-    {
-      cache: "no-store",
-      headers,
-      method: "POST",
-    },
+  return requestWithLabel<FaqRecheckResult>(
+    `/p/products/${productId}/faq-recheck`,
+    "FAQ 复检失败",
+    { method: "POST" },
   );
-  return readJson<FaqRecheckResult>(response, "FAQ 复检失败");
 }
 
 export async function dispatchProducts(
   productIds: string[],
 ): Promise<{ queued: string[]; blocked: { product_id: string; blockers: string[] }[] }> {
-  const headers = buildHeaders();
-  headers.set("Content-Type", "application/json");
-  const response = await fetch(`${API_PROXY_BASE}/p/dispatch/batch`, {
-    body: JSON.stringify({ product_ids: productIds }),
-    cache: "no-store",
-    headers,
-    method: "POST",
-  });
-  return readJson(response, "上传派单失败");
+  return requestWithLabel(
+    "/p/dispatch/batch",
+    "上传派单失败",
+    { body: { product_ids: productIds }, method: "POST" },
+  );
 }

@@ -1,8 +1,6 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+import { requestPreferDetail } from "@/lib/labelled-api";
 
 export type HealthRunTrigger = "scheduled" | "manual";
 export type HealthRunStatus = "running" | "completed" | "failed";
@@ -109,67 +107,27 @@ export type SmtpDiagnostic = {
   error?: string;
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response, label: string): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = typeof body.detail === "string" ? body.detail : "";
-    } catch {
-      // Ignore non-JSON error bodies.
-    }
-    throw new Error(detail || `${label}（${response.status}）`);
-  }
-  return (await response.json()) as T;
-}
-
 export async function getHealthRuns(
   limit = 30,
 ): Promise<{ runs: HealthRun[] }> {
-  const response = await fetch(`${API_PROXY_BASE}/h/runs?limit=${limit}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<{ runs: HealthRun[] }>(response, "H 站点健康");
+  return requestPreferDetail<{ runs: HealthRun[] }>(
+    `/h/runs?limit=${limit}`,
+    "H 站点健康",
+  );
 }
 
 export async function getHealthRun(runId: string): Promise<HealthRunDetail> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/h/runs/${encodeURIComponent(runId)}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "GET",
-    },
+  return requestPreferDetail<HealthRunDetail>(
+    `/h/runs/${encodeURIComponent(runId)}`,
+    "H 站点健康",
   );
-  return readJson<HealthRunDetail>(response, "H 站点健康");
 }
 
 export async function triggerHealthRun(): Promise<HealthRun> {
-  const response = await fetch(`${API_PROXY_BASE}/h/runs/trigger`, {
-    cache: "no-store",
-    headers: buildHeaders(),
+  // 往 n8n 派单，不是当场跑体检 —— 默认超时够用。
+  return requestPreferDetail<HealthRun>("/h/runs/trigger", "H 站点健康", {
     method: "POST",
   });
-  return readJson<HealthRun>(response, "H 站点健康");
 }
 
 export async function getHealthFindings(params: {
@@ -184,16 +142,8 @@ export async function getHealthFindings(params: {
   if (params.findingType) {
     query.set("finding_type", params.findingType);
   }
-  const response = await fetch(
-    `${API_PROXY_BASE}/h/findings?${query.toString()}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "GET",
-    },
-  );
-  return readJson<{ items: HealthFinding[]; total: number }>(
-    response,
+  return requestPreferDetail<{ items: HealthFinding[]; total: number }>(
+    `/h/findings?${query.toString()}`,
     "H 站点健康",
   );
 }
@@ -202,68 +152,44 @@ export async function updateHealthFinding(
   findingId: string,
   action: HealthFindingAction,
 ): Promise<HealthFinding> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/h/findings/${encodeURIComponent(findingId)}`,
-    {
-      body: JSON.stringify({ action }),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
+  return requestPreferDetail<HealthFinding>(
+    `/h/findings/${encodeURIComponent(findingId)}`,
+    "H 站点健康",
+    { body: { action }, method: "PATCH" },
   );
-  return readJson<HealthFinding>(response, "H 站点健康");
 }
 
 export async function getWpRedirects(): Promise<RedirectsResponse> {
-  const response = await fetch(`${API_PROXY_BASE}/h/wp/redirects`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<RedirectsResponse>(response, "跳转管理");
+  return requestPreferDetail<RedirectsResponse>("/h/wp/redirects", "跳转管理");
 }
 
 export async function saveWpRedirects(
   rules: RedirectRule[],
 ): Promise<RedirectsResponse> {
-  const response = await fetch(`${API_PROXY_BASE}/h/wp/redirects`, {
-    body: JSON.stringify({ rules }),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "PUT",
-  });
-  return readJson<RedirectsResponse>(response, "保存跳转规则");
+  return requestPreferDetail<RedirectsResponse>(
+    "/h/wp/redirects",
+    "保存跳转规则",
+    { body: { rules }, method: "PUT" },
+  );
 }
 
 export async function verifyWpRedirect(
   path: string,
 ): Promise<RedirectVerification> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/h/wp/redirects/verify`,
-    {
-      body: JSON.stringify({ path }),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
+  return requestPreferDetail<RedirectVerification>(
+    "/h/wp/redirects/verify",
+    "验证跳转规则",
+    { body: { path }, method: "POST" },
   );
-  return readJson<RedirectVerification>(response, "验证跳转规则");
 }
 
 export async function getWpSentinel(): Promise<WpSentinel> {
-  const response = await fetch(`${API_PROXY_BASE}/h/wp/sentinel`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<WpSentinel>(response, "插件哨兵");
+  return requestPreferDetail<WpSentinel>("/h/wp/sentinel", "插件哨兵");
 }
 
 export async function runWpSmtpCheck(): Promise<SmtpDiagnostic> {
-  const response = await fetch(`${API_PROXY_BASE}/h/wp/smtp-check`, {
-    cache: "no-store",
-    headers: buildHeaders(),
+  // 后端对 WP 的调用统一 WP_TIMEOUT_SECONDS=10，所以 15 秒默认够用。
+  return requestPreferDetail<SmtpDiagnostic>("/h/wp/smtp-check", "SMTP 体检", {
     method: "POST",
   });
-  return readJson<SmtpDiagnostic>(response, "SMTP 体检");
 }

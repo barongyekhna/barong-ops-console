@@ -1,9 +1,22 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+// B2B 产品页小窗 + 批发站点发布的接口层。请求统一走 `lib/api.ts`。
+//
+// **超时是这里唯一需要动脑的地方。** 收口前这四个调用一个超时都没有(无限等);
+// `lib/api.ts` 给非 GET 的默认值是 15 秒,而下面两个写接口都会连着打 WP.com:
+//   · `/b2b/website/publish` = 1 个主页 + N 个店型子页 + 指南回链 + 小窗文案,
+//     生产上现在 N=6,也就是至少 9 次跨公网往返 —— 15 秒必被掐断。
+//   · `/b2b/widget-push` = 按产品逐个推,规模随产品数长。
+// 所以这两处显式放宽。留一个有限上限而不是照抄「无限等」:WP 挂了的时候,
+// 无限等会让按钮永远转圈、连一句话都给不出。
+
+import { b2bRequest } from "../api-base";
+
 const LABEL = "B2B 产品页小窗";
+
+/** WP.com 往返慢,发布一次要打 9+ 次。见文件头。 */
+const WHOLESALE_PUBLISH_TIMEOUT_MS = 180_000;
+const WIDGET_PUSH_TIMEOUT_MS = 120_000;
 
 export type WidgetJob = {
   job_id: string;
@@ -20,53 +33,16 @@ export type WidgetPushResult = {
   targets: number;
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = typeof body.detail === "string" ? body.detail : "";
-    } catch {
-      // Ignore non-JSON error bodies.
-    }
-    throw new Error(detail || `${LABEL}（${response.status}）`);
-  }
-  return (await response.json()) as T;
-}
-
 export async function getWidgetJobs(): Promise<WidgetJob[]> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/widget-jobs`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<WidgetJob[]>(response);
+  return b2bRequest<WidgetJob[]>("/b2b/widget-jobs", LABEL);
 }
 
 /** 全量重推。政策文案改了之后用这个——每产品的数据平时保存即自动推。 */
 export async function pushWidgets(): Promise<WidgetPushResult> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/widget-push`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return b2bRequest<WidgetPushResult>("/b2b/widget-push", LABEL, {
     method: "POST",
+    timeoutMs: WIDGET_PUSH_TIMEOUT_MS,
   });
-  return readJson<WidgetPushResult>(response);
 }
 
 export type WholesaleSiteStatus = {
@@ -93,19 +69,13 @@ export type WholesalePublishResult = {
 };
 
 export async function getWholesaleSiteStatus(): Promise<WholesaleSiteStatus> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/website/status`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<WholesaleSiteStatus>(response);
+  return b2bRequest<WholesaleSiteStatus>("/b2b/website/status", LABEL);
 }
 
 /** 重新生成 /wholesale/ 主页和全部店型子页。幂等。 */
 export async function publishWholesaleSite(): Promise<WholesalePublishResult> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/website/publish`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return b2bRequest<WholesalePublishResult>("/b2b/website/publish", LABEL, {
     method: "POST",
+    timeoutMs: WHOLESALE_PUBLISH_TIMEOUT_MS,
   });
-  return readJson<WholesalePublishResult>(response);
 }

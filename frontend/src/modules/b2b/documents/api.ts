@@ -1,7 +1,9 @@
 "use client";
 
+import { b2bRequest } from "../api-base";
+
+// 只剩 downloadDocument 在用（下载走裸 fetch，见下）。
 const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 const LABEL = "B2B 单据";
 
@@ -43,58 +45,25 @@ export const STAGES: { key: string; label: string }[] = [
   { key: "closed", label: "已完成" },
 ];
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) headers.set("Content-Type", "application/json");
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = typeof body.detail === "string" ? body.detail : "";
-    } catch {
-      // 非 JSON 错误体忽略
-    }
-    throw new Error(detail || `${LABEL}（${response.status}）`);
-  }
-  return (await response.json()) as T;
+function buildHeaders() {
+  return new Headers({ Accept: "application/json" });
 }
 
 export async function getBanking(): Promise<BankingState> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/banking`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<BankingState>(response);
+  return b2bRequest<BankingState>("/b2b/banking", LABEL);
 }
 
 export async function saveBanking(
   profile: Record<string, string>,
 ): Promise<BankingState> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/banking`, {
-    body: JSON.stringify(profile),
-    headers: buildHeaders(true),
+  return b2bRequest<BankingState>("/b2b/banking", LABEL, {
+    body: profile,
     method: "PUT",
   });
-  return readJson<BankingState>(response);
 }
 
 export async function getDocuments(): Promise<B2BDocument[]> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/documents`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<B2BDocument[]>(response);
+  return b2bRequest<B2BDocument[]>("/b2b/documents", LABEL);
 }
 
 export async function createDocument(payload: {
@@ -109,12 +78,10 @@ export async function createDocument(payload: {
   freight_quote?: number | null;
   notes?: string | null;
 }): Promise<B2BDocument> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/documents`, {
-    body: JSON.stringify(payload),
-    headers: buildHeaders(true),
+  return b2bRequest<B2BDocument>("/b2b/documents", LABEL, {
+    body: payload,
     method: "POST",
   });
-  return readJson<B2BDocument>(response);
 }
 
 /** 下载 PDF。走 blob，浏览器直接存盘。 */
@@ -122,6 +89,8 @@ export async function downloadDocument(
   documentId: string,
   number: string,
 ): Promise<void> {
+  // 下载保留裸 fetch：要的是 blob 和 Content-Disposition，
+  // 而 apiRequest 的契约是「返回解析后的 JSON」。硬塞进去只会让返回类型说谎。
   const response = await fetch(
     `${API_PROXY_BASE}/b2b/documents/${documentId}/pdf`,
     { cache: "no-store", headers: buildHeaders() },
@@ -153,11 +122,7 @@ export type SampleCredit = {
 
 /** 样品费台账。开 PI 时自动抵扣，不用你记。 */
 export async function getSampleCredits(): Promise<SampleCredit[]> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/sample-credits`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<SampleCredit[]>(response);
+  return b2bRequest<SampleCredit[]>("/b2b/sample-credits", LABEL);
 }
 
 export async function addSampleCredit(payload: {
@@ -166,12 +131,10 @@ export async function addSampleCredit(payload: {
   buyer_company?: string | null;
   note?: string | null;
 }): Promise<SampleCredit> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/sample-credits`, {
-    body: JSON.stringify(payload),
-    headers: buildHeaders(true),
+  return b2bRequest<SampleCredit>("/b2b/sample-credits", LABEL, {
+    body: payload,
     method: "POST",
   });
-  return readJson<SampleCredit>(response);
 }
 
 /** 从一张 PI 派生商业发票或装箱单（发货报关要）。 */
@@ -184,20 +147,20 @@ export async function createShippingDoc(
     net_weight_kg?: number | null;
   },
 ): Promise<B2BDocument> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/documents/${documentId}/shipping`,
-    { body: JSON.stringify(payload), headers: buildHeaders(true), method: "POST" },
+  return b2bRequest<B2BDocument>(
+    `/b2b/documents/${documentId}/shipping`,
+    LABEL,
+    { body: payload, method: "POST" },
   );
-  return readJson<B2BDocument>(response);
 }
 
 export async function setDocumentStage(
   documentId: string,
   stage: string,
 ): Promise<B2BDocument> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/documents/${documentId}/stage`,
-    { body: JSON.stringify({ stage }), headers: buildHeaders(true), method: "PATCH" },
+  return b2bRequest<B2BDocument>(
+    `/b2b/documents/${documentId}/stage`,
+    LABEL,
+    { body: { stage }, method: "PATCH" },
   );
-  return readJson<B2BDocument>(response);
 }

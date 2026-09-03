@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { API_PROXY_BASE, buildHeaders, readJson } from "./api-base";
+import { contentRequest, SLOW_WP_TIMEOUT_MS } from "./api-base";
 
 const GOLD = "#d9a441";
 const GREEN = "#55bd88";
@@ -31,12 +31,10 @@ export function SiteNavPanel() {
 
   const reload = useCallback(async () => {
     try {
-      const response = await fetch(`${API_PROXY_BASE}/seo/site-nav`, {
-        cache: "no-store",
-        headers: buildHeaders(),
-        method: "GET",
-      });
-      const data = await readJson<{ hubs: Hub[] }>(response, "站内入口加载失败");
+      const data = await contentRequest<{ hubs: Hub[] }>(
+        "/seo/site-nav",
+        "站内入口加载失败",
+      );
       setHubs(data.hubs ?? []);
       setError(null);
     } catch (loadError) {
@@ -53,12 +51,10 @@ export function SiteNavPanel() {
       setBusy(true);
       setError(null);
       try {
-        const response = await fetch(`${API_PROXY_BASE}/seo/site-nav/pin`, {
-          body: JSON.stringify({ key: hub.key, pinned: !hub.pinned }),
-          headers: buildHeaders(true),
+        await contentRequest<unknown>("/seo/site-nav/pin", "设置失败", {
+          body: { key: hub.key, pinned: !hub.pinned },
           method: "POST",
         });
-        await readJson<unknown>(response, "设置失败");
         setNotice(
           hub.pinned
             ? `${hub.label} 取消强制——它现在按内容决定挂不挂。`
@@ -78,11 +74,8 @@ export function SiteNavPanel() {
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch(`${API_PROXY_BASE}/seo/site-nav/sync`, {
-        headers: buildHeaders(true),
-        method: "POST",
-      });
-      const result = await readJson<{
+      // 同步打 WP.com 改菜单，不是派单 —— 默认 15 秒不够。
+      const result = await contentRequest<{
         menu: {
           ok: boolean;
           added?: string[];
@@ -93,7 +86,10 @@ export function SiteNavPanel() {
           crowded?: boolean;
         };
         home: { ok: boolean; changed?: boolean; reason?: string };
-      }>(response, "同步失败");
+      }>("/seo/site-nav/sync", "同步失败", {
+        method: "POST",
+        timeoutMs: SLOW_WP_TIMEOUT_MS,
+      });
       const parts: string[] = [];
       if (result.menu?.ok) {
         const added = result.menu.added ?? [];

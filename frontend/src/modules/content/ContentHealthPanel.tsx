@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { API_PROXY_BASE, buildHeaders, readJson } from "./api-base";
+import { contentRequest } from "./api-base";
 
 const GOLD = "#d9a441";
 const GREEN = "#55bd88";
@@ -34,13 +34,8 @@ export function ContentHealthPanel() {
 
   const reload = useCallback(async () => {
     try {
-      const response = await fetch(`${API_PROXY_BASE}/seo/content-health`, {
-        cache: "no-store",
-        headers: buildHeaders(),
-        method: "GET",
-      });
-      const data = await readJson<{ stranded: Stranded[] }>(
-        response,
+      const data = await contentRequest<{ stranded: Stranded[] }>(
+        "/seo/content-health",
         "内容自检加载失败",
       );
       setRows(data.stranded ?? []);
@@ -66,15 +61,11 @@ export function ContentHealthPanel() {
       }
       let total = 0;
       for (const [kind, ids] of byKind) {
-        const response = await fetch(
-          `${API_PROXY_BASE}/seo/content-health/reset`,
-          {
-            body: JSON.stringify({ ids, kind }),
-            headers: buildHeaders(true),
-            method: "POST",
-          },
+        const result = await contentRequest<{ reset: number }>(
+          "/seo/content-health/reset",
+          "复位失败",
+          { body: { ids, kind }, method: "POST" },
         );
-        const result = await readJson<{ reset: number }>(response, "复位失败");
         total += result.reset ?? 0;
       }
       setNotice(`已复位 ${total} 条，它们现在可以重新生成了。`);

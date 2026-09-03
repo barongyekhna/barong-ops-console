@@ -1,8 +1,14 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+import { b2bRequest } from "../api-base";
+
+/**
+ * 扫店和机器初筛都是**同步**的：run_sweep 逐条打 Serper，screen_prospects
+ * 逐家读官网再过 AI 漏斗。规模随查询数/店铺数长，默认 15 秒必然不够。
+ * 收口前它们一个超时都没有。
+ */
+const SLOW_SWEEP_TIMEOUT_MS = 300_000;
+
 const LABEL = "B2B 客户挖掘";
 
 export type ProspectStatus =
@@ -75,37 +81,6 @@ export type SweepResult = {
   errors: string[];
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  if (!response.ok) {
-    let detail = "";
-    try {
-      const body = (await response.json()) as { detail?: string };
-      detail = typeof body.detail === "string" ? body.detail : "";
-    } catch {
-      // Ignore non-JSON error bodies.
-    }
-    throw new Error(detail || `${LABEL}（${response.status}）`);
-  }
-  return (await response.json()) as T;
-}
-
 export async function getProspects(params: {
   status?: ProspectStatus | "";
   country?: string;
@@ -118,43 +93,26 @@ export async function getProspects(params: {
   if (params.storeType) query.set("store_type", params.storeType);
   if (params.verdict) query.set("verdict", params.verdict);
   query.set("limit", "300");
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/prospects?${query.toString()}`,
-    { cache: "no-store", headers: buildHeaders() },
-  );
-  return readJson<ProspectList>(response);
+    return b2bRequest<ProspectList>(`/b2b/prospects?${query.toString()}`, LABEL);
 }
 
 export async function reviewProspect(
   prospectId: string,
   payload: { approve: boolean; reject_reason?: string; notes?: string },
 ): Promise<Prospect> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/prospects/${encodeURIComponent(prospectId)}/review`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
-  );
-  return readJson<Prospect>(response);
+    return b2bRequest<Prospect>(
+      `/b2b/prospects/${encodeURIComponent(prospectId)}/review`,
+      LABEL,
+      { body: payload, method: "PATCH" },
+    );
 }
 
 export async function getProspectQueries(): Promise<ProspectQuery[]> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/prospect-queries`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<ProspectQuery[]>(response);
+    return b2bRequest<ProspectQuery[]>("/b2b/prospect-queries", LABEL);
 }
 
 export async function getQuota(): Promise<SweepResult> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/prospect-quota`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  });
-  return readJson<SweepResult>(response);
+    return b2bRequest<SweepResult>("/b2b/prospect-quota", LABEL);
 }
 
 export async function runSweep(payload: {
@@ -162,25 +120,18 @@ export async function runSweep(payload: {
   country?: string;
   store_type?: string;
 }): Promise<SweepResult> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/prospect-sweep`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return b2bRequest<SweepResult>("/b2b/prospect-sweep", LABEL, {
+    body: payload,
     method: "POST",
+    timeoutMs: SLOW_SWEEP_TIMEOUT_MS,
   });
-  return readJson<SweepResult>(response);
 }
 
 export async function seedProspectConfig(): Promise<{
   queries_added: number;
   cities_added: number;
 }> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/prospect-config/seed`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
-  });
-  return readJson<{ queries_added: number; cities_added: number }>(response);
+    return b2bRequest<{ queries_added: number; cities_added: number }>("/b2b/prospect-config/seed", LABEL, { method: "POST" });
 }
 
 export type ScreenResult = {
@@ -198,11 +149,9 @@ export async function screenProspects(payload: {
   limit: number;
   store_type?: string;
 }): Promise<ScreenResult> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/prospect-screen`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return b2bRequest<ScreenResult>("/b2b/prospect-screen", LABEL, {
+    body: payload,
     method: "POST",
+    timeoutMs: SLOW_SWEEP_TIMEOUT_MS,
   });
-  return readJson<ScreenResult>(response);
 }

@@ -1,9 +1,17 @@
 "use client";
 
+// B2B 批发目录的接口层。JSON 请求统一走 `lib/api.ts`。
+//
+// **一个刻意的例外**:`exportLineSheet` 保留裸 fetch —— 它要的是 blob 和
+// Content-Disposition 里的文件名,而 `apiRequest` 的契约是「返回解析后的 JSON」。
+// 硬塞进去只会让那个函数的返回类型变成谎话。下载类调用全仓都按这个办法处理。
+
+import { b2bRequest } from "../api-base";
+
 const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 const LABEL = "B2B 批发目录";
+const BASE = "/b2b/wholesale";
 
 export type WholesaleStatus = "pending" | "ready" | "archived";
 
@@ -72,18 +80,12 @@ export type WholesaleItemPatch = {
   clear_review_flag?: boolean;
 };
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
+// 只剩 exportLineSheet 在用（下载走裸 fetch，见文件头）。
+function buildHeaders() {
+  return new Headers({
+    Accept: "application/json",
+    "Content-Type": "application/json",
+  });
 }
 
 async function readError(response: Response): Promise<string> {
@@ -98,13 +100,6 @@ async function readError(response: Response): Promise<string> {
     // Ignore non-JSON error bodies.
   }
   return detail || `${LABEL}（${response.status}）`;
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    throw new Error(await readError(response));
-  }
-  return (await response.json()) as T;
 }
 
 export async function getWholesaleItems(params: {
@@ -123,47 +118,31 @@ export async function getWholesaleItems(params: {
     query.set("search", params.search.trim());
   }
   query.set("limit", "500");
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/wholesale/items?${query.toString()}`,
-    { cache: "no-store", headers: buildHeaders() },
-  );
-  return readJson<WholesaleItemList>(response);
+  return b2bRequest<WholesaleItemList>(`${BASE}/items?${query.toString()}`, LABEL);
 }
 
 export async function patchWholesaleItem(
   itemId: string,
   patch: WholesaleItemPatch,
 ): Promise<WholesaleItem> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/wholesale/items/${encodeURIComponent(itemId)}`,
-    {
-      body: JSON.stringify(patch),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
+  return b2bRequest<WholesaleItem>(
+    `${BASE}/items/${encodeURIComponent(itemId)}`,
+    LABEL,
+    { body: patch, method: "PATCH" },
   );
-  return readJson<WholesaleItem>(response);
 }
 
 export async function batchPatchWholesaleItems(
   items: (WholesaleItemPatch & { item_id: string })[],
 ): Promise<WholesaleItemList> {
-  const response = await fetch(`${API_PROXY_BASE}/b2b/wholesale/items`, {
-    body: JSON.stringify({ items }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return b2bRequest<WholesaleItemList>(`${BASE}/items`, LABEL, {
+    body: { items },
     method: "PATCH",
   });
-  return readJson<WholesaleItemList>(response);
 }
 
 export async function getCategoryReadiness(): Promise<CategoryReadinessList> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/b2b/wholesale/category-readiness`,
-    { cache: "no-store", headers: buildHeaders() },
-  );
-  return readJson<CategoryReadinessList>(response);
+  return b2bRequest<CategoryReadinessList>(`${BASE}/category-readiness`, LABEL);
 }
 
 /** 导出图册。返回 blob 让浏览器直接下载,不走 JSON。 */
@@ -178,7 +157,7 @@ export async function exportLineSheet(payload: {
   const response = await fetch(`${API_PROXY_BASE}/b2b/wholesale/line-sheet`, {
     body: JSON.stringify(payload),
     cache: "no-store",
-    headers: buildHeaders(true),
+    headers: buildHeaders(),
     method: "POST",
   });
   if (!response.ok) {

@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { register } from "node:module";
 import test from "node:test";
 
-import {
+// 被测模块 2026-09-02 收口到 `lib/api.ts` 之后带上了 `@/lib/...` 路径别名，
+// 而 `node --test` 没有 Next 那套解析器 —— 静态 import 会直接 ERR_MODULE_NOT_FOUND。
+// 先注册别名钩子，再动态 import（静态 import 会在 register 之前求值）。
+register("./_alias-hooks.mjs", import.meta.url);
+
+const {
   deleteProductSource,
   getProductSources,
   isHttpProductSourceUrl,
   normalizeProductSourceSku,
   upsertProductSource,
-} from "../../frontend/src/modules/w/siteops/api.ts";
+} = await import("../../frontend/src/modules/w/siteops/api.ts");
 
 test("W-S 货源客户端使用规范化 SKU 与精确 CRUD 契约", async () => {
   const originalFetch = globalThis.fetch;

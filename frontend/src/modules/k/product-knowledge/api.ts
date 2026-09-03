@@ -25,25 +25,112 @@ import type {
   WShippingClassOption,
 } from "./types";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
-import { translateKBackendError } from "@/lib/i18n";
+import { ApiError, apiRequest } from "@/lib/api";
 import { parsePublishGateConflictDetail } from "./publish-gate-error";
 
-const API_PROXY_BASE = "/api/backend";
 export const K_PRODUCTS_PATH = "/k/products";
 export const PRODUCT_CREATE_FAILURE_MESSAGE =
   "产品创建失败，请稍后重试或检查SKU/变体信息";
 
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+
+// 只剩给后端返回的图片路径加代理前缀在用（不是发请求）：后端给的是
+// `/k/media/…`，浏览器要走代理才拿得到，少这个前缀图片全是裂的。
+const API_PROXY_BASE = "/api/backend";
+
+const K_FALLBACK_MESSAGE = "产品知识库请求未完成。";
+
+function asDetailRecord(detail: unknown): Record<string, unknown> | null {
+  return detail && typeof detail === "object" && !Array.isArray(detail)
+    ? (detail as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * K 的请求入口。传输层全在 `lib/api.ts`（超时、GET 重试、401 派发、
+ * K 专属的后端文案翻译 —— `translateKBackendError` 本来就在那里按 `/k/`
+ * 前缀调用）；这里只保留 K **特有**的两件事：
+ *
+ *   1. 模块兜底文案。不传的话失败会退化成通用的「服务暂时不可用」，
+ *      不说是哪个模块出的事。
+ *   2. **上架门禁 409 的白名单校验。** `parsePublishGateConflictDetail`
+ *      只放行完全符合安全形状的 detail（多一个字段、blockers 里混进数字，
+ *      一律返回 null）。后端 detail 是不可信输入，这层不能省 ——
+ *      收口前它在 errorPayloadFor 里，现在挪到这里，行为一字不变。
+ */
+async function kRequest<T>(
+  path: string,
+  options: {
+    body?: unknown;
+    headers?: HeadersInit;
+    method?: string;
+    timeoutMs?: number;
+  } = {},
+): Promise<T> {
+  try {
+    return await apiRequest<T>(path, {
+      ...options,
+      fallbackMessage: K_FALLBACK_MESSAGE,
+    });
+  } catch (error) {
+    if (!(error instanceof ApiError)) {
+      throw error;
+    }
+    const publishGateDetail = parsePublishGateConflictDetail(error.detail);
+    if (publishGateDetail) {
+      throw new ProductKnowledgeApiError(
+        "产品未通过上架门禁。",
+        error.status,
+        publishGateDetail,
+      );
+    }
+    throw new ProductKnowledgeApiError(
+      error.message,
+      error.status,
+      asDetailRecord(error.detail),
+    );
+  }
+}
+
+/**
+ * 「没有就是没有」的 GET：404 不是错误，返回 null。
+ *
+ * 收口前这三处各自写着 `if (response.status === 404) return null;`。
+ * `apiRequest` 对 !ok 一律抛 ApiError，所以这层要显式接住。
+ * 只接 404 —— 其余状态照常抛，别把「服务挂了」也吞成「没有数据」。
+ * （`isRetryableError` 只重试 5xx 和 429，404 不会被重试。）
+ */
+async function kRequestOrNull<T>(
+  path: string,
+  options: { method?: string; timeoutMs?: number } = {},
+): Promise<T | null> {
+  try {
+    return await kRequest<T>(path, options);
+  } catch (error) {
+    if (
+      error instanceof ProductKnowledgeApiError &&
+      error.status === 404
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
 
 export class ProductKnowledgeApiError extends Error {
+  // 显式字段，不用 TS 的「参数属性」简写 —— 那个需要编译器生成赋值代码，
+  // node 的 strip-only 类型剥离做不到，整个模块就 import 不进 `node --test`。
+  readonly status: number;
+  readonly detail: Record<string, unknown> | null;
+
   constructor(
     message: string,
-    readonly status: number,
-    readonly detail: Record<string, unknown> | null = null,
+    status: number,
+    detail: Record<string, unknown> | null = null,
   ) {
     super(message);
     this.name = "ProductKnowledgeApiError";
+    this.status = status;
+    this.detail = detail;
   }
 
   get code() {
@@ -53,14 +140,6 @@ export class ProductKnowledgeApiError extends Error {
   get reason() {
     return typeof this.detail?.reason === "string" ? this.detail.reason : null;
   }
-}
-
-function readAccessToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
 }
 
 function stableJson(value: unknown): string {
@@ -93,83 +172,6 @@ function productCreateIdempotencyKey(payload: ProductKnowledgeCreatePayload) {
   return `k-product-create-${hashString(stableJson(payload))}`;
 }
 
-function buildHeaders(hasBody = false, idempotencyKey?: string) {
-  const headers = new Headers({
-    Accept: "application/json",
-  });
-  const accessToken = readAccessToken();
-
-  if (hasBody) {
-    headers.set("Content-Type", "application/json");
-  }
-  if (accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
-  if (idempotencyKey) {
-    headers.set("Idempotency-Key", idempotencyKey);
-  }
-
-  return headers;
-}
-
-async function errorPayloadFor(
-  response: Response,
-): Promise<{ detail: Record<string, unknown> | null; message: string }> {
-  try {
-    const payload = (await response.json()) as { detail?: unknown };
-    if (typeof payload.detail === "string") {
-      return { detail: null, message: payload.detail };
-    }
-    const publishGateDetail = parsePublishGateConflictDetail(payload.detail);
-    if (publishGateDetail) {
-      return {
-        detail: publishGateDetail,
-        message: "产品未通过上架门禁。",
-      };
-    }
-    if (
-      payload.detail &&
-      typeof payload.detail === "object" &&
-      "message" in payload.detail
-    ) {
-      const detail = payload.detail as Record<string, unknown>;
-      const message =
-        typeof detail.message === "string"
-          ? detail.message
-          : "产品知识库请求未完成。";
-
-      return { detail, message };
-    }
-  } catch {
-    // Keep the stable fallback for non-JSON backend responses.
-  }
-
-  return { detail: null, message: "产品知识库请求未完成。" };
-}
-
-async function readJson<T>(response: Response, path: string): Promise<T> {
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-
-  if (!response.ok) {
-    const errorPayload = await errorPayloadFor(response);
-    throw new ProductKnowledgeApiError(
-      translateKBackendError({
-        detail: errorPayload.detail,
-        fallback: "产品知识库请求未完成。",
-        message: errorPayload.message,
-        path,
-        status: response.status,
-      }),
-      response.status,
-      errorPayload.detail,
-    );
-  }
-
-  return (await response.json()) as T;
-}
-
 export async function getProducts(options?: {
   limit?: number;
   offset?: number;
@@ -186,49 +188,27 @@ export async function getProducts(options?: {
     params.set("q", options.q.trim());
   }
   const path = `${K_PRODUCTS_PATH}${params.toString() ? `?${params.toString()}` : ""}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-
-  return readJson<ProductKnowledgeListResponse>(response, path);
+  return kRequest<ProductKnowledgeListResponse>(path);
 }
 
 export async function getProduct(
   productId: string,
 ): Promise<ProductKnowledgeDetail> {
   const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-
-  return readJson<ProductKnowledgeDetail>(response, path);
+  return kRequest<ProductKnowledgeDetail>(path);
 }
 
 export async function getShippingClasses(): Promise<WShippingClassOption[]> {
   const path = "/w/shipping/classes";
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-
-  return readJson<WShippingClassOption[]>(response, path);
+  return kRequest<WShippingClassOption[]>(path);
 }
 
 export async function assignProductShipping(productId: string): Promise<unknown> {
   const path = `/w/shipping/assign/${encodeURIComponent(productId)}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ force: true }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<unknown>(path, {
+    body: { force: true },
     method: "POST",
   });
-
-  return readJson<unknown>(response, path);
 }
 
 export async function patchProductShipping(
@@ -241,28 +221,21 @@ export async function patchProductShipping(
     | { contains_battery: boolean },
 ): Promise<unknown> {
   const path = `/w/shipping/products/${encodeURIComponent(productId)}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<unknown>(path, {
+    body: payload,
     method: "PATCH",
   });
-
-  return readJson<unknown>(response, path);
 }
 
 export async function createProduct(
   payload: ProductKnowledgeCreatePayload,
 ): Promise<ProductKnowledgeDetail> {
   const path = K_PRODUCTS_PATH;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true, productCreateIdempotencyKey(payload)),
+  return kRequest<ProductKnowledgeDetail>(path, {
+    body: payload,
+    headers: { "Idempotency-Key": productCreateIdempotencyKey(payload) },
     method: "POST",
   });
-
-  return readJson<ProductKnowledgeDetail>(response, path);
 }
 
 export async function updateProduct(
@@ -270,17 +243,10 @@ export async function updateProduct(
   payload: ProductKnowledgeUpdatePayload,
 ): Promise<ProductKnowledgeDetail> {
   const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
-  );
-
-  return readJson<ProductKnowledgeDetail>(response, path);
+  return kRequest<ProductKnowledgeDetail>(path, {
+    body: payload,
+    method: "PATCH",
+  });
 }
 
 export async function updateVariantPrices(
@@ -288,20 +254,10 @@ export async function updateVariantPrices(
   items: { variant_id: string; price_override: number }[],
 ): Promise<{ items: ProductKnowledgeVariant[]; count: number }> {
   const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/variant-prices`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify({ items }),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "PATCH",
-    },
-  );
-
-  return readJson<{ items: ProductKnowledgeVariant[]; count: number }>(
-    response,
-    path,
-  );
+  return kRequest<{ items: ProductKnowledgeVariant[]; count: number }>(path, {
+    body: { items },
+    method: "PATCH",
+  });
 }
 
 export async function deleteProduct(
@@ -314,38 +270,19 @@ export async function deleteProduct(
   deleted_counts: Record<string, number>;
 }> {
   const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify({ product_key: productKey }),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "DELETE",
-    },
-  );
-
-  return readJson<{
-    status: "deleted";
-    product_id: string;
-    product_key: string;
-    deleted_counts: Record<string, number>;
-  }>(response, path);
+  return kRequest<{ status: "deleted"; product_id: string; product_key: string; deleted_counts: Record<string, number>; }>(path, {
+    body: { product_key: productKey },
+    method: "DELETE",
+  });
 }
 
 export async function enrichProductWithDeepSeek(
   productId: string,
 ): Promise<void> {
   const path = `${K_PRODUCTS_PATH}/${productId}/enrich/deepseek`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  await readJson<unknown>(response, path);
+  await kRequest<unknown>(path, {
+    method: "POST",
+  });
 }
 
 /**
@@ -359,16 +296,9 @@ export async function generateProductSellingPoints(
   productId: string,
 ): Promise<GenerationEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/selling-points/generate`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<GenerationEnqueueResult>(response, path);
+  return kRequest<GenerationEnqueueResult>(path, {
+    method: "POST",
+  });
 }
 
 export async function approveProductSellingPoints(
@@ -376,37 +306,17 @@ export async function approveProductSellingPoints(
   payload: ProductSellingPoints,
 ): Promise<ProductSellingPoints> {
   const path = `${K_PRODUCTS_PATH}/${productId}/selling-points/approve`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<ProductSellingPoints>(response, path);
+  return kRequest<ProductSellingPoints>(path, {
+    body: payload,
+    method: "POST",
+  });
 }
 
 export async function getProductSellingPoints(
   productId: string,
 ): Promise<ProductSellingPoints | null> {
   const path = `${K_PRODUCTS_PATH}/${productId}/selling-points`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "GET",
-    },
-  );
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  return readJson<ProductSellingPoints>(response, path);
+  return kRequestOrNull<ProductSellingPoints>(path);
 }
 
 /** 多阶段任务的进度。目前只有卖点生成用（bullets → zh → copy → done）。 */
@@ -439,12 +349,9 @@ async function enqueueGeneration(
   kind: "generate-copy" | "generate-image-brief",
 ): Promise<GenerationEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/${kind}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<GenerationEnqueueResult>(path, {
     method: "POST",
   });
-  return readJson<GenerationEnqueueResult>(response, path);
 }
 
 export function generateProductCopy(productId: string): Promise<GenerationEnqueueResult> {
@@ -460,13 +367,10 @@ async function enqueueGenerationBatch(
   kind: "generate-copy" | "generate-image-brief",
 ): Promise<GenerationEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${kind}/batch`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ product_ids: productIds }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<GenerationEnqueueResult>(path, {
+    body: { product_ids: productIds },
     method: "POST",
   });
-  return readJson<GenerationEnqueueResult>(response, path);
 }
 
 export function generateProductCopyBatch(
@@ -483,12 +387,7 @@ export function generateProductImageBriefBatch(
 
 export async function getGenerationJobs(productId: string): Promise<GenerationJob[]> {
   const path = `${K_PRODUCTS_PATH}/${productId}/generation-jobs`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  const data = await readJson<{ jobs: GenerationJob[] }>(response, path);
+  const data = await kRequest<{ jobs: GenerationJob[] }>(path);
   return data.jobs ?? [];
 }
 
@@ -514,15 +413,7 @@ export async function getImagePlates(
   productId: string,
 ): Promise<{ items: ImagePlate[]; masked_count: number }> {
   const path = `${K_PRODUCTS_PATH}/${productId}/image-plates`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  const data = await readJson<{ items: ImagePlate[]; masked_count: number }>(
-    response,
-    path,
-  );
+  const data = await kRequest<{ items: ImagePlate[]; masked_count: number }>(path);
   // 后端给的是它自己的路径（/k/media/…）。浏览器要走代理才拿得到，
   // 少这个前缀图片就全是裂的。前缀是 API 层的事，别让组件各拼各的。
   return {
@@ -543,13 +434,10 @@ export async function savePlateMask(
   maskPngBase64: string,
 ): Promise<{ mask_asset_id: string; bytes: number }> {
   const path = `${K_PRODUCTS_PATH}/${productId}/image-plates/${assetId}/mask`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ mask_png_base64: maskPngBase64 }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<{ mask_asset_id: string; bytes: number }>(path, {
+    body: { mask_png_base64: maskPngBase64 },
     method: "PUT",
   });
-  return readJson<{ mask_asset_id: string; bytes: number }>(response, path);
 }
 
 /** 「这个产品怎么工作」——AI 看原厂参考图推导，人工可改。作图/渲染/审查共用。 */
@@ -573,13 +461,10 @@ export async function updateOperatingModel(
   },
 ): Promise<OperatingModel> {
   const path = `${K_PRODUCTS_PATH}/${productId}/operating-model`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  const data = await kRequest<{ operating_model: OperatingModel }>(path, {
+    body: payload,
     method: "PUT",
   });
-  const data = await readJson<{ operating_model: OperatingModel }>(response, path);
   return data.operating_model;
 }
 
@@ -621,13 +506,10 @@ export async function renderProductImages(
   positions?: number[],
 ): Promise<RenderEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/render-images`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(positions && positions.length ? { positions } : {}),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<RenderEnqueueResult>(path, {
+    body: positions && positions.length ? { positions } : {},
     method: "POST",
   });
-  return readJson<RenderEnqueueResult>(response, path);
 }
 
 export async function getRenderJobs(
@@ -636,12 +518,7 @@ export async function getRenderJobs(
 ): Promise<RenderJobsResult> {
   const query = batchId ? `?batch_id=${encodeURIComponent(batchId)}` : "";
   const path = `${K_PRODUCTS_PATH}/${productId}/render-jobs${query}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  return readJson<RenderJobsResult>(response, path);
+  return kRequest<RenderJobsResult>(path);
 }
 
 export async function retryRenderJobs(
@@ -649,13 +526,10 @@ export async function retryRenderJobs(
   batchId: string,
 ): Promise<RenderJobsResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/render-images/retry`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ batch_id: batchId }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<RenderJobsResult>(path, {
+    body: { batch_id: batchId },
     method: "POST",
   });
-  return readJson<RenderJobsResult>(response, path);
 }
 
 export type ProductFaqItem = { question: string; answer: string };
@@ -668,13 +542,7 @@ export async function updateProductFaq(
   faq_schema_eligible: boolean;
 }> {
   const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/faq`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ items }),
-    cache: "no-store",
-    headers: buildHeaders(true),
-    method: "PUT",
-  });
-  return readJson(response, path);
+  return kRequest(path, { body: { items }, method: "PUT" });
 }
 
 export type RepublishStage = "auditing" | "exporting" | "dispatching";
@@ -750,16 +618,10 @@ export async function ignoreBrandFinding(
   payload: BrandFindingIgnore,
 ): Promise<{ brand_audit_json: unknown; fingerprint: string }> {
   const path = `${K_PRODUCTS_PATH}/${productId}/brand-audit/ignore`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<{ brand_audit_json: unknown; fingerprint: string }>(path, {
+    body: payload,
     method: "POST",
   });
-  return readJson<{ brand_audit_json: unknown; fingerprint: string }>(
-    response,
-    path,
-  );
 }
 
 /**
@@ -774,13 +636,10 @@ export async function setBrandAuditOverride(
   reason = "",
 ): Promise<{ operator_override: unknown }> {
   const path = `${K_PRODUCTS_PATH}/${productId}/brand-audit/override`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ enabled, reason }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<{ operator_override: unknown }>(path, {
+    body: { enabled, reason },
     method: "POST",
   });
-  return readJson<{ operator_override: unknown }>(response, path);
 }
 
 /** 点「唤起 Codex 作图」预填进 Codex 输入框的指令(与后端 codex_prompt_for_sku 同文案)。 */
@@ -812,12 +671,7 @@ export type RenderAsset = {
 
 export async function getRenderAssets(productId: string): Promise<RenderAsset[]> {
   const path = `${K_PRODUCTS_PATH}/${productId}/render-assets`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  const data = await readJson<{ assets: RenderAsset[] }>(response, path);
+  const data = await kRequest<{ assets: RenderAsset[] }>(path);
   return data.assets ?? [];
 }
 
@@ -826,13 +680,10 @@ export async function saveRenderAssets(
   assetIds?: string[],
 ): Promise<RenderAsset[]> {
   const path = `${K_PRODUCTS_PATH}/${productId}/render-assets/save`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(assetIds && assetIds.length ? { asset_ids: assetIds } : {}),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  const data = await kRequest<{ assets: RenderAsset[] }>(path, {
+    body: assetIds && assetIds.length ? { asset_ids: assetIds } : {},
     method: "POST",
   });
-  const data = await readJson<{ assets: RenderAsset[] }>(response, path);
   return data.assets ?? [];
 }
 
@@ -847,13 +698,10 @@ export async function reworkRenderAsset(
   },
 ): Promise<RenderEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/render-rework`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<RenderEnqueueResult>(path, {
+    body: payload,
     method: "POST",
   });
-  return readJson<RenderEnqueueResult>(response, path);
 }
 
 export async function addBriefImage(
@@ -866,13 +714,10 @@ export async function addBriefImage(
   },
 ): Promise<RenderEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/brief-images`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<RenderEnqueueResult>(path, {
+    body: payload,
     method: "POST",
   });
-  return readJson<RenderEnqueueResult>(response, path);
 }
 
 // 把一张手动上传的图标记「绑定(取图)」或取消。绑定的手动图会随渲染图进 P 上架包。
@@ -882,13 +727,10 @@ export async function setImageUploadBound(
   bound: boolean,
 ): Promise<KMediaAsset> {
   const path = `${K_PRODUCTS_PATH}/${productId}/images/${assetId}/upload-bound`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ bound }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<KMediaAsset>(path, {
+    body: { bound },
     method: "POST",
   });
-  return readJson<KMediaAsset>(response, path);
 }
 
 export type OverlayFieldOption = {
@@ -901,12 +743,7 @@ export async function getOverlayFields(
   productId: string,
 ): Promise<OverlayFieldOption[]> {
   const path = `${K_PRODUCTS_PATH}/${productId}/overlay-fields`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  const data = await readJson<{ fields: OverlayFieldOption[] }>(response, path);
+  const data = await kRequest<{ fields: OverlayFieldOption[] }>(path);
   return data.fields ?? [];
 }
 
@@ -916,13 +753,10 @@ export async function applyBriefOverlay(
   sourceFields: string[],
 ): Promise<RenderEnqueueResult> {
   const path = `${K_PRODUCTS_PATH}/${productId}/brief-images/${position}/overlay`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ source_fields: sourceFields }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<RenderEnqueueResult>(path, {
+    body: { source_fields: sourceFields },
     method: "POST",
   });
-  return readJson<RenderEnqueueResult>(response, path);
 }
 
 export type DispatchUploadResult = {
@@ -935,64 +769,32 @@ export async function dispatchUpload(
   productId: string,
 ): Promise<DispatchUploadResult> {
   const path = `/p/products/${encodeURIComponent(productId)}/dispatch`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<DispatchUploadResult>(path, {
     method: "POST",
   });
-  return readJson<DispatchUploadResult>(response, path);
 }
 
 export async function getProductReadiness(
   productId: string,
 ): Promise<ProductReadinessState> {
   const path = `${K_PRODUCTS_PATH}/${productId}/readiness`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "GET",
-    },
-  );
-
-  return readJson<ProductReadinessState>(response, path);
+  return kRequest<ProductReadinessState>(path);
 }
 
 export async function submitProductKeywords(
   productId: string,
 ): Promise<ProductSectionState> {
   const path = `${K_PRODUCTS_PATH}/${productId}/keywords/submit`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<ProductSectionState>(response, path);
+  return kRequest<ProductSectionState>(path, {
+    method: "POST",
+  });
 }
 
 export async function getLatestWorkflow(
   productId: string,
 ): Promise<KWorkflowExecution | null> {
   const path = `${K_PRODUCTS_PATH}/${productId}/workflow/latest`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "GET",
-    },
-  );
-
-  if (response.status === 404) {
-    return null;
-  }
-
-  return readJson<KWorkflowExecution>(response, path);
+  return kRequestOrNull<KWorkflowExecution>(path);
 }
 
 export async function startWorkflow(
@@ -1000,17 +802,10 @@ export async function startWorkflow(
   payload: KWorkflowStartPayload,
 ): Promise<KWorkflowExecution> {
   const path = `${K_PRODUCTS_PATH}/${productId}/workflow/start`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<KWorkflowExecution>(response, path);
+  return kRequest<KWorkflowExecution>(path, {
+    body: payload,
+    method: "POST",
+  });
 }
 
 export async function reviewWorkflowRiskTerms(
@@ -1018,17 +813,10 @@ export async function reviewWorkflowRiskTerms(
   payload: KRiskReviewPayload,
 ): Promise<KWorkflowExecution> {
   const path = `${K_PRODUCTS_PATH}/${productId}/workflow/risk-review`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<KWorkflowExecution>(response, path);
+  return kRequest<KWorkflowExecution>(path, {
+    body: payload,
+    method: "POST",
+  });
 }
 
 export async function exportWorkflow(
@@ -1036,17 +824,10 @@ export async function exportWorkflow(
   executionId?: string | null,
 ): Promise<KWorkflowExportResponse> {
   const path = `${K_PRODUCTS_PATH}/${productId}/workflow/export`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify({ execution_id: executionId ?? null }),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<KWorkflowExportResponse>(response, path);
+  return kRequest<KWorkflowExportResponse>(path, {
+    body: { execution_id: executionId ?? null },
+    method: "POST",
+  });
 }
 
 export async function controlWorkflow(
@@ -1055,55 +836,34 @@ export async function controlWorkflow(
   payload: KWorkflowControlPayload,
 ): Promise<KWorkflowExecution> {
   const path = `${K_PRODUCTS_PATH}/${productId}/workflow/${action}`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<KWorkflowExecution>(response, path);
+  return kRequest<KWorkflowExecution>(path, {
+    body: payload,
+    method: "POST",
+  });
 }
 
 export async function getMediaAssets(
   productId: string,
 ): Promise<KMediaListResponse> {
   const path = `/k/media?product_id=${encodeURIComponent(productId)}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-
-  return readJson<KMediaListResponse>(response, path);
+  return kRequest<KMediaListResponse>(path);
 }
 
 export async function createMediaAsset(
   payload: KMediaCreatePayload,
 ): Promise<KMediaAsset> {
   const path = "/k/media";
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<KMediaAsset>(path, {
+    body: payload,
     method: "POST",
   });
-
-  return readJson<KMediaAsset>(response, path);
 }
 
 export async function deleteMediaAsset(assetId: string): Promise<KMediaAsset> {
   const path = `/k/media/${assetId}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
+  return kRequest<KMediaAsset>(path, {
     method: "DELETE",
   });
-
-  return readJson<KMediaAsset>(response, path);
 }
 
 export function mediaAssetFileUrl(assetId: string) {
@@ -1130,33 +890,18 @@ export async function uploadProductMediaAsset(
   formData.append("asset_role", assetRole);
 
   const path = `${K_PRODUCTS_PATH}/${productId}/media/upload`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: formData,
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "POST",
-    },
-  );
-
-  return readJson<KMediaAsset>(response, path);
+  return kRequest<KMediaAsset>(path, {
+    method: "POST",
+  });
 }
 
 export async function submitProductImages(
   productId: string,
 ): Promise<ProductSectionState> {
   const path = `${K_PRODUCTS_PATH}/${productId}/images/submit`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<ProductSectionState>(response, path);
+  return kRequest<ProductSectionState>(path, {
+    method: "POST",
+  });
 }
 
 export async function bindProductImage(
@@ -1170,17 +915,10 @@ export async function bindProductImage(
       },
 ): Promise<KWorkflowExecution> {
   const path = `${K_PRODUCTS_PATH}/${productId}/images/bind`;
-  const response = await fetch(
-    `${API_PROXY_BASE}${path}`,
-    {
-      body: JSON.stringify(payload),
-      cache: "no-store",
-      headers: buildHeaders(true),
-      method: "POST",
-    },
-  );
-
-  return readJson<KWorkflowExecution>(response, path);
+  return kRequest<KWorkflowExecution>(path, {
+    body: payload,
+    method: "POST",
+  });
 }
 
 export async function importISystemImagesToProduct(
@@ -1188,14 +926,10 @@ export async function importISystemImagesToProduct(
   payload: KImportISystemImagePayload,
 ): Promise<KImportISystemImageResponse> {
   const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/images/import-i-output`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<KImportISystemImageResponse>(path, {
+    body: payload,
     method: "POST",
   });
-
-  return readJson<KImportISystemImageResponse>(response, path);
 }
 
 function categorySpecTemplatePath(
@@ -1214,16 +948,7 @@ export async function getCategorySpecTemplate(
   categoryId: string,
 ): Promise<CategorySpecTemplate | null> {
   const path = categorySpecTemplatePath(categoryTree, categoryId);
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-
-  if (response.status === 404) {
-    return null;
-  }
-  return readJson<CategorySpecTemplate>(response, path);
+  return kRequestOrNull<CategorySpecTemplate>(path);
 }
 
 export async function draftCategorySpecTemplate(
@@ -1231,12 +956,9 @@ export async function draftCategorySpecTemplate(
   categoryId: string,
 ): Promise<CategorySpecTemplate> {
   const path = categorySpecTemplatePath(categoryTree, categoryId, "/draft");
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<CategorySpecTemplate>(path, {
     method: "POST",
   });
-  return readJson<CategorySpecTemplate>(response, path);
 }
 
 export async function putCategorySpecTemplate(
@@ -1248,13 +970,10 @@ export async function putCategorySpecTemplate(
   },
 ): Promise<CategorySpecTemplate> {
   const path = categorySpecTemplatePath(categoryTree, categoryId);
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<CategorySpecTemplate>(path, {
+    body: payload,
     method: "PUT",
   });
-  return readJson<CategorySpecTemplate>(response, path);
 }
 
 export async function parseProductSpecsPaste(
@@ -1262,13 +981,10 @@ export async function parseProductSpecsPaste(
   rawText: string,
 ): Promise<SpecPasteParseResponse> {
   const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/specs/parse-paste`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    body: JSON.stringify({ raw_text: rawText }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+  return kRequest<SpecPasteParseResponse>(path, {
+    body: { raw_text: rawText },
     method: "POST",
   });
-  return readJson<SpecPasteParseResponse>(response, path);
 }
 
 export type CategoryTreeItem = {
@@ -1286,11 +1002,6 @@ export async function searchCategories(
 ): Promise<CategoryTreeItem[]> {
   const params = new URLSearchParams({ tree, q, limit: String(limit) });
   const path = `/k/categories/search?${params.toString()}`;
-  const response = await fetch(`${API_PROXY_BASE}${path}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
-  });
-  const data = await readJson<{ items: CategoryTreeItem[] }>(response, path);
+  const data = await kRequest<{ items: CategoryTreeItem[] }>(path);
   return data.items ?? [];
 }

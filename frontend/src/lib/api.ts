@@ -4,7 +4,7 @@ import {
   clearFrontendRequestCache,
   requestWithFrontendCache,
 } from "@/lib/request-cache";
-import { translateKBackendError } from "@/lib/i18n";
+import { translateC19BackendError, translateKBackendError } from "@/lib/i18n";
 
 export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 
@@ -22,12 +22,30 @@ let activeRouteAbortGeneration = 0;
 const activeApiControllers = new Set<AbortController>();
 
 export class ApiError extends Error {
+  // 显式字段 + 构造函数内赋值,**不用 TS 的「参数属性」简写**。
+  // 参数属性需要编译器生成赋值代码,node 的 strip-only 类型剥离做不到,
+  // 整个模块就 import 不进 `node --test` —— 这正是 2026-09-02 之前
+  // 关于 apiRequest 的断言全是「读源码匹配正则」的原因。
+  readonly status: number;
+  readonly detail: unknown;
+
   constructor(
     message: string,
-    readonly status: number,
+    status: number,
+    /**
+     * 后端 `detail` 的原始值。
+     *
+     * `message` 是给人看的一句话 —— 会被翻译器改写、会被中文兜底整句换掉。
+     * 但有些接口的 `detail` 是**结构化的**,调用方要按字段读:K 的发布门禁返回
+     * `{blockers: [...]}`、M 的出库返回缺料清单。这些信息以前在 apiRequest
+     * 内部解析出来后就被丢掉了,调用方只剩一句话可看,清单静默消失。
+     */
+    detail: unknown = null,
   ) {
     super(message);
     this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
   }
 }
 
@@ -39,9 +57,12 @@ export class ApiRequestAbortedError extends Error {
 }
 
 export class ApiTimeoutError extends ApiRequestAbortedError {
-  constructor(readonly timeoutMs: number) {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
     super("服务暂时不可用，请稍后再试。");
     this.name = "ApiTimeoutError";
+    this.timeoutMs = timeoutMs;
   }
 }
 
@@ -50,6 +71,15 @@ type ApiRequestOptions = Omit<RequestInit, "body"> & {
   bypassCache?: boolean;
   retryLimit?: number;
   timeoutMs?: number;
+  /**
+   * 模块自己的兜底文案，用来顶替按状态码给的通用兜底。
+   *
+   * 为什么需要：通用兜底（「服务暂时不可用，请稍后再试。」）不说是**哪个**
+   * 模块出的事。收口时一度让所有模块都退化成这句，等于把「界面失败时只给
+   * 含糊提示」这个老毛病又请回来 —— 用户报「产品知识库请求未完成」我能定位，
+   * 报「服务暂时不可用」就只能猜。
+   */
+  fallbackMessage?: string;
 };
 
 function toBackendRequestPath(path: string) {
@@ -248,8 +278,9 @@ function fallbackErrorMessageForStatus(status: number) {
 }
 
 function isTechnicalErrorMessage(message: string) {
-  const normalized = message.trim().toLowerCase();
-  return (
+  const trimmed = message.trim();
+  const normalized = trimmed.toLowerCase();
+  if (
     normalized === "not authenticated." ||
     normalized === "not authenticated" ||
     normalized === "internal server error." ||
@@ -262,7 +293,15 @@ function isTechnicalErrorMessage(message: string) {
     normalized === "request failed" ||
     normalized === "加载失败，请稍后重试。" ||
     normalized === "服务暂时不可用，请稍后重试。"
-  );
+  ) {
+    return true;
+  }
+  // 通用启发式:整个 UI 是中文,任何不含中文的后端英文/工程串(异常文本、
+  // 字段名、堆栈等)都不该原样呈现给用户 → 判为技术串,由调用方按状态兜底。
+  if (trimmed && !/[一-鿿]/.test(trimmed)) {
+    return true;
+  }
+  return false;
 }
 
 function storedSessionToken() {
@@ -300,6 +339,7 @@ export async function apiRequest<T>(
   const {
     body,
     bypassCache = false,
+    fallbackMessage,
     retryLimit: retryLimitOption,
     timeoutMs: timeoutMsOption,
     ...fetchOptions
@@ -315,7 +355,12 @@ export async function apiRequest<T>(
   const externalSignal = fetchOptions.signal ?? null;
   headers.set("Accept", "application/json");
 
-  if (body !== undefined) {
+  // multipart 的 boundary 是 fetch 自己按 FormData 生成并写进 Content-Type 的。
+  // 我们一旦手动设成 application/json,boundary 就没了,后端解析必然失败。
+  const isFormDataBody =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
+  if (body !== undefined && !isFormDataBody) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -357,7 +402,12 @@ export async function apiRequest<T>(
         try {
           const response = await fetch(frontendProxyPath, {
             ...fetchOptions,
-            body: body === undefined ? undefined : JSON.stringify(body),
+            body:
+              body === undefined
+                ? undefined
+                : isFormDataBody
+                  ? (body as FormData)
+                  : JSON.stringify(body),
             cache: "no-store",
             credentials: "include",
             headers,
@@ -375,7 +425,8 @@ export async function apiRequest<T>(
           }
 
           if (!response.ok) {
-            let message = fallbackErrorMessageForStatus(response.status);
+            let message =
+              fallbackMessage ?? fallbackErrorMessageForStatus(response.status);
             let errorDetail: unknown = null;
             try {
               const payload = (await response.json()) as { detail?: unknown };
@@ -394,19 +445,37 @@ export async function apiRequest<T>(
             } catch {
               // Keep the stable fallback when the backend does not return JSON.
             }
-            if (isTechnicalErrorMessage(message)) {
-              message = fallbackErrorMessageForStatus(response.status);
-            }
+            const statusFallback =
+              fallbackMessage ?? fallbackErrorMessageForStatus(response.status);
             if (backendPath.startsWith("/k/")) {
               message = translateKBackendError({
                 detail: errorDetail,
-                fallback: fallbackErrorMessageForStatus(response.status),
+                fallback: statusFallback,
                 message,
                 path: backendPath,
                 status: response.status,
               });
+            } else if (backendPath.startsWith("/c19")) {
+              message = translateC19BackendError({
+                detail: errorDetail,
+                fallback: statusFallback,
+                message,
+                status: response.status,
+              });
             }
-            throw new ApiError(message, response.status);
+            // 通用兜底:任何仍是英文/工程串(未被翻译器认出的后端文案)一律
+            // 换成中文状态兜底,保证前端永不出现原始英文报错。
+            if (isTechnicalErrorMessage(message)) {
+              message = statusFallback;
+            }
+            throw new ApiError(message, response.status, errorDetail);
+          }
+
+          // 204 No Content / 205 Reset Content 按规范**不带响应体**,
+          // 直接 response.json() 会抛 SyntaxError。DELETE 类接口大量返回 204,
+          // 不处理这条,收口第一个模块就会红。
+          if (response.status === 204 || response.status === 205) {
+            return undefined as T;
           }
 
           return (await response.json()) as T;

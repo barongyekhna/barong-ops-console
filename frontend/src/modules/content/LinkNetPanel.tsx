@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { API_PROXY_BASE, buildHeaders, readJson } from "./api-base";
+import { contentRequest, SLOW_WP_TIMEOUT_MS } from "./api-base";
 
 const GOLD = "#d9a441";
 const GREEN = "#55bd88";
@@ -39,12 +39,9 @@ export function LinkNetPanel() {
 
   const reload = useCallback(async () => {
     try {
-      const response = await fetch(`${API_PROXY_BASE}/seo/link-net`, {
-        cache: "no-store",
-        headers: buildHeaders(),
-        method: "GET",
-      });
-      setState(await readJson<LinkNetState>(response, "内链网状态加载失败"));
+      setState(
+        await contentRequest<LinkNetState>("/seo/link-net", "内链网状态加载失败"),
+      );
       setError(null);
     } catch (loadError) {
       setError((loadError as Error).message);
@@ -99,16 +96,16 @@ export function LinkNetPanel() {
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                const response = await fetch(
-                  `${API_PROXY_BASE}/seo/link-net/refresh`,
-                  { headers: buildHeaders(true), method: "POST" },
-                );
-                const result = await readJson<{
+                // 同步打 WP.com 覆盖文章内链，不是派单 —— 默认 15 秒不够。
+                const result = await contentRequest<{
                   ok: boolean;
                   changed: boolean;
                   reason?: string;
                   posts?: number;
-                }>(response, "刷新失败");
+                }>("/seo/link-net/refresh", "刷新失败", {
+                  method: "POST",
+                  timeoutMs: SLOW_WP_TIMEOUT_MS,
+                });
                 if (!result.ok) return result.reason ?? "推送失败";
                 // 让人看得见「什么都没做」也是正确结果
                 return result.changed
@@ -151,13 +148,11 @@ export function LinkNetPanel() {
             disabled={busy || pages.stale_count === 0}
             onClick={() =>
               void run(async () => {
-                const response = await fetch(`${API_PROXY_BASE}/geo/backlinks`, {
-                  headers: buildHeaders(true),
-                  method: "POST",
-                });
-                const result = await readJson<{ job_id?: string }>(
-                  response,
+                // 这一条是**派单**（返回 job_id 就走），默认超时够用。
+                const result = await contentRequest<{ job_id?: string }>(
+                  "/geo/backlinks",
                   "派单失败",
+                  { method: "POST" },
                 );
                 return `已派单 ${result.job_id ?? ""}，n8n 正在更新产品页。`;
               })

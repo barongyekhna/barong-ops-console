@@ -1,8 +1,14 @@
 "use client";
 
-const API_PROXY_BASE = "/api/backend";
-const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+// M 系列制造库存的接口层。请求统一走 `lib/api.ts`。
+//
+// 这个模块是「结构化 detail」的典型:负库存被后端拦死时返回 409,
+// detail 里带**逐项缺口清单**,对话框要按行渲染出来给人看。
+// 收口前这份清单是本文件自己从响应里挖的;收口后由 `ApiError.detail` 带出来
+// —— 那个字段就是为这类场景补的(以前 apiRequest 解析完就丢了)。
+
+import { ApiError, apiRequest } from "@/lib/api";
+
 const LABEL = "库存";
 
 export type Kind = "part" | "product";
@@ -96,50 +102,33 @@ export class ShortageError extends Error {
   }
 }
 
-function buildHeaders(json = false) {
-  const headers = new Headers({ Accept: "application/json" });
-  if (json) {
-    headers.set("Content-Type", "application/json");
+/**
+ * 把 `ApiError` 翻回本模块原有的两种错误形态。
+ *
+ * 收口只换传输层,**不改调用方看到的错误**:dialogs.tsx 里 `err instanceof
+ * ShortageError` 那条分支要照常命中,FastAPI 422 也要照常显示第一条 msg
+ * 而不是一句笼统的状态兜底。
+ */
+function rethrow(error: unknown): never {
+  if (!(error instanceof ApiError)) {
+    throw error;
   }
-  if (typeof window !== "undefined") {
-    const token = window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-    if (token) {
-      headers.set("Authorization", `Bearer ${token}`);
-    }
-  }
-  return headers;
-}
-
-async function readJson<T>(response: Response): Promise<T> {
-  if (response.ok) {
-    return (await response.json()) as T;
-  }
-  if (response.status === 401 && typeof window !== "undefined") {
-    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
-  }
-  let detail: unknown = "";
-  try {
-    detail = ((await response.json()) as { detail?: unknown }).detail;
-  } catch {
-    // non-JSON body
-  }
+  const detail = error.detail;
   if (
-    response.status === 409 &&
+    error.status === 409 &&
     detail &&
     typeof detail === "object" &&
     Array.isArray((detail as { shortages?: unknown }).shortages)
   ) {
-    const d = detail as { message?: string; shortages: RequirementRow[] };
-    throw new ShortageError(d.message || "库存不足", d.shortages);
+    const shortage = detail as { message?: string; shortages: RequirementRow[] };
+    throw new ShortageError(shortage.message || "库存不足", shortage.shortages);
   }
   if (Array.isArray(detail)) {
-    // FastAPI 422 校验错误
+    // FastAPI 422 校验错误:detail 是一个数组,第一条的 msg 才是人话。
     const first = detail[0] as { msg?: string } | undefined;
-    throw new Error(first?.msg || `${LABEL}（${response.status}）`);
+    throw new Error(first?.msg || `${LABEL}（${error.status}）`);
   }
-  throw new Error(
-    typeof detail === "string" && detail ? detail : `${LABEL}（${response.status}）`,
-  );
+  throw error;
 }
 
 function get<T>(path: string, params?: Record<string, string | undefined>) {
@@ -150,19 +139,11 @@ function get<T>(path: string, params?: Record<string, string | undefined>) {
     }
   }
   const qs = query.toString();
-  return fetch(`${API_PROXY_BASE}/mfg${path}${qs ? `?${qs}` : ""}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-  }).then((r) => readJson<T>(r));
+  return apiRequest<T>(`/mfg${path}${qs ? `?${qs}` : ""}`).catch(rethrow);
 }
 
 function send<T>(method: "POST" | "PATCH" | "PUT", path: string, body: unknown) {
-  return fetch(`${API_PROXY_BASE}/mfg${path}`, {
-    method,
-    cache: "no-store",
-    headers: buildHeaders(true),
-    body: JSON.stringify(body),
-  }).then((r) => readJson<T>(r));
+  return apiRequest<T>(`/mfg${path}`, { body, method }).catch(rethrow);
 }
 
 export const getContext = () => get<FactoryContext>("/context");
