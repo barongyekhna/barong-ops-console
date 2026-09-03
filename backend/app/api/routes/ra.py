@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ...db.session import get_db, get_read_db
+from ...db.session import STATEMENT_TIMEOUT_MS, get_db, get_read_db
 from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
 from .rw import _target_org_for_user, require_r_series_org
@@ -489,8 +489,13 @@ class CruiseToggleRequest(BaseModel):
 
 
 def _cruise_today_usage(db: Session, org_id: str) -> dict[str, object]:
-    """今日 R-A 烧钱概况:AI 评估次数 + 各出网 provider 台账用量。"""
-    from r_system_v2.ra.quota_ledger import provider_label
+    """今日 R-A 烧钱概况:AI 评估次数 + 各出网 provider 台账用量。
+
+    provider 用量直接复用 quota_ledger 的 ``usage_today``,好让巡航条和 LiveDeck
+    /quota 用**同一份 used/budget/remaining**——否则巡航条只报 used、LiveDeck 报
+    used/上限,同模块两种口径,用户看不出还剩多少(L18)。
+    """
+    from r_system_v2.ra.quota_ledger import usage_today
 
     with without_org_data_isolation():
         ai_evals = db.execute(
@@ -499,22 +504,23 @@ def _cruise_today_usage(db: Session, org_id: str) -> dict[str, object]:
                 "WHERE created_at::date = CURRENT_DATE"
             )
         ).scalar()
-        providers = db.execute(
-            text(
-                "SELECT provider, used FROM ra_provider_quota_usage "
-                "WHERE day = CURRENT_DATE AND used > 0 ORDER BY used DESC"
-            )
-        ).mappings().all()
+        ledger = usage_today(db)
+    providers = [
+        {
+            "provider": provider,
+            "label": info["label"],
+            "used": info["used"],
+            "budget": info["budget"],
+            "remaining": info["remaining"],
+            "unlimited": info["unlimited"],
+        }
+        for provider, info in ledger.items()
+        if info["used"] > 0
+    ]
+    providers.sort(key=lambda p: p["used"], reverse=True)
     return {
         "ai_evaluations": int(ai_evals or 0),
-        "providers": [
-            {
-                "provider": r["provider"],
-                "label": provider_label(r["provider"]),
-                "used": int(r["used"]),
-            }
-            for r in providers
-        ],
+        "providers": providers,
     }
 
 
@@ -708,6 +714,17 @@ def ra_groups(
     if cached is not None:
         return cached
     with without_org_data_isolation():
+        # H8: the jsonb layer-expansion below is heavy; cap it so a cold-cache
+        # request fails fast (8s) instead of holding a gunicorn worker until the
+        # 120s global timeout. The 60s file cache in front still absorbs the
+        # common case; a rare timeout surfaces as a quick error the client retries.
+        # 从配置取，不写死。写死的后果是：把 db_statement_timeout_ms 调大之后
+        # 这一条**依然是 8 秒**，而且没人会想到来这里看。approval.py 用的就是
+        # 配置值，两处行为不该分叉。
+        if db.get_bind().dialect.name == "postgresql":
+            db.execute(
+                text(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+            )
         # 只取分组卡需要的字段，不拉整份报告（报告里含全部 AI 层审计，很重）。
         rows = db.execute(
             text(

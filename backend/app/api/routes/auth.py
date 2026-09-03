@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
@@ -202,6 +204,180 @@ def auth_context(
         )
     return AuthContextResponse(
         user_id=identity.id,
+        org_id=context.org_id,
+        role=context.role,
+        module_scope=context.module_scope,
+        context_available=True,
+        resolution_source=resolution_source,
+    )
+
+
+class OrgSwitchRequest(BaseModel):
+    """切到哪个组织。"""
+
+    org_id: str = Field(min_length=1, max_length=40)
+
+
+class AvailableOrg(BaseModel):
+    org_id: str
+    org_name: str
+    org_type: str
+    role: str
+    is_active_context: bool
+
+
+class AvailableOrgsResponse(BaseModel):
+    organizations: list[AvailableOrg]
+    active_org_id: str | None
+
+
+@router.get("/organizations", response_model=AvailableOrgsResponse)
+def auth_available_organizations(
+    request: Request,
+    db: Session = Depends(get_read_db),
+    identity: AuthenticatedUserIdentity = Depends(_current_identity_fast),
+) -> AvailableOrgsResponse:
+    """当前账号能切到哪些组织。
+
+    前端的组织切换器用它填下拉。owner 看到全部 active 组织，
+    其余人只看到自己有 active 成员关系的那些。
+    """
+    from ...models.organization import OrganizationRecord
+    from ...models.org_membership import OrgMembershipRecord
+    from ...core.roles import is_owner_role
+
+    user = _identity_user(identity)
+    auth_session = _identity_auth_session(identity)
+
+    if is_owner_role(user.role):
+        rows = list(
+            db.scalars(
+                select(OrganizationRecord)
+                .where(OrganizationRecord.status == "active")
+                .order_by(OrganizationRecord.org_name)
+            )
+        )
+        roles = {row.org_id: "owner" for row in rows}
+    else:
+        memberships = list(
+            db.scalars(
+                select(OrgMembershipRecord).where(
+                    OrgMembershipRecord.user_id == str(user.id),
+                    OrgMembershipRecord.status == "active",
+                )
+            )
+        )
+        roles = {m.org_id: m.role for m in memberships}
+        rows = (
+            list(
+                db.scalars(
+                    select(OrganizationRecord)
+                    .where(
+                        OrganizationRecord.org_id.in_(list(roles)),
+                        OrganizationRecord.status == "active",
+                    )
+                    .order_by(OrganizationRecord.org_name)
+                )
+            )
+            if roles
+            else []
+        )
+
+    active = getattr(auth_session, "active_org_id", None)
+    return AvailableOrgsResponse(
+        organizations=[
+            AvailableOrg(
+                org_id=row.org_id,
+                org_name=row.org_name,
+                org_type=row.org_type or "",
+                role=roles.get(row.org_id, ""),
+                is_active_context=(row.org_id == active),
+            )
+            for row in rows
+        ],
+        active_org_id=active,
+    )
+
+
+@router.post("/switch-organization", response_model=AuthContextResponse)
+def auth_switch_organization(
+    payload: OrgSwitchRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    session: AuthenticatedSession = Depends(get_current_session),
+) -> AuthContextResponse:
+    """把当前会话切到指定组织。
+
+    这是 middleware/org_context.py 里那条死分支缺的另一半：它一直在读
+    `auth_session.active_org_id`，但从来没有地方写它。
+
+    **安全要点**：必须确认这个人真的是目标组织的 active 成员，否则这个端点
+    就成了越权入口 —— 它写的是后续所有请求的组织上下文。
+    owner 例外，可切到任意 active 组织（与权限引擎里 owner 的全局语义一致）。
+    """
+    from ...core.roles import is_owner_role
+    from ...models.org_membership import OrgMembershipRecord
+    from ...models.organization import OrganizationRecord
+
+    org_id = payload.org_id.strip()
+    user = session.user
+
+    organization = db.scalar(
+        select(OrganizationRecord).where(
+            OrganizationRecord.org_id == org_id,
+            OrganizationRecord.status == "active",
+        )
+    )
+    if organization is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="找不到这个组织，或它已经停用。",
+        )
+
+    if not is_owner_role(user.role):
+        membership = db.scalar(
+            select(OrgMembershipRecord).where(
+                OrgMembershipRecord.user_id == str(user.id),
+                OrgMembershipRecord.org_id == org_id,
+                OrgMembershipRecord.status == "active",
+            )
+        )
+        if membership is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="这个账号不属于该组织。",
+            )
+
+    auth_session = session.auth_session
+    auth_session.active_org_id = org_id
+    db.add(auth_session)
+    db.commit()
+
+    # 组织上下文有会话级缓存（middleware/org_context.py），切换后必须让它失效，
+    # 否则最多 5 秒内还停留在旧组织 —— 用户会以为切换没生效。
+    from ...middleware.org_context import reset_org_context_cache_for_tests
+
+    reset_org_context_cache_for_tests()
+
+    request_id = str(getattr(request.state, "context_id", "")) or "auth-switch-org"
+    context, resolution_source = build_org_context(
+        db,
+        request=request,
+        user=user,
+        auth_session=auth_session,
+        request_id=request_id,
+    )
+    if context is None:
+        return AuthContextResponse(
+            user_id=user.id,
+            org_id=None,
+            role=None,
+            module_scope=[],
+            context_available=False,
+            resolution_source=resolution_source,
+        )
+    return AuthContextResponse(
+        user_id=user.id,
         org_id=context.org_id,
         role=context.role,
         module_scope=context.module_scope,

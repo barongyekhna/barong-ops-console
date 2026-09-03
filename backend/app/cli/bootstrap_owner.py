@@ -8,6 +8,7 @@ from ..core.security import hash_password
 from ..db.session import managed_session
 from ..modules.c19.identity_sync_service import sync_profile_for_user
 from ..repositories.operation_logs import create_operation_log
+from ..services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from ..repositories.users import (
     create_owner,
     get_owner,
@@ -77,6 +78,7 @@ def bootstrap_owner(
         db.execute(
             text("SELECT pg_advisory_xact_lock(:lock_id)"),
             {"lock_id": OWNER_BOOTSTRAP_LOCK_ID},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
 
     existing_owner = get_owner(db)

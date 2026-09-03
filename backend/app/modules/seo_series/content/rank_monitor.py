@@ -17,6 +17,10 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ...k_series.product_knowledge.scope_shim import (
+    KScopeContext,
+    apply_scope_filters,
+)
 from .models import SeoTopic
 
 logger = logging.getLogger(__name__)
@@ -86,20 +90,30 @@ def apply_terrain_to_topics(db: Session) -> int:
     return touched
 
 
-def monitor_state(db: Session) -> dict[str, Any]:
-    """SEO 视角的监测面板:只看 kind='seo_keyword' 的那部分。"""
+def monitor_state(
+    db: Session, *, scope_context: KScopeContext | None = None
+) -> dict[str, Any]:
+    """SEO 视角的监测面板:只看 kind='seo_keyword' 的那部分。
+
+    ``scope_context`` 把监测词限定在调用者自己的 workspace——被监测的关键词与
+    竞品阵地就是业务情报,绝不能跨组织泄漏。
+    """
     from ...geo_series.monitor.models import GeoMonitorQuestion, GeoMonitorResult
 
     questions = list(
         db.execute(
-            select(GeoMonitorQuestion).where(GeoMonitorQuestion.kind == MONITOR_KIND)
+            apply_scope_filters(
+                select(GeoMonitorQuestion), GeoMonitorQuestion, scope_context
+            ).where(GeoMonitorQuestion.kind == MONITOR_KIND)
         ).scalars()
     )
     by_id = {q.id: q for q in questions}
     latest: dict[Any, Any] = {}
     if by_id:
         for row in db.execute(
-            select(GeoMonitorResult)
+            apply_scope_filters(
+                select(GeoMonitorResult), GeoMonitorResult, scope_context
+            )
             .where(GeoMonitorResult.question_id.in_(list(by_id)))
             .order_by(GeoMonitorResult.checked_at.desc())
         ).scalars():

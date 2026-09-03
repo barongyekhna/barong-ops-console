@@ -24,6 +24,7 @@ from ....models.user import User
 from ...k_series.product_knowledge.scope_shim import KScopeContext
 from .constants import JOB_TYPE_CONTENT
 from .orchestrator import GeoContentOrchestrator
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 logger = logging.getLogger(__name__)
 
@@ -84,30 +85,45 @@ def enqueue_geo_jobs(
                 "business_context": scope_context.business_context,
                 "scope_mode": scope_context.scope_mode,
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         created.append({"job_id": str(job_id), "cluster_id": str(cluster_id)})
     return batch_id, created
 
 
 def jobs_status(
-    db: Session, *, cluster_id: UUID | None = None, limit: int = 50
+    db: Session,
+    *,
+    cluster_id: UUID | None = None,
+    limit: int = 50,
+    scope_context: KScopeContext | None = None,
 ) -> list[dict[str, Any]]:
-    where = "WHERE cluster_id = :cluster_id" if cluster_id is not None else ""
-    params: dict[str, Any] = {"limit": limit}
+    # geo_generation_jobs 按 workspace_key 分区(不是 org_id):必须①手动按
+    # workspace_key 过滤(跨组织隔离)、②包在 without_org_data_isolation 里,
+    # 否则 C18G 会拒掉这条不带 org_id 的裸 SQL。
+    from ...k_series.product_knowledge.scope_shim import normalize_scope_context
+    from ....services.data_isolation import without_org_data_isolation
+
+    scope = normalize_scope_context(scope_context)
+    where = "WHERE workspace_key = :workspace_key"
+    params: dict[str, Any] = {"limit": limit, "workspace_key": scope.workspace_key}
     if cluster_id is not None:
+        where += " AND cluster_id = :cluster_id"
         params["cluster_id"] = cluster_id
-    rows = db.execute(
-        text(
-            f"""
-            SELECT id, cluster_id, job_type, status, error, started_at, finished_at
-            FROM {_TABLE}
-            {where}
-            ORDER BY created_at DESC
-            LIMIT :limit
-            """
-        ),
-        params,
-    ).mappings().all()
+    with without_org_data_isolation():
+        rows = db.execute(
+            text(
+                f"""
+                SELECT id, cluster_id, job_type, status, error, started_at,
+                       finished_at
+                FROM {_TABLE}
+                {where}
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """
+            ),
+            params,
+        ).mappings().all()
     return [
         {
             "job_id": str(r["id"]),
@@ -138,6 +154,7 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"limit": limit},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     if not rows:
         return []
@@ -152,6 +169,7 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"ids": ids},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return [dict(r) for r in rows]
@@ -169,6 +187,7 @@ def _set_job_status(job_id: Any, status: str, *, error: str | None = None) -> No
                 """
             ),
             {"id": job_id, "status": status, "error": error},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         db.commit()
 
@@ -183,6 +202,7 @@ def _reset_cluster_after_failure(cluster_id: Any) -> None:
                     "updated_at = now() WHERE id = :id AND status = 'generating'"
                 ),
                 {"id": cluster_id},
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             )
             db.commit()
     except Exception:  # noqa: BLE001 - best-effort recovery
@@ -278,6 +298,7 @@ def requeue_stale_running(db: Session, *, older_than_seconds: int = 900) -> int:
             """
         ),
         {"secs": str(older_than_seconds)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return result.rowcount or 0

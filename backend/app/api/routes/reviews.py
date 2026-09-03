@@ -6,7 +6,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ...db.session import get_db
-from ...core.roles import normalize_role
+from ...core.roles import (
+    is_owner_role,
+    is_super_admin_role,
+    normalize_role,
+)
 from ...models.user import User
 from ...schemas.common import ListResponse
 from ...schemas.module import ModuleManifestRead, ModuleRegistryResponse
@@ -41,13 +45,13 @@ def _normalized_role(user: User) -> str:
 
 def _review_scope(request: Request, user: User) -> ReviewAuditScope:
     role = _normalized_role(user)
-    if role == "owner":
+    if is_owner_role(role):
         return ReviewAuditScope(
             role=role,
             current_org_id=getattr(request.state, "org_id", None),
             is_owner=True,
         )
-    if role == "super_admin":
+    if is_super_admin_role(role):
         current_org_id = getattr(request.state, "org_id", None) or user.organization_id
         if current_org_id is None or not str(current_org_id).strip():
             raise HTTPException(

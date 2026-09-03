@@ -276,16 +276,20 @@ def list_topics(
     """选题队列。按分数倒序——分数已经把"有没有事实支撑"算进去了。"""
     from sqlalchemy import select
 
+    from ..k_series.product_knowledge.scope_shim import apply_scope_filters
     from .content.models import SeoRadarRun, SeoTopic
 
-    query = select(SeoTopic)
+    scope = _scope(request)
+    query = apply_scope_filters(select(SeoTopic), SeoTopic, scope)
     if status_filter:
         query = query.where(SeoTopic.status == status_filter)
     rows = list(
         db.execute(query.order_by(SeoTopic.score.desc(), SeoTopic.created_at)).scalars()
     )
     last_run = db.execute(
-        select(SeoRadarRun).order_by(SeoRadarRun.created_at.desc()).limit(1)
+        apply_scope_filters(select(SeoRadarRun), SeoRadarRun, scope)
+        .order_by(SeoRadarRun.created_at.desc())
+        .limit(1)
     ).scalars().first()
     return {
         "topics": [
@@ -442,21 +446,28 @@ def generate_article(
 
 @router.get("/items")
 def list_items(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_seo_permission("seo.content.read")),
 ) -> dict[str, Any]:
     from sqlalchemy import select
 
+    from ..k_series.product_knowledge.scope_shim import apply_scope_filters
     from .content.generation_jobs import jobs_status
     from .content.models import SeoContentItem, SeoTopic
 
+    scope = _scope(request)
     rows = list(
         db.execute(
-            select(SeoContentItem).order_by(SeoContentItem.created_at.desc())
+            apply_scope_filters(select(SeoContentItem), SeoContentItem, scope)
+            .order_by(SeoContentItem.created_at.desc())
         ).scalars()
     )
     topics = {
-        t.id: t for t in db.execute(select(SeoTopic)).scalars()
+        t.id: t
+        for t in db.execute(
+            apply_scope_filters(select(SeoTopic), SeoTopic, scope)
+        ).scalars()
     }
     return {
         "items": [
@@ -479,7 +490,7 @@ def list_items(
             }
             for i in rows
         ],
-        "jobs": jobs_status(db),
+        "jobs": jobs_status(db, scope_context=scope),
     }
 
 
@@ -579,12 +590,13 @@ def create_publish(
 
 @router.get("/publishes")
 def list_publishes(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_seo_permission("seo.content.read")),
 ) -> dict[str, Any]:
     from .content.publish_jobs import jobs_recent
 
-    return {"jobs": jobs_recent(db)}
+    return {"jobs": jobs_recent(db, scope_context=_scope(request))}
 
 
 @router.post("/factory-index")
@@ -611,6 +623,7 @@ def rebuild_factory_index(
 
 @router.get("/link-net")
 def link_net_state(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_seo_permission("seo.content.read")),
 ) -> dict[str, Any]:
@@ -622,7 +635,7 @@ def link_net_state(
     # 产品页那侧:算出「有 N 个产品页的链接已过期」。零 WP 调用——
     # 靠上次真写进去的块指纹比对(见 backlink_targets 的注释)。
     try:
-        targets, skipped = collect_backlink_targets(db)
+        targets, skipped = collect_backlink_targets(db, scope_context=_scope(request))
     except Exception:  # noqa: BLE001 - 面板不该因为一处失败整块打不开
         targets, skipped = [], ["产品页状态暂时算不出来"]
     payload["product_pages"] = {
@@ -652,13 +665,14 @@ def link_net_refresh(
 
 @router.get("/site-nav")
 def site_nav_state(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_seo_permission("seo.content.read")),
 ) -> dict[str, Any]:
     """枢纽页的内容数——决定它该不该有入口。不出网。"""
     from ..content_links.site_nav import HUBS, hub_item_counts, pinned_hubs
 
-    counts = hub_item_counts(db)
+    counts = hub_item_counts(db, _scope(request))
     pinned = pinned_hubs(db)
     return {
         "hubs": [
@@ -721,8 +735,15 @@ def content_health(
     """「标了完成却没有产物」的记录。只读,不出网。"""
     from ..content_core.consistency import find_stranded
 
-    stranded = find_stranded(db)
-    return {"stranded": stranded, "count": len(stranded)}
+    failed: list[str] = []
+    stranded = find_stranded(db, failed_labels=failed)
+    # failed 非空 = 这次自检有判据没跑成,结论不完整。前端据此别显示成「全清」。
+    return {
+        "stranded": stranded,
+        "count": len(stranded),
+        "failed_checks": failed,
+        "complete": not failed,
+    }
 
 
 @router.post("/content-health/reset")
@@ -745,12 +766,13 @@ def content_health_reset(
 
 @router.get("/monitor")
 def seo_monitor(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_seo_permission("seo.content.read")),
 ) -> dict[str, Any]:
     from .content.rank_monitor import monitor_state
 
-    return monitor_state(db)
+    return monitor_state(db, scope_context=_scope(request))
 
 
 @router.post("/monitor/seed")

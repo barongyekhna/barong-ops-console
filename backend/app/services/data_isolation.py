@@ -17,6 +17,14 @@ from .event_collector import emit_event
 ORG_DATA_ISOLATION_SKIP_OPTION = "skip_org_data_isolation"
 ORG_ID_FIELD = "org_id"
 
+# 业务代码用的单语句逃生口。给 db.execute(..., execution_options=SKIP_ORG_DATA_ISOLATION)
+# 用:只跳过这一条语句的裸 SQL 守卫,ORM 自动过滤/写保护/跨组织 get 拦截全部保留。
+# 比 without_org_data_isolation() 安全得多——后者会把整个隔离上下文置 None。
+# 只允许用在①真全局表(类目树、配额台账)②已在路由依赖里绑死单一组织的表
+# ③经父表间接隔离且调用方已按父表 scope 取过 id 的子表。
+# 审计口径:grep SKIP_ORG_DATA_ISOLATION 就是全部单语句豁免点。
+SKIP_ORG_DATA_ISOLATION = {ORG_DATA_ISOLATION_SKIP_OPTION: True}
+
 
 class OrgDataIsolationError(PermissionError):
     pass
@@ -368,6 +376,47 @@ class OrgDataIsolationSession(Session):
         if not _is_skip_enabled(execution_options or {}):
             self._enforce_raw_sql_guard(statement)
         return super().execute(
+            statement,
+            params=params,
+            execution_options=execution_options or {},
+            bind_arguments=bind_arguments,
+            **kw,
+        )
+
+    def scalar(
+        self,
+        statement: Any,
+        params: Any | None = None,
+        *,
+        execution_options: Any | None = None,
+        bind_arguments: Any | None = None,
+        **kw: Any,
+    ) -> Any:
+        # SQLAlchemy 2.0 的 scalar/scalars 走 _execute_internal,不经过被 override
+        # 的 execute(),所以裸 SQL 守卫原本对它们完全失效。schemas/data_isolation.py
+        # 的 intercepts_raw_sql=True 在补上这两个之前是一句空承诺。
+        if not _is_skip_enabled(execution_options or {}):
+            self._enforce_raw_sql_guard(statement)
+        return super().scalar(
+            statement,
+            params=params,
+            execution_options=execution_options or {},
+            bind_arguments=bind_arguments,
+            **kw,
+        )
+
+    def scalars(
+        self,
+        statement: Any,
+        params: Any | None = None,
+        *,
+        execution_options: Any | None = None,
+        bind_arguments: Any | None = None,
+        **kw: Any,
+    ) -> Any:
+        if not _is_skip_enabled(execution_options or {}):
+            self._enforce_raw_sql_guard(statement)
+        return super().scalars(
             statement,
             params=params,
             execution_options=execution_options or {},

@@ -36,12 +36,14 @@ from ..repositories.users import (
 )
 from ..schemas.user import must_change_password_required
 from .event_collector import emit_event
+from .data_isolation import SKIP_ORG_DATA_ISOLATION
 from .login_side_effects import (
     LoginFailureSideEffect,
     LoginSuccessSideEffect,
     queue_login_failure_side_effect,
     queue_login_success_side_effect,
 )
+from .rate_limiter import register_login_rate_limit_attempt
 
 
 class InvalidCredentialsError(ValueError):
@@ -94,6 +96,10 @@ class AuthenticatedUserIdentity:
     last_login_at: datetime | None
     session_expires_at: datetime
     session_id_hash: str
+    # 这个会话选定的组织。**必须一路带到中间件** —— 中间件读的是
+    # auth_session.active_org_id，而 auth_session 是由这个 identity 重建出来的。
+    # 漏掉这一个字段，前面加列、登录挑默认组织、切换端点写库就全都白做。
+    active_org_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -301,7 +307,7 @@ def _record_login_rate_limit(
 
 def _auth_sessions_table_available(db: Session) -> bool:
     try:
-        rows = db.execute(text("SELECT version_num FROM alembic_version"))
+        rows = db.execute(text("SELECT version_num FROM alembic_version"), execution_options=SKIP_ORG_DATA_ISOLATION)
         revisions = {str(row[0]) for row in rows if row[0]}
     except SQLAlchemyError:
         db.rollback()
@@ -311,7 +317,7 @@ def _auth_sessions_table_available(db: Session) -> bool:
     if not table_exists(db, "auth_sessions"):
         return False
     try:
-        db.execute(text("SELECT 1 FROM auth_sessions LIMIT 1"))
+        db.execute(text("SELECT 1 FROM auth_sessions LIMIT 1"), execution_options=SKIP_ORG_DATA_ISOLATION)
     except SQLAlchemyError as exc:
         db.rollback()
         if is_missing_table_error(exc, "auth_sessions"):
@@ -431,6 +437,9 @@ def authenticated_session_from_identity(
         user_id=identity.id,
         issued_at=identity.session_expires_at,
         expires_at=identity.session_expires_at,
+        # 中间件读的就是这一列；identity 里带过来的必须还原回去，
+        # 否则「会话选定组织」那条分支照旧读到 None。
+        active_org_id=identity.active_org_id,
         last_seen_at=None,
         ip_address=audit.ip_address,
         user_agent=audit.user_agent,
@@ -445,6 +454,61 @@ def authenticated_session_from_identity(
 def _is_legacy_auth_session(auth_session: AuthSession) -> bool:
     return auth_session.session_id_hash == LEGACY_SESSION_HASH_MARKER
 
+
+def _default_active_org_for(db: Session, user: User) -> str | None:
+    """登录时给这个会话挑一个默认组织。
+
+    2026-09-01：加了 active_org_id 之后实测发现，新登录的**多组织**账号仍然整站
+    403 —— 新会话这一列是空的，而解析链的「唯一 active 成员关系」那步因为有两个
+    成员关系而落空。用户的体感是「能登录，然后什么都打不开」。
+
+    规则按「最像他日常用的那个」排序，选不出来就返回 None
+    （行为与从前完全一致，单组织用户不受任何影响）。
+    """
+    from ..models.org_membership import OrgMembershipRecord
+    from ..models.organization import OrganizationRecord
+
+    try:
+        memberships = list(
+            db.scalars(
+                select(OrgMembershipRecord)
+                .where(
+                    OrgMembershipRecord.user_id == str(user.id),
+                    OrgMembershipRecord.status == "active",
+                )
+                .order_by(OrgMembershipRecord.joined_at)
+            )
+        )
+    except SQLAlchemyError:
+        db.rollback()
+        return None
+
+    if not memberships:
+        return None
+
+    member_org_ids = [m.org_id for m in memberships]
+
+    def _is_active_org(org_id: str) -> bool:
+        return (
+            db.scalar(
+                select(OrganizationRecord.org_id).where(
+                    OrganizationRecord.org_id == org_id,
+                    OrganizationRecord.status == "active",
+                )
+            )
+            is not None
+        )
+
+    # ① 管理员在用户管理里给他设的那个组织 —— 前提是他确实是成员。
+    preferred = str(getattr(user, "organization_id", "") or "").strip()
+    if preferred and preferred in member_org_ids and _is_active_org(preferred):
+        return preferred
+
+    # ② 否则取最早加入的那个 active 组织（通常是主职）。
+    for org_id in member_org_ids:
+        if _is_active_org(org_id):
+            return org_id
+    return None
 
 def _new_session(
     db: Session,
@@ -485,6 +549,12 @@ def _new_session(
             ip_address=audit.ip_address,
             user_agent=audit.user_agent,
         )
+        # 给会话挑个默认组织，否则多组织账号一登录就整站 403（实测）。
+        # 选不出来就留空 —— 单组织用户走原来的解析链，行为不变。
+        default_org = _default_active_org_for(db, user)
+        if default_org is not None:
+            auth_session.active_org_id = default_org
+            db.add(auth_session)
     except SQLAlchemyError as exc:
         db.rollback()
         if not is_missing_table_error(exc, "auth_sessions"):
@@ -508,6 +578,7 @@ def _authenticated_identity_from_user(
     user: User,
     expires_at: datetime,
     session_id_hash: str,
+    active_org_id: str | None = None,
 ) -> AuthenticatedUserIdentity:
     return AuthenticatedUserIdentity(
         id=user.id,
@@ -522,6 +593,7 @@ def _authenticated_identity_from_user(
         last_login_at=user.last_login_at,
         session_expires_at=expires_at,
         session_id_hash=session_id_hash,
+        active_org_id=active_org_id,
     )
 
 
@@ -590,6 +662,7 @@ def validate_session_identity_fast(
                 User.is_active,
                 User.last_login_at,
                 AuthSession.expires_at.label("session_expires_at"),
+                AuthSession.active_org_id.label("session_active_org_id"),
             )
             .select_from(AuthSession)
             .join(User, AuthSession.user_id == User.id)
@@ -624,6 +697,7 @@ def validate_session_identity_fast(
         last_login_at=row.last_login_at,
         session_expires_at=row.session_expires_at,
         session_id_hash=cache_key,
+        active_org_id=row.session_active_org_id,
     )
     _cache_session_identity(identity, now=now)
     return identity
@@ -638,7 +712,51 @@ def login(
     audit: AuditContext,
 ) -> LoginResult:
     attempted_at = _now()
+
+    # ① 三层桶限流（IP / 用户名 / 端点）。**放在密码哈希之前**——撞库的唯一成本
+    # 就是那次 argon2 计算（约 0.5s 且可并发），先花掉它等于没有限流。
+    rate_decision = register_login_rate_limit_attempt(
+        db,
+        username=username,
+        audit=audit,
+        settings=settings,
+        now=attempted_at,
+    )
+    # **必须当场提交。** register_login_rate_limit_attempt 自己不 commit,计数只留在
+    # 事务里;而登录失败会抛异常、事务被丢弃 —— 于是失败次数永远回到零,限流等于不存在。
+    # 2026-08-31 实测:接回限流后连发 25 次错密码仍然全部 401,桶里只有成功登录留下的
+    # 那两条记录。限流器要数的恰恰是失败,这一行 commit 才是它生效的前提。
+    db.commit()
+    if not rate_decision.allowed:
+        retry_after = rate_decision.retry_after_seconds or 1
+        _record_login_rate_limit(
+            db,
+            audit=audit,
+            reason=rate_decision.reason or "login_rate_limited",
+            retry_after_seconds=retry_after,
+        )
+        raise LoginRateLimitError(retry_after_seconds=retry_after)
+
     user = get_login_user_by_username(db, username)
+
+    # ② 账号级锁定 / 失败退避。这两个字段 login_side_effects 一直在写，
+    # 但在此之前**没有任何地方读它们**，所以锁定形同虚设。
+    if user is not None:
+        account_retry_after = _user_retry_after_seconds(
+            user,
+            settings=settings,
+            now=attempted_at,
+        )
+        if account_retry_after is not None:
+            _record_login_rate_limit(
+                db,
+                audit=audit,
+                reason="account_locked",
+                retry_after_seconds=account_retry_after,
+                user=user,
+            )
+            raise LoginRateLimitError(retry_after_seconds=account_retry_after)
+
     password_matches = False
 
     if user is None:
@@ -672,6 +790,9 @@ def login(
             user=user,
             expires_at=auth_session.expires_at,
             session_id_hash=_cache_key_for_session_id(session_id),
+            # 登录时刚挑好的默认组织必须一起进缓存，否则 5 秒缓存窗口内
+            # 中间件仍然读到 None —— 用户会看到「刚登录就什么都打不开」。
+            active_org_id=auth_session.active_org_id,
         ),
         now=logged_in_at,
     )

@@ -370,8 +370,12 @@ def geo_cluster_jobs(
     db: Session = Depends(get_db),
     user: User = Depends(_require_geo_permission(C.PERMISSION_READ)),
 ) -> dict[str, Any]:
-    del user, request
-    return {"jobs": jobs_status(db, cluster_id=cluster_id)}
+    del user
+    return {
+        "jobs": jobs_status(
+            db, cluster_id=cluster_id, scope_context=_scope_context(request)
+        )
+    }
 
 
 @router.post("/clusters/{cluster_id}/products/{product_id}/spotlight")
@@ -590,7 +594,8 @@ def geo_backlink_state(
     user: User = Depends(_require_geo_permission(C.PERMISSION_READ)),
 ) -> dict[str, Any]:
     """What a backlink run would do right now, plus the recent ledger."""
-    targets, skipped = collect_backlink_targets(db)
+    scope = _scope_context(request)
+    targets, skipped = collect_backlink_targets(db, scope_context=scope)
     return {
         "ready": bool(targets),
         "target_count": len(targets),
@@ -612,7 +617,7 @@ def geo_backlink_state(
                 "created_at": j.created_at.isoformat() if j.created_at else None,
                 "finished_at": j.finished_at.isoformat() if j.finished_at else None,
             }
-            for j in backlink_jobs_recent(db)
+            for j in backlink_jobs_recent(db, scope_context=scope)
         ],
     }
 
@@ -630,7 +635,7 @@ def geo_backlink_dispatch(
     when they change.
     """
     scope = _scope_context(request)
-    targets, skipped = collect_backlink_targets(db)
+    targets, skipped = collect_backlink_targets(db, scope_context=scope)
     if not targets:
         raise HTTPException(
             status_code=409,

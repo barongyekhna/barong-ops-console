@@ -17,6 +17,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...k_series.product_knowledge.models import KProductKnowledgeProduct
+from ...k_series.product_knowledge.scope_shim import (
+    KScopeContext,
+    apply_scope_filters,
+)
 from ...p_series.upload.models import PUploadJob
 from .backlink import guides_block_for_product
 from .models import GeoContentCluster
@@ -42,13 +46,22 @@ def _woo_id_for(db: Session, product_id: Any) -> int | None:
     return None
 
 
-def _cluster_product_ids(db: Session) -> list[str]:
-    """Every product attached to any cluster — those are the only candidates."""
+def _cluster_product_ids(
+    db: Session, scope_context: KScopeContext | None = None
+) -> list[str]:
+    """Every product attached to any cluster — those are the only candidates.
+
+    ``scope_context`` 把候选收窄到调用者自己的 workspace——绝不能把别的组织
+    的簇（连同它们的产品）泄漏进来（跨组织业务数据隔离）。
+    """
     ids: list[str] = []
     seen: set[str] = set()
-    for (product_ids,) in db.execute(
-        select(GeoContentCluster.product_ids_json)
-    ).all():
+    query = apply_scope_filters(
+        select(GeoContentCluster.product_ids_json),
+        GeoContentCluster,
+        scope_context,
+    )
+    for (product_ids,) in db.execute(query).all():
         for raw in product_ids if isinstance(product_ids, list) else []:
             text = str(raw or "").strip()
             if text and text not in seen:
@@ -116,7 +129,10 @@ def _reason(previous: str, blocks: dict[str, str], had_history: bool) -> str:
 
 
 def collect_backlink_targets(
-    db: Session, *, product_ids: list[str] | None = None
+    db: Session,
+    *,
+    product_ids: list[str] | None = None,
+    scope_context: KScopeContext | None = None,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """(targets, skipped) — targets 可以直接派单,skipped 解释其余的。
 
@@ -125,6 +141,7 @@ def collect_backlink_targets(
     第二条 PUT 抹掉第一条(契约 v2 的由来)。
 
     ``product_ids`` 收窄扫描范围(上架钩子只关心刚上的那个),不传就是全站扫。
+    ``scope_context`` 把候选簇限定在调用者自己的 workspace——跨组织业务数据隔离。
     """
     # 先把「线上真实状态」刷新一次(一次批量 API)。不刷就可能把草稿指南挂到
     # 产品页上——published_url 在草稿期就已经写库了。
@@ -145,7 +162,7 @@ def collect_backlink_targets(
     targets: list[dict[str, Any]] = []
     skipped: list[str] = []
 
-    for raw_id in _cluster_product_ids(db):
+    for raw_id in _cluster_product_ids(db, scope_context):
         if wanted and raw_id not in wanted:
             continue
         product = None

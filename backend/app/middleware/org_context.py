@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from threading import Lock
+
+import time
+
+import hashlib
+
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import uuid4
@@ -388,6 +394,55 @@ def inject_org_context(request: Request, context: OrgContext) -> None:
     set_current_event_context(context_id=context.request_id, user_id=context.user_id)
 
 
+# --- 组织上下文的会话级缓存 ---------------------------------------------------
+#
+# 为什么需要：2026-09-01 剖析发现完整中间件链每请求约 90ms，其中数据库往返只占
+# 约 18ms，真正的大头是 `anyio.to_thread.run_sync` 的线程切换（每请求 36 次，
+# `_thread.lock.acquire` 累计占 83%）。而「这个用户属于哪个组织」在一个会话内
+# 是稳定答案，没必要每个请求重算一遍、还为此走一趟线程池。
+#
+# TTL 与 auth_service.SESSION_IDENTITY_CACHE_TTL_SECONDS 保持一致：
+# 组织归属变更（加/去成员关系）最多 5 秒后生效，与会话身份缓存的既有取舍同源。
+ORG_CONTEXT_CACHE_TTL_SECONDS = 5
+ORG_CONTEXT_CACHE_MAX_ENTRIES = 4096
+_org_context_cache: dict[str, tuple[float, OrgContext, str]] = {}
+_org_context_cache_lock = Lock()
+
+
+def _org_context_cache_key(session_id: str) -> str:
+    return hashlib.sha256(session_id.encode("utf-8")).hexdigest()
+
+
+def _org_context_from_cache(session_id: str) -> tuple[OrgContext, str] | None:
+    key = _org_context_cache_key(session_id)
+    now = time.monotonic()
+    with _org_context_cache_lock:
+        entry = _org_context_cache.get(key)
+        if entry is None:
+            return None
+        expires_at, context, source = entry
+        if expires_at <= now:
+            _org_context_cache.pop(key, None)
+            return None
+        return context, source
+
+
+def _store_org_context_in_cache(
+    session_id: str, context: OrgContext, source: str
+) -> None:
+    key = _org_context_cache_key(session_id)
+    expires_at = time.monotonic() + ORG_CONTEXT_CACHE_TTL_SECONDS
+    with _org_context_cache_lock:
+        if len(_org_context_cache) >= ORG_CONTEXT_CACHE_MAX_ENTRIES:
+            _org_context_cache.clear()
+        _org_context_cache[key] = (expires_at, context, source)
+
+
+def reset_org_context_cache_for_tests() -> None:
+    """清空缓存。测试里改了成员关系/组织之后必须调用。"""
+    with _org_context_cache_lock:
+        _org_context_cache.clear()
+
 async def org_context_middleware(request: Request, call_next):
     if is_auth_me_path(request.url.path):
         return await call_next(request)
@@ -430,6 +485,14 @@ async def org_context_middleware(request: Request, call_next):
                 status.HTTP_401_UNAUTHORIZED,
                 "Not authenticated.",
             )
+        return await call_next(request)
+
+    # 先看缓存：命中就直接在事件循环上注入，**完全不进线程池、不开数据库会话**。
+    # 这一条省掉的不只是几次查询，更是那趟线程池往返 —— 剖析显示后者才是大头。
+    cached_context = _org_context_from_cache(session_id)
+    if cached_context is not None:
+        context, resolution_source = cached_context
+        inject_org_context(request, context)
         return await call_next(request)
 
     audit = _audit_context(request, request_id)
@@ -481,6 +544,7 @@ async def org_context_middleware(request: Request, call_next):
         )
 
     if context is not None:
+        _store_org_context_in_cache(session_id, context, resolution_source)
         inject_org_context(request, context)
         emit_event(
             event_type="org_context.injected",

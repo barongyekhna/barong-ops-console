@@ -26,6 +26,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ...k_series.product_knowledge.scope_shim import KScopeContext
 from .orchestrator import SeoContentOrchestrator
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +82,18 @@ def enqueue_seo_jobs(
                 "business_context": scope_context.business_context,
                 "scope_mode": scope_context.scope_mode,
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         created.append({"job_id": str(job_id), "topic_id": str(topic_id)})
     return created
 
 
-def jobs_status(db: Session, *, limit: int = 50) -> list[dict[str, Any]]:
+def jobs_status(
+    db: Session,
+    *,
+    limit: int = 50,
+    scope_context: KScopeContext | None = None,
+) -> list[dict[str, Any]]:
     """最近的任务。失败的会标 ``superseded``——**同一个选题后来跑成功了**。
 
     为什么需要这个:失败记录是历史,不该永远在面板上显示成报错。
@@ -97,19 +104,29 @@ def jobs_status(db: Session, *, limit: int = 50) -> list[dict[str, Any]]:
 
     判据不是"多久以前",而是"这个选题后来成没成"——一个三天前失败、至今
     没成功过的任务,仍然该显示。
+
+    ``seo_generation_jobs`` 用 workspace_key 分区(不是 org_id),所以这条裸 SQL
+    必须①手动按 workspace_key 过滤(跨组织隔离)、②包在 without_org_data_isolation
+    里,否则 C18G 会因为「裸 SQL 不带 org_id」直接拒掉整条(见 f_series 同款注释)。
     """
-    rows = db.execute(
-        text(
-            f"""
-            SELECT id, topic_id, job_kind, status, error, started_at, finished_at,
-                   created_at
-            FROM {_TABLE}
-            ORDER BY created_at DESC
-            LIMIT :limit
-            """
-        ),
-        {"limit": limit},
-    ).mappings().all()
+    from ...k_series.product_knowledge.scope_shim import normalize_scope_context
+    from ....services.data_isolation import without_org_data_isolation
+
+    scope = normalize_scope_context(scope_context)
+    with without_org_data_isolation():
+        rows = db.execute(
+            text(
+                f"""
+                SELECT id, topic_id, job_kind, status, error, started_at,
+                       finished_at, created_at
+                FROM {_TABLE}
+                WHERE workspace_key = :workspace_key
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": limit, "workspace_key": scope.workspace_key},
+        ).mappings().all()
 
     # 每个选题最近一次成功的时间;比它早的失败都已经被覆盖了。
     last_success: dict[Any, Any] = {}
@@ -157,6 +174,7 @@ def _claim_queued(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"limit": limit},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     if not rows:
         return []
@@ -169,6 +187,7 @@ def _claim_queued(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"ids": [r["id"] for r in rows]},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return [dict(r) for r in rows]
@@ -186,6 +205,7 @@ def _finish(job_id: Any, status: str, *, error: str | None = None) -> None:
                 """
             ),
             {"id": job_id, "status": status, "error": error},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         db.commit()
 
@@ -284,6 +304,7 @@ def requeue_stale_running(db: Session, *, older_than_seconds: int = 900) -> int:
             """
         ),
         {"secs": str(older_than_seconds)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return result.rowcount or 0

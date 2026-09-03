@@ -11,7 +11,7 @@ from ...db.session import get_db, get_read_db
 from ...models.org_membership import OrgMembershipRecord
 from ...models.organization import OrganizationRecord
 from ...models.user import User
-from ...services.data_isolation import without_org_data_isolation
+from ...services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
 from ...services.rw_keepa_ingestion import keepa_ingestion_runtime_status
 from ..deps import get_current_user
 from r_system_v2.rw.category.category_tree import (
@@ -188,7 +188,8 @@ def _deepseek_batch_status(db: Session) -> dict[str, object]:
                 FROM ai_evaluations
                 WHERE layer = 'deepseek'
                 """
-            )
+            ),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().first()
     except SQLAlchemyError:
         row = None
@@ -454,6 +455,7 @@ def rw_products(
                 """
             ),
             params,
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         fetched_rows = list(result)
         if fetched_rows:
@@ -468,6 +470,7 @@ def rw_products(
                     """
                 ),
                 params,
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             ).mappings().first()
             total_count = int(total_row["total"] or 0) if total_row else 0
         for row in fetched_rows:
@@ -572,7 +575,8 @@ def _product_category_options(db: Session) -> list[dict[str, object]]:
                 FROM products_rw
                 WHERE category_id IS NOT NULL OR features ? 'amazon_leaf_category_id'
                 """
-            )
+            ),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().all()
     except SQLAlchemyError:
         return []
@@ -791,7 +795,7 @@ def _prune_unselected_pending_queue(db: Session, runnable_categories: list[str])
               AND category_id NOT IN :categories
             """
         ).bindparams(bindparam("categories", expanding=True))
-        result = db.execute(statement, {"categories": runnable_categories})
+        result = db.execute(statement, {"categories": runnable_categories}, execution_options=SKIP_ORG_DATA_ISOLATION)
     else:
         result = db.execute(
             text(
@@ -799,7 +803,8 @@ def _prune_unselected_pending_queue(db: Session, runnable_categories: list[str])
                 DELETE FROM enrich_queue
                 WHERE picked = false
                 """
-            )
+            ),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
     return int(result.rowcount or 0)
 
@@ -834,6 +839,7 @@ def rw_delete_product(
         result = db.execute(
             text("DELETE FROM products_rw WHERE asin = :asin"),
             {"asin": clean_asin},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         db.commit()
     except SQLAlchemyError as exc:
@@ -863,7 +869,8 @@ def rw_delete_rejected_products(
                 DELETE FROM products_rw
                 WHERE state IN ('ai1_rejected', 'rejected')
                 """
-            )
+            ),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         db.commit()
     except SQLAlchemyError as exc:
