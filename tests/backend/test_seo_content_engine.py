@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 
@@ -279,15 +280,26 @@ def test_live_state_refresh_never_blanks_on_a_wp_outage() -> None:
     assert "什么都不改" in src
 
 
-def test_publish_queue_commits_before_dispatch() -> None:
-    """n8n 毫秒级就来取包,行没落库会 401(2026-07-23 的竞态,继承过来)。"""
-    from backend.app.modules.seo_series.content import publish_jobs
+def test_publish_queue_uses_the_shared_serial_engine() -> None:
+    """SEO 发布队列共用 `services/n8n_dispatch.py`。
 
-    src = inspect.getsource(publish_jobs.kick_queue)
-    commit_at = src.index("db.commit()")
-    send_at = src.index("_send_to_n8n")
-    assert commit_at < send_at
-    assert "IN_FLIGHT_TIMEOUT_MINUTES" in inspect.getsource(publish_jobs)
+    「先提交再发送」这条（2026-07-23 的竞态）现在由
+    `tests/backend/test_n8n_queue_contract.py` **真跑**验证 —— 那边开第二个
+    会话去查，证明 webhook 发出去的时候别的连接已经能看到 dispatched。
+    源码文本断言证明不了这个。
+    """
+    from backend.app.modules.seo_series.content import publish_jobs
+    from backend.app.services import n8n_dispatch
+
+    assert publish_jobs.IN_FLIGHT_TIMEOUT_MINUTES == 15
+    assert isinstance(publish_jobs._QUEUE, n8n_dispatch.QueueSpec)
+    assert publish_jobs._QUEUE.model is publish_jobs.SeoPublishJob
+    assert "未回传" in publish_jobs._QUEUE.stale_error
+    payload = publish_jobs._QUEUE.build_payload(
+        SimpleNamespace(job_id="j3", channel="wp", token="t3"), "https://base.test"
+    )
+    assert "/seo/publishes/j3/package?token=t3" in payload["package_url"]
+    assert payload["callback_url"].endswith("/seo/publishes/j3/result")
 
 
 def test_only_approved_and_clean_articles_can_be_published() -> None:

@@ -121,19 +121,28 @@ def _jobs_source() -> str:
     return Path(jobs_module.__file__).read_text(encoding="utf-8")
 
 
-def test_kick_queue_commits_before_sending_to_n8n() -> None:
-    """**竞态**:n8n 毫秒级回来拉包,没提交它拿到的 token 查不到行 → 401。"""
-    source = _jobs_source()
-    kick = source[source.index("def kick_queue(") : source.index("def create_widget_job(")]
-    assert kick.index("db.commit()") < kick.index("_send_to_n8n(job")
+def test_widget_queue_uses_the_shared_serial_engine() -> None:
+    """小窗推送共用 `services/n8n_dispatch.py`。
 
+    四条不变量（收僵尸 / 严格串行 / **先提交再发送** / 失败递归）由
+    `tests/backend/test_n8n_queue_contract.py` 真跑验证。这里只钉住
+    「B2B 确实用的是那一份」以及本模块特有的载荷形状 ——
+    2026-09-03 之前这两条断的是源码文本，换个写法就能绕过去。
+    """
+    from types import SimpleNamespace
 
-def test_kick_queue_keeps_the_four_invariants() -> None:
-    kick = _jobs_source()
-    assert "IN_FLIGHT_TIMEOUT_MINUTES" in kick  # 收割僵尸
-    assert 'status == "dispatched"' in kick  # 同时最多一单
-    assert "with_for_update(skip_locked=True)" in kick  # 行锁
-    assert "return kick_queue(db, public_base=public_base)" in kick  # 失败递归
+    from backend.app.modules.b2b.widget import jobs as widget_jobs
+    from backend.app.services import n8n_dispatch
+
+    assert widget_jobs.IN_FLIGHT_TIMEOUT_MINUTES == 15
+    assert isinstance(widget_jobs._QUEUE, n8n_dispatch.QueueSpec)
+    assert widget_jobs._QUEUE.model is widget_jobs.B2BWidgetJob
+    assert "未回传" in widget_jobs._QUEUE.stale_error
+    payload = widget_jobs._QUEUE.build_payload(
+        SimpleNamespace(job_id="j4", channel="wp", token="t4"), "https://base.test"
+    )
+    assert "/b2b/widget-jobs/j4/package?token=t4" in payload["package_url"]
+    assert payload["callback_url"].endswith("/b2b/widget-jobs/j4/result")
 
 
 def test_record_result_is_terminal_state_idempotent() -> None:

@@ -7,6 +7,7 @@ assertions for the skill, orchestrator, queue, and router.
 from __future__ import annotations
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 
@@ -699,16 +700,34 @@ def test_intra_cluster_links_are_placeholders_until_posts_exist() -> None:
 
 
 def test_publish_queue_mirrors_p_serial_semantics() -> None:
-    from backend.app.modules.geo_series.content import publish_jobs
+    """GEO 发布队列必须和 P 用**同一套**串行语义。
 
-    src = inspect.getsource(publish_jobs)
-    assert "IN_FLIGHT_TIMEOUT_MINUTES = 15" in src
-    # strictly one dispatch in flight
-    assert 'GeoPublishJob.status == "dispatched"' in src
-    # commit before sending (the 2026-07-23 race fix inherited from P)
-    kick = inspect.getsource(publish_jobs.kick_queue)
-    assert kick.index("db.commit()") < kick.index("_send_to_n8n(job")
-    # terminal-state idempotency
+    2026-09-03 之前这里断的是源码文本（`kick.index("db.commit()") <
+    kick.index("_send_to_n8n(job")`）。那种断言两头都靠不住：换个写法就绕过去，
+    纯重构又会让它变红。现在五个模块共用 `services/n8n_dispatch.py`，
+    四条不变量由 `tests/backend/test_n8n_queue_contract.py` **真跑**验证，
+    这里只需要钉住「GEO 确实用的是那一份，没有自己再抄一遍」。
+    """
+    from backend.app.modules.geo_series.content import publish_jobs
+    from backend.app.services import n8n_dispatch
+
+    assert publish_jobs.IN_FLIGHT_TIMEOUT_MINUTES == 15
+    assert isinstance(publish_jobs._QUEUE, n8n_dispatch.QueueSpec)
+    assert publish_jobs._QUEUE.model is publish_jobs.GeoPublishJob
+    # 看门狗文案必须含「未回传」——P 的 record_result 靠这三个字区分
+    # 「推测的失败」和「事实的失败」，改掉会让迟到的成功翻不了案。
+    assert "未回传" in publish_jobs._QUEUE.stale_error
+    # 载荷里 n8n 取包和回调要用的三样，缺一整单静默失败
+    payload = publish_jobs._QUEUE.build_payload(
+        SimpleNamespace(
+            job_id="j1", cluster_id="c1", channel="wp", token="t1"
+        ),
+        "https://base.test",
+    )
+    assert payload["token"] == "t1"
+    assert "publish-package?token=t1" in payload["package_url"]
+    assert payload["callback_url"].endswith("/geo/publishes/j1/result")
+    # 终态幂等（这条仍是模块自己的逻辑，刻意没有合并）
     rec = inspect.getsource(publish_jobs.record_result)
     assert 'if job.status in ("success", "failed")' in rec
     assert "invalid job token" in rec
@@ -1199,15 +1218,21 @@ def test_backlink_workflow_is_brand_new_and_writes_only_description() -> None:
 
 
 def test_backlink_queue_mirrors_serial_semantics() -> None:
+    """反链队列同样共用 `services/n8n_dispatch.py`。见上一条的说明。"""
     from backend.app.modules.geo_series.content import backlink_jobs as bj
+    from backend.app.services import n8n_dispatch
 
-    src = inspect.getsource(bj)
-    assert "IN_FLIGHT_TIMEOUT_MINUTES = 15" in src
-    assert "N8N_GEO_BACKLINK_WEBHOOK" in src
-    # 先 commit 再发——n8n 毫秒级回来取包(P 系列 2026-07-23 竞态)
-    kick = inspect.getsource(bj.kick_queue)
-    assert kick.index("db.commit()") < kick.index("_send_to_n8n(job")
-    # 终态幂等
+    assert bj.IN_FLIGHT_TIMEOUT_MINUTES == 15
+    assert bj.N8N_WEBHOOK_ENV == "N8N_GEO_BACKLINK_WEBHOOK"
+    assert isinstance(bj._QUEUE, n8n_dispatch.QueueSpec)
+    assert bj._QUEUE.model is bj.GeoBacklinkJob
+    assert "未回传" in bj._QUEUE.stale_error
+    payload = bj._QUEUE.build_payload(
+        SimpleNamespace(job_id="j2", channel="wp", token="t2"), "https://base.test"
+    )
+    assert "/geo/backlinks/j2/package?token=t2" in payload["package_url"]
+    assert payload["callback_url"].endswith("/geo/backlinks/j2/result")
+    # 终态幂等（模块自己的逻辑，刻意没有合并）
     assert 'if job.status in {"success", "failed"}' in inspect.getsource(bj.record_result)
 
 

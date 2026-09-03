@@ -108,18 +108,37 @@ def test_desk_is_mounted_once_and_never_bare() -> None:
     assert all(p.startswith("/api/app/content-desk") for p in paths), paths
 
 
-def test_sidebar_prefix_is_in_both_hardcoded_tables() -> None:
-    """侧边栏组织树有**两张**硬编码前缀表，只加一张 = 模块隐身。
+def test_sidebar_org_tree_prefix_table_covers_content_desk() -> None:
+    """侧边栏组织树的前缀表漏加就模块隐身。W-A 栽过一次，B2B 又栽了一次。
 
-    W-A 栽过一次，B2B 又栽了一次。
+    2026-08-31：这里原本要求**两张**硬编码表同步（前缀表 + 一个按组织中文名
+    判定的 isRestrictedProductModule）。第二张已经删掉——它是第二套真相源，
+    后端 INTL_TRADE_ONLY_MODULE_KEYS 漏了 k./i./p. 时只在前端被遮住、敲 URL
+    照样进，而且改一次组织名整套失效。现在「哪些模块只属于国际贸易组织」
+    由后端单独判定，前端只剩这一张前缀表管组织树分组。
     """
     src = (
         REPO / "frontend/src/components/capability-sidebar-engine.tsx"
     ).read_text()
     prefixes = src.split("ORGANIZATION_MODULE_PREFIXES")[1].split("] as const")[0]
     assert '"content."' in prefixes
-    restricted = src.split("function isRestrictedProductModule")[1].split("}")[0]
-    assert 'startsWith("content.")' in restricted
+    # 按组织名比对的遮罩不许回来——它正是那第二套真相源。
+    assert "isRestrictedProductModule" not in src, (
+        "前端又出现了按组织判定的模块遮罩。这类判定只应存在于后端 "
+        "module_registry.INTL_TRADE_ONLY_MODULE_KEYS。"
+    )
+
+
+def test_backend_owns_the_org_only_module_list() -> None:
+    """K/I/P 必须在后端的「只属国际贸易」白名单里。
+
+    体检实证：漏了这三个 ⇒ 制造组织超管敲 URL 能打开 K 的创建表单，
+    POST /api/app/k/products 返回业务校验 422 而不是 403。
+    """
+    from backend.app.services.module_registry import INTL_TRADE_ONLY_MODULE_KEYS
+
+    for key in ("k.product_knowledge", "i.image_system", "p.upload"):
+        assert key in INTL_TRADE_ONLY_MODULE_KEYS, f"{key} 不在组织白名单里"
 
 
 def _function_body_source(func: object) -> str:
@@ -342,18 +361,36 @@ def test_bad_derivations_have_no_release_button() -> None:
     assert "已放行" in panel
 
 
-def test_fetch_boilerplate_is_defined_once() -> None:
-    """buildHeaders/readJson 原来在三个面板里各复制一份。内容台是第四个用到
-    它们的地方——再抄一遍就是四份，四份必然分叉。"""
+def test_content_panels_have_no_local_fetch_boilerplate() -> None:
+    """内容台/GEO/SEO 面板不许再自己写请求样板。
+
+    演进史：`buildHeaders`/`readJson` 最早在 LinkNetPanel、ContentHealthPanel、
+    SiteNavPanel 里**各一份**；内容台是第四处，那一轮合并成 `content/api-base.ts`
+    一份（这条测试当时钉的就是「只剩 api-base.ts 有」）。
+
+    2026-09-02 再往上收一层：传输层进 `lib/api.ts`，带标签的错误口径进
+    `lib/labelled-api.ts`，`content/api-base.ts` 退化成一行改名转发。
+    所以现在的正确断言是**一份都不该有**，而不是「只有 api-base.ts 有」。
+    """
     from pathlib import Path
 
     root = Path("frontend/src/modules/content")
-    definitions = [
-        path
+    boilerplate = [
+        path.name
         for path in root.rglob("*.ts*")
         if "function buildHeaders" in path.read_text()
+        or "async function readJson" in path.read_text()
     ]
-    assert [p.name for p in definitions] == ["api-base.ts"], definitions
+    assert boilerplate == [], boilerplate
+
+    # 反对照：面板确实还在发请求，只是走公共入口 —— 否则这条测试会因为
+    # 「面板里根本没有请求了」而假绿。
+    users = [
+        path.name
+        for path in root.rglob("*.ts*")
+        if "contentRequest" in path.read_text()
+    ]
+    assert len(users) >= 4, users
 
 
 def test_revise_is_synchronous_on_both_engines() -> None:

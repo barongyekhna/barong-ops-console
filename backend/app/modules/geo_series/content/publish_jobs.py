@@ -26,6 +26,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ....services import n8n_dispatch
+
 from ...k_series.product_knowledge.scope_shim import KScopeContext
 from .models import GeoContentItem, GeoPublishJob
 
@@ -64,12 +66,9 @@ def enqueue_publish_job(
     return job
 
 
-def _send_to_n8n(job: GeoPublishJob, *, public_base: str) -> None:
-    webhook = (os.getenv(N8N_WEBHOOK_ENV) or "").strip()
-    if not webhook:
-        raise RuntimeError(f"{N8N_WEBHOOK_ENV} 未配置")
-    base = (os.getenv("P_CALLBACK_BASE") or public_base).rstrip("/")
-    payload = {
+def _build_payload(job: GeoPublishJob, base: str) -> dict[str, object]:
+    """这一单发给 n8n 的载荷。传输层在 `services/n8n_dispatch.py`。"""
+    return {
         "job_id": job.job_id,
         "cluster_id": str(job.cluster_id),
         "channel": job.channel,
@@ -79,67 +78,27 @@ def _send_to_n8n(job: GeoPublishJob, *, public_base: str) -> None:
         "callback_url": f"{base}/geo/publishes/{job.job_id}/result",
         "token": job.token,
     }
-    request = urllib.request.Request(
-        webhook,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    urllib.request.urlopen(request, timeout=15)
 
+
+_QUEUE = n8n_dispatch.QueueSpec(
+    model=GeoPublishJob,
+    webhook_env=N8N_WEBHOOK_ENV,
+    build_payload=_build_payload,
+    stale_error=(
+        "n8n 超过 15 分钟未回传，按失联处理"
+        "（检查 n8n 执行记录后可重新发布）"
+    ),
+    in_flight_timeout_minutes=IN_FLIGHT_TIMEOUT_MINUTES,
+)
 
 def kick_queue(db: Session, *, public_base: str) -> GeoPublishJob | None:
-    """Reap stale runs, then release at most one queued job. Safe from anywhere."""
-    deadline = _now() - timedelta(minutes=IN_FLIGHT_TIMEOUT_MINUTES)
-    stale = db.execute(
-        select(GeoPublishJob)
-        .where(
-            GeoPublishJob.status == "dispatched",
-            GeoPublishJob.dispatched_at < deadline,
-        )
-        .with_for_update(skip_locked=True)
-    ).scalars().all()
-    if stale:
-        for job in stale:
-            job.status = "failed"
-            job.error = (
-                "n8n 超过 15 分钟未回传，按失联处理"
-                "（检查 n8n 执行记录后可重新发布）"
-            )
-            job.finished_at = _now()
-        db.flush()
+    """收僵尸，然后在「无 in-flight」时派下一单。
 
-    in_flight = db.scalar(
-        select(GeoPublishJob.id).where(GeoPublishJob.status == "dispatched").limit(1)
-    )
-    if in_flight is not None:
-        return None
-
-    job = db.execute(
-        select(GeoPublishJob)
-        .where(GeoPublishJob.status == "queued")
-        .order_by(GeoPublishJob.created_at.asc())
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    ).scalars().first()
-    if job is None:
-        return None
-
-    job.status = "dispatched"
-    job.dispatched_at = _now()
-    db.add(job)
-    # Commit BEFORE sending: n8n calls back for the package within milliseconds.
-    db.commit()
-    try:
-        _send_to_n8n(job, public_base=public_base)
-    except Exception as exc:  # noqa: BLE001 - a dead webhook must not wedge the queue
-        job.status = "failed"
-        job.error = f"dispatch failed: {exc}"[:500]
-        job.finished_at = _now()
-        db.commit()
-        return kick_queue(db, public_base=public_base)
-    return job
-
+    实现在 `services/n8n_dispatch.py` —— 收口前这套逻辑在五个模块里各有一份，
+    四条不变量（收僵尸 / 严格串行 / 先提交再发送 / 失败递归）由
+    `tests/backend/test_n8n_queue_contract.py` 行为验证。
+    """
+    return n8n_dispatch.kick_queue(db, _QUEUE, public_base=public_base)
 
 def create_publish_job(
     db: Session,

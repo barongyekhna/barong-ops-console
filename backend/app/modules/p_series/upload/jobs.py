@@ -22,6 +22,8 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ....services import n8n_dispatch
+
 from .models import PUploadJob
 
 N8N_WEBHOOK_ENV = "N8N_P_UPLOAD_WEBHOOK"
@@ -52,13 +54,9 @@ def enqueue_dispatch_job(
     return job
 
 
-def _send_to_n8n(job: PUploadJob, *, public_base: str) -> None:
-    """真正把一单 POST 给 n8n webhook（调用方负责状态流转）。"""
-    webhook = (os.getenv(N8N_WEBHOOK_ENV) or "").strip()
-    if not webhook:
-        raise RuntimeError("N8N_P_UPLOAD_WEBHOOK 未配置")
-    base = (os.getenv("P_CALLBACK_BASE") or public_base).rstrip("/")
-    payload = {
+def _build_payload(job: PUploadJob, base: str) -> dict[str, object]:
+    """这一单发给 n8n 的载荷。传输层在 `services/n8n_dispatch.py`。"""
+    return {
         "job_id": job.job_id,
         "product_id": str(job.product_id),
         "channel": job.channel,
@@ -69,79 +67,28 @@ def _send_to_n8n(job: PUploadJob, *, public_base: str) -> None:
         "callback_url": f"{base}/p/uploads/{job.job_id}/result",
         "token": job.token,
     }
-    request = urllib.request.Request(
-        webhook,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310
-        response.read()
+
+
+_QUEUE = n8n_dispatch.QueueSpec(
+    model=PUploadJob,
+    webhook_env=N8N_WEBHOOK_ENV,
+    build_payload=_build_payload,
+    stale_error=(
+        f"n8n 超过 {IN_FLIGHT_TIMEOUT_MINUTES} 分钟未回传，按失联处理"
+        "（检查 n8n 执行记录后可重新上传）"
+    ),
+    in_flight_timeout_minutes=IN_FLIGHT_TIMEOUT_MINUTES,
+)
 
 
 def kick_queue(db: Session, *, public_base: str) -> PUploadJob | None:
     """队列引擎：先给失联的 in-flight 收尸，然后在「无 in-flight」时派下一单。
 
-    返回本次真正派出去的 job（没有则 None）。幂等，可被任何触发点安全调用
-    （入队后 / n8n 回传后 / 台账页轮询时）。
+    实现在 `services/n8n_dispatch.py` —— 收口前这套逻辑在五个模块里各有一份，
+    四条不变量（收僵尸 / 严格串行 / 先提交再发送 / 失败递归）由
+    `tests/backend/test_n8n_queue_contract.py` 行为验证。
     """
-    # 1) 失联收尸：dispatched 超时的标 failed，腾出跑道
-    deadline = _now() - timedelta(minutes=IN_FLIGHT_TIMEOUT_MINUTES)
-    stale = db.scalars(
-        select(PUploadJob)
-        .where(PUploadJob.status == "dispatched")
-        .where(PUploadJob.dispatched_at < deadline)
-        .with_for_update(skip_locked=True)
-    ).all()
-    for job in stale:
-        job.status = "failed"
-        job.error = (
-            f"n8n 超过 {IN_FLIGHT_TIMEOUT_MINUTES} 分钟未回传，按失联处理"
-            "（检查 n8n 执行记录后可重新上传）"
-        )
-        job.finished_at = _now()
-        db.add(job)
-    if stale:
-        db.flush()
-
-    # 2) 跑道占用检查：还有 in-flight 就不派新单（严格串行）
-    in_flight = db.scalar(
-        select(PUploadJob.id).where(PUploadJob.status == "dispatched").limit(1)
-    )
-    if in_flight is not None:
-        return None
-
-    # 3) 取最老的 queued（行锁防并发触发点重复派单）
-    job = db.scalars(
-        select(PUploadJob)
-        .where(PUploadJob.status == "queued")
-        .order_by(PUploadJob.created_at.asc())
-        .limit(1)
-        .with_for_update(skip_locked=True)
-    ).first()
-    if job is None:
-        return None
-
-    # 4) 先落库再发货(2026-07-23 竞态实锤):n8n 收到 webhook 后毫秒级回来
-    #    取数,任务行若还没提交,取数按「token 无效」401 打回。所以必须先把
-    #    dispatched 状态提交成既成事实,再发 webhook;发送失败由下面的
-    #    except 收尸(兜底还有失联超时收尸)。
-    job.status = "dispatched"
-    job.dispatched_at = _now()
-    db.add(job)
-    db.commit()
-    try:
-        _send_to_n8n(job, public_base=public_base)
-    except Exception as exc:  # noqa: BLE001 - 单发失败不阻塞队列
-        job.status = "failed"
-        job.error = f"dispatch failed: {exc}"[:500]
-        job.finished_at = _now()
-        db.add(job)
-        db.commit()
-        # 继续踢下一单（递归深度 = 连续失败单数，有限）
-        return kick_queue(db, public_base=public_base)
-    return job
-
+    return n8n_dispatch.kick_queue(db, _QUEUE, public_base=public_base)
 
 def create_dispatch_job(
     db: Session,
@@ -173,9 +120,19 @@ def record_result(
         return None
     if not token or token != job.token:
         raise PermissionError("invalid job token")
-    # 幂等：已完成的重复回报不重复处理
-    if job.status in ("success", "failed"):
+    # 幂等：已落定的重复回报不重复处理。
+    #
+    # 唯一例外——**迟到的成功回报可以翻案**。failed 有两种来源：n8n 明确报错
+    # (事实)，和看门狗「超时未回传」(推测)。2026-08-11 实测过一次推测错杀：
+    # 产品其实已经建进 Woo(草稿 4394)，只是 n8n 的回报节点被跳过，15 分钟后
+    # 被判失联；此时人工补回报却被这条幂等挡在门外，账面永远是「失败」，
+    # 而站上明明有货。事实必须能覆盖推测，否则对不上账。
+    if job.status == "success":
         return job
+    if job.status == "failed":
+        timed_out = "未回传" in (job.error or "")
+        if not (timed_out and status == "success"):
+            return job
     job.status = "success" if status == "success" else "failed"
     job.external_product_id = external_product_id
     job.external_url = external_url
