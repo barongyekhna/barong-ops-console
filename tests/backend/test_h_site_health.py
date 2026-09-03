@@ -608,7 +608,9 @@ def test_auto_close_never_touches_ignored_or_failed_runs(h_env: TestClient) -> N
         finding_id = str(target.id)
 
     # 人把 A 标成「忽略」——那是他主动做的分类，系统不该替他改
-    acted = h_env.post(
+    # 路由是 PATCH（router.py:391），这里一直写的是 POST，于是拿到 405 而不是
+    # 200——测试红了很久，红的是它自己，不是被测代码。
+    acted = h_env.patch(
         f"/api/app/h/findings/{finding_id}", json={"action": "acknowledge"}
     )
     assert acted.status_code == 200, acted.text

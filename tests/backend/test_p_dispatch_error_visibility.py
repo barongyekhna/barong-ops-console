@@ -84,4 +84,12 @@ def test_production_still_sanitizes_non_whitelisted_conflicts(
     response = _production_response(monkeypatch, path=path, detail=detail)
 
     assert response.status_code == 409
-    assert json.loads(response.body) == {"detail": "Request conflict."}
+    # 消毒后的文案 2026-08-31 改成了中文（整站中文界面里冒英文套话，而且
+    # 三种不同的失败说同一句话）。这条测试的本意是「非白名单路径的 detail
+    # 必须被换掉、内部细节不外泄」——所以断言的重点是：原始 detail 里的
+    # 内容一个字都没漏出来，而不是那句话本身长什么样。
+    body = json.loads(response.body)
+    assert set(body) == {"detail"}
+    assert body["detail"] == "和现有数据冲突了（可能已经存在，或刚被别人改过）。请刷新后重试。"
+    assert "hidden" not in response.body.decode()
+    assert "blockers" not in response.body.decode()

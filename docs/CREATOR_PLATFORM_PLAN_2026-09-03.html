@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>创作者硬货代工平台 · 十年计划书</title>
+<style>
+:root{
+  --bg:#070b12;--panel:#0d1420;--panel2:#111c2b;--line:#1d2b3f;--line2:#26405c;
+  --text:#d7e3f2;--muted:#8aa0ba;--cyan:#38d6ff;--amber:#ffb547;--green:#3ee08a;--red:#ff5c7a;--violet:#a78bfa;
+  --mono:"SF Mono",Menlo,Consolas,"Cascadia Mono",monospace;
+  --sans:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.75;
+  background-image:linear-gradient(rgba(56,214,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(56,214,255,.035) 1px,transparent 1px);background-size:32px 32px}
+a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}
+.wrap{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+nav{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--line);background:rgba(7,11,18,.92);padding:22px 16px}
+nav .brand{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--cyan);margin-bottom:4px}
+nav .brand2{font-size:12px;color:var(--muted);margin-bottom:16px}
+nav a{display:block;color:var(--muted);font-size:13px;padding:5px 8px;border-left:2px solid transparent;margin-bottom:1px}
+nav a:hover{color:var(--text);border-left-color:var(--line2);text-decoration:none}
+nav a.h2{color:var(--text)}
+nav a.h3{padding-left:20px;font-size:12px}
+main{padding:36px 56px 120px;max-width:1080px}
+.cover{border:1px solid var(--line2);background:linear-gradient(135deg,rgba(56,214,255,.08),rgba(167,139,250,.06));padding:36px 40px;border-radius:8px;margin-bottom:40px;position:relative;overflow:hidden}
+.cover:before{content:"";position:absolute;inset:0;background:radial-gradient(600px 200px at 80% 0,rgba(56,214,255,.12),transparent)}
+.cover .tag{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--cyan)}
+.cover h1{font-size:34px;margin:8px 0 6px;letter-spacing:.02em}
+.cover .sub{color:var(--muted);font-size:15px;max-width:720px}
+.meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.meta b{color:var(--text);font-weight:500}
+h2{font-size:24px;margin:56px 0 14px;padding-top:12px;border-top:1px solid var(--line);letter-spacing:.01em}
+h2 .n{font-family:var(--mono);font-size:12px;color:var(--cyan);letter-spacing:.2em;display:block;margin-bottom:4px}
+h3{font-size:17px;margin:30px 0 10px;color:#eaf2fc}
+h4{font-size:15px;margin:20px 0 6px;color:var(--cyan);font-weight:600}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 14px;padding-left:22px}li{margin-bottom:5px}
+table{border-collapse:collapse;width:100%;margin:12px 0 20px;font-size:14px;background:var(--panel)}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:var(--panel2);font-family:var(--mono);font-size:12px;letter-spacing:.06em;color:var(--cyan);font-weight:500}
+tr:nth-child(even) td{background:rgba(255,255,255,.015)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:16px 20px;margin:14px 0}
+.card.cyan{border-color:rgba(56,214,255,.45)}.card.amber{border-color:rgba(255,181,71,.5)}.card.red{border-color:rgba(255,92,122,.5)}.card.green{border-color:rgba(62,224,138,.45)}
+.card .t{font-family:var(--mono);font-size:11px;letter-spacing:.18em;margin-bottom:6px}
+.card.cyan .t{color:var(--cyan)}.card.amber .t{color:var(--amber)}.card.red .t{color:var(--red)}.card.green .t{color:var(--green)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:14px 16px}
+.kpi .v{font-family:var(--mono);font-size:24px;color:var(--cyan)}
+.kpi .l{font-size:12px;color:var(--muted)}
+code,pre{font-family:var(--mono);font-size:12.5px}
+code{background:rgba(56,214,255,.08);border:1px solid rgba(56,214,255,.15);padding:1px 5px;border-radius:3px;color:#bfefff}
+pre{background:#050810;border:1px solid var(--line);border-radius:6px;padding:14px 16px;overflow-x:auto;line-height:1.55;color:#c9d8ea;margin:10px 0 18px}
+pre code{background:none;border:0;padding:0;color:inherit}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 18px;font-family:var(--mono);font-size:12px}
+.flow span{background:var(--panel2);border:1px solid var(--line2);padding:6px 10px;border-radius:4px;color:#cfe6f5}
+.flow i{color:var(--muted);font-style:normal}
+.badge{display:inline-block;font-family:var(--mono);font-size:11px;padding:1px 7px;border-radius:3px;border:1px solid var(--line2);color:var(--muted);margin-right:6px}
+.badge.now{color:var(--green);border-color:rgba(62,224,138,.5)}.badge.y3{color:var(--amber);border-color:rgba(255,181,71,.5)}.badge.y5{color:var(--violet);border-color:rgba(167,139,250,.5)}
+.small{font-size:12.5px;color:var(--muted)}
+.hr{height:1px;background:var(--line);margin:28px 0}
+.decision{border-left:3px solid var(--amber);padding:8px 14px;background:rgba(255,181,71,.05);margin:10px 0}
+.decision b{color:var(--amber)}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}nav{position:relative;height:auto;border-right:0;border-bottom:1px solid var(--line)}main{padding:24px 18px 80px}.grid2,.grid3{grid-template-columns:1fr}}
+@media print{body{background:#fff;color:#111}nav{display:none}.wrap{display:block}main{max-width:none;padding:0}
+  .cover,.card,.kpi,table,pre{background:#fff!important;border-color:#bbb!important;color:#111}th{color:#111!important;background:#eee!important}h2 .n,.cover .tag{color:#036}a{color:#036}code{color:#036;background:#f2f2f2;border-color:#ddd}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav>
+  <div class="brand">BARONG · MISSION PLAN</div>
+  <div class="brand2">创作者硬货代工平台</div>
+  <a class="h2" href="#s0">导读</a>
+  <a class="h2" href="#s1">1 项目定义</a>
+  <a class="h2" href="#s2">2 商业模式</a>
+  <a class="h3" href="#s2-1">价值链与钱流</a>
+  <a class="h3" href="#s2-2">四层收入</a>
+  <a class="h3" href="#s2-3">零库存机制</a>
+  <a class="h3" href="#s2-4">底盘与认证</a>
+  <a class="h2" href="#s3">3 市场与竞争</a>
+  <a class="h2" href="#s4">4 十年路线图</a>
+  <a class="h2" href="#s5">5 产品面设计</a>
+  <a class="h2" href="#s6">6 技术架构与实施</a>
+  <a class="h3" href="#s6-1">模块注册</a>
+  <a class="h3" href="#s6-2">数据模型</a>
+  <a class="h3" href="#s6-3">项目状态机</a>
+  <a class="h3" href="#s6-4">达人门户与鉴权</a>
+  <a class="h3" href="#s6-5">预售页与收款</a>
+  <a class="h3" href="#s6-6">K 作图: logo 上产品</a>
+  <a class="h3" href="#s6-7">与 R/F/M/C19 的接法</a>
+  <a class="h3" href="#s6-8">PWA 与壳</a>
+  <a class="h3" href="#s6-9">发版与验收</a>
+  <a class="h2" href="#s7">7 获客实操攻略</a>
+  <a class="h2" href="#s8">8 交付实操 SOP</a>
+  <a class="h2" href="#s8b">8B 设计谁来做</a>
+  <a class="h2" href="#s9">9 底盘一号</a>
+  <a class="h2" href="#s10">10 风险与机制</a>
+  <a class="h2" href="#s11">11 行动清单</a>
+  <a class="h2" href="#s12">12 待你拍板</a>
+  <a class="h2" href="#s13">附录</a>
+</nav>
+<main>
+
+<div class="cover">
+  <div class="tag">PROJECT PLAN · REV 2 · 2026-09-03</div>
+  <h1>创作者硬货代工平台</h1>
+  <div class="sub">有粉丝的人负责卖,你负责把东西做出来。粉丝的钱先到,货后生产。控制台一个引擎走两条线,现有独立站与 B2B 线一切照旧。十年对标 Xometry。</div>
+  <div class="meta">
+    <div>阶段 <b>规划,未开工</b></div>
+    <div>起步团队 <b>1 人 + AI</b></div>
+    <div>生产 <b>吉林自有工厂</b></div>
+    <div>首发市场 <b>洛杉矶 · 户外/露营/数码创作者</b></div>
+    <div>文档 <b>docs/CREATOR_PLATFORM_PLAN_2026-09-03.html</b></div>
+  </div>
+</div>
+
+<h2 id="s0"><span class="n">SECTION 00</span>导读</h2>
+<p>这份计划把 2026-09-03 一整场讨论的结论、技术细节和实操攻略写在一处。它有三个用途:你自己反复看;以后给合作方或投资人看的底稿;以及任何一个不了解你的 AI 会话拿到它就能接着干活。</p>
+<div class="grid3">
+  <div class="kpi"><div class="v">2</div><div class="l">产品面:工厂面(控制台)+ 达人面(模块 + PWA 壳)。粉丝面砍掉</div></div>
+  <div class="kpi"><div class="v">3 年</div><div class="l">第三年前不碰收银台归己、外协厂网络、底盘库开放三条分界线</div></div>
+  <div class="kpi"><div class="v">10 人</div><div class="l">第一年的获客目标是一份名单,不是一个市场</div></div>
+</div>
+<div class="card cyan"><div class="t">怎么读</div>
+<p>只想知道做什么:读 1、2、11。想知道怎么建:读 5、6。想知道怎么找客户、怎么交付:读 7、8、9。想知道哪里会死:读 10。需要你决定的事全部集中在 12,一共五条。</p></div>
+<div class="card amber"><div class="t">你不需要做的事</div>
+<p>不注册新公司,不重写控制台,不招人,不融资,不停现在的独立站,不投广告,不动 08-28 定的原生购物 App 计划(它服务独立站,与本线无关)。计划里所有"新建"都是控制台里的一个新模块,复用现有引擎。</p></div>
+
+<h2 id="s1"><span class="n">SECTION 01</span>项目定义</h2>
+<h3>一句话</h3>
+<p><b>为有粉丝但做不了硬货的创作者提供"预售即生产"的实体产品代工。</b>创作者出粉丝和预售,你出工厂、AI 前台和认证;双方零库存。</p>
+<h3>为什么是它:资产正好压在缺口上</h3>
+<table>
+<tr><th>你手里的资产</th><th>市场上的缺口</th><th>结论</th></tr>
+<tr><td>吉林工厂:无固定品类,组装 + 外协整合</td><td>创作者做不了硬货:MOQ 太高、不会找供应链、不会认证。印花 T 恤谁都能做,户外/锂电/小家电没人给他们小批量做</td><td>"无固定品类"从劣势变成核心:你不是台灯厂,你是底盘平台</td></tr>
+<tr><td>控制台:R 选品 / F 找件 / K 规格出图 / P 上架 / GEO·SEO 内容 / B2B 开发信 / C19 数字员工</td><td>创作者需要一个从"想法"到"到货"全程有人管的后台</td><td>八成功能已经存在,过去两年等于在给这个平台造引擎</td></tr>
+<tr><td>人在洛杉矶</td><td>创作者密度最高的城市</td><td>前三个客户面对面谈</td></tr>
+<tr><td>被亚马逊伤过的四点:压货 / 费用 / 封号 / 认证</td><td>创作者更过不了这四关</td><td>伤口变成产品:预售零库存、自有渠道、认证产品化</td></tr>
+<tr><td>2027 影像工作室计划</td><td>每个创作者产品都要一支发布片</td><td>工作室成为本线的发布部门,不是另一个方向</td></tr>
+</table>
+<h3>被否决的方向与理由</h3>
+<ul>
+<li><b>机器人触觉神经</b>:材料 + 传感器研发,收入前先烧五到十年,买家是整机厂且多自研;和你的任何资产不沾边。起点到终点之间没有一个能活下来的中间态。</li>
+<li><b>把控制台当 SaaS 卖给中国卖家</b>:付费意愿低,没有护城河,竞争者众。</li>
+<li><b>面向粉丝的 App / 平台</b>:粉丝在 Instagram、TikTok、YouTube、抖音上,一个都不在你这;"先造流量再卖货"是独立站 App 没人装的同一个坑。</li>
+</ul>
+<div class="card green"><div class="t">形状</div>
+<p>头两年它就是渠道拓展:创作者是带着粉丝来的分销商,工厂多了一批不压货的美国客户。平台梦碎了,也剩一门赚钱的生意。这是"输了也不亏"的起点,天花板是平台上市。好的十年计划第一年看起来像在解决眼前的事。</p></div>
+
+<h2 id="s2"><span class="n">SECTION 02</span>商业模式</h2>
+<h3 id="s2-1">价值链与钱流</h3>
+<div class="flow">
+<span>创作者带想法来 / R 系列推选题</span><i>→</i><span>AI 前台出方案:底盘选型 · 定制项 · 成本 · 交期 · 认证清单</span><i>→</i><span>创作者开 14 天预售(托管预售页)</span><i>→</i><span>达标才生产;不达标退款取消</span><i>→</i><span>50% 定金 · 工厂开工</span><i>→</i><span>品控门 · 认证 · 海运</span><i>→</i><span>尾款 · 发货到美国三方仓 / 代发</span><i>→</i><span>数字员工全程跟单</span>
+</div>
+<p>三方各拿什么:粉丝拿到一个他信任的人"设计"的真产品;创作者拿到 40% 以上毛利、零库存、一支发布片;你拿到产品毛利、项目服务费,以及一个案例。</p>
+
+<h3 id="s2-2">四层收入,按时间先后打开</h3>
+<table>
+<tr><th>层</th><th>收什么</th><th>什么时候有</th><th>说明</th></tr>
+<tr><td>产品毛利</td><td>每件到岸供货价与成本的差</td><td><span class="badge now">第一天</span></td><td>主收入,25–35% 加成</td></tr>
+<tr><td>项目服务费</td><td>设计、打样、认证、合规,按项目收</td><td><span class="badge now">第一天</span></td><td>实报实销 + 20% 管理费;认证一次多客户摊</td></tr>
+<tr><td>平台抽成</td><td>预售款经你的收银台,抽 GMV 5–8%</td><td><span class="badge y3">第三年起</span></td><td>"收银台归你"分界线;需 Stripe Connect 平台账户 + 美国主体</td></tr>
+<tr><td>供给侧费用</td><td>外协厂接单付平台费</td><td><span class="badge y5">第四年起</span></td><td>Xometry 模式;你带订单、规格、品控标准去找厂</td></tr>
+</table>
+<h4>单项目示例账(示意,不是承诺)</h4>
+<table>
+<tr><th>项目</th><th>数值</th><th>备注</th></tr>
+<tr><td>创作者粉丝</td><td>8 万</td><td>互动率 4%</td></tr>
+<tr><td>预售数量</td><td>600 件</td><td>底盘 MOQ 底线 300</td></tr>
+<tr><td>零售价</td><td>$79</td><td>创作者定</td></tr>
+<tr><td>到岸供货价</td><td>$34</td><td>含海运与关税分摊</td></tr>
+<tr><td>你的单件毛利</td><td>约 $8</td><td></td></tr>
+<tr><td>项目服务费</td><td>$4,000</td><td>含认证差异部分</td></tr>
+<tr><td>单项目收入</td><td><b>约 $8,800</b></td><td></td></tr>
+<tr><td>创作者到手毛利</td><td>约 $27,000</td><td>扣掉平台手续费与退款准备金前</td></tr>
+</table>
+<p>第一年 20 个这种项目,收入十几万美元,一个人够活;更重要的是攒下 20 个案例、2–3 个底盘、一套认证库。</p>
+
+<h3 id="s2-3">零库存是机制,不是口号</h3>
+<ul>
+<li><b>预售未达标不生产</b>:达标线 = 底盘 MOQ 底线。没达标,粉丝退款,你损失的是报价时间,那是 AI 干的。</li>
+<li><b>定金在开工前</b>:50% 定金到账才下生产单;发货前收尾款。</li>
+<li><b>底盘限制变量</b>:创作者定制的是外观、颜色、功能组合、品牌;结构件、电池、电路不动。</li>
+<li><b>粉丝对创作者、创作者对你</b>:两段合同,两段账期,你永远不直接对粉丝承担售后(第三年收银台归你之后再重新设计)。</li>
+</ul>
+<p>对创作者也一样:他不囤货,这是他从没被人给过的条件。印花代工只给他 15–25% 毛利,你给 40% 以上,还带发布片。</p>
+
+<h3 id="s2-4">底盘与认证是护城河</h3>
+<p><b>底盘</b>:一个验证过、已认证的功能平台,例如"12V 锂电 + 防水壳 + 功能模块"。露营淋浴那套防水锂电工艺是第一个底盘,上面可以长出淋浴、水泵、灯、风扇、加热垫。底盘做到三件事同时成立:交期从 90 天压到 3–4 周;质量事故风险最低;认证一次多客户摊。</p>
+<p><b>认证</b>:一个底盘做一次电池与安全认证,之后每个客户的变体只做差异部分,你的报价永远比新入场者低一截,而且他们连该做哪些认证都不知道。这块直接复用 SEO 模块的工艺事实库结构:哪种工艺配哪种认证,带版本带引用。</p>
+<p><b>为什么抄不了</b>:阿里 Accio 只寻源不生产;Pietra 是供应商目录,不控制交付,估值卡在 2021 年;Printful 只会印花。三家都没有"AI 前台 + 自家工厂 + 认证库"这个组合。等外协厂接进来形成供给侧网络,就是 Xometry 的路。</p>
+
+<h2 id="s3"><span class="n">SECTION 03</span>市场与竞争</h2>
+<h3>对标与参照(2026-09-03 联网核实)</h3>
+<table>
+<tr><th>公司</th><th>模式</th><th>数据</th><th>对你的启示</th></tr>
+<tr><td>Xometry(纳斯达克 XMTR)</td><td>按需制造市场:订单与产能都在平台上</td><td>2026 Q1 营收 2.05 亿美元,市场业务同比 +40%;上市当年(2021)营收约 1.4 亿美元;西门子投资约 5000 万美元</td><td>十年目标线:平台年营收过亿、增速 30%+</td></tr>
+<tr><td>Pietra(纽约)</td><td>创作者品牌孵化:供应商目录 + 建站 + 仓储</td><td>累计融资 3660 万美元;估值 7500 万美元停在 2021 年 A 轮</td><td>需求真实存在;但不控制制造就没有交付质量,估值就卡住</td></tr>
+<tr><td>阿里 Accio</td><td>AI 寻源代理</td><td>2026 加入代理式 AI</td><td>只做前半段,不碰生产;可能成为你的供给侧数据源</td></tr>
+<tr><td>Wonnda / Velio</td><td>品牌与合同制造商撮合 / 创作者服装品牌</td><td>早期</td><td>方向被验证,但均无自有工厂</td></tr>
+<tr><td>Printful / Fourthwall / Spring</td><td>印花按需</td><td>成熟</td><td>只覆盖软货,硬货空白</td></tr>
+<tr><td>Medvi(一人公司参照)</td><td>零员工 + AI,卖实体产品(GLP-1)</td><td>2025 年营收 4.01 亿美元</td><td>一人 + AI 卖实体货能到的规模,已有先例</td></tr>
+</table>
+<h3>目标客户画像(第一年)</h3>
+<ul>
+<li><b>粉丝量</b>:1 万–30 万。头部太贵且有经纪公司挡着;1 万以下预售凑不到 MOQ。</li>
+<li><b>垂直</b>:户外 / 露营 / 越野 / 钓鱼 / 数码 EDC。和底盘一号匹配。</li>
+<li><b>地区</b>:洛杉矶及南加州优先,面对面。</li>
+<li><b>信号</b>:互动率 ≥3%(Instagram)或 ≥5%(TikTok);近 90 天稳定更新;做过周边或联名;粉丝美国占比高;简介留了商务邮箱。</li>
+<li><b>热线索</b>:在 Kickstarter/Indiegogo 上众筹成功但交付延误或失败的户外类项目,需求已被市场验证,缺的正是你。</li>
+</ul>
+
+<h2 id="s4"><span class="n">SECTION 04</span>十年路线图</h2>
+<table>
+<tr><th>阶段</th><th>你做什么</th><th>收入量级</th><th>里程碑</th><th>团队</th></tr>
+<tr><td>第 1–2 年</td><td>一人 + AI,自家工厂全包,当渠道拓展做</td><td>十几万到几十万美元</td><td>20–40 个案例;2–3 个底盘;认证库成形;达人面 PWA 上线</td><td>1 人 + 数字员工</td></tr>
+<tr><td>第 3–4 年</td><td>收银台归你,开始抽成;签 3–5 家经纪公司</td><td>几百万美元</td><td>美国主体 + Stripe Connect 平台账户;第一次融资</td><td>3–5 人</td></tr>
+<tr><td>第 5–7 年</td><td>接入外协厂网络,AI 报价标准化;底盘库对网络开放</td><td>几千万美元</td><td>东南亚或墨西哥第二组装点(关税)</td><td>20–50 人</td></tr>
+<tr><td>第 8–10 年</td><td>平台化,几千个品牌,工厂网络</td><td>过亿美元</td><td>走 Xometry 的路</td><td>—</td></tr>
+</table>
+<h3>三条分界线(第三年以后才碰)</h3>
+<ol>
+<li><b>收银台归不归你。</b>预售款经你的手,你就从代工厂变成平台,抽成才有,GMV 才算你的。不经手,永远是供货商。</li>
+<li><b>供给侧有没有别人的工厂。</b>只有吉林一家,天花板就是一家厂的产能。</li>
+<li><b>底盘和认证库是不是别人也能用。</b>只给自己用是工厂资产,开放给网络里的厂用才是平台资产。</li>
+</ol>
+<div class="card amber"><div class="t">三句真话</div>
+<ul>
+<li>上市路上一定要接受别人进来。融资就意味着董事会和分权。头两三年可以真的一个人;如果底线是永远不交出位置,目标就该改成年入几百万美元的一人公司,也很好,只是不上市。这个决定第三年再做。</li>
+<li>硬货交期 60–120 天,创作者等不起。解法就是底盘:交期压到三四周。</li>
+<li>中美关税是最大外部风险。前五年不用管,合同里留关税转嫁条款;五年后要第二个组装点。</li>
+</ul></div>
+
+<h2 id="s5"><span class="n">SECTION 05</span>产品面设计</h2>
+<table>
+<tr><th>面</th><th>载体</th><th>谁用</th><th>状态</th></tr>
+<tr><td>工厂面</td><td>控制台本身(K 规格 / M 生产库存 / 霓旌 / 新模块的内部视图)</td><td>你和数字员工</td><td>已有,加一个模块</td></tr>
+<tr><td>达人面</td><td>控制台新模块的外部门户 + PWA 壳(以后 Capacitor 上商店)</td><td>创作者</td><td>新建</td></tr>
+<tr><td>收银台</td><td>一个托管预售页,链接放创作者简介里;粉丝点完就走,不注册不关注</td><td>粉丝</td><td>第一年可选,第三年必做</td></tr>
+<tr><td>粉丝面</td><td>—</td><td>—</td><td><b>砍掉</b>。粉丝在他们自己的平台上</td></tr>
+<tr><td>多工厂面</td><td>—</td><td>外协厂</td><td>第五年再说</td></tr>
+</table>
+<h3>达人面的五个界面</h3>
+<ol>
+<li><b>我的项目</b>:每个项目一张卡,当前阶段、下一步谁动、截止日。</li>
+<li><b>报价与方案</b>:底盘、定制项、单价、服务费、交期、认证清单;一键"接受报价"。</li>
+<li><b>预售实时数</b>:已售 / 目标 / 剩余天数;达标提示;预售页链接与二维码。</li>
+<li><b>生产进度与品控</b>:阶段时间线(开工 / 组装 / 品控 / 认证 / 装柜 / 海运 / 到仓),每阶段带工厂实拍照片;创作者可以对照片"确认"或"提问"。</li>
+<li><b>消息</b>:与跟单员(数字员工)的对话;付款提醒;文件(合同、发票、认证报告)。</li>
+</ol>
+<h3>壳还是原生</h3>
+<p>创作者感觉不到"套壳"。他看到的是 App Store 搜得到、图标在桌面上、品控照片一到手机就震、分享弹的是系统面板。Shopify 的商家 App、Discord 的 iOS 端用的是 React Native,没人觉得不正式。正式感来自设计、图标、推送和稳定,不来自代码是不是 Swift。</p>
+<table>
+<tr><th>路线</th><th>代码份数</th><th>每个功能写几遍</th><th>适合</th></tr>
+<tr><td>控制台模块 + PWA/Capacitor 壳</td><td>1</td><td>1</td><td>表单、数字、照片、聊天(本 App 全部内容)</td></tr>
+<tr><td>控制台模块 + Swift + Kotlin</td><td>3</td><td>3</td><td>AR、离线地图、重渲染(本 App 一个都没有)</td></tr>
+</table>
+<p>苹果审核条款 4.2 会拒"只是把网站装进 App"的壳。避开的办法是壳里有真正的原生能力:推送、相机上传品控反馈、系统分享、离线看进度。这四样恰好是创作者真要的,不是为过审硬加的。苹果开发者账号还在等,原生和壳都卡这道门,所以这个决定不影响进度。建议先按壳走,第三年达人面成重心、要堆手机专属功能时再重写原生,那时重写的钱相对生意是零头。</p>
+<div class="decision"><b>待拍板 #2</b>:达人面是否接受"PWA → Capacitor 壳"路线。你 08-28 对购物 App 明确要过"不是套壳";达人面是另一个 App,需要你单独拍板。</div>
+
+<h2 id="s6"><span class="n">SECTION 06</span>技术架构与实施</h2>
+<p>原则:一个引擎两条线。新线是控制台里一个可复用模块,不是给第一个创作者定制的页面;不 fork 现有 B2B 表,复用它的引擎(筛选、模板、抑制名单、邮箱查找)。所有路径与文件名均为本仓库当前真实位置。</p>
+
+<h3 id="s6-1">模块注册</h3>
+<p>在 <code>backend/app/core/modules.py</code> 按 <code>b2b.wholesale</code>(约第 1411 行)那条清单的格式新增一条:</p>
+<pre><code>module_key="cp.creator_drops"
+display_name="达人合作"
+category="b2b"                      # 与批发同组,侧边栏同一分区
+route_namespace="/creator-drops"    # 前端页面前缀
+api_namespace="/creator"            # 后端 /api/app/creator/*
+required_permissions=("cp.creator_drops.read",)
+permission_manifest: cp.creator_drops.read / .manage / .approve(risk_level="high", 放行定金、放行生产)
+feature_flag_key="modules.cp.creator_drops"
+data_boundary: reads=(cp_*, k_product_knowledge_products, mfg_items, b2b_email_templates)
+               writes=(cp_*, p_notifications)
+external_dependencies=("stripe", "serper", "outbound_mailer")</code></pre>
+<p>三处必做,漏一处就"隐身"(以前踩过):</p>
+<ul>
+<li>侧边栏前缀白名单:<code>frontend/src/components/capability-sidebar-engine.tsx</code> 的 <code>ORGANIZATION_MODULE_PREFIXES</code> 加 <code>cp.</code>;导航项在 <code>frontend/src/lib/navigation.ts</code>。</li>
+<li>前端代理白名单:<code>frontend/src/app/api/backend/[...path]/route.ts</code>。<code>/api/app/creator/*</code> 走应用前缀;预售页与达人门户走 <code>/api/public/*</code>,必须逐条登记到 <code>ALLOWED_PUBLIC_GET_PATHS</code> / <code>ALLOWED_PUBLIC_POST_PATHS</code>(公共前缀是精确路径集合,不是前缀匹配)。</li>
+<li>组织上下文:模块数据挂在工厂组织下;操作它的真人账号必须恰好有一条 <code>org_memberships</code>(多一条即 403)。创作者<b>不建控制台账号</b>,见 6.4。</li>
+</ul>
+
+<h3 id="s6-2">数据模型</h3>
+<p>目录 <code>backend/app/modules/cp_series/creator_drops/</code>,结构照 <code>b2b/prospects</code>(models / schemas / service / router / screening)。表前缀 <code>cp_</code>。迁移文件放 <code>backend/alembic/versions/</code>,SQL 里的百分号写成 <code>%%</code>,用新镜像跑。</p>
+<table>
+<tr><th>表</th><th>作用</th><th>关键字段</th></tr>
+<tr><td><code>cp_creators</code></td><td>创作者名单(潜客 → 客户同一张表)</td><td>handle, platform(instagram/tiktok/youtube), followers, engagement_rate, avg_views_90d, niche, city, email, email_source, status(new/approved/rejected/contacted/replied/customer,沿用 B2B 潜客状态), screening_json, suppression 由 <code>b2b/outreach/suppression.py</code> 统一查</td></tr>
+<tr><td><code>cp_base_platforms</code></td><td>底盘库</td><td>name, k_spec_template_id(挂 K 规格模板), bom_root_mfg_item_id(挂 M 物料), customizable_fields_json(颜色/logo 位/喷头/容量/配件…), cert_bundle_json(已做认证 + 报告文件 + 有效期), moq_floor, lead_days, cost_floor_usd, status</td></tr>
+<tr><td><code>cp_projects</code></td><td>一个创作者一个产品一个项目</td><td>creator_id, base_platform_id, k_product_id(每个项目在 K 建一个产品,变体 = 创作者配色), status(状态机见 6.3), target_qty, retail_price_usd, currency, timeline_json(各阶段时间戳,验收只认这里), owner_user_id</td></tr>
+<tr><td><code>cp_quotes</code></td><td>报价版本</td><td>project_id, version, unit_cost_usd, landed_price_usd, service_fee_usd, cert_items_json, lead_days, valid_until, accepted_at, breakdown_json(BOM+组装+品控+包装+运费+关税分摊)</td></tr>
+<tr><td><code>cp_presales</code></td><td>预售活动</td><td>project_id, slug(预售页地址), starts_at, ends_at, target_qty, sold_qty, checkout_mode(creator_stripe / platform_stripe / external_link), stripe_account_id, page_json(文案、图、FAQ)</td></tr>
+<tr><td><code>cp_presale_orders</code></td><td>粉丝订单(无账号)</td><td>presale_id, email, qty, amount, provider, provider_ref, status(paid/refunded), shipping_json</td></tr>
+<tr><td><code>cp_payments</code></td><td>创作者付你的钱</td><td>project_id, kind(deposit/balance/service_fee), method(wire/stripe), amount_usd, expected_at, received_at, evidence_asset_id</td></tr>
+<tr><td><code>cp_production_updates</code></td><td>生产进度与品控照片</td><td>project_id, stage, note, photo_asset_ids(K 媒资), mfg_document_id(挂 M 生产单), visible_to_creator, creator_ack_at, creator_question</td></tr>
+<tr><td><code>cp_messages</code></td><td>达人门户对话</td><td>project_id, sender(creator/agent/human), body, attachments_json, read_at。创作者不进 C19,门户自带线程</td></tr>
+<tr><td><code>cp_portal_tokens</code></td><td>达人门户钥匙</td><td>creator_id, token_hash, label, last_used_at, disabled_at。照 <code>backend/app/models/mcp_access_token.py</code> 的做法</td></tr>
+<tr><td><code>cp_design_briefs</code></td><td>需求规格书与设计分档</td><td>project_id, tier, prd_json, reference_urls, must_have, must_not, approved_at(详见 8B)</td></tr>
+<tr><td><code>cp_design_vendors</code></td><td>外包设计供应商(ID / 结构 / 方案 / 模具)</td><td>name, kind, city, contact, lead_days_typical, quality_score, projects_done</td></tr>
+<tr><td><code>cp_outreach_log</code></td><td>开发信台账</td><td>creator_id, template_kind, sent_at, mailer_ref, bounce, reply_at, sample_shipped_at, tracking</td></tr>
+</table>
+
+<h3 id="s6-3">项目状态机</h3>
+<div class="flow">
+<span>inquiry</span><i>→</i><span>quoted</span><i>→</i><span>quote_accepted</span><i>→</i><span>presale_live</span><i>→</i><span>presale_met</span><i>|</i><span>presale_failed(终态,退款)</span><i>→</i><span>deposit_paid</span><i>→</i><span>in_production</span><i>→</i><span>qc_passed</span><i>→</i><span>cert_cleared</span><i>→</i><span>balance_paid</span><i>→</i><span>shipped</span><i>→</i><span>delivered</span><i>→</i><span>settled</span>
+</div>
+<ul>
+<li>报价之前另有一段设计分支(一档/二档/三档),见 8B。</li>
+<li>每次跃迁写 <code>timeline_json[status] = 时间戳</code>,并写操作日志(approve 类动作走 <code>operation_log_required</code>)。</li>
+<li><b>两道人工放行</b>:<code>presale_met → deposit_paid</code>(确认定金到账)和 <code>qc_passed → cert_cleared</code>(确认认证报告)。AI 可以建议,不能替人点;这是"人的命令高于程序"。</li>
+<li><b>验收标准与实现无关</b>:项目"在推进"只认 <code>timeline_json</code> 的时间戳,不认代码/测试/日志。检查脚本独立于控制台。</li>
+</ul>
+
+<h3 id="s6-4">达人门户与鉴权</h3>
+<p>创作者不走控制台账号体系。原因:控制台的组织上下文中间件只在成员关系恰好一条时放行,权限体系为内部员工设计,把外部人塞进去既危险又麻烦。</p>
+<ul>
+<li>门户端点挂在 <code>/api/public/creator-portal/*</code>,不经组织上下文中间件(与 <code>auth/login</code> 同前缀策略)。</li>
+<li>鉴权 = 每个创作者一把门户钥匙(magic link):邮件里的链接携带一次性 token,换取 30 天有效的门户会话;钥匙哈希存 <code>cp_portal_tokens</code>,可停用、可重发。做法照 MCP 个人钥匙。</li>
+<li>门户只能读写自己 <code>creator_id</code> 下的项目;每个端点用 creator 作用域查询,禁止裸 <code>project_id</code> 查表(GEO/SEO 曾经的 workspace_key 泄漏类问题,逐端点 curl 复验)。</li>
+<li>速率限制复用 <code>backend/app/modules/c19/rate_limit.py</code> 的做法。</li>
+<li>前端页面在 <code>frontend/src/app/portal/*</code>(与 <code>privacy</code>、<code>support</code> 同级,不在 <code>(console)</code> 分组内),独立布局,手机优先。</li>
+</ul>
+
+<h3 id="s6-5">预售页与收款</h3>
+<ul>
+<li>页面 <code>frontend/src/app/drop/[slug]/page.tsx</code>,服务端渲染,含产品图(K 出图)、故事、规格、FAQ、倒计时、进度条;结构化数据与品牌硬门沿用现有插件规则(品牌只有创作者品牌 + 制造方署名,不写 30 天退货窗口那类承诺)。</li>
+<li>后端 <code>GET /api/public/drops/{slug}</code>、<code>POST /api/public/drops/{slug}/checkout</code>(创建 Stripe Checkout Session,回跳)、<code>POST /api/public/stripe/webhook</code>(签名校验,幂等写 <code>cp_presale_orders</code>)。</li>
+<li><b>第一年</b>:<code>checkout_mode = creator_stripe</code>。用 Stripe Connect(Standard)把页面上的收款直接落到创作者自己的 Stripe 账户,钱不经你手;创作者按合同电汇你定金与尾款。这与现有 B2B 铁律一致:对企业客户只收电汇,不碰信用卡/PayPal。也允许 <code>external_link</code>:创作者用自己的 Shopify,页面只当落地页。</li>
+<li><b>第三年</b>:<code>checkout_mode = platform_stripe</code>,钱进你的平台账户,按 <code>application_fee</code> 抽成后结算给创作者。前置:美国主体、Stripe 平台账户、产品责任险、销售税(用 Stripe Tax)。</li>
+<li>Stripe 密钥进现有密钥管理与 key-health 巡检;每一笔出网付费调用当天接台账(Serper 事件的铁律)。</li>
+</ul>
+
+<h3 id="s6-6">K 作图:logo 上产品</h3>
+<p>目的:开发信首封里那张"这是你的产品"的图,一天出一百张,零 AI 变形风险。</p>
+<ul>
+<li>底盘一号在 K 里建一个"母产品",拍好实拍底图并刷好产品保护蒙版(现有 <code>image-plates/{asset_id}/mask</code> 流程);同时在 <code>image_instruction_json</code> 里新增 <code>brand_zones</code>:每张底图上 logo 可落的区域多边形 + 透视参数 + 允许的最大占比。</li>
+<li>新增确定性合成步骤(Pillow,不走 AI):把创作者 logo(SVG/PNG,从主页或简介抓,或让 AI 按 handle 生成占位字标)按 <code>brand_zones</code> 做透视贴合 + 材质混合,输出 <code>asset_role="creator_mock"</code>。这一步在 <code>image_render_jobs.py</code> 的 <code>_resolve_render_plate</code> 之后、AI 背景渲染之前插入;AI 仍只画背景,产品像素来自实拍。</li>
+<li>配色变体走现有 <code>variant_color</code> 机制,创作者主色 = 一个 colorway。</li>
+<li>输出进 WebP、验证真出 WebP;明亮暖白家规不变。</li>
+<li>预算:按张记到 K 的图像台账;批量任务走 k-worker 队列,worker 镜像独立构建。</li>
+</ul>
+
+<h3 id="s6-7">与 R / F / M / C19 / 数字员工的接法</h3>
+<table>
+<tr><th>模块</th><th>怎么用</th><th>改动量</th></tr>
+<tr><td>R 系列</td><td>按整棵类目子树跑"户外圈子最缺什么",输出给底盘选型与选题推荐;R→K 转移流程照旧</td><td>零改动,只是换输入</td></tr>
+<tr><td>F 系列</td><td>底盘上新配件的 1688 找件与规格抓取</td><td>零改动</td></tr>
+<tr><td>K 系列</td><td>每个项目一个产品;规格模板 = 底盘;出图见 6.6;信息图门禁沿用</td><td>brand_zones + 合成步骤</td></tr>
+<tr><td>M 系列</td><td>底盘 BOM 落 <code>mfg_bom_lines</code>;定金到账自动生成生产单 <code>mfg_documents</code>;进出库 <code>mfg_movements</code>;负库存拦死照旧</td><td>一个"从项目生成生产单"的服务函数</td></tr>
+<tr><td>霓旌</td><td>把生产单进度用一天一条的规矩推到 C19 给你;她已经管 M 库存</td><td>加一个意图:项目进度摘要</td></tr>
+<tr><td>白苏婉</td><td>给每个项目写预售页文案、发布片脚本、创作者可以直接发的三条帖子文案(影子模式起步,三灯分级)</td><td>加一个内容任务类型</td></tr>
+<tr><td>B2B 开发信线</td><td>店型目录加一个"创作者"店型(店型是主键,和现有 24 店型同一套路);首封模板按 <code>store_type="creator_outdoor"</code> 单独一份;跟进/回复六类共用;抑制名单、邮箱查找、Serper 都复用;发送仍由外部冷发信工具投递,控制台永不自己发</td><td>模板 + 筛选规则(互动率替代店铺规模)</td></tr>
+<tr><td>通知</td><td>创作者回复、定金到账、品控照片上传、预售达标进通知收件箱与手机推送</td><td>四个事件类型</td></tr>
+<tr><td>H 站点健康</td><td>预售页纳入哨兵巡检(死链、支付回跳)</td><td>加 URL 规则</td></tr>
+</table>
+
+<h3 id="s6-8">PWA 与壳</h3>
+<ol>
+<li>门户页面 <code>manifest.webmanifest</code>(名称、图标、主题色、<code>display: standalone</code>)+ service worker(离线缓存最近的项目页与照片)。</li>
+<li>Web Push(VAPID):iOS 16.4+ 添加到主屏幕后可推;订阅存 <code>cp_push_subscriptions</code>;事件见 6.7。</li>
+<li>相机:<code>&lt;input capture&gt;</code> 让创作者对品控照片回传标注;分享:Web Share API。</li>
+<li>够用之后再上 Capacitor:加 push / camera / share 插件,壳内指向同一门户 URL;上架 App Store / Google Play。此时开发者账号必须已到位。</li>
+<li>手机端只做门户,不做控制台指挥中心布局的移动适配。</li>
+</ol>
+
+<h3 id="s6-9">发版与验收</h3>
+<ul>
+<li>测试走 <code>scripts/run_backend_tests.sh unit|integration</code>;裸 pytest 是假红。</li>
+<li>发版走 <code>safe_compose_release.sh</code>;共享工作树禁 <code>git stash</code>;发前查 <code>git status</code> 与 <code>alembic heads</code>,手动升级;<code>--service</code> 不累加;worker 重建先 <code>rm -f</code> 再 <code>up</code>。</li>
+<li>一块功能发一次版,不拆七次。本模块建议分三次:① 名单 + 开发信 + logo 出图;② 项目/报价/状态机 + 达人门户;③ 预售页 + Stripe + PWA。</li>
+<li>验收只认业务心跳:名单里出现 <code>status=contacted</code> 的行、<code>cp_outreach_log.sent_at</code> 有值、第一张 <code>creator_mock</code> 媒资落盘、门户 magic link 匿名 curl 能打开。</li>
+<li>外部副作用回读验证:Stripe 创建 Session 后回读 Session;发信后回读投递工具的状态;上传 WP 后 <code>context=edit</code> 回读。</li>
+</ul>
+
+<h2 id="s7"><span class="n">SECTION 07</span>获客实操攻略</h2>
+<div class="card cyan"><div class="t">先改一个字</div><p>前期不是"推广",是"找 10 个人"。第一年的客户是 10–30 个创作者,是一份名单,不是市场。对一份名单,广告、SEO、社媒运营全是错误工具;Google 烧掉 500 美金那次就是拿市场工具去做名单的事。</p></div>
+<h3>核心一招:先做出东西,再去找人</h3>
+<p>不拿"我们提供代工服务"的提案去谈,创作者每天收到二十封。拿实物去:R 系列算出户外圈子最缺什么,在底盘一号上做出成品样机,K 把每个创作者的 logo 与配色渲染到实拍图上。首封一句话加一张图:"这是你的产品,三周能到粉丝手上,你不压一分钱货。"从"推销服务"变成"递给他一个已经存在的东西"。</p>
+<h3>名单从哪来(合规来源)</h3>
+<table>
+<tr><th>来源</th><th>方法</th><th>成本</th></tr>
+<tr><td>平台搜索</td><td>Instagram / TikTok / YouTube 按标签与地点(#campinglife #overlanding #edc + Los Angeles);Serper 抓"outdoor youtuber los angeles"类结果</td><td>Serper 按次;K 的 FAQ 研究已不设闸,本线单独记台账</td></tr>
+<tr><td>网红数据库</td><td>Modash / HypeAuditor / Upfluence 之类,按互动率与受众地区筛;合规数据源,不爬 LinkedIn</td><td>月费,几十到几百美元</td></tr>
+<tr><td>Kickstarter / Indiegogo</td><td>搜户外类"已成功但延期/未交付"项目,创始人邮箱在项目页;这是最热的线索</td><td>人工,每周 1 小时</td></tr>
+<tr><td>经纪公司 / 小型 MCN</td><td>洛杉矶中小型创作者经纪公司,谈成一家等于谈成 20–50 个创作者;找"brand partnerships"负责人</td><td>面谈</td></tr>
+<tr><td>转介绍</td><td>每个创作者认识 20 个创作者;下一单折扣</td><td>零</td></tr>
+</table>
+<h3>筛选(AI 自动打分,规则明写)</h3>
+<ul>
+<li>硬门:美国受众 ≥60%;近 90 天更新 ≥8 条;有商务邮箱或经纪联系方式;不在抑制名单。</li>
+<li>评分:互动率(权重最高)、内容与底盘的匹配度(AI 读近 20 条帖子判断)、是否做过周边、是否提过"想出自己的产品"。</li>
+<li>粉丝数只用来算预售上限,不用来排序。</li>
+<li>复用 <code>b2b/prospects/screening.py</code> 的三层漏斗(规则 → 站点抓取 → AI 判断)与"一句人话"输出。</li>
+</ul>
+<h3>首封开发信(英文,创作者店型专用)</h3>
+<pre><code>Subject: made you something
+
+Hi {first_name},
+
+{personal_line}   ← AI 写:引用他最近一条和户外装备有关的帖子,一句话
+
+I run a small factory. We build waterproof, battery-powered camp gear —
+showers, pumps, lights. I mocked up one with your branding (photo attached
+in the link below, not a file).
+
+How it works: you pre-sell it to your audience for two weeks. If it hits the
+minimum, we build and ship. If it doesn't, nobody pays anything. You never
+hold inventory.
+
+I'm in LA. Happy to drop off a sample.
+
+{sender_name}
+{sender_domain}</code></pre>
+<ul>
+<li>首封不带附件,图用链接;不装大,"small factory"比"leading manufacturer"可信;绝不出现 credit card / PayPal 字眼(模板校验会拦)。</li>
+<li>跟进信 4–7 天后接在原邮件下回复,给"不要"的出口。</li>
+<li>域名:主域名永不冷开发。<code>barongsupply.com</code> 已养号用于批发;创作者线建议另买一个可辨认的消耗性域名,退信 >3% 即杀域名。SPF/DKIM/DMARC;养号 2–4 周;每邮箱每天 30–50 封上限;发前验邮箱;CAN-SPAM 真实地址 + 一键退订 + 真实身份,渲染时追加。</li>
+<li>投递用冷开发专用工具(Instantly / Smartlead 类),绝不用 SES / Brevo。</li>
+</ul>
+<h3>样品包(前 10 个)</h3>
+<ul>
+<li>内容:一台带他 logo 的样机 + 一张卡片(二维码指向他专属的门户预览页,已经放好他的 mock 图与预估账)+ 一句手写。</li>
+<li>成本约 30–60 美元一份;快递到手的打开率是邮件的几十倍;创作者收到实物会拍它,那就是免费内容。</li>
+<li>寄之前先邮件确认地址,不寄给没回过信的人。</li>
+</ul>
+<h3>节奏(为你的身体定)</h3>
+<table>
+<tr><th>频率</th><th>动作</th></tr>
+<tr><td>每周</td><td>发 30 封首封;寄 2 个样品;1 小时扫 Kickstarter</td></tr>
+<tr><td>每月</td><td>见 1 个人(创作者或经纪公司)</td></tr>
+<tr><td>每季度</td><td>项目数上限(建议 6),满了就排队,不加班</td></tr>
+</table>
+<h3>不做的</h3>
+<ul><li>不投广告;不碰 LinkedIn(已被拉黑);不群发;不做面向粉丝的任何内容;不给没预售的创作者免费做货。</li></ul>
+<h3>第二年才开的"推广"</h3>
+<p>工厂自己当创作者:"中国工厂为美国网红从零做产品"是 YouTube / TikTok 上验证过的题材。你是电影学院出来的,这就是 2027 工作室的第一个节目。每个客户项目是一集,客户自己会转发。第一年只攒素材:每个项目开工到发货全程留档,K 与数字员工负责归档。</p>
+
+<h2 id="s8"><span class="n">SECTION 08</span>交付实操 SOP</h2>
+<h3>一个项目的标准流程与时长</h3>
+<table>
+<tr><th>#</th><th>阶段</th><th>谁动</th><th>产出</th><th>时长</th></tr>
+<tr><td>1</td><td>需求与选型</td><td>AI 前台 + 你</td><td>底盘、定制项清单、mock 图</td><td>1–2 天</td></tr>
+<tr><td>2</td><td>报价</td><td>AI 算 + 你审</td><td><code>cp_quotes</code> 一版;含认证清单与交期</td><td>1 天</td></tr>
+<tr><td>3</td><td>合同与预售准备</td><td>你 + 白苏婉</td><td>合同签署;预售页文案与图;创作者三条帖子文案</td><td>3–5 天</td></tr>
+<tr><td>4</td><td>预售</td><td>创作者</td><td>14 天;进度实时到门户</td><td>14 天</td></tr>
+<tr><td>5</td><td>达标判定 + 定金</td><td>系统判定,你放行</td><td>50% 定金电汇;未达标则退款关项目</td><td>2–3 天</td></tr>
+<tr><td>6</td><td>生产</td><td>吉林工厂 + 霓旌跟单</td><td>生产单、每阶段实拍照片</td><td>底盘 10–15 天</td></tr>
+<tr><td>7</td><td>品控与认证差异项</td><td>工厂 + 第三方机构</td><td>品控报告;认证差异报告(如仅换外观则免)</td><td>3–10 天</td></tr>
+<tr><td>8</td><td>尾款 + 发运</td><td>你放行</td><td>海运或快递到美国三方仓 / 创作者指定地址</td><td>海运 25–35 天,空运 5–7 天</td></tr>
+<tr><td>9</td><td>交付与结算</td><td>三方仓 / 创作者</td><td>发货给粉丝;项目 settled;案例归档</td><td>—</td></tr>
+</table>
+<p>底盘项目端到端约 6–9 周(含 14 天预售);纯外观定制走空运可压到 5 周。这是能对创作者说出口的数字,别说"三周",三周是生产段。</p>
+
+<h3>定价公式</h3>
+<pre><code>到岸供货价 = (BOM + 组装工时 + 品控 + 包装) × (1 + 加成 25%–35%)
+             + 单件运费分摊 + 单件关税分摊
+项目服务费 = 设计/打样实际成本 + 认证差异项实际费用 + 20% 管理费
+预售达标线 = max(底盘 MOQ 底线, 覆盖固定成本所需件数)
+定金       = 预售达标后合同总额 × 50%,开工前到账
+尾款       = 其余 50%,发运前到账</code></pre>
+<ul>
+<li>报价对创作者展示三行:单价、服务费、达标线。成本明细不给。</li>
+<li>合同币种美元;收款电汇;汇率风险写进合同(报价有效期 30 天)。</li>
+</ul>
+
+<h3>合同关键条款(给律师的清单,不是合同)</h3>
+<ul>
+<li>预售未达标自动终止,双方无违约;创作者负责退款给粉丝(第一年模式)。</li>
+<li>定金不退;尾款未付不发运;超期 30 天未付尾款,货物按合同处置。</li>
+<li>知识产权:创作者的 logo / 品牌归创作者;底盘、结构、电路、认证归你;创作者不得把底盘拿给别的厂做。</li>
+<li>品质:以品控报告 + 认证报告为验收依据;不良率上限与补发规则。</li>
+<li>产品责任:美国销售方(创作者或其公司)购买产品责任险;你提供认证与技术文件。第三年收银台归你之后,责任险由你买。</li>
+<li>关税与政策变化转嫁条款;不可抗力。</li>
+<li>案例授权:允许你以"为 X 制造"作为案例展示(可选退出)。</li>
+</ul>
+
+<h3>主体安排</h3>
+<table>
+<tr><th>事项</th><th>主体</th><th>说明</th></tr>
+<tr><td>签约、开票、收电汇</td><td>广州龙杰</td><td>销售主体不变;与现有 B2B 一致</td></tr>
+<tr><td>生产</td><td>吉林工厂</td><td>对外可写,是加分项</td></tr>
+<tr><td>深圳公司</td><td>—</td><td>一个字都不提</td></tr>
+<tr><td>美国主体(LLC)</td><td>第 2–3 年</td><td>收银台归你、Stripe 平台账户、产品责任险、销售税都需要它;第一年不建</td></tr>
+</table>
+<p>口径:谁卖货、谁收钱、谁生产,三件事各自说清楚、全站一致。多主体合法,封号封的是自相矛盾。</p>
+
+<h3>物流与售后</h3>
+<ul>
+<li>第一年:整批发到美国三方仓(创作者自选或你推荐),仓库负责单件发粉丝;你不做逐件履约。</li>
+<li>锂电池运输:按 UN38.3 与危险品申报走海运/空运,别省这一步。</li>
+<li>售后:创作者对粉丝;你对创作者按不良率补发。门户里的"提问"按钮就是售后入口。</li>
+</ul>
+
+<h2 id="s8b"><span class="n">SECTION 08B</span>设计谁来做</h2>
+<div class="card red"><div class="t">REV 1 漏掉的洞</div><p>"底盘"只回答了底盘之内的事。创作者提的想法一半在底盘之外,图纸、规格书、模具谁来出,REV 1 一个字没写。答案不是"你做"也不是"创作者做",而是把设计分成三档,每档主人不同。</p></div>
+<table>
+<tr><th>档</th><th>是什么</th><th>谁做</th><th>周期</th><th>费用</th><th>第一年接不接</th></tr>
+<tr><td><b>一档 · 底盘之内</b></td><td>颜色、logo、模块组合;配置器里选</td><td>没有设计这件事,设计在建底盘时做完</td><td>0</td><td>0</td><td>接,目标占八成</td></tr>
+<tr><td><b>二档 · 公模整合</b></td><td>底盘之外但公模件齐全:车架/电机/电调/泵/电池/PCBA 全是现成件,只新做外壳或一个结构件</td><td>你 + AI(F 系列找件拼 BOM)+ 一位外包工业设计师画外壳</td><td>2–4 周设计;小批量硅胶覆膜 / 3D 打印,大批量开钢模</td><td>ID 几千到两万人民币;软模几千,钢模几万到十几万</td><td>接;这是工厂"组装 + 外协整合"模式的主场</td></tr>
+<tr><td><b>三档 · 从零</b></td><td>工业设计 + 结构 + 电路 + 固件 + DFM 整套</td><td>设计外包:深圳/东莞的工业设计公司 + 方案公司(PCBA 带固件)+ 结构公司(模具图);他们是你的供应商,创作者看不见</td><td>6–12 周</td><td>几万到十几万人民币</td><td>只接创作者预付设计费的</td></tr>
+</table>
+<h3>以遥控车为例</h3>
+<ul>
+<li>车架、电机、电调、接收机、电池:1688 现成件,规格书由元件厂提供;安装接口尺寸由公模厂提供图纸。</li>
+<li>唯一要新画的是车壳:外包工业设计师在公模安装接口之上建模,两三周;小批量硅胶覆膜,过量后开钢模。</li>
+<li>所以遥控车是二档,不是三档。世界上八成的"创作者产品"都是公模改外观。</li>
+</ul>
+<h3>创作者去哪做设计:哪也不去</h3>
+<p>他只需要说清楚想要什么,而这正是真正的瓶颈。他会说"一个很酷的越野遥控车",设计师没法拿这句话报价。<b>AI 前台的核心工作是把一句模糊的话追问成一份需求规格书</b>(PRD):用途与玩法、尺寸与重量、性能(速度/续航/防水等级)、价格带、参考产品与"必须有 / 不能有"、品牌资产。规格书生成后自动分档:一档进配置器;二档走 F 找件 + 一位外壳设计师;三档去设计公司询价。</p>
+<h3>AI 能做与不能做(2026 现状,别信宣传)</h3>
+<ul>
+<li>能:写需求规格书;从 1688 规格拼 BOM 与成本;出概念渲染图(K 管线);比对元件规格是否匹配(电压/电流/尺寸)。</li>
+<li>不能:能上机床的图纸、公差配合、模具分型、DFM。这些仍由人做。AI CAD 类工具可以出草模给设计师起步,不能替代设计师交付。</li>
+</ul>
+<div class="card amber"><div class="t">写死的规矩</div>
+<ul>
+<li>三档设计费创作者<b>预付</b>,永远不从预售款里出。设计发生在预售之前,预售还没有钱;愿不愿付设计费是筛掉不认真的人最好的过滤器。</li>
+<li>设计成果的归属写进合同:外观归创作者,结构/电路/模具归你(并计入底盘库,下一个客户可复用)。</li>
+<li>二档的外壳设计师与三档的设计公司都是<b>供应商</b>,进供应商表、有交期与质量记录,与电机供应商同等管理。</li>
+</ul></div>
+<h3>对数据模型与状态机的补充</h3>
+<ul>
+<li>新表 <code>cp_design_briefs</code>:project_id, tier(1/2/3), prd_json(AI 生成的需求规格书,人工确认版本), reference_urls, must_have / must_not, approved_at。</li>
+<li>新表 <code>cp_design_vendors</code>:name, kind(id / structure / pcba_solution / mold), city, contact, lead_days_typical, quality_score, projects_done。</li>
+<li><code>cp_projects</code> 加 <code>design_tier</code> 与 <code>design_fee_usd</code>;<code>cp_payments.kind</code> 加 <code>design_fee</code>。</li>
+<li>状态机在 <code>inquiry</code> 与 <code>quoted</code> 之间加分支:<code>brief_drafted → brief_approved → (tier 1 直接报价 | tier 2 design_in_progress → design_done | tier 3 design_fee_paid → design_in_progress → design_done)</code>。设计费未到账,三档项目卡在 <code>brief_approved</code> 不动。</li>
+<li>每个二三档项目完成后,把新做的结构件与认证登记进 <code>cp_base_platforms</code>,底盘库随项目自然长大。</li>
+</ul>
+
+<h2 id="s9"><span class="n">SECTION 09</span>底盘一号:12V 锂电防水户外平台</h2>
+<p>来源:露营淋浴的防水工艺与锂电主场根源,是你工厂验证最久的一套。以下认证与成本区间为规划参考,开工前须由认证机构与工厂报价确认。</p>
+<div class="grid2">
+<div class="card"><div class="t" style="color:var(--cyan)">固定部分(不给改)</div>
+<ul><li>锂电池包(容量分档)+ 保护板 + USB-C 充电</li><li>防水外壳(IP 等级)与密封结构</li><li>功能模块接口:泵 / 灯 / 风扇 / 加热垫</li><li>安全与认证相关电路</li></ul></div>
+<div class="card"><div class="t" style="color:var(--green)">可定制项(创作者选)</div>
+<ul><li>外壳颜色、logo 位置与工艺(丝印 / 激光 / 贴片)</li><li>功能模块组合(淋浴 / 水泵 / 营地灯 / 风扇)</li><li>喷头与软管、收纳袋、配件包</li><li>容量档位、包装与说明书署名</li></ul></div>
+</div>
+<table>
+<tr><th>认证项</th><th>为什么</th><th>一次还是每次</th></tr>
+<tr><td>UN38.3</td><td>锂电池运输必需</td><td>电池包一次</td></tr>
+<tr><td>IEC 62133 / UL 2054(电池包)</td><td>美国零售与平台常要求</td><td>一次</td></tr>
+<tr><td>FCC Part 15</td><td>仅当带蓝牙/无线;不带则不需要</td><td>视模块</td></tr>
+<tr><td>加州 Prop 65 标签</td><td>加州销售</td><td>每款核对</td></tr>
+<tr><td>IP 等级测试报告</td><td>防水宣称的依据</td><td>外壳一次,换外壳复测</td></tr>
+<tr><td>CPSIA / 标签合规</td><td>如面向儿童或有特定材料</td><td>视情况</td></tr>
+</table>
+<table>
+<tr><th>参数</th><th>规划值</th></tr>
+<tr><td>MOQ 底线</td><td>300 件</td></tr>
+<tr><td>生产段交期</td><td>10–15 天(外观定制);20–25 天(换模块)</td></tr>
+<tr><td>出厂成本区间</td><td>示意 $18–$30,按容量与模块</td></tr>
+<tr><td>建议零售价带</td><td>$59–$129</td></tr>
+<tr><td>K 母产品</td><td>一个;每个创作者项目 = 一个子产品,colorway = 创作者主色</td></tr>
+</table>
+<p>底盘二号候选:营地灯 / 移动电源类(同一电池包);底盘三号候选:M 系列里已在做的制造品类中出货最稳的一个。原则:先有实拍与认证,再叫底盘。</p>
+
+<h2 id="s10"><span class="n">SECTION 10</span>风险与机制</h2>
+<p>家规:承诺必须配机制。每条风险后面是机制与上限。</p>
+<table>
+<tr><th>风险</th><th>机制</th><th>上限</th></tr>
+<tr><td>创作者预售崩了</td><td>不达标不生产;头一年只接互动率过线的人;定金先于开工</td><td>单项目损失 = 报价与出图时间</td></tr>
+<tr><td>质量事故毁口碑</td><td>首年只做验证过的底盘;品控门 + 认证放行由人点;不良率补发条款</td><td>一次事故等于十个案例白攒,这条比赚钱重要</td></tr>
+<tr><td>关税与政策</td><td>合同转嫁条款;报价 30 天有效;五年后第二组装点</td><td>—</td></tr>
+<tr><td>你一个人倒下</td><td>每季度项目上限;交期由你定不由粉丝定;数字员工接跟单与客服;深夜不处理</td><td>建议每季度 6 个项目</td></tr>
+<tr><td>创作者拿底盘去别的厂</td><td>IP 条款;认证与技术文件不交付;底盘越迭代越难抄</td><td>—</td></tr>
+<tr><td>付费出网调用失控</td><td>Serper / Stripe / 图像调用当天接台账;key-health 巡检;4sapi 式"假绿"要用余额校验</td><td>每模块日预算</td></tr>
+<tr><td>开发信毁域名</td><td>消耗性域名;退信 >3% 杀域名;主域名永不冷开发</td><td>损失一个域名</td></tr>
+<tr><td>平台化后交权</td><td>第三年再决定;之前不融资</td><td>—</td></tr>
+<tr><td>信息在链条中被压扁</td><td>状态机时间戳逐项保留;except 不吞成 0;报价明细逐项存 breakdown_json</td><td>—</td></tr>
+</table>
+
+<h2 id="s11"><span class="n">SECTION 11</span>行动清单</h2>
+<h3>第一周(三件事,都在现有模块上改)</h3>
+<ol>
+<li>R 系列跑一遍户外整棵子树,定底盘一号的第一个样机做什么。</li>
+<li>B2B 店型目录加"创作者"店型;潜客表换成创作者字段;筛选改互动率;首封模板一份。</li>
+<li>K 母产品:底盘一号实拍 + 蒙版 + brand_zones;logo 合成步骤;出第一张 creator_mock。</li>
+</ol>
+<h3>第一个月</h3>
+<ul>
+<li>样机一台做出来;名单 100 人;首封发出 60 封;寄样 4 份;Kickstarter 线索 10 条。</li>
+<li>模块第一次发版:名单 + 开发信 + 出图。</li>
+<li>合同模板给律师;买一个消耗性域名开始养号。</li>
+</ul>
+<h3>第一季度</h3>
+<ul>
+<li>签第一个创作者;走完一次完整状态机(哪怕小批量)。</li>
+<li>模块第二次发版:项目 / 报价 / 状态机 / 达人门户(网页版)。</li>
+<li>见 1–2 家经纪公司。</li>
+</ul>
+<h3>第一年</h3>
+<ul>
+<li>20 个案例;底盘二号;认证库成形;预售页 + Stripe Connect(creator 模式)+ PWA 上线;第一集素材归档。</li>
+</ul>
+
+<h2 id="s12"><span class="n">SECTION 12</span>待你拍板(只有五条)</h2>
+<div class="decision"><b>#1 开工时间。</b>现在是"先不急"。你说开工,第一周三件事就启动。</div>
+<div class="decision"><b>#2 达人面路线。</b>接受"PWA → Capacitor 壳",还是坚持原生。建议壳,理由在第 5 节。</div>
+<div class="decision"><b>#3 开发信域名。</b>创作者线复用 barongsupply.com,还是另买一个消耗性域名。建议另买,受众不同,坏了不牵连批发线。</div>
+<div class="decision"><b>#4 底盘一号。</b>默认露营淋浴平台。如果你心里有更稳的一套,换它。</div>
+<div class="decision"><b>#5 这条线的名字。</b>对创作者的品牌名(例如 "Barong Makes" 一类),用于门户、预售页署名与域名。第一封信发出前要定。</div>
+
+<h2 id="s13"><span class="n">APPENDIX</span>附录</h2>
+<h3>A. 来源(2026-09-03 核实)</h3>
+<ul>
+<li>Xometry Q1 2026 业绩:<a href="https://investors.xometry.com/news-releases/news-release-details/xometry-reports-record-first-quarter-2026-results">investors.xometry.com</a>;<a href="https://3dprintingindustry.com/news/xometry-reports-record-q1-2026-revenue-as-marketplace-growth-reaches-40-251400/">3dprintingindustry.com</a></li>
+<li>Pietra 融资与估值:<a href="https://www.clay.com/dossier/pietra-funding">clay.com</a>;<a href="https://pitchbook.com/profiles/company/268486-57">pitchbook.com</a></li>
+<li>阿里 Accio 代理式寻源:<a href="https://www.marketscale.com/industries/software-and-technology/agentic-ai-is-rewriting-the-rules-of-b2b-sourcing-and-alibabas-accio-is-the-latest-proof">marketscale.com</a></li>
+<li>创作者经济初创(Wonnda / Velio):<a href="https://wonnda.com/magazine/creator-economy-startups/">wonnda.com</a></li>
+<li>一人公司与 AI(Medvi 等案例):<a href="https://fi.co/insight/the-one-person-unicorn-how-solo-founders-are-building-billion-dollar-companies-with-ai-in-2026">fi.co</a></li>
+<li>Sazo 跨境代理式商务 A 轮:<a href="https://www.digitalcommerce360.com/2026/07/23/sazo-agentic-ai-cross-border-commerce/">digitalcommerce360.com</a></li>
+</ul>
+<h3>B. 术语</h3>
+<table>
+<tr><th>词</th><th>意思</th></tr>
+<tr><td>底盘</td><td>验证过、已认证的功能平台;创作者只改外观与功能组合</td></tr>
+<tr><td>达人面 / 门户</td><td>创作者用的外部界面;不走控制台账号,用 magic link 钥匙</td></tr>
+<tr><td>收银台</td><td>粉丝付款的那一页;第一年钱进创作者 Stripe,第三年进你的平台账户</td></tr>
+<tr><td>creator_mock</td><td>K 生成的"带创作者 logo 的实拍图",用于首封开发信与门户预览</td></tr>
+<tr><td>业务心跳</td><td>验收只认状态机时间戳与台账,不认代码、测试、日志</td></tr>
+<tr><td>店型</td><td>B2B 模块的主键概念;"创作者"作为一个新店型接入,不另起炉灶</td></tr>
+</table>
+<h3>C. 本文档与仓库的关系</h3>
+<p>本文件是规划,不是代码。文中所有文件路径在 2026-09-03 的仓库中真实存在;<code>cp_</code> 前缀的表、<code>cp.creator_drops</code> 模块、<code>/portal</code> 与 <code>/drop</code> 页面均为待建。对应记忆:<code>creator-hardgoods-platform-plan</code>。</p>
+<p class="small">REV 2 · 2026-09-03 · 由 Claude 与 Barong 在同一场讨论中定稿;REV 2 补 8B "设计谁来做"。</p>
+
+</main>
+</div>
+</body>
+</html>

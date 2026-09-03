@@ -115,7 +115,11 @@ def test_module_control_scopes_i_series_to_target_organization(
             OrganizationRecord(
                 org_id=other_org_id,
                 org_name="涌龙麟（吉林）电子产品制造有限公司",
-                org_type="store",
+                # 生产库里这家就是 factory。夹具原本写成 "store" —— 那时
+                # 「模块归哪个组织」是按**组织名**判定的，org_type 写什么都无所谓，
+                # 于是这个矛盾一直没暴露。2026-08-31 判定改用 org_type
+                # （组织名会变、且失效方式是静默的）之后，夹具必须反映真实形状。
+                org_type="factory",
                 owner_user_id=str(owner_id),
                 status="active",
                 metadata_json={},

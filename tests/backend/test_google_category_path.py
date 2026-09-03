@@ -56,7 +56,12 @@ class _FakeSession:
         self.id_lookups: list[str] = []
         self.name_lookups: list[str] = []
 
-    def execute(self, statement: Any, params: dict[str, object]) -> _FakeResult:
+    def execute(
+        self,
+        statement: Any,
+        params: dict[str, object] | None = None,
+        **_kwargs: Any,
+    ) -> _FakeResult:
         sql = str(statement)
         if "WHERE id = :google_id" in sql:
             google_id = str(params["google_id"])

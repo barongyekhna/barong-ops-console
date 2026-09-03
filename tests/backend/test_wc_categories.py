@@ -43,7 +43,12 @@ class _FakeDB:
         self.commits = 0
         self.rollbacks = 0
 
-    def execute(self, statement: object, params: dict[str, object]) -> _Rows:
+    def execute(
+        self,
+        statement: object,
+        params: dict[str, object] | None = None,
+        **_kwargs: object,
+    ) -> _Rows:
         sql = str(statement)
         if sql.startswith("SELECT google_id, wc_term_id"):
             if self.fail_read:

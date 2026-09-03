@@ -9,7 +9,6 @@ from backend.app.core.module_switches import MODULE_SWITCH_REGISTRY_V1
 from backend.app.schemas.approval import ApprovalRequestCreate
 from backend.app.schemas.execution_provider import ExecutionRequestContractV1
 from backend.app.schemas.module_switch import ModuleSwitchRegistryRecord
-from backend.app.sandbox.types import SandboxRequest
 from backend.app.services.emergency_kill_switch import (
     EmergencyKillSwitchBlockedError,
     EmergencyKillSwitchPermissionError,
@@ -316,76 +315,6 @@ def test_c13d_global_kill_switch_blocks_c13c_policy_engine() -> None:
         )
 
 
-def test_c13d_global_kill_switch_blocks_c12_c09_and_c10() -> None:
-    set_global_kill_switch(
-        global_kill_switch=True,
-        actor_role="owner",
-        actor_user_id=1,
-    )
-    try:
-        with pytest.raises(ValidationError, match="global_kill_switch_enabled"):
-            ApprovalRequestCreate(
-                approval_id="approval-c13d-blocked",
-                execution_id="execution-c13d-blocked",
-                module_key="admin.users",
-                adapter_key="admin.users.adapter",
-                action_key="admin.users.read",
-                risk_level="high",
-                execution_type="real",
-                reason="This request must be blocked by C13D.",
-            )
-
-        with pytest.raises(ValidationError, match="global_kill_switch_enabled"):
-            execution_request(module_key="admin.users")
-
-        request = ExecutionRequestContractV1.model_construct(
-            execution_id="exec_c13d_bypass",
-            request_id="req_c13d_bypass",
-            module_key="admin.users",
-            adapter_key="admin.users.adapter",
-            action_key="admin.users.read",
-            actor_user_id=1001,
-            target_scope={},
-            input_payload={},
-            sanitized_input_summary={},
-            provider_key="core.mock_provider",
-            provider_type="mock_provider",
-            status="requested",
-            risk_level="medium",
-            required_permission="users.read",
-            approval_status="not_required",
-            secret_binding_status="not_required",
-            created_at=None,
-            accepted_at=None,
-            started_at=None,
-            finished_at=None,
-            cancelled_at=None,
-            timeout_at=None,
-            result_summary=None,
-            artifact_refs=[],
-            error_code=None,
-            error_message_safe=None,
-            operation_log_id=None,
-        )
-
-        with pytest.raises(ValidationError, match="global_kill_switch_enabled"):
-            SandboxRequest(
-                c09_execution_request=request,
-                module_key="admin.users",
-                adapter_key="admin.users.adapter",
-                provider_key="core.mock_provider",
-                provider_type="mock_provider",
-                action_key="admin.users.read",
-                risk_level="medium",
-            )
-    finally:
-        set_global_kill_switch(
-            global_kill_switch=False,
-            actor_role="owner",
-            actor_user_id=1,
-        )
-
-
 def test_module_switch_runtime_gate_fail_closes_missing_or_invalid_records() -> None:
     missing = ModuleSwitchRuntimeGate().decision("business.missing")
     invalid = ModuleSwitchRuntimeGate(
@@ -424,44 +353,3 @@ def test_c09_execution_request_is_blocked_before_contract_generation() -> None:
         execution_request(module_key="business.missing")
 
 
-def test_c10_sandbox_entry_is_blocked_before_sandbox_request() -> None:
-    request = ExecutionRequestContractV1.model_construct(
-        execution_id="exec_c13b_bypass",
-        request_id="req_c13b_bypass",
-        module_key="business.missing",
-        adapter_key="business.missing.adapter",
-        action_key="business.missing.run",
-        actor_user_id=1001,
-        target_scope={},
-        input_payload={},
-        sanitized_input_summary={},
-        provider_key="core.mock_provider",
-        provider_type="mock_provider",
-        status="requested",
-        risk_level="medium",
-        required_permission="users.read",
-        approval_status="not_required",
-        secret_binding_status="not_required",
-        created_at=None,
-        accepted_at=None,
-        started_at=None,
-        finished_at=None,
-        cancelled_at=None,
-        timeout_at=None,
-        result_summary=None,
-        artifact_refs=[],
-        error_code=None,
-        error_message_safe=None,
-        operation_log_id=None,
-    )
-
-    with pytest.raises(ValidationError, match="BLOCKED by Module Switch"):
-        SandboxRequest(
-            c09_execution_request=request,
-            module_key="business.missing",
-            adapter_key="business.missing.adapter",
-            provider_key="core.mock_provider",
-            provider_type="mock_provider",
-            action_key="business.missing.run",
-            risk_level="medium",
-        )

@@ -161,6 +161,7 @@ def _round4_gallery_brief(
             "prompt": "Product in verified real use, angle one.",
             "selling_point_id": "camp-cooking",
             "proof_intent": "Show active outdoor cooking from the front.",
+            "scene_motif": "campsite_dinner_cook",
         },
         {
             "position": 5,
@@ -169,6 +170,7 @@ def _round4_gallery_brief(
             "prompt": "Product in verified real use, angle two.",
             "selling_point_id": "camp-cooking",
             "proof_intent": "Show active outdoor cooking from the side.",
+            "scene_motif": "backyard_family_lunch",
         },
     ]
     if include_accessory:
@@ -197,6 +199,7 @@ def _round4_gallery_brief(
                     "Show active outdoor cooking in wide composition "
                     f"{description_index + 1}."
                 ),
+                "scene_motif": f"wide_use_scene_{description_index + 1}",
             }
         )
     return {"images": images}
@@ -538,7 +541,7 @@ def test_enqueue_persists_forced_ratio_in_each_job_snapshot(
     inserted: list[dict[str, object]] = []
 
     class _DB:
-        def execute(self, statement, parameters):
+        def execute(self, statement, parameters=None, **_kwargs):
             if "INSERT INTO k_image_render_jobs" in str(statement):
                 inserted.append(dict(parameters))
             return SimpleNamespace(scalar=lambda: 0)

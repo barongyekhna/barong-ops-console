@@ -537,7 +537,7 @@ def test_user_and_membership_lifecycle_sync_is_transactional(
     _membership(db, user=owner, organization=organization, role="owner")
     db.commit()
 
-    managed = user_management_service.create_managed_user(
+    managed, _initial_password = user_management_service.create_managed_user(
         db,
         payload=UserCreate(
             username="managed-c19-user",

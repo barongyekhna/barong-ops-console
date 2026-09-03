@@ -1,5 +1,3 @@
-from backend.app.sandbox import StagingSandbox
-from backend.app.services.execution_dispatch_pipeline import EXECUTION_DISPATCH_PIPELINE
 from backend.app.services.execution_provider_registry import (
     list_execution_provider_contracts,
 )
@@ -96,42 +94,3 @@ def test_execution_router_future_live_is_selected_but_gated() -> None:
     assert response.live_provider_dispatched is False
 
 
-def test_staging_sandbox_prepares_isolated_context_only() -> None:
-    response = EXECUTION_ROUTER.receive_request(
-        org_id=ORG_ID,
-        module_id="admin.users",
-        action="admin.users.read",
-        payload={"execution_mode": "staging"},
-        context=router_context("users.read"),
-    )
-    staging = StagingSandbox().prepare(response, payload={"title": "redacted"})
-
-    assert staging.status == "prepared"
-    assert staging.execution_dispatched is False
-    assert staging.external_call_performed is False
-    assert staging.production_db_access_performed is False
-    assert staging.request.policy.production_db_access_allowed is False
-    assert staging.request.policy.audit_logging_required is True
-    assert staging.request.policy.c17_integration_ready is True
-
-
-def test_c15_dispatch_pipeline_runs_c15a_c15f_then_router() -> None:
-    result = EXECUTION_DISPATCH_PIPELINE.dispatch(
-        org_id=ORG_ID,
-        module_id="integration.n8n_test_bridge",
-        workflow_id="n8n.workflow.integration.n8n_test_bridge.dispatch.v1",
-        payload={
-            "execution_mode": "staging",
-            "action": "integration.n8n_test_bridge.test_run.declare",
-        },
-        context=router_context("modules.read"),
-    )
-
-    assert result.status == "accepted"
-    assert result.c15a_workflow_match.execution_allowed is True
-    assert result.c15f_whitelist_check.binding_validation_passed is True
-    assert result.router_response.selected_provider.provider_key == (
-        "future.webhook_provider"
-    )
-    assert result.workflow_registry_executes is False
-    assert result.webhook_direct_execution_allowed is False

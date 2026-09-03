@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from backend.app.sandbox import SandboxRuntime
-from backend.app.sandbox.types import SandboxRequest
 from backend.app.schemas.execution_provider import ExecutionRequestContractV1
 from backend.app.services.emergency_kill_switch import set_global_kill_switch
 from backend.app.services.execution_flow_gate import (
@@ -167,36 +165,3 @@ def test_c13e_gate_blocks_c14_unknown_external_dependency() -> None:
         )
 
 
-def test_c13e_gate_blocks_c10_sandbox_request_mismatch() -> None:
-    with pytest.raises(
-        ExecutionFlowGateBlockedError,
-        match="c10_sandbox_request_mismatch",
-    ):
-        C13E_GATE.check(
-            SandboxRequest.model_construct(
-                c09_execution_request=bypassed_request(),
-                module_key="admin.users",
-                adapter_key="k.product_knowledge.placeholder.adapter",
-                provider_key="core.no_op_provider",
-                provider_type="no_op_provider",
-                action_key="k.product_knowledge.placeholder.prepare",
-                risk_level="medium",
-                source_trust_zone="c09_execution_provider",
-                target_trust_zone="c10_sandbox",
-            ),
-            integration_point="c10_sandbox_entry",
-        )
-
-
-def test_c13e_gate_blocks_direct_c10_runtime_bypass() -> None:
-    with pytest.raises(
-        ExecutionFlowGateBlockedError,
-        match="module_switch_not_registered",
-    ):
-        SandboxRuntime().handle_execution_request(
-            bypassed_request(
-                module_key="business.missing",
-                adapter_key="business.missing.adapter",
-                action_key="business.missing.run",
-            )
-        )

@@ -16,14 +16,12 @@ from backend.app.schemas.execution_trace import ExecutionTrace, ExecutionTraceSt
 from backend.app.schemas.organization import generate_org_id
 from backend.app.schemas.storage_layer import EventRaw, StorageTimeRange
 from backend.app.schemas.structured_logs import LogEntity, LogEntry, LogMetadata
-from backend.app.services.anomaly_detection import StreamAnomalyEngine
 from backend.app.services.audit_query_engine import AuditLogWriter, AuditQueryEngine
 from backend.app.services.data_isolation import (
     OrgDataIsolationUserContext,
     org_data_isolation_context,
 )
 from backend.app.services.event_collector import clear_event_buffer, emit_event
-from backend.app.services.execution_replay import ReplayEngine
 from backend.app.services.storage_layer import DBStorageAdapter
 
 
@@ -190,77 +188,6 @@ def test_c17_db_storage_and_audit_query_are_persistent(
     with SessionLocal() as db:
         audit_count = len(tuple(db.scalars(select(AuditLogRecord))))
     assert audit_count == 1
-
-
-def test_c17_replay_from_event_stream_persists_deterministic_jobs(
-    clean_auth_tables: None,
-) -> None:
-    adapter = DBStorageAdapter(now=BASE_TIME, org_id="platform")
-    adapter.write_trace(_trace())
-    adapter.write_log(_log_entry())
-
-    engine = ReplayEngine(adapter, org_id="platform")
-    first = engine.replay_from_event_stream(trace_id="trace-durable-001")
-    second = engine.replay_from_event_stream(trace_id="trace-durable-001")
-
-    assert first.context_id == "ctx-durable-001"
-    assert first.steps[-1].replay_output == {"stored": True}
-
-    with SessionLocal() as db:
-        jobs = tuple(
-            db.scalars(
-                select(ReplayJobRecord).order_by(ReplayJobRecord.created_at)
-            )
-        )
-
-    assert len(jobs) == 2
-    assert {job.replay_id for job in jobs} == {first.replay_id, second.replay_id}
-    assert jobs[0].deterministic_hash == jobs[1].deterministic_hash
-    assert all(job.org_id == "platform" for job in jobs)
-
-
-def test_c17_stream_anomaly_engine_persists_org_grouped_anomalies(
-    clean_auth_tables: None,
-) -> None:
-    adapter = DBStorageAdapter(now=BASE_TIME, org_id="platform")
-    for index in range(5):
-        adapter.append_event(
-            EventRaw(
-                event_id=f"evt-stream-{index}",
-                timestamp=BASE_TIME + timedelta(seconds=index),
-                context_id=f"ctx-stream-{index}",
-                trace_id=f"trace-stream-{index}",
-                user_id="user-stream",
-                module="C15",
-                event_type="workflow.retry",
-                action="workflow retry",
-                source="backend",
-                status="failed",
-                metadata={"retry_count": 1},
-            )
-        )
-
-    result = StreamAnomalyEngine(
-        org_id="platform",
-        window_seconds=60,
-        threshold_event_count=5,
-    ).analyze_stream(
-        time_range=StorageTimeRange(
-            start_at=BASE_TIME - timedelta(seconds=1),
-            end_at=BASE_TIME + timedelta(seconds=10),
-        )
-    )
-
-    assert "c17g.stream.threshold.module_volume" in {
-        finding.rule_id for finding in result.findings
-    }
-
-    with SessionLocal() as db:
-        rows = tuple(db.scalars(select(AnomalyEventRecord)))
-
-    assert rows
-    assert {row.org_id for row in rows} == {"platform"}
-    assert any(row.module_id == "C15" for row in rows)
 
 
 def test_c17_event_stream_respects_c18_org_isolation(

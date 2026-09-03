@@ -43,9 +43,17 @@ def test_finding_fingerprint_stable() -> None:
     b = bg.brand_finding_fingerprint(
         "text", {"surface": "[copy.k[1]]", "term": "usb-c"})
     assert a == b == "text::[copy.k[1]]::usb-c"
+    # 图片指纹必须含 asset_id(2026-08-31)。以前只有 (位号, 类别),
+    # 而 K 的出图按位号覆盖——忽略一次之后,同一位号重渲出的**任何**新图
+    # 都会继承那次放行,静默通过品牌门。线上 PSPE-002 的第 2、5 张图就卡在这个状态。
     img = bg.brand_finding_fingerprint(
-        "image", {"position": 4, "category": "geometry"})
-    assert img == "image::4::geometry"
+        "image", {"asset_id": "AAA-111", "position": 4, "category": "geometry"})
+    assert img == "image::aaa-111::4::geometry"
+
+    # 同位号同类别、但换了一张图 ⇒ 指纹必须不同,否则旧放行会被继承。
+    other = bg.brand_finding_fingerprint(
+        "image", {"asset_id": "BBB-222", "position": 4, "category": "geometry"})
+    assert other != img, "换了图片却拿到同一个指纹——放行会被错误继承"
 
 
 def test_run_brand_audit_carries_and_applies_ignores() -> None:
@@ -86,3 +94,50 @@ def test_ignore_endpoint_wired() -> None:
     assert "/brand-audit/ignore" in src
     assert "set_brand_finding_ignored" in src
     assert "brand_finding_fingerprint" in src
+
+
+def test_operator_override_beats_every_gate() -> None:
+    """死规矩：人工放行高于一切 fail-closed 规则。
+
+    2026-08-11 用户拍板。起因是审查器把花洒手柄上的 "STOP"（一键止水的功能
+    标识）判成品牌字样、把 "panda pump"（产品描述）判成商标——它是 AI，不真正
+    了解这个产品。运营者看过图做出决定后，这个控制台里不允许任何一道程序再拦他。
+
+    override 打开时无条件放行：不看违规、不看 errors、也不看指纹是否过期。
+    """
+    from types import SimpleNamespace
+
+    from backend.app.modules.k_series.product_knowledge.brand_guard import (
+        audit_gate_blockers,
+        operator_override,
+    )
+
+    worst_case = {
+        "clean": False,
+        "fingerprint": "stale-and-wrong",
+        "text_violations": [{"surface": "copy", "term": "SomeBrand"}],
+        "image_violations": [{"position": 2, "category": "geometry", "finding": "x"}],
+        "errors": ["image_audit[3]: boom"],          # errors 本来永不可忽略
+        "operator_override": {"enabled": True, "by": "barongyekhna"},
+    }
+    product = SimpleNamespace(brand_audit_json=worst_case)
+    # db 传 None：override 分支必须在任何数据库访问之前就短路返回
+    assert audit_gate_blockers(None, product) == []
+    assert operator_override(worst_case)
+
+    # 关掉之后照常按结论把关
+    off = dict(worst_case)
+    off.pop("operator_override")
+    assert operator_override(off) == {}
+    assert audit_gate_blockers(None, SimpleNamespace(brand_audit_json=None))
+
+
+def test_override_is_attributable() -> None:
+    """放行要留痕：谁、何时、为何。出了事查得到是谁拍的板。"""
+    import inspect
+
+    from backend.app.modules.k_series.product_knowledge import brand_guard
+
+    src = inspect.getsource(brand_guard.set_operator_override)
+    for field in ('"by"', '"at"', '"reason"'):
+        assert field in src, f"override 缺少留痕字段: {field}"

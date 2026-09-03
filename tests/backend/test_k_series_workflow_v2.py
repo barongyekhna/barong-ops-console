@@ -1214,6 +1214,7 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
                         "prompt": "Verified construction in real use, front view.",
                         "selling_point_id": "operator-steel",
                         "proof_intent": "Show the verified construction during use.",
+                        "scene_motif": "workshop_bench_use",
                     },
                     {
                         "position": 5,
@@ -1222,6 +1223,7 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
                         "prompt": "Verified construction in real use, side view.",
                         "selling_point_id": "operator-steel",
                         "proof_intent": "Show the verified construction from another angle.",
+                        "scene_motif": "outdoor_patio_use",
                     },
                     {
                         "position": 6,
@@ -1230,6 +1232,7 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
                         "prompt": "Wide verified-use scene for the description module.",
                         "selling_point_id": "operator-steel",
                         "proof_intent": "Show the verified construction in a wide use scene.",
+                        "scene_motif": "kitchen_counter_use",
                     },
                     {
                         "position": 7,
@@ -1238,6 +1241,7 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
                         "prompt": "Wide verified-use detail for the description module.",
                         "selling_point_id": "operator-steel",
                         "proof_intent": "Show the verified construction in a wide detail view.",
+                        "scene_motif": "garage_storage_use",
                     },
                     {
                         "position": 8,
@@ -1246,6 +1250,7 @@ def test_image_brief_retries_once_when_verified_dimensions_are_omitted() -> None
                         "prompt": "Wide verified-use context for the description module.",
                         "selling_point_id": "operator-steel",
                         "proof_intent": "Show the verified construction in a wide context view.",
+                        "scene_motif": "backyard_family_use",
                     },
                 ]
             }
@@ -1297,6 +1302,7 @@ def test_image_brief_second_bad_gallery_fails_open_with_error_notification() -> 
                         "prompt": "Verified construction in real use.",
                         "selling_point_id": "operator-steel",
                         "proof_intent": "Show the verified construction during use.",
+                        "scene_motif": "workshop_bench_use",
                     },
                 ]
             }

@@ -26,7 +26,7 @@ class _DB:
     def __init__(self, rows):
         self._rows = rows
 
-    def execute(self, _statement, _params):
+    def execute(self, _statement, _params=None, **_kwargs):
         return _Rows(self._rows)
 
 
@@ -133,3 +133,24 @@ def test_non_square_main_image_stays_in_gallery() -> None:
     )
 
     assert images[0].placement == "gallery"
+
+
+def test_late_success_callback_overturns_timeout_guess() -> None:
+    """迟到的成功回报必须能翻掉看门狗的「失联」判定。
+
+    2026-08-11 实测：n8n 把产品建进了 Woo(草稿 4394)，但回报节点因为
+    simple 产品的变体批载荷为空而被跳过；15 分钟后看门狗按「未回传」标 failed。
+    此时补回报却被幂等挡住 —— 账面永远是失败，站上明明有货。
+    failed 有两种来源：n8n 明确报错(事实) vs 看门狗超时(推测)，
+    **事实必须能覆盖推测**，否则对不上账。
+    """
+    import inspect
+
+    from backend.app.modules.p_series.upload import jobs
+
+    src = inspect.getsource(jobs.record_result)
+    # success 仍然幂等，不许被后续回报改写
+    assert 'if job.status == "success":' in src
+    # 只有「超时判定的 failed」+「迟到的 success」这一种组合可以翻案
+    assert '"未回传" in (job.error or "")' in src
+    assert 'timed_out and status == "success"' in src

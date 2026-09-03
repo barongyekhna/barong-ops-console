@@ -768,6 +768,90 @@ def test_factory_photos_are_real_with_alt_and_caption() -> None:
     assert markup.count('width="1400"') == 4
 
 
+def test_sourcing_numbers_are_the_ones_the_user_actually_walked() -> None:
+    """这些数字是用户 2026-08-01 口述的亲身经历(背着包一家一家跑),
+    **不许改写、不许"约等于"**。它们是全页最值钱的一段:贸易公司编不出
+    "跑了三十多家电机厂才敲定一家"。改动其中任何一个都是把真话变成宣传。
+    """
+    from backend.app.modules.b2b import policies
+
+    text = _text(pages.render_intro_block())
+    for fact in (
+        "more than thirty motor factories",
+        "four provinces",
+        "close to ten battery makers",
+        "seventeen PCBA shops",
+        "twelve tooling shops",
+        "three provinces",
+    ):
+        assert fact in text, f"跑供应商的事实丢了: {fact}"
+    # 有标准、有取舍要说,但不给对方伸手要文件的抓手
+    assert "We turned down almost all of them" in policies.WHOLESALE_INTRO_SOURCING
+
+
+def test_public_page_states_no_years() -> None:
+    """**死规矩**(用户 2026-09-02 拍板):公开页面不写年限/年份。
+
+    2026-08-01 那版写过首次出货年份。年份是真的,删它跟真假无关 ——
+    开厂时间对买手的采购决策毫无影响,唯一作用是给对方一个"够不够老"的
+    称重把柄。这一页立的是"四省三十多家电机厂"这类抄不走的事实,不是资历。
+    少一个可被拿来称重的数字,就少一处不必要的暴露面。
+    """
+    import re
+
+    text = _text(pages.render_intro_block())
+    text += _text(pages.render_wholesale_page([_group()]))
+    found = re.findall(r"\b(?:19|20)\d{2}\b", text)
+    assert not found, f"公开页面出现了年份 {found} —— 年限是禁写项"
+
+
+def test_public_page_never_advertises_certifications() -> None:
+    """**死规矩**(用户 2026-08-01 拍板,他吃过亏):认证一个字都不许写上公开页面。
+
+    骗认证是这行的常见套路——装成买家要走认证文件,拿到就拉黑,压根不下单。
+    而且比"认证被白拿"更严重的是:**认证文件上印着供应商的名字**,发出去泄的
+    是四省跑三十多家才敲定的供应链名单,那往往才是对方真正想要的东西。
+
+    谁要文件谁开口,给不给是逐单人工决定,**不是页面上的公开承诺**。
+    """
+    text = _text(pages.render_intro_block())
+    text += _text(pages.render_wholesale_page([_group()]))
+    for banned in ("certification", "certificate", "certified", "compliance",
+                   "test report", "paperwork", "UN38.3", "FCC", "BSCI",
+                   "RoHS", "REACH"):
+        assert banned.lower() not in text.lower(), (
+            f"公开页面出现了认证说法「{banned}」——这会招骗文件的"
+        )
+
+
+def test_submersion_test_never_hardens_into_a_spec() -> None:
+    """"泡了一个月"是**我们自己做过的一次测试**,不是产品规格。
+
+    写成 "30-day submersion rated" 就等于给零售商一条可索赔的性能承诺,
+    而退货口径只认瑕疵、不接受无理由退——**承诺必须配机制,这条没机制**。
+    顺带:这也正是 GMC 当初封号的那类句子。
+    """
+    text = _text(pages.render_intro_block()).lower()
+    assert "we left one running in a tank for a month" in text, "自测的说法丢了"
+    # 2026-09-02:免责必须和事实在同一句里,而不是只写在源码注释中 ——
+    # 看页面的人读不到注释,照样会把它当耐久指标去索赔。
+    assert "our own bench test on one unit" in text, "自测的限定条件丢了"
+    assert "not a published rating" in text, "「这不是规格」的免责丢了"
+    for spec in ("rated", "guarantee", "warranted", "certified waterproof",
+                 "ip68", "ip67"):
+        assert spec not in text, f"自测被写成了规格/承诺: {spec}"
+
+
+def test_page_says_what_we_do_not_do() -> None:
+    """反直觉但真实:采购最信的是敢说"这个我们不做"的供应商。
+    没有这段,上面那些"我们有自己的技术"就退化成人人都能写的形容词。
+    """
+    text = _text(pages.render_intro_block())
+    assert "we don't wind motors or make battery cells" in text.lower()
+    # 责任要落到发票和保修上——那才是零售商真正在担的风险
+    assert "warranty" in text.lower()
+
+
 def test_factory_photos_sit_in_one_row() -> None:
     """默认 `.by-cards` 是 auto-fit minmax(240px,1fr),960px 的版心只放得下
     3 张,第 4 张单独掉到第二行(用户 2026-07-31 指出难看)。修饰类

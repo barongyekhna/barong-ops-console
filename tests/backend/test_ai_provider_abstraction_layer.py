@@ -160,8 +160,9 @@ def test_execution_router_syncs_provider_config_and_injects_model(
         *,
         request: ProviderRequest,
         timeout_seconds: float,
+        deadline: float | None = None,
     ) -> dict[str, Any]:
-        del timeout_seconds
+        del timeout_seconds, deadline
         captured.append(request)
         return {
             "choices": [
@@ -225,8 +226,9 @@ def test_execution_router_falls_back_to_default_provider(
         *,
         request: ProviderRequest,
         timeout_seconds: float,
+        deadline: float | None = None,
     ) -> dict[str, Any]:
-        del timeout_seconds
+        del timeout_seconds, deadline
         captured.append(request)
         if len(captured) == 1:
             raise ValueError("temporary_provider_failure")

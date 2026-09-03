@@ -188,7 +188,10 @@ function loadBackendRoutes() {
   const stdout = execFileSync(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf-8",
-    timeout: 120_000,
+    // 后端冷启动 import 实测 >120s，原值必然 SIGTERM，整个文件崩溃 ——
+    // 这是全仓唯一防「加了后端端点忘登记代理白名单」的机器保护，
+    // 它一崩，那条已知坑就是裸奔状态（2026-08-31 体检）。
+    timeout: 600_000,
     env: { ...process.env },
   });
   const lines = stdout.trim().split("\n");

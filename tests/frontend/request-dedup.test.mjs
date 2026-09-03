@@ -255,10 +255,23 @@ test("product management uses full-list route, safe delete, and clean K labels",
     "frontend/src/modules/k/product-knowledge/ProductForm.tsx",
     "utf8",
   );
-  const productDetailSource = readFileSync(
-    "frontend/src/modules/k/product-knowledge/ProductDetail.tsx",
-    "utf8",
-  );
+  // 产品详情这一屏 = ProductDetail + 从它拆出去的面板。
+  // 2026-09-01 拆分（变体价格 / 运费+包装 / 关键词审核）之后，下面这些断言
+  // 守的仍然是「这一屏有没有这些东西」，只是东西换了文件住。
+  // 拼起来读，守卫才跟着**功能**走而不是跟着文件布局走 ——
+  // 否则每拆一次组件就要红一次，久了就没人敢拆了。
+  const productDetailSource = [
+    "ProductDetail.tsx",
+    "VariantPricesPanel.tsx",
+    "ShippingPackagePanel.tsx",
+    "KeywordReviewPanel.tsx",
+    "SellingPointsPanel.tsx",
+    "ProductMediaPanel.tsx",
+  ]
+    .map((file) =>
+      readFileSync(`frontend/src/modules/k/product-knowledge/${file}`, "utf8"),
+    )
+    .join("\n");
   const productApiSource = readFileSync(
     "frontend/src/modules/k/product-knowledge/api.ts",
     "utf8",
@@ -267,22 +280,21 @@ test("product management uses full-list route, safe delete, and clean K labels",
     "frontend/src/app/api/backend/[...path]/route.ts",
     "utf8",
   );
-  const researchPanelSource = readFileSync(
-    "frontend/src/modules/k15/research-trigger/ResearchTriggerPanel.tsx",
-    "utf8",
-  );
-  const serpPanelSource = readFileSync(
-    "frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx",
-    "utf8",
-  );
-  const keywordTypesSource = readFileSync(
-    "frontend/src/modules/k19/keywords/types.ts",
-    "utf8",
-  );
-  const riskTypesSource = readFileSync(
-    "frontend/src/modules/k20/risk/types.ts",
-    "utf8",
-  );
+  // K 系列内部代号（K14/K15/K16/K17/K18…）不许出现在用户可见文案里。
+  // 2026-09-02 删掉 k15/k16/k20 三个孤儿面板后，这条守卫改成扫**仍然在用的**
+  // 整个 K 产品知识库界面 —— 守的是「代号别泄漏给用户」这个意图，
+  // 不是某几个文件的存在。覆盖面比原来更宽。
+  const liveKSurfaceSource = [
+    "k/product-knowledge/ProductDetail.tsx",
+    "k/product-knowledge/KeywordReviewPanel.tsx",
+    "k/product-knowledge/SellingPointsPanel.tsx",
+    "k/product-knowledge/ProductMediaPanel.tsx",
+    "k/product-knowledge/VariantPricesPanel.tsx",
+    "k/product-knowledge/ShippingPackagePanel.tsx",
+    "k19/keywords/types.ts",
+  ]
+    .map((file) => readFileSync(`frontend/src/modules/${file}`, "utf8"))
+    .join("\n");
 
   assert.match(productPageSource, /<ProductListFull \/>/);
   assert.doesNotMatch(
@@ -329,10 +341,11 @@ test("product management uses full-list route, safe delete, and clean K labels",
   assert.match(proxySource, /method === "GET" \|\| method === "PATCH" \|\| method === "DELETE"/);
 
   assert.doesNotMatch(productDetailSource, />K14|K14 Selling Points|auxiliary K14/);
-  assert.doesNotMatch(researchPanelSource, />K15</);
-  assert.doesNotMatch(serpPanelSource, />K16</);
-  assert.doesNotMatch(keywordTypesSource, /K15 research|K16 SERP|K17 ChatGPT|K18 Claude/);
-  assert.doesNotMatch(riskTypesSource, /K17 pre-filter|K18 validated/);
+  assert.doesNotMatch(liveKSurfaceSource, />K1[4-9]</);
+  assert.doesNotMatch(
+    liveKSurfaceSource,
+    /K15 research|K16 SERP|K17 ChatGPT|K18 Claude|K17 pre-filter|K18 validated/,
+  );
 });
 
 test("dashboard initial load renders partial state without all-settled blocking", () => {

@@ -78,7 +78,11 @@ test("跳转管理接住交接：预填路径 + 推荐目标 + 高亮那一行",
 
 test("必须实测跳转真生效，才敢把死链标成已解决", () => {
   const panels = read("WpBridgePanels.tsx");
-  const save = panels.slice(panels.indexOf("const handleSave"));
+  // 保存流程本体。2026-09-01 加二次确认后改名 doSave（handleSave 这个名字
+  // 现在只会误导——按钮点下去只是开确认弹层，不再直接保存）。
+  const saveStart = panels.indexOf("const doSave");
+  assert.ok(saveStart > 0, "找不到保存流程本体");
+  const save = panels.slice(saveStart);
   const verifyAt = save.indexOf("verifyWpRedirect(pendingFinding.path)");
   const resolveAt = save.indexOf('updateHealthFinding(pendingFinding.findingId, "resolve")');
   assert.ok(verifyAt > 0, "保存后要实测一次");

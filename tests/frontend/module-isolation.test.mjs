@@ -385,6 +385,14 @@ const registryItems = [
   manifest({
     category: "admin",
     denied_behavior: "hide_when_denied",
+    module_key: "admin.mcp_keys",
+    required_permissions: ["modules.read"],
+    route_namespace: "/mcp-keys",
+    status: "sealed",
+  }),
+  manifest({
+    category: "admin",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.key_health",
     required_permissions: ["modules.read"],
     route_namespace: "/key-health",
@@ -653,12 +661,15 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
     sidebarSource,
     /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"cs\.",\s*"b2b\.",\s*"geo\.",\s*"seo\.",\s*"gmc\.",\s*"content\.",\s*"mfg\.",?\s*\]/,
   );
-  assert.match(sidebarSource, /normalized\.startsWith\("i\."\)/);
-  // F/H/W 系列与产品系列同规：进组织树，且只在国际贸易组织下展示（死命令）。
-  assert.match(sidebarSource, /normalized\.startsWith\("w\."\)/);
-  assert.match(sidebarSource, /normalized\.startsWith\("f\."\)/);
-  assert.match(sidebarSource, /normalized\.startsWith\("h\."\)/);
-  assert.match(sidebarSource, /normalized\.startsWith\("cs\."\)/);
+  // 「哪些模块只属于国际贸易组织」不再由前端判定。
+  // 这里原本断言前端有一组 normalized.startsWith("i."/"w."/"f."/"h."/"cs.") 判据，
+  // 配合一个按**组织中文名**比对的 isProductKnowledgeOrg 来遮蔽模块。那是第二套
+  // 真相源：后端 INTL_TRADE_ONLY_MODULE_KEYS 漏了 k./i./p. 时只在前端被遮住，
+  // 敲 URL 照样进（实测制造超管能打开 K 的创建表单）；而且改一次组织名整套失效。
+  // 2026-08-31 收敛到后端，这里改为断言那套遮罩**不会回来**。
+  assert.doesNotMatch(sidebarSource, /isRestrictedProductModule/);
+  assert.doesNotMatch(sidebarSource, /isProductKnowledgeOrg/);
+  assert.doesNotMatch(sidebarSource, /涌龙麟（深圳）国际贸易有限公司/);
   assert.match(sidebarSource, /function capabilitySidebarVisible/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(fallbackItem\);/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(item\);/);
@@ -1338,6 +1349,10 @@ test("sidebar navigation exposes the full productized capability structure", () 
 
   assert.deepEqual(moduleKeys, [
     "admin.users",
+    // 「接入钥匙」(MCP 个人钥匙总览)。2026-08-28 上生产时漏加进这份期望清单，
+    // 于是这条测试从那时起一直是红的——而 Docker 构建闸门因为 cd .. 的 bug
+    // 跑了 0 条测试，红测试就这么被放行了。两个问题在 2026-08-31 一起修。
+    "admin.mcp_keys",
     "admin.organizations",
     "admin.permissions",
     "k.product_knowledge",
