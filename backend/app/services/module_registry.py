@@ -75,6 +75,15 @@ INTL_TRADE_ONLY_MODULE_KEYS = R_SERIES_MODULE_KEYS | frozenset(
         "geo.content",
         "seo.content",
         "content.desk",
+        # 2026-08-31 体检补齐:这三个模块一直只服务国际贸易组织,但**只在前端遮**
+        # (capability-sidebar-engine.tsx 靠比对组织中文名把它们从侧边栏摘掉),
+        # 后端白名单漏了。后果是制造组织超管敲 URL 直接进 /products,创建表单
+        # 完整打开,POST /api/app/k/products 返回的是业务校验 422 而不是 403 ——
+        # 带上 category_id 就能在国际贸易的 K 库里建产品。
+        # 靠组织名字符串遮还有个附带问题:改一次组织名,整套遮罩全线失效。
+        "k.product_knowledge",
+        "i.image_system",
+        "p.upload",
     }
 )
 INTL_TRADE_ONLY_MODULE_KEYS |= CS_CUSTOMER_SERVICE_MODULE_KEYS

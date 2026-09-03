@@ -7,7 +7,15 @@ from typing import Any
 _SKILLS_DIR = Path(__file__).parent / "skills"
 
 KEYWORD_RESEARCH_SKILL_VERSION = "k-keyword-research-independent-site-v1"
-SELLING_POINTS_SKILL_VERSION = "k-selling-points-evidence-v2"
+# v3(2026-08-03):卖点生成拆成三阶段异步 job(bullets → zh → copy),
+# 阶段 1 不再一口气要 marketing_copy/翻译,并加 8-10 条上限
+# (此前提示词无任何条数约束,模型自己吐 15 条,占输出量约八成)。
+SELLING_POINTS_SKILL_VERSION = "k-selling-points-evidence-v4"
+
+# 阶段 1 的卖点条数上限。上架实际用得上的本来就是 5-8 条,
+# 多出来的只是给运营挑,不值得让每次生成都多等三分之一的时间。
+SELLING_POINTS_MIN_BULLETS = 8
+SELLING_POINTS_MAX_BULLETS = 10
 
 KEYWORD_RESEARCH_SKILL_SOURCES = [
     {
@@ -94,9 +102,35 @@ def keyword_research_skill_context() -> dict[str, Any]:
     }
 
 
-def selling_points_skill_context() -> dict[str, Any]:
+_SELLING_POINTS_COPY_BLOCKS = {
+    # 阶段 1(bullets):只出卖点本体 + 归类信息。翻译与整段文案交给后续阶段,
+    # 让运营最快看到最值钱的那部分。
+    "bullets": [
+        (
+            f"{SELLING_POINTS_MIN_BULLETS}-{SELLING_POINTS_MAX_BULLETS} benefit-led "
+            "bullets ranked by conversion importance"
+        ),
+        "seo_keywords pulled from approved non-risk keywords",
+        "market_tags for buyer segment, use case, and product type",
+    ],
+    # 阶段 3(copy):只补商品页那段整段文案。
+    "copy": ["marketing_copy with a concise product-page paragraph"],
+    # 旧的一口气全出模式,保留给非分阶段调用方。
+    "full": [
+        "benefit-led bullets ranked by conversion importance",
+        "marketing_copy with a concise product-page paragraph",
+        "translated_version in the target market language",
+        "chinese_translation covering every final bullet and marketing_copy for operator review",
+        "seo_keywords pulled from approved non-risk keywords",
+        "market_tags for buyer segment, use case, and product type",
+    ],
+}
+
+
+def selling_points_skill_context(*, stage: str = "full") -> dict[str, Any]:
     return {
         "version": SELLING_POINTS_SKILL_VERSION,
+        "stage": stage,
         "name": "Conversion-first ecommerce selling-points skill",
         "goal": (
             "Turn approved keywords and product facts into target-market copy that "
@@ -116,17 +150,17 @@ def selling_points_skill_context() -> dict[str, Any]:
             "Use an N-piece claim only when package_includes exists and its list length is exactly N; otherwise describe it simply as a set.",
             "If no supplied evidence supports a proposed claim, omit it or mark it unverified for operator review; never phrase it as a product fact.",
         ],
-        "required_copy_blocks": [
-            "benefit-led bullets ranked by conversion importance",
-            "marketing_copy with a concise product-page paragraph",
-            "translated_version in the target market language",
-            "chinese_translation covering every final bullet and marketing_copy for operator review",
-            "seo_keywords pulled from approved non-risk keywords",
-            "market_tags for buyer segment, use case, and product type",
-        ],
+        "required_copy_blocks": _SELLING_POINTS_COPY_BLOCKS.get(
+            stage, _SELLING_POINTS_COPY_BLOCKS["full"]
+        ),
         "quality_bar": [
             "Specific beats generic; mention concrete product attributes whenever available.",
             "Do not repeat the same benefit with different wording.",
+            (
+                f"Ship only the {SELLING_POINTS_MIN_BULLETS}-{SELLING_POINTS_MAX_BULLETS} "
+                "strongest bullets. A weak filler bullet costs the shopper attention and "
+                "the operator review time; drop it instead of padding the list."
+            ),
             "Prefer clear plain language over hype.",
             "Make missing proof explicit in rationale instead of fabricating details.",
         ],
@@ -185,7 +219,42 @@ def claude_keyword_review_instruction() -> str:
     )
 
 
-def selling_points_instruction() -> str:
+def selling_points_instruction(*, stage: str = "full") -> str:
+    """卖点生成指令。
+
+    ``stage="bullets"`` 是三阶段异步 job 的第一刀,只要卖点本体——中文对照和
+    整段商品页文案分别由阶段 2/3 补,好让运营最快看到最值钱的部分。
+    ``stage="full"`` 保留旧的一口气全出行为。
+    """
+
+    if stage == "bullets":
+        tail = (
+            "Keep copy clear enough for a shopper to decide. "
+            f"Return between {SELLING_POINTS_MIN_BULLETS} and "
+            f"{SELLING_POINTS_MAX_BULLETS} bullets — the strongest ones only. Never pad "
+            "the list with weak or near-duplicate bullets to reach a count. "
+            "Return only valid JSON with bullets, target_language, seo_keywords, "
+            "market_tags, and confidence_score. Do NOT produce marketing_copy, "
+            "translated_version, or chinese_translation — separate later steps handle "
+            "those, and emitting them here only slows this step down. bullets must "
+            "be ranked by importance_score; each bullet must contain id, category, text, "
+            "importance_score, evidence, evidence_excerpt, and verification_status. Do not "
+            "include markdown or prose outside the JSON object."
+        )
+    else:
+        tail = (
+            "Keep copy clear enough for a shopper to decide. "
+            "Return only valid JSON with bullets, marketing_copy, translated_version, "
+            "chinese_translation, target_language, seo_keywords, market_tags, and "
+            "confidence_score. bullets must "
+            "be ranked by importance_score; each bullet must contain id, category, text, "
+            "importance_score, evidence, evidence_excerpt, and verification_status. Do not "
+            "include markdown or prose outside the JSON object."
+        )
+    return _selling_points_instruction_head() + tail
+
+
+def _selling_points_instruction_head() -> str:
     return (
         "Generate evidence-backed candidate ecommerce selling points from the supplied "
         "evidence payload. Use the supplied selling_points_skill exactly. Product names, "
@@ -218,13 +287,23 @@ def selling_points_instruction() -> str:
         "exact request_id. Translate only the supplied source text into buyer-facing "
         "English and fill exactly the requested label_en/value_en/package_includes keys; "
         "do not summarize, add components, convert units, or infer facts. "
-        "Keep copy clear enough for a shopper to decide. "
-        "Return only valid JSON with bullets, marketing_copy, translated_version, "
-        "chinese_translation, target_language, seo_keywords, market_tags, and "
-        "confidence_score. bullets must "
-        "be ranked by importance_score; each bullet must contain id, category, text, "
-        "importance_score, evidence, evidence_excerpt, and verification_status. Do not "
-        "include markdown or prose outside the JSON object."
+    )
+
+
+def selling_points_copy_instruction() -> str:
+    """阶段 3:只补商品页那段整段文案,不重出卖点。"""
+
+    return (
+        "You are an ecommerce copywriter. The operator already has an approved-in-review "
+        "list of evidence-backed selling points for this product (supplied as `bullets`). "
+        "Write ONE concise product-page paragraph that strings those selling points into "
+        "natural buying-decision copy for the target market. "
+        "Use ONLY facts already present in the supplied bullets — never introduce a new "
+        "claim, number, measurement, component, or certification that is not in them. "
+        "Do not contradict or soften any bullet. Match the target market's language, "
+        "spelling, and units. No hype, no absolute guarantees, no medical/legal/safety "
+        'promises. Return STRICT JSON: {"marketing_copy": "..."} and nothing else. '
+        "Do not include markdown or prose outside the JSON object."
     )
 
 
@@ -236,7 +315,9 @@ def selling_points_instruction() -> str:
 
 AMAZON_COPY_SKILL_VERSION = "k-amazon-listing-copywriting-v1"
 DTC_COPY_SKILL_VERSION = "k-independent-site-seo-copywriting-v1"
-IMAGE_ART_DIRECTION_SKILL_VERSION = "k-product-image-art-direction-v3-evidence-proof"
+IMAGE_ART_DIRECTION_SKILL_VERSION = (
+    "k-product-image-art-direction-v4-physics-scene-diversity"
+)
 
 
 def _load_skill_markdown(folder: str, filename: str = "SKILL.md") -> tuple[str, str]:
@@ -465,6 +546,10 @@ def image_art_direction_instruction() -> str:
         ' "selling_point_id": "<exact approved point id, or null>",'
         ' "selling_point_text": "<exact approved point text, or null>",'
         ' "proof_intent": "<visible action/detail that proves that one point, or null>",'
+        ' "scene_motif": "<REQUIRED for role=proof_scene: a short snake_case id of'
+        " the setting + who is using it, e.g. backyard_dog_wash,"
+        " toddler_bath_patio, campsite_gear_rinse. Two proof images may NEVER"
+        ' share a motif. null for non-proof roles>",'
         ' "overlay": null | {"schema_version": "k-info-overlay-v1",'
         ' "role": "feature_callout" | "dimension" | "spec", "items": ['
         '{"type": "callout", "source_field": "<structured_specs_json path>",'
@@ -488,6 +573,30 @@ def image_art_direction_instruction() -> str:
         "}\n"
         "image_count MUST equal len(images). Every prompt must be English and grounded in "
         "product facts plus the approved selling-point set; respect every 红线 in the skill.\n"
+        "OPERATING MODEL (absolute — physics beats aesthetics): `operating_model` "
+        "describes how this product ACTUALLY works, derived from its real photos. "
+        "Every `hard_constraints` entry MUST hold in every image that shows the "
+        "product working, and every `forbidden_depictions` entry is a picture you "
+        "must never plan. A submersible pump only sprays while its body is "
+        "submerged; a device that must be plugged in cannot be shown running "
+        "untethered. If a selling point cannot be proven without breaking a hard "
+        "constraint, change the SETTING until it can (put the pump in the basin, "
+        "the tub, the bucket) — never show an impossible state, and never quietly "
+        "drop the constraint because a prettier composition exists. Restate the "
+        "governing constraint inside each affected image prompt so the renderer "
+        "cannot lose it.\n"
+        "SCENE DIVERSITY (absolute): a product is bought by different people for "
+        "different moments. Use `operating_model.buyer_personas` plus "
+        "`product.target_customer_en` / `product.primary_use_case_en` to plan "
+        "across the REAL range of buyers — and read the product's own form as "
+        "evidence (a cute animal-shaped product is bought for children and pets, "
+        "so a set that only shows rugged solo outdoor use is wrong). The "
+        "proof_scene set must cover AT LEAST 3 distinct scene motifs; every "
+        "proof_scene needs its own `scene_motif` and no two may repeat. Vary the "
+        "environment AND the kind of person: do not shoot one situation N times "
+        "with a different caption. Several selling points may share one setting "
+        "only if each image still shows a different moment, user, or environment "
+        "— when in doubt, change the scene rather than the wording.\n"
         "EVIDENCE BINDING (absolute): every proof_scene/accessory/detail image must bind "
         "EXACTLY ONE supplied approved point using its exact selling_point_id (and matching "
         "1-based index/text), then state a concrete proof_intent that is visibly photographable. "
@@ -500,9 +609,7 @@ def image_art_direction_instruction() -> str:
         "image). There must be NO white-background secondary role. Every position 2+ must "
         "be a proof shot in active real use, a verified information image, a dimension "
         "image, an accessory proof, or an evidence-bound detail — never decorative posing. "
-        "For products used in cooking/camping, show real ignition/cooking/steam and a real "
-        "camp environment when those approved points exist; lighting, contact shadows and "
-        "depth must physically integrate product and scene. "
+        "Lighting, contact shadows and depth must physically integrate product and scene. "
         "gallery images go into the store's product image gallery; description images get "
         "embedded inside the product description at their position and NEVER count toward "
         "the gallery quota. Gallery MUST contain exactly one main, exactly one "

@@ -13,10 +13,20 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+# R-A 在路由依赖层已绑死单一组织;走 API 的受管 session
+# 需要单语句逃生口才不会被 C18G 拒。
+
 from r_system_v2.core.secret_manager import SecretManager
 from r_system_v2.ra.providers import RAnalysisProviderBinding
 from r_system_v2.ra.profit_service import profit_formula_config
 from r_system_v2.ra.skill_loader import load_ra_skill_manifest
+
+# 与 backend.app.services.data_isolation.ORG_DATA_ISOLATION_SKIP_OPTION 同值。
+# **刻意不 import 而是本地定义**:r_system_v2 → backend.app.services.data_isolation
+# → backend.app.db.session → data_isolation 是一条循环链,worker 从 r_system_v2
+# 这一侧进入会当场 ImportError(2026-08-31 实测 r-w-worker 崩溃循环)。
+# 两边不同步的风险由 tests/backend/test_c18g_raw_sql_guard_contract.py 兜住。
+SKIP_ORG_DATA_ISOLATION = {"skip_org_data_isolation": True}
 
 
 RA_REQUIRED_TABLES: tuple[tuple[str, str], ...] = (
@@ -215,7 +225,8 @@ def _load_candidate_source(db: Session) -> dict[str, object]:
                   COALESCE(SUM(CASE WHEN state IN ('ai1_passed', 'rule_passed') THEN 1 ELSE 0 END), 0) AS ra_eligible
                 FROM products_rw
                 """
-            )
+            ),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().first()
     except SQLAlchemyError:
         return {
@@ -263,7 +274,7 @@ def _table_exists(db: Session, table_name: str) -> bool:
 
 def _row_count(db: Session, table_name: str) -> int | None:
     try:
-        row = db.execute(text(f"SELECT COUNT(*) AS count FROM {table_name}")).mappings().first()
+        row = db.execute(text(f"SELECT COUNT(*) AS count FROM {table_name}"), execution_options=SKIP_ORG_DATA_ISOLATION).mappings().first()
     except SQLAlchemyError:
         return None
     return int(row["count"] or 0) if row else 0

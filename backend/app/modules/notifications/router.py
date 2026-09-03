@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from hmac import compare_digest
+
 import os
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -132,7 +134,10 @@ def ingest_endpoint(
                 f"{INGEST_TOKEN_ENV} on the backend to enable n8n callbacks."
             ),
         )
-    if x_notify_token != expected:
+    # 常数时间比较:裸 != 会因为逐字符提前返回而泄漏「前几位对了」的信息,
+    # 让攻击者能逐位试出 token。全仓其它 12 处机器端点都用 compare_digest,
+    # 只有这一处是裸比较(2026-08-31 体检)。
+    if not compare_digest(str(x_notify_token or ""), str(expected)):
         raise HTTPException(status_code=401, detail="Invalid ingest token.")
     row = service.create_notification(
         db,

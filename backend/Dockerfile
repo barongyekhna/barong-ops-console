@@ -17,11 +17,15 @@ RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app \
     && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media /var/lib/barong/f-media \
+                /var/lib/barong/agent-memory \
     && chown -R app:app /app /var/lib/barong /ms-playwright
 
 COPY --chown=app:app backend ./backend
 COPY --chown=app:app r_system_v2 ./r_system_v2
 COPY --chown=app:app tests/backend ./tests/backend
+# 运维检查脚本要在容器里跑得起来（scripts/check_worker_heartbeats.py 只连库、
+# 不依赖控制台 UI，是数字员工「够不着控制台就没法上报」那条死循环的出口）。
+COPY --chown=app:app scripts ./scripts
 COPY --chown=app:app tests/fixtures ./tests/fixtures
 
 USER app

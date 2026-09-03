@@ -105,9 +105,17 @@ def render_intro_block(photos: list[dict] | None = None) -> str:
         f'<p class="by-lead">{_e(policies.WHOLESALE_INTRO_LEAD)}</p>'
         '<ul class="by-list">'
         f"<li><strong>We do in-house:</strong> {inhouse}</li>"
-        f"<li><strong>We partner for:</strong> {partnered}</li>"
+        # "partner for" 太含糊,采购读不出"你到底买不买得起责任"。
+        # "source from qualified partners" 同时说清了两件事:外购,且有门槛。
+        f"<li><strong>We source from qualified partners:</strong> "
+        f"{partnered}</li>"
         "</ul>"
+        # 顺序是有讲究的:先「怎么挑的供应商」(用脚跑出来的数字)再「密封工艺」
+        # (别人抄不走的工程例子),最后「我们不做什么」。可信度是这么堆起来的:
+        # 具体事实 → 硬例子 → 主动划边界。反过来排就变成又一篇自我介绍。
+        f"<p>{_e(policies.WHOLESALE_INTRO_SOURCING)}</p>"
         f"<p>{_e(policies.WHOLESALE_INTRO_CLOSE)}</p>"
+        f"<p>{_e(policies.WHOLESALE_INTRO_LIMITS)}</p>"
         f"<p><strong>{_e(policies.WHOLESALE_INTRO_PROOF)}</strong></p>"
         f'<p class="by-meta">{_e(policies.WHOLESALE_SELLER_LINE)}</p>' 
         # `by-photo-strip`:四张工厂照排成一行(手机 2×2)。默认 `.by-cards` 是

@@ -67,7 +67,20 @@ def _entry(*, ok: bool, status: int, data: Any = None, detail: Any = None) -> Ca
 
 
 def _deferred_entry(detail: str) -> CapabilityEntry:
-    return _entry(ok=False, status=503, detail=detail)
+    """有意不在批量 bootstrap 里查的项。**不是故障。**
+
+    2026-08-31 体检：这里原本返回 `status=503, ok=False`，而前端把所有 ok=False
+    折叠成一个「降级」布尔 —— 于是这 4 个恒定的 deferred 项让侧边栏那句
+    「部分信息待刷新」从登录第一秒起就永远亮着，成了一个永远亮的假警报。
+
+    改用 204（No Content：请求成立，只是这次没有内容给你）并显式标 `deferred`，
+    让调用方能区分「故意不查」和「查了但失败」。
+    这里**不改成真去查** —— 那会给全站每个已鉴权请求再加 4 次数据库往返，
+    而中间件本身已经背着约 900ms 的固定开销。
+    """
+    entry = _entry(ok=False, status=204, detail=detail)
+    entry["deferred"] = True
+    return entry
 
 
 def _can_read_target(

@@ -31,6 +31,11 @@ class ModuleControlError(ValueError):
     pass
 
 
+from .module_registry import (
+    FACTORY_ONLY_MODULE_KEYS,
+    INTL_TRADE_ONLY_MODULE_KEYS,
+)
+
 TARGET_PRODUCT_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 I_IMAGE_SYSTEM_MODULE_ID = "i.image_system"
 I_IMAGE_SYSTEM_ORGANIZATION_NAME = TARGET_PRODUCT_ORGANIZATION_NAME
@@ -45,17 +50,10 @@ B2B_WHOLESALE_MODULE_ID = "b2b.wholesale"
 # M 系列只属于 factory 类型组织(按 org_type 判,不按组织名;2026-08-21 拍板)。
 MFG_INVENTORY_MODULE_ID = "mfg.inventory"
 FACTORY_ORG_TYPE = "factory"
-TRADE_ONLY_MODULE_IDS = frozenset(
-    {
-        "b2b.wholesale",
-        "content.desk",
-        "f.enrichment",
-        "h.site_health",
-        "k.product_knowledge",
-        "p.upload",
-        "w.site_ops",
-    }
-)
+# 唯一真相源在 module_registry。这里曾经是一份手抄件，漏了 geo.content /
+# seo.content —— owner 的侧边栏里制造组织下会冒出 GEO/SEO 内容引擎。
+# 手抄一份清单就一定会漂移，所以直接引用。
+TRADE_ONLY_MODULE_IDS = INTL_TRADE_ONLY_MODULE_KEYS
 
 
 def _is_r_series_module(module_id: str) -> bool:
@@ -66,17 +64,15 @@ def _module_allowed_for_organization(
     organization: OrganizationRecord,
     manifest: ModuleManifestV1,
 ) -> bool:
-    organization_name = organization.org_name.strip()
-    if manifest.module_key == MFG_INVENTORY_MODULE_ID:
-        return (organization.org_type or "").strip() == FACTORY_ORG_TYPE
-    if manifest.module_key == I_IMAGE_SYSTEM_MODULE_ID:
-        return organization_name == I_IMAGE_SYSTEM_ORGANIZATION_NAME
-    if _is_r_series_module(manifest.module_key):
-        return organization_name == R_SERIES_ORGANIZATION_NAME
-    if manifest.module_key == CS_CUSTOMER_SERVICE_MODULE_ID:
-        return organization_name == TARGET_PRODUCT_ORGANIZATION_NAME
+    # **按 org_type 判，不按组织名。**
+    # 组织名是可以改的（工商变更、简称调整），而这套判定原本散在三处、
+    # 每处都拿中文名做字符串比较 —— 改一次名字三处一起失效，而且失效方式是
+    # 「模块静默出现在不该出现的组织下」，不会报错。
+    org_type = (organization.org_type or "").strip()
+    if manifest.module_key in FACTORY_ONLY_MODULE_KEYS:
+        return org_type == FACTORY_ORG_TYPE
     if manifest.module_key in TRADE_ONLY_MODULE_IDS:
-        return organization_name == TARGET_PRODUCT_ORGANIZATION_NAME
+        return org_type != FACTORY_ORG_TYPE
     return True
 
 

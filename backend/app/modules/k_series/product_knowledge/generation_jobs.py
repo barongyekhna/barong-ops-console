@@ -23,7 +23,8 @@ from sqlalchemy.orm import Session
 
 from ....db.session import SessionLocal
 from ....models.user import User
-from .scope_shim import KScopeContext
+from .scope_shim import KScopeContext, normalize_scope_context
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from .selling_points_jobs import run_selling_points_job
 from .workflow_engine import KWorkflowOrchestratorV2
 
@@ -97,6 +98,7 @@ def enqueue_generation_jobs(
                 "business_context": scope_context.business_context,
                 "scope_mode": scope_context.scope_mode,
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).first()
         if row is None:
             # 已有在途任务:回报那一条,让前端接着轮它而不是以为没反应。
@@ -105,12 +107,18 @@ def enqueue_generation_jobs(
                     f"""
                     SELECT id, status FROM {_TABLE}
                     WHERE product_id = :product_id AND job_type = :job_type
+                      AND workspace_key = :workspace_key
                       AND status IN ('pending', 'running')
                     ORDER BY created_at DESC
                     LIMIT 1
                     """
                 ),
-                {"product_id": product_id, "job_type": job_type},
+                {
+                    "product_id": product_id,
+                    "job_type": job_type,
+                    "workspace_key": scope_context.workspace_key,
+                },
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             ).mappings().first()
             if existing is not None:
                 created.append(
@@ -149,6 +157,7 @@ def enqueue_generation_jobs(
                     "business_context": scope_context.business_context,
                     "scope_mode": scope_context.scope_mode,
                 },
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             ).first()
             if row is None:
                 continue
@@ -162,16 +171,28 @@ def jobs_status(
     batch_id: UUID | None = None,
     product_id: UUID | None = None,
     limit: int = 200,
+    scope_context: KScopeContext | None = None,
 ) -> list[dict[str, Any]]:
-    clauses = []
-    params: dict[str, Any] = {"limit": max(1, min(limit, 500))}
+    """任务面板。**走 API 请求线程,所以必须按 workspace 过滤。**
+
+    ``k_generation_jobs`` 用 workspace_key 分区(不是 org_id):裸 SQL 既要显式
+    带 workspace 过滤(跨组织隔离),又要用单语句逃生口让 C18G 放行这一条。
+    基线条件写死在 clauses 初值里,可选条件只能往后追加 —— 否则一旦两个
+    可选条件都不传,过滤就整条消失了(GEO 样板同款写法)。
+    """
+    scope = normalize_scope_context(scope_context)
+    clauses = ["workspace_key = :workspace_key"]
+    params: dict[str, Any] = {
+        "limit": max(1, min(limit, 500)),
+        "workspace_key": scope.workspace_key,
+    }
     if batch_id is not None:
         clauses.append("batch_id = :batch_id")
         params["batch_id"] = batch_id
     if product_id is not None:
         clauses.append("product_id = :product_id")
         params["product_id"] = product_id
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    where = f"WHERE {' AND '.join(clauses)}"
     rows = db.execute(
         text(
             f"""
@@ -184,6 +205,7 @@ def jobs_status(
             """
         ),
         params,
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     return [
         {
@@ -222,6 +244,7 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"limit": limit},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     if not rows:
         return []
@@ -236,6 +259,7 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"ids": ids},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return [dict(r) for r in rows]
@@ -259,6 +283,7 @@ def _set_job_status(
                 """
             ),
             {"id": job_id, "status": status, "error": error, "skill_version": skill_version},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         db.commit()
 
@@ -371,6 +396,7 @@ def _run_brand_audit_job(
                 """
             ),
             {"pid": product.id},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).scalar()
         or 0
     )
@@ -635,6 +661,7 @@ def requeue_stale_running(db: Session, *, older_than_seconds: int = 900) -> int:
             """
         ),
         {"secs": str(older_than_seconds)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return result.rowcount or 0

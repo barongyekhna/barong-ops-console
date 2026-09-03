@@ -14,7 +14,17 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+# R-A 在路由依赖层已绑死单一组织;走 API 的受管 session
+# 需要单语句逃生口才不会被 C18G 拒。
+
 from r_system_v2.ra.profit_service import _json_bind
+
+# 与 backend.app.services.data_isolation.ORG_DATA_ISOLATION_SKIP_OPTION 同值。
+# **刻意不 import 而是本地定义**:r_system_v2 → backend.app.services.data_isolation
+# → backend.app.db.session → data_isolation 是一条循环链,worker 从 r_system_v2
+# 这一侧进入会当场 ImportError(2026-08-31 实测 r-w-worker 崩溃循环)。
+# 两边不同步的风险由 tests/backend/test_c18g_raw_sql_guard_contract.py 兜住。
+SKIP_ORG_DATA_ISOLATION = {"skip_org_data_isolation": True}
 
 
 STAGE_LABELS = {
@@ -157,6 +167,7 @@ def list_run_events(
             """
         ),
         params,
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings()
     items = []
     last_seq = int(params["after_seq"])

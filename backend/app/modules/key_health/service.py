@@ -26,6 +26,7 @@ from ...services.api_key_orchestration import _decrypt_key_value
 from ...services.data_isolation import without_org_data_isolation
 from ..notifications.service import create_notification
 from .probes import HEALTHY, WARNING_STATUSES, ProbeResult, ProbeTarget, safe_probe_target
+from ...services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 
 logger = logging.getLogger(__name__)
@@ -109,6 +110,7 @@ def exclusive_run_lock() -> Iterator[None]:
                 connection.execute(
                     text("SELECT pg_advisory_unlock(:lock_id)"),
                     {"lock_id": RUN_LOCK_ID},
+                    execution_options=SKIP_ORG_DATA_ISOLATION,
                 )
                 connection.commit()
             except Exception:

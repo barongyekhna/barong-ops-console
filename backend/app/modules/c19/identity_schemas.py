@@ -26,6 +26,7 @@ class C19ProfileSummaryRead(BaseModel):
     user_id: int
     display_name: str
     avatar_ref: str | None = None
+    is_bot: bool = False
 
 
 class C19ProfileRead(C19ProfileSummaryRead):

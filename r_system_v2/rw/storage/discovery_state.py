@@ -9,6 +9,16 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+# 与 backend.app.services.data_isolation.ORG_DATA_ISOLATION_SKIP_OPTION 同值。
+# **刻意不 import 而是本地定义**:r_system_v2 → backend.app.services.data_isolation
+# → backend.app.db.session → data_isolation 是一条循环链,worker 从 r_system_v2
+# 这一侧进入会当场 ImportError(2026-08-31 实测 r-w-worker 崩溃循环)。
+# 两边不同步的风险由 tests/backend/test_c18g_raw_sql_guard_contract.py 兜住。
+SKIP_ORG_DATA_ISOLATION = {"skip_org_data_isolation": True}
+
+# R-W 在路由依赖层已绑死单一组织;这些表无 org_id 列,
+# 走 API 的受管 session 需要单语句逃生口才不会被 C18G 拒。
+
 
 DISCOVERY_STATE_KEY = "rw_keepa_discovery_state"
 DISCOVERY_STATE_VERSION = 1
@@ -44,6 +54,7 @@ def _load_state(db: Session) -> dict[str, Any]:
         row = db.execute(
             text("SELECT value FROM rw_runtime_settings WHERE key = :key"),
             {"key": DISCOVERY_STATE_KEY},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().first()
     except SQLAlchemyError:
         db.rollback()
@@ -79,6 +90,7 @@ def _save_state(db: Session, state: dict[str, Any]) -> None:
                 """
             ),
             {"key": DISCOVERY_STATE_KEY, "value": value},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         return
 
@@ -92,6 +104,7 @@ def _save_state(db: Session, state: dict[str, Any]) -> None:
             """
         ),
         {"key": DISCOVERY_STATE_KEY, "value": value},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     if not updated.rowcount:
         db.execute(
@@ -102,4 +115,5 @@ def _save_state(db: Session, state: dict[str, Any]) -> None:
                 """
             ),
             {"key": DISCOVERY_STATE_KEY, "value": value},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )

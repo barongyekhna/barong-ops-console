@@ -25,6 +25,7 @@ from r_system_v2.ra.quota_ledger import (
 
 from ...api.deps import get_current_user
 from ...core.roles import is_super_admin_role
+from ...core.target_org_guard import enforce_caller_is_target_org
 from ...db.session import get_db
 from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
@@ -52,6 +53,17 @@ def _require_f_permission(permission_key: str):
         db: Session = Depends(get_db),
         user: User = Depends(get_current_user),
     ) -> User:
+        # H1: F sourcing data has no org_id/workspace_key column, so cross-org
+        # isolation must be enforced at the gate — caller org must be the F
+        # target org (owner is global and exempt). Blocks a super_admin of
+        # another org from reading this org's 1688 candidates/keywords/quota.
+        enforce_caller_is_target_org(
+            request,
+            db,
+            user,
+            target_name=C.TARGET_ORGANIZATION_NAME,
+            detail="You do not have access to sourcing tools.",
+        )
         permissions = resolve_current_user_permission_info(db, user, request=request)
         allowed_keys = {permission_key}
         if permission_key == C.PERMISSION_READ:

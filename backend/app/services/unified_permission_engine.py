@@ -378,6 +378,34 @@ class UnifiedPermissionEngine:
 
         role = normalize_role(membership.role)
         rbac_metadata = _legacy_metadata(role, module_id, action_text)
+
+        # 平台 owner 在模块绑定门之前放行。
+        # 2026-08-31 体检：module_bindings 表是 0 行，而绑定查不到就返回 False，
+        # 于是这道门对所有人一律拒绝；又因为它排在 owner 豁免之前，连 owner 都被挡，
+        # 结果是 owner 打不开操作日志——审计能力对最该有审计能力的人关闭。
+        # 引擎另一条路径 decide_permission_key 一直有 owner 分支，只有这条漏了。
+        # 非 owner 仍然照常受绑定约束，这不是把门拆掉。
+        if is_owner_role(user.role):
+            module_actions = _module_actions(module_id)
+            return self._allow(
+                request,
+                user_id=user_id,
+                org_id=org_id,
+                module_id=module_id,
+                action=action.value,
+                role=normalize_role(user.role),
+                reason=(
+                    "Platform owner has global access; module binding is not a "
+                    "gate for the owner role."
+                ),
+                allowed_actions=_sorted_actions(module_actions),
+                legacy_rbac_metadata=rbac_metadata,
+                c18c_org_membership_checked=True,
+                c18d_module_binding_checked=True,
+                c18f_isolation_applied=True,
+                owner_platform_role=True,
+            )
+
         if not self._module_bound_to_org(module_id=module_id, org_id=org_id):
             return self._deny(
                 request,

@@ -24,6 +24,7 @@ from .models import KProductKnowledgeProduct
 from .scope_shim import KScopeContext
 from .sku_allocator import ensure_product_sku
 from .spec_templates import refresh_product_spec_completeness
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 _RW_COLUMNS = (
     "asin, marketplace, title, brand, category_id, category_path, "
@@ -31,11 +32,16 @@ _RW_COLUMNS = (
 )
 
 
-def _ra_keywords_for_asin(db: Session, asin: str) -> dict[str, Any]:
+def _ra_keywords_for_asin(db: Session, asin: str, org_id: str) -> dict[str, Any]:
     """R-A 选品报告里的关键词块（Rainforest+Serper+Google Ads 汇总）。
 
     有报告就用报告的词；没有（比如直接从 R-W 手动搬运）返回空 dict，
     调用方回退到 source_query/title。
+
+    2026-08-31 体检:这条以前**只按 asin 查、完全不带组织过滤**,而
+    ``ra_reports`` 是有 org_id 列的 —— 同一个 ASIN 如果被另一个组织也分析过,
+    这里会把对方的关键词研究结果搬进本组织的产品。这是真实的越界读,
+    不是被 C18G 误伤,所以修法是**补过滤而不是加豁免**。
     """
     try:
         row = db.execute(
@@ -43,12 +49,12 @@ def _ra_keywords_for_asin(db: Session, asin: str) -> dict[str, Any]:
                 """
                 SELECT payload
                 FROM ra_reports
-                WHERE UPPER(asin) = :asin
+                WHERE UPPER(asin) = :asin AND org_id = :org_id
                 ORDER BY created_at DESC
                 LIMIT 1
                 """
             ),
-            {"asin": asin.strip().upper()},
+            {"asin": asin.strip().upper(), "org_id": org_id},
         ).mappings().first()
     except Exception:
         db.rollback()
@@ -87,6 +93,7 @@ def transfer_from_rw(
         rw = db.execute(
             text(f"SELECT {_RW_COLUMNS} FROM products_rw WHERE asin = :a"),
             {"a": asin},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().first()
         if rw is None:
             errors.append({"asin": asin, "reason": "not_in_rw"})
@@ -102,11 +109,12 @@ def transfer_from_rw(
                 "w": scope_context.workspace_key,
                 "b": scope_context.business_context,
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).first()
         if already is not None:
             skipped.append(asin)
             continue
-        ra_keywords = _ra_keywords_for_asin(db, asin)
+        ra_keywords = _ra_keywords_for_asin(db, asin, scope_context.workspace_key)
         primary_keyword = (
             str(ra_keywords.get("primary") or "").strip()
             or rw["source_query"]

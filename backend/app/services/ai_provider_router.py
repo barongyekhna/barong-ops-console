@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Literal
@@ -32,7 +33,14 @@ from .provider_config_service import (
 
 AIProvider = Literal["serp", "chatgpt", "claude", "deepseek"]
 AITaskType = Literal[
-    "search", "chat", "generate", "selling_points", "content_analysis"
+    "search",
+    "chat",
+    "generate",
+    "selling_points",
+    "selling_points_translation",
+    "selling_points_copy",
+    "content_analysis",
+    "agent_chat",
 ]
 
 MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
@@ -45,10 +53,19 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "chat": "deepseek-v4-pro",
         "generate": "deepseek-v4-pro",
         "selling_points": "deepseek-v4-pro",
+        # 卖点三阶段里的后两刀都是"照着已有卖点改写",不需要顶配推理:
+        # 中位数实测 pro 要 19.5s,同通道 flash 只要 6.3s(2026-08-03)。
+        # 此前这两个 task_type 在注册表里没条目,悄悄落到 default=pro。
+        "selling_points_translation": "deepseek-v4-flash",
+        "selling_points_copy": "deepseek-v4-flash",
         # GEO 审稿助读:逐篇解读(翻译/GEO 作用/为什么这么写),量大且不需要
         # 顶配推理,用户拍板走便宜的 flash(2026-07-28 实探供应商在售模型:
         # deepseek-v4-flash / deepseek-v4-pro)。
         "content_analysis": "deepseek-v4-flash",
+        # 数字员工(白苏婉)在 C19 通讯里的对话。刻意不复用 "chat" —— 那条
+        # 落 default=pro,中位数 19.5s,聊天窗里等 20 秒等于死机。护栏在代码里
+        # (动作白名单 + 权限位)而不在模型脑子里,所以这里可以放心用便宜的 flash。
+        "agent_chat": "deepseek-v4-flash",
     },
     "chatgpt": {
         "default": "gpt-5.6-luna",
@@ -91,6 +108,16 @@ MODEL_FALLBACKS: dict[str, list[str]] = {
 # 生成类任务全部走异步 job,放宽超时不影响交互体验(2026-07-22)。
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 240.0
 DEFAULT_PROVIDER_MAX_ATTEMPTS = 1
+# 一次 execute() 的墙钟总预算(含同 provider 模型降级 + 跨 provider fallback)。
+# 上面那个 240s 只是 socket 单次操作超时,管不住"慢慢滴响应体"——台账里出现过
+# 单次 deepseek 调用 903s 仍 success(2026-08-03)。而 fallback 链会再开一份
+# 全新的 240s 预算,所以旧的真实上限是 ~480s 而非 240s。
+# 420s 的取值:卖点生成 p50=100s、p95 仍在 200s 以内,420s 能容纳绝大多数正常
+# 生成;超出的多半是上游抽风,与其让它占着 worker 槽位把整条 K 队列拖死,
+# 不如失败掉让运营重点一次。
+DEFAULT_PROVIDER_TOTAL_BUDGET_SECONDS = float(
+    os.getenv("AI_PROVIDER_TOTAL_BUDGET_SECONDS", "420")
+)
 
 
 class AIProviderExecutionError(RuntimeError):
@@ -399,11 +426,27 @@ def _parse_provider_content(response: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+_READ_CHUNK_BYTES = 65536
+
+
 def _post_json(
     *,
     request: ProviderRequest,
     timeout_seconds: float,
+    deadline: float | None = None,
 ) -> dict[str, Any]:
+    """打一次 provider,受 socket 超时**和**墙钟 deadline 双重约束。
+
+    ``urlopen(timeout=)`` 只是 socket 单次操作超时,不是总时长。只要对端
+    (或它前面的负载均衡)先发响应头、再一块一块慢慢滴响应体,每两次 recv
+    的间隔都小于 timeout,这个超时就永远不会触发——总时长可以拉到任意长。
+
+    实证(2026-08-03,event_streams 台账 40 条 selling_points 事件):
+    单次 deepseek 调用出现过 409s / 900.5s / 903.2s 的 **success**,
+    全部 attempt=1、无降级记录,而当时 timeout 配的是 240s。所以必须
+    在分块读的循环里自己累计计时。
+    """
+
     data = json.dumps(request.body).encode("utf-8")
     url_request = UrlRequest(
         request.url,
@@ -411,8 +454,25 @@ def _post_json(
         headers=request.headers,
         method="POST",
     )
-    with urlopen(url_request, timeout=timeout_seconds) as response:
-        body = response.read().decode("utf-8")
+
+    def _check_deadline() -> None:
+        if deadline is not None and perf_counter() >= deadline:
+            raise TimeoutError("provider_total_budget_exhausted")
+
+    _check_deadline()
+    socket_timeout = timeout_seconds
+    if deadline is not None:
+        socket_timeout = max(1.0, min(timeout_seconds, deadline - perf_counter()))
+
+    with urlopen(url_request, timeout=socket_timeout) as response:
+        chunks: list[bytes] = []
+        while True:
+            _check_deadline()
+            chunk = response.read(_READ_CHUNK_BYTES)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        body = b"".join(chunks).decode("utf-8")
     parsed = json.loads(body)
     if not isinstance(parsed, dict):
         raise ValueError("provider_response_not_object")
@@ -426,10 +486,12 @@ class AIExecutionRouter:
         *,
         timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
         max_attempts: int = DEFAULT_PROVIDER_MAX_ATTEMPTS,
+        total_budget_seconds: float = DEFAULT_PROVIDER_TOTAL_BUDGET_SECONDS,
     ) -> None:
         self.db = db
         self.timeout_seconds = timeout_seconds
         self.max_attempts = max(1, max_attempts)
+        self.total_budget_seconds = total_budget_seconds
 
     def execute(
         self,
@@ -458,6 +520,9 @@ class AIExecutionRouter:
         )
         self._validate_context_org(context=context, org_record=org_record)
         key = self._key_for_provider(context, canonical_provider)
+        # 墙钟总预算在这里起算,贯穿模型降级链与 provider fallback。
+        # 不设它的话,一次 execute() 的真实上限是 timeout×(降级次数+fallback),
+        # 而不是 timeout。
         return self._execute_with_key(
             provider=canonical_provider,
             task_type=task_type,
@@ -468,6 +533,7 @@ class AIExecutionRouter:
             execution_context=context,
             fallback_provider=fallback_provider,
             fallback_allowed=True,
+            deadline=perf_counter() + self.total_budget_seconds,
         )
 
     def _execute_with_key(
@@ -482,6 +548,7 @@ class AIExecutionRouter:
         execution_context: ModuleExecutionContext,
         fallback_provider: str | None,
         fallback_allowed: bool,
+        deadline: float | None = None,
     ) -> dict[str, Any]:
         model = AIModelRouter.resolve_model(provider=provider, task_type=task_type)
         config = upsert_provider_config(
@@ -534,6 +601,7 @@ class AIExecutionRouter:
                     raw_response = _post_json(
                         request=provider_request,
                         timeout_seconds=self.timeout_seconds,
+                        deadline=deadline,
                     )
                     parsed = adapter.response_parser(raw_response)
                     latency_ms = (perf_counter() - started) * 1000
@@ -575,12 +643,22 @@ class AIExecutionRouter:
                         details={"attempt": attempt, "model": active_model},
                     )
                 except (URLError, json.JSONDecodeError, ValueError) as exc:
+                    # 连接阶段超时时 urlopen 抛的是 URLError(reason=socket.timeout),
+                    # 会落到这里被报成 REQUEST_FAILED —— 明明是超时却不叫超时,
+                    # 排查时看错误码会被带偏。按 reason 还原它的真身。
+                    timed_out = isinstance(exc, URLError) and isinstance(
+                        getattr(exc, "reason", None), TimeoutError
+                    )
                     last_error = AIProviderExecutionError(
-                        "AI_PROVIDER_REQUEST_FAILED",
-                        f"AI provider '{provider}' request failed.",
+                        "AI_PROVIDER_TIMEOUT" if timed_out else "AI_PROVIDER_REQUEST_FAILED",
+                        (
+                            f"AI provider '{provider}' request timed out."
+                            if timed_out
+                            else f"AI provider '{provider}' request failed."
+                        ),
                         provider=provider,
                         task_type=task_type,
-                        status_code=502,
+                        status_code=504 if timed_out else 502,
                         details={
                             "attempt": attempt,
                             "error_class": exc.__class__.__name__,
@@ -606,7 +684,10 @@ class AIExecutionRouter:
                 break
 
         resolved_fallback = fallback_provider or DEFAULT_FALLBACK_PROVIDERS.get(provider)
-        if fallback_allowed and resolved_fallback:
+        # 预算耗尽就别再开一份全新的 240s 去打备胎 —— 那正是"名义 240s 上限
+        # 实际能跑 480s"的来源。宁可现在就失败,让上层重试。
+        budget_left = deadline is None or perf_counter() < deadline
+        if fallback_allowed and resolved_fallback and budget_left:
             try:
                 fallback = normalize_provider(resolved_fallback)
                 fallback_key = self._key_for_provider(execution_context, fallback)
@@ -620,6 +701,7 @@ class AIExecutionRouter:
                     execution_context=execution_context,
                     fallback_provider=None,
                     fallback_allowed=False,
+                    deadline=deadline,
                 )
             except (ProviderConfigError, AIProviderExecutionError):
                 pass

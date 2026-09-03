@@ -300,8 +300,9 @@ def _summary_from_row(row: ConversationListRow) -> ConversationSummary:
         direct_peer=(
             DirectPeerView(
                 user_id=peer_profile.user_id,
-                display_name=peer_profile.display_name,
+                display_name=peer_profile.resolved_display_name,
                 avatar_ref=peer_profile.avatar_ref,
+                is_bot=row.direct_peer_is_bot,
             )
             if peer_profile is not None
             else None

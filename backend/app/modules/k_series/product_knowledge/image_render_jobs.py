@@ -59,6 +59,7 @@ from .info_overlay import (
     normalize_overlay_contract,
 )
 from .scope_shim import KScopeContext
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from .workflow_engine import (
     IMAGE_SOURCE_I_SYSTEM,
     _approved_selling_points_snapshot,
@@ -1339,6 +1340,7 @@ def enqueue_image_render_jobs(
             """
         ),
         {"product_id": product.id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).scalar()
     if int(in_flight or 0) > 0:
         raise KImageRenderError(
@@ -1424,6 +1426,7 @@ def enqueue_image_render_jobs(
                 "business_context": scope_context.business_context,
                 "scope_mode": scope_context.scope_mode,
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         created.append(_job_dict(job_id, batch_id, position, placement, asset_role))
     if not created:
@@ -1480,6 +1483,7 @@ def render_jobs_status(
                 """
             ),
             {"product_id": product_id},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).scalar()
     if batch_id is None:
         return {"batch_id": None, "jobs": [], "summary": _summary([])}
@@ -1494,6 +1498,7 @@ def render_jobs_status(
             """
         ),
         {"product_id": product_id, "batch_id": batch_id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     jobs = [
         {
@@ -1542,6 +1547,7 @@ def retry_failed_render_jobs(
             """
         ),
         {"product_id": product_id, "batch_id": batch_id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     if result.rowcount:
         # Reset the batch's finalize marker so the retried run re-finalizes.
@@ -1554,6 +1560,7 @@ def retry_failed_render_jobs(
                 """
             ),
             {"batch_id": batch_id},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
     return result.rowcount or 0
 
@@ -1577,6 +1584,7 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"limit": limit},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     if not rows:
         return []
@@ -1591,6 +1599,7 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
             """
         ),
         {"ids": ids},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return [dict(row) for row in rows]
@@ -1614,6 +1623,7 @@ def _set_job_status(
                 """
             ),
             {"id": job_id, "status": status, "error": error, "asset_id": asset_id},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         db.commit()
 
@@ -2009,6 +2019,7 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
                 """
             ),
             {"batch_id": batch_id},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().all()
         if not rows:
             return
@@ -2025,6 +2036,7 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
                 """
             ),
             {"batch_id": batch_id},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
 
         product = db.get(KProductKnowledgeProduct, rows[0]["product_id"])
@@ -2067,6 +2079,7 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
                     "business_context": rows[0].get("business_context"),
                     "scope_mode": rows[0].get("scope_mode"),
                 },
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             )
 
         level = "info" if not failed else ("warning" if completed else "error")
@@ -2155,6 +2168,7 @@ def cleanup_stale_staged(db: Session, product_id: UUID | None = None) -> int:
             """
         ),
         params,
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     return result.rowcount or 0
 
@@ -2364,6 +2378,7 @@ def save_render_assets(
                 "tag": RENDER_PIPELINE_TAG,
                 "position": position,
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).scalars().all()
         # 被替换旧图的 I 媒体库镜像同步下架
         if replaced:
@@ -2376,6 +2391,7 @@ def save_render_assets(
                     """
                 ),
                 {"image_ids": [f"k-render-{rid}" for rid in replaced]},
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             )
         if row.asset_role == ASSET_ROLE_MAIN:
             main_asset = row
@@ -2428,6 +2444,7 @@ def save_render_assets(
                 "business_context": scope_context.business_context,
                 "scope_mode": scope_context.scope_mode,
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
     return {"saved": saved, "audit_enqueued": bool(product.marketing_copy_json)}
 
@@ -2576,6 +2593,7 @@ def enqueue_rework_job(
                 else (asset.id if use_current_as_reference else None)
             ),
         },
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     return batch_id, _job_dict(job_id, batch_id, position, str(meta.get("placement") or PLACEMENT_GALLERY), asset.asset_role)
 
@@ -2648,6 +2666,7 @@ def requeue_stale_render_jobs(db: Session, *, older_than_seconds: int = 1800) ->
             """
         ),
         {"secs": str(older_than_seconds)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return result.rowcount or 0

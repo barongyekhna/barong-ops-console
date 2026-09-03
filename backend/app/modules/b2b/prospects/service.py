@@ -33,6 +33,7 @@ from .models import (
     B2BTargetCity,
 )
 from .serper_places import SerperPlacesError, search_places
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 logger = logging.getLogger(__name__)
 
@@ -330,6 +331,7 @@ def quota_status(db: Session) -> dict[str, int]:
                 "WHERE provider = :provider AND day = CURRENT_DATE"
             ),
             {"provider": PROVIDER_B2B_SERPER_PLACES},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         or 0
     )
@@ -371,6 +373,7 @@ def chain_hints(db: Session, prospects: list[B2BProspect]) -> dict[UUID, str]:
             "GROUP BY 1"
         ),
         {"names": list(names)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).all()
     city_counts = {row[0]: int(row[1]) for row in rows}
 

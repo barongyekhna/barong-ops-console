@@ -52,7 +52,16 @@ def _site_nav(db: Session) -> dict[str, Any]:
 def _self_check(db: Session) -> dict[str, Any]:
     from ..content_core.consistency import find_stranded
 
-    stranded = find_stranded(db)
+    # 跑挂的判据要单独收集:一条都没跑成却报「没有异常」,是假绿灯。
+    failed: list[str] = []
+    stranded = find_stranded(db, failed_labels=failed)
+    if failed:
+        return {
+            "key": "self_check",
+            "label": "内容自检",
+            "ok": False,
+            "text": f"没跑成({'/'.join(failed)})——这次的结论不可信",
+        }
     return {
         "key": "self_check",
         "label": "内容自检",

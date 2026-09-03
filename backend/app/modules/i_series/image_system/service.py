@@ -1149,6 +1149,7 @@ class IImageModelEngine:
         generation_count: int,
         reference_image_count: int,
         reference_images: list[tuple[str, bytes, str | None]] | None,
+        mask_image: tuple[str, bytes, str] | None = None,
     ) -> list[ImageCandidate]:
         url = provider_url(key.url, endpoint)
         headers = {
@@ -1172,17 +1173,35 @@ class IImageModelEngine:
                                 ),
                             )
                         )
+                    # 产品保护蒙版:不透明处模型不许改,透明处才重绘。K 用它锁住
+                    # 实拍产品像素,只让模型换背景(2026-08-03 换路后的核心)。
+                    # 注意它跟参考图用不同的表单字段,重试换字段名时不能连它一起换。
+                    mask_file: tuple[str, tuple[str, bytes, str]] | None = None
+                    if mask_image is not None:
+                        mask_file = (
+                            "mask",
+                            (
+                                safe_filename(mask_image[0]),
+                                mask_image[1],
+                                mask_image[2] or "image/png",
+                            ),
+                        )
                     data = {
                         "model": IMAGE_MODEL_NAME,
                         "prompt": image_prompt_enhanced,
                         "n": str(generation_count),
                         "size": size,
                     }
-                    response = client.post(url, headers=headers, data=data, files=files)
+                    post_files = files + ([mask_file] if mask_file else [])
+                    response = client.post(
+                        url, headers=headers, data=data, files=post_files
+                    )
                     if response.status_code in {400, 422} and files:
                         alternate_files = [
                             ("image", file_value) for _, file_value in files
                         ]
+                        if mask_file:
+                            alternate_files.append(mask_file)
                         response = client.post(
                             url,
                             headers=headers,
@@ -1244,6 +1263,7 @@ class IImageModelEngine:
         style_config: dict[str, Any] | None = None,
         reference_image_count: int = 0,
         reference_images: list[tuple[str, bytes, str | None]] | None = None,
+        mask_image: tuple[str, bytes, str] | None = None,
     ) -> list[ImageCandidate]:
         size, requested_width, requested_height = provider_size_for_aspect_ratio(
             aspect_ratio
@@ -1294,6 +1314,7 @@ class IImageModelEngine:
                     generation_count=generation_count,
                     reference_image_count=reference_image_count,
                     reference_images=reference_images,
+                    mask_image=mask_image,
                 )
                 for candidate in candidates:
                     candidate.metadata.update(

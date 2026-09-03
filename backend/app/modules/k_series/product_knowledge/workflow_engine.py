@@ -105,6 +105,7 @@ from .prompt_skills import (
 )
 from .scope_shim import KScopeContext, apply_scope_filters
 from .spec_templates import effective_product_category, missing_required_for_product
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 logger = logging.getLogger(__name__)
 
@@ -1343,7 +1344,7 @@ class KProductKnowledgeWorkflowEngine:
             execution.error_report_json = self._error_report(
                 execution,
                 code="IMAGE_BINDING_REQUIRED",
-                message="A manual upload or I-system image asset must be bound before export.",
+                message="上架前必须先绑定一张手动上传或 I 系列图片素材。",
                 step="image_handling",
             )
             self._append_trace(
@@ -1361,7 +1362,7 @@ class KProductKnowledgeWorkflowEngine:
             execution.error_report_json = self._error_report(
                 execution,
                 code="SELLING_POINTS_APPROVAL_REQUIRED",
-                message="Approve evidence-backed selling points before export.",
+                message="上架前请先审批有证据支撑的卖点。",
                 step="selling_points_review_manual",
             )
             self._append_trace(
@@ -2771,6 +2772,10 @@ def _copy_evidence_product_snapshot(
         ),
         "package_includes": package_includes,
         "organization_name": product.organization_name,
+        # 谁在用 / 用在哪 —— 作图排场景要靠它们才不会所有图撞进同一个母题
+        # (2026-08-03 熊猫花洒: 9 张图 5 张都是「营地里洗登山靴」)。
+        "target_customer_en": getattr(product, "target_customer_en", None),
+        "primary_use_case_en": getattr(product, "primary_use_case_en", None),
     }
 
 
@@ -3253,6 +3258,7 @@ def _variant_pack_quantities(db: Session, product: Any) -> list[int]:
                 "p": str(product.id),
                 "p_hex": str(product.id).replace("-", ""),
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).scalars().all()
     except Exception:  # noqa: BLE001 - 盒内文案兜底不许炸文案生成
         return []
@@ -3530,6 +3536,90 @@ def _image_brief_gallery_error(
     )
 
 
+# 一套图至少要覆盖几个不同的使用母题。低于这个数就是「同一张图拍了 N 遍」。
+# 2026-08-03 熊猫花洒: 9 张图 5 张同母题(营地洗登山靴 ×3 + 透明盆泡着 ×2)，
+# 而文案里的宠物洗澡/孩子洗澡/花园一个都没出现。根因是图组按「一条卖点一张
+# 图」排，卖点全是规格(2.11 GPM / 6.5 ft / IPX8)，每条规格最省事的证明方式都
+# 是同一个场景，必然撞车。
+_IMAGE_BRIEF_MIN_SCENE_MOTIFS = 3
+
+
+def _scene_motif_issues(images: list[Any]) -> list[dict[str, Any]]:
+    """proof_scene 的场景母题必须互不重复，且整套图覆盖足够多的母题。"""
+
+    motifs: list[tuple[int, str]] = []
+    missing: list[int] = []
+    for index, image in enumerate(images, start=1):
+        if not isinstance(image, dict):
+            continue
+        if str(image.get("role") or "").strip().lower() != "proof_scene":
+            continue
+        position = image.get("position")
+        try:
+            position = int(position)
+        except (TypeError, ValueError):
+            position = index
+        motif = re.sub(
+            r"[^a-z0-9]+", "_", str(image.get("scene_motif") or "").strip().lower()
+        ).strip("_")
+        if not motif:
+            missing.append(position)
+            continue
+        motifs.append((position, motif))
+
+    issues: list[dict[str, Any]] = []
+    if missing:
+        issues.append(
+            {
+                "role": "proof_scene",
+                "field": "scene_motif",
+                "positions": missing,
+                "message": (
+                    "every proof_scene image must declare a scene_motif "
+                    f"(missing at positions {missing})"
+                ),
+            }
+        )
+    seen: dict[str, int] = {}
+    for position, motif in motifs:
+        if motif in seen:
+            issues.append(
+                {
+                    "role": "proof_scene",
+                    "field": "scene_motif",
+                    "motif": motif,
+                    "positions": [seen[motif], position],
+                    "message": (
+                        f"scene_motif '{motif}' is reused at positions "
+                        f"{seen[motif]} and {position}; every proof_scene must "
+                        "prove its point in a DIFFERENT setting/user situation"
+                    ),
+                }
+            )
+        else:
+            seen[motif] = position
+    distinct = len(seen)
+    # 母题下限跟着 proof 张数走：有几张就得有几个不同母题，封顶 3。写死 3 会
+    # 让「只有 2 张 proof」的合法图组永远过不了(自相矛盾)。
+    expected = min(_IMAGE_BRIEF_MIN_SCENE_MOTIFS, len(motifs))
+    if motifs and distinct < expected:
+        issues.append(
+            {
+                "role": "proof_scene",
+                "field": "scene_motif",
+                "expected_minimum": expected,
+                "actual": distinct,
+                "message": (
+                    f"the proof_scene set must cover at least {expected} "
+                    f"distinct scene motifs (found {distinct}); vary the "
+                    "environment AND the kind of person using it, do not shoot "
+                    "one situation repeatedly"
+                ),
+            }
+        )
+    return issues
+
+
 def _validate_image_brief_gallery_composition(
     result: dict[str, Any],
     *,
@@ -3645,6 +3735,7 @@ def _validate_image_brief_gallery_composition(
                 ),
             }
         )
+    issues.extend(_scene_motif_issues(images))
     if issues:
         raise _image_brief_gallery_error(
             issues,
@@ -4834,7 +4925,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         execution.error_report_json = self._error_report(
             execution,
             code="IMAGE_BINDING_REQUIRED",
-            message="A manual upload or I-system image asset must be bound before export.",
+            message="上架前必须先绑定一张手动上传或 I 系列图片素材。",
             step="image_binding",
         )
         self._append_trace(execution, "image_binding", "blocked", error=execution.error_report_json)
@@ -4956,7 +5047,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             execution.error_report_json = self._error_report(
                 execution,
                 code="MARKETING_COPY_REQUIRED",
-                message="Generate the product marketing copy before export.",
+                message="上架前请先生成产品营销文案。",
                 step="marketing_copy_generation",
             )
             self._append_trace(
@@ -4974,7 +5065,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             execution.error_report_json = self._error_report(
                 execution,
                 code="IMAGE_BINDING_REQUIRED",
-                message="A manual upload or I-system image asset must be bound before export.",
+                message="上架前必须先绑定一张手动上传或 I 系列图片素材。",
                 step="image_binding",
             )
             self._append_trace(
@@ -5365,7 +5456,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         if not approved_points:
             raise KWorkflowExecutionError(
                 "SELLING_POINTS_APPROVAL_REQUIRED_FOR_COPY",
-                "Approve at least one evidence-backed selling point before generating marketing copy.",
+                "请先审批至少一个有证据支撑的卖点，再生成营销文案。",
                 status_code=409,
             )
         execution = self._latest_execution(product)
@@ -5573,7 +5664,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         if _image_brief_evidence_digest(product, current_points) != evidence_digest:
             raise KWorkflowExecutionError(
                 "MARKETING_COPY_EVIDENCE_CHANGED",
-                "Approved selling points or specifications changed while copy was generated; regenerate from the current evidence.",
+                "生成文案期间卖点或规格发生了变化，请根据当前证据重新生成。",
                 status_code=409,
             )
         _capture_ai_category_hint(product, result)
@@ -5594,6 +5685,68 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         self.db.add(product)
         self.db.flush()
         return product
+
+    def _resolve_operating_model(
+        self,
+        *,
+        product: KProductKnowledgeProduct,
+        product_snapshot: dict[str, Any],
+        key: Any,
+    ) -> dict[str, Any]:
+        """产品「怎么工作 / 谁在用」——看原厂参考图推导，供排图组/渲染/审查共用。
+
+        2026-08-03 熊猫花洒(PSPE-002)：作图链路上没有任何一环知道这是台潜水泵
+        (整机浸没才出水、无吸水管)，因为作图 AI 只拿到文字规格、从没见过产品照
+        片，于是 9 张图里 3 张把泵画在干燥地面上却在喷水。PSPE-001 栽过同一个坑
+        但当时只修了那个产品没修模块，所以原样再犯。
+
+        人工改过的(edited_by_user=True)直接沿用，绝不重新推导覆盖——重生成简报
+        不该把运营者的纠正冲掉。推导失败一律 fail-open：返回空 dict，作图退回
+        到今天的行为，绝不因为这一步挂掉整个简报生成。
+        """
+        from .brand_guard import ai_operating_model, product_operating_model
+
+        existing = product_operating_model(product)
+        if existing.get("edited_by_user"):
+            return existing
+        try:
+            from .brand_guard import reference_assets_for_derivation
+
+            loaded = reference_assets_for_derivation(self.db, product)
+        except Exception:  # noqa: BLE001 - derivation is best-effort
+            logger.exception(
+                "operating model reference load failed product=%s", product.id
+            )
+            return existing
+        if not loaded:
+            # 没有原厂参考图就没法推导工作原理（渲染本身也需要它，这种产品
+            # 走不到出图）。保留已有的，不编造。
+            return existing
+        reference_keys = [item[0] for item in loaded]
+        references = [(item[1], item[2]) for item in loaded]
+        # 参考图字节已全部读进内存 —— 出网调用前必须先放掉读事务，否则 8s
+        # idle-in-transaction 会把连接掐断(K 踩过：「提交关键词报请求未完成」)。
+        self.db.commit()
+        facts = {
+            "product_name_en": product_snapshot.get("product_name_en"),
+            "product_type": product_snapshot.get("product_type"),
+            "structured_specs_json": product_snapshot.get("structured_specs_json"),
+            "package_includes": product_snapshot.get("package_includes"),
+            "target_customer_en": product_snapshot.get("target_customer_en"),
+            "primary_use_case_en": product_snapshot.get("primary_use_case_en"),
+        }
+        try:
+            return ai_operating_model(
+                key,
+                product_facts=facts,
+                references=references,
+                reference_keys=reference_keys,
+            )
+        except Exception:  # noqa: BLE001 - never block brief generation on this
+            logger.exception(
+                "operating model derivation failed product=%s", product.id
+            )
+            return existing
 
     def generate_image_brief(
         self,
@@ -5619,7 +5772,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         if not approved_points:
             raise KWorkflowExecutionError(
                 "SELLING_POINTS_APPROVAL_REQUIRED_FOR_IMAGE_BRIEF",
-                "Approve at least one evidence-backed selling point before generating the image brief.",
+                "请先审批至少一个有证据支撑的卖点，再生成作图简报。",
                 status_code=409,
             )
         evidence_digest = _image_brief_evidence_digest(product, approved_points)
@@ -5639,15 +5792,25 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             sanitize_snapshot_for_generation,
         )
 
+        product_snapshot = sanitize_snapshot_for_generation(
+            _copy_evidence_product_snapshot(product), product
+        )
+        operating_model = self._resolve_operating_model(
+            product=product,
+            product_snapshot=product_snapshot,
+            key=key,
+        )
         ai_input = {
             "module_id": MODULE_KEY,
             "task": "image_brief_generation",
             "channel": channel,
             "instruction": image_art_direction_instruction(),
             "art_direction_skill": skill,
-            "product": sanitize_snapshot_for_generation(
-                _copy_evidence_product_snapshot(product), product
-            ),
+            "product": product_snapshot,
+            # 从原厂参考图推导出的「这东西怎么工作 / 谁在用」。作图 AI 看不到
+            # 图片(router 只发文字)，没有这段它就只能照着规格脑补，于是把潜水泵
+            # 画在干燥地面上还在喷水(2026-08-03 熊猫花洒)。
+            "operating_model": operating_model,
             # The approved set is the sole claim authority for image planning.
             # Marketing copy is intentionally not passed here: stale/unreviewed
             # prose must not become a visual product claim.
@@ -5738,6 +5901,18 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 retry_task = "image_brief_generation_dimension_retry"
                 correction_prefix = (
                     "The previous plan omitted the mandatory role=dimension image. "
+                )
+            elif any(
+                issue.get("field") == "scene_motif" for issue in initial_issues
+            ):
+                retry_task = "image_brief_generation_gallery_retry"
+                correction_prefix = (
+                    "The previous plan reused the same scene motif across proof "
+                    "images (or omitted scene_motif). Every proof_scene must "
+                    "declare a distinct scene_motif and prove its point in a "
+                    "genuinely different setting with a different kind of user — "
+                    "vary environment AND person, and cover the product's real "
+                    "buyer personas rather than shooting one situation N times. "
                 )
             else:
                 retry_task = "image_brief_generation_gallery_retry"
@@ -5884,6 +6059,10 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                         product.id,
                     )
         result["evidence_digest"] = evidence_digest
+        # 工作原理跟着简报一起存(零迁移)。渲染 prompt 和物理审查门都从这里读，
+        # 人工改过的版本在 _resolve_operating_model 里已被原样保留。
+        if operating_model:
+            result["operating_model"] = operating_model
         zh = self._plain_chinese(result, "作图指令", user=user, request=request)
         product = self._require_product(product_id, scope_context)
         product.image_instruction_json = result
@@ -5989,7 +6168,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             execution.error_report_json = self._error_report(
                 execution,
                 code="SELLING_POINTS_APPROVAL_REQUIRED",
-                message="Approve evidence-backed selling points before export.",
+                message="上架前请先审批有证据支撑的卖点。",
                 step="selling_points_review_manual",
             )
             self._append_trace(

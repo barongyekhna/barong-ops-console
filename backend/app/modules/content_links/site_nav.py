@@ -89,19 +89,32 @@ HUBS: tuple[HubSpec, ...] = (
 )
 
 
-def hub_item_counts(db: Session) -> dict[str, int]:
+def hub_item_counts(db: Session, scope_context: Any = None) -> dict[str, int]:
     """每个枢纽底下**真正已经发布**的文章数。不出网。
 
     判据是 ``wp_status == 'publish'``,不是 ``published_url`` 非空——
     草稿期就已经写库了,published_url 非空 ≠ 线上可见(这条踩过)。
+
+    ``scope_context`` 传了就把计数限定在调用者自己的 workspace(跨组织隔离);
+    不传保持旧行为(内部同步/机器条按站点整体算)。
     """
+    from ..k_series.product_knowledge.scope_shim import apply_scope_filters
+
+    def _scoped(query: Any, model: Any) -> Any:
+        return apply_scope_filters(query, model, scope_context) if scope_context else query
+
     counts = {hub.key: 0 for hub in HUBS}
     try:
         from ..geo_series.content.models import GeoContentItem
 
         counts["guides"] = len(
             db.execute(
-                select(GeoContentItem.id).where(GeoContentItem.wp_status == "publish")
+                _scoped(
+                    select(GeoContentItem.id).where(
+                        GeoContentItem.wp_status == "publish"
+                    ),
+                    GeoContentItem,
+                )
             ).all()
         )
     except Exception:  # noqa: BLE001 - 一个枢纽算不出来不该拖垮另一个
@@ -112,9 +125,12 @@ def hub_item_counts(db: Session) -> dict[str, int]:
 
         counts["factory"] = len(
             db.execute(
-                select(SeoContentItem.id).where(
-                    SeoContentItem.wp_status == "publish",
-                    SeoContentItem.destination == DESTINATION_FACTORY,
+                _scoped(
+                    select(SeoContentItem.id).where(
+                        SeoContentItem.wp_status == "publish",
+                        SeoContentItem.destination == DESTINATION_FACTORY,
+                    ),
+                    SeoContentItem,
                 )
             ).all()
         )

@@ -15,6 +15,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ..linesheet.schemas import LineSheetItem, LineSheetMeta, LineSheetRequest
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 # 对外口径全部从 policies 取——**唯一真相源**。图册和产品页小窗共用同一份,
 # 改一处两处生效;各自抄一份的话,门槛一改两边必然对不上(GMC 口径不一致的雷)。
 from ..policies import (
@@ -514,6 +515,7 @@ def _k_main_image_path(db: Session, k_product_id: UUID | None) -> str | None:
             "ORDER BY created_at DESC LIMIT 1"
         ),
         {"pid": k_product_id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     if not object_key:
         return None

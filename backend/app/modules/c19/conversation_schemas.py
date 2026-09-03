@@ -183,6 +183,7 @@ class DirectPeerView(BaseModel):
     user_id: int
     display_name: str
     avatar_ref: str | None
+    is_bot: bool = False
 
 
 class ConversationSummary(BaseModel):

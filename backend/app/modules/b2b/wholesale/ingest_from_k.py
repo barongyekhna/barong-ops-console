@@ -20,6 +20,7 @@ from ...k_series.product_knowledge.models import (
 from ..store_types import service as store_type_service
 from . import service
 from .schemas import IngestResult
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,7 @@ def _resolve_category_path(db: Session, product) -> list[str]:
         full_path = db.scalar(
             text("SELECT full_path FROM k_category_google WHERE id = :gid"),
             {"gid": google_id},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         if full_path:
             return [
@@ -223,7 +225,8 @@ def backfill_uploaded_products(db: Session) -> IngestResult:
             "SELECT DISTINCT ON (product_id) product_id, external_product_id "
             "FROM p_upload_jobs WHERE status = 'success' "
             "ORDER BY product_id, finished_at DESC"
-        )
+        ),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).all()
     payloads: list[dict[str, object]] = []
     skipped = 0

@@ -10,7 +10,17 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+# R-W 在路由依赖层已绑死单一组织;这些表无 org_id 列,
+# 走 API 的受管 session 需要单语句逃生口才不会被 C18G 拒。
+
 from r_system_v2.rw.providers.keepa_provider import MAX_REQUESTS_PER_MINUTE
+
+# 与 backend.app.services.data_isolation.ORG_DATA_ISOLATION_SKIP_OPTION 同值。
+# **刻意不 import 而是本地定义**:r_system_v2 → backend.app.services.data_isolation
+# → backend.app.db.session → data_isolation 是一条循环链,worker 从 r_system_v2
+# 这一侧进入会当场 ImportError(2026-08-31 实测 r-w-worker 崩溃循环)。
+# 两边不同步的风险由 tests/backend/test_c18g_raw_sql_guard_contract.py 兜住。
+SKIP_ORG_DATA_ISOLATION = {"skip_org_data_isolation": True}
 
 
 SETTINGS_KEY = "rw_realtime_engine"
@@ -39,6 +49,7 @@ def load_runtime_settings(db: Session) -> RwRuntimeSettings:
         row = db.execute(
             text("SELECT value FROM rw_runtime_settings WHERE key = :key"),
             {"key": SETTINGS_KEY},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().first()
     except SQLAlchemyError:
         db.rollback()
@@ -67,6 +78,7 @@ def save_runtime_settings(
                 """
             ),
             {"key": SETTINGS_KEY, "value": value},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
     else:
         updated = db.execute(
@@ -79,6 +91,7 @@ def save_runtime_settings(
                 """
             ),
             {"key": SETTINGS_KEY, "value": value},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         )
         if not updated.rowcount:
             db.execute(
@@ -89,6 +102,7 @@ def save_runtime_settings(
                     """
                 ),
                 {"key": SETTINGS_KEY, "value": value},
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             )
     return settings
 

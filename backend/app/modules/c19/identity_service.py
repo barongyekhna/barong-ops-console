@@ -49,16 +49,18 @@ def profile_summary_from_bundle(
 ) -> C19ProfileSummaryRead:
     return C19ProfileSummaryRead(
         user_id=bundle.profile.user_id,
-        display_name=bundle.profile.display_name,
+        display_name=bundle.profile.resolved_display_name,
         avatar_ref=bundle.profile.avatar_ref,
+        is_bot=bundle.is_bot,
     )
 
 
 def profile_read_from_bundle(bundle: C19ProfileBundle) -> C19ProfileRead:
     return C19ProfileRead(
         user_id=bundle.profile.user_id,
-        display_name=bundle.profile.display_name,
+        display_name=bundle.profile.resolved_display_name,
         avatar_ref=bundle.profile.avatar_ref,
+        is_bot=bundle.is_bot,
         bio=bundle.profile.bio,
         affiliations=[
             C19AffiliationRead(

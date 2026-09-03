@@ -16,7 +16,11 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ..k_series.product_knowledge.scope_shim import KScopeContext
+from ..k_series.product_knowledge.scope_shim import (
+    KScopeContext,
+    normalize_scope_context,
+)
+from ...services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 logger = logging.getLogger(__name__)
 
@@ -46,33 +50,56 @@ STEPS: tuple[Step, ...] = (
 )
 
 
-def _scalar(db: Session, sql: str) -> int:
+def _scalar(db: Session, sql: str, params: dict[str, Any] | None = None) -> int | None:
+    """跑一条计数探针。**查不动返回 None,不返回 0。**
+
+    2026-08-31 体检:这四条探针全部被 C18G 拒(裸 SQL 不带 org_id),旧实现
+    `except: return 0` 把它们一律吞成 0,于是页面把 12 件待挑的活显示成
+    「0 件待挑 ✓」。**报 0 和报"查不动"是两回事** —— 前者是假绿灯,
+    会让人以为没活干;后者至少让人知道这个数字不可信。
+
+    这些表用 workspace_key 分区(不是 org_id),所以裸 SQL 必须显式带
+    workspace 过滤,并用单语句逃生口让 C18G 放行这一条。
+    """
     try:
-        return int(db.execute(text(sql)).scalar() or 0)
+        return int(
+            db.execute(
+                text(sql),
+                params or {},
+                execution_options=SKIP_ORG_DATA_ISOLATION,
+            ).scalar()
+            or 0
+        )
     except Exception:  # noqa: BLE001 - 一条判据查不动不该让整页打不开
         logger.exception("workflow probe failed: %s", sql)
-        return 0
+        return None
 
 
-def _pick_counts(db: Session) -> tuple[int, int]:
+def _pick_counts(
+    db: Session, scope: KScopeContext | None = None
+) -> tuple[int | None, int | None]:
     """(高分未挑的选题, 还没挑问句的簇)。
 
     ``geo_reachable`` 的题**排除掉** —— 那是 GEO 的地盘,催 SEO 写它就是让
     两篇自家文章抢同一个查询。
     """
+    ws = normalize_scope_context(scope).workspace_key
     unpicked = _scalar(
         db,
         "SELECT count(*) FROM seo_topics "
         f"WHERE status = 'candidate' AND score >= {PICK_SCORE_FLOOR} "
-        "AND geo_reachable = false",
+        "AND geo_reachable = false AND workspace_key = :ws",
+        {"ws": ws},
     )
     # **不限 status='draft'**:簇生成过之后变成 needs_review,原来那个条件会让它
     # 再也不出现——哪怕一条问句都没挑(2026-08-03 捏捏簇就是这么消失的)。
     no_questions = _scalar(
         db,
         "SELECT count(*) FROM geo_content_clusters "
-        "WHERE status <> 'archived' AND (picked_questions_json IS NULL "
+        "WHERE status <> 'archived' AND workspace_key = :ws "
+        "AND (picked_questions_json IS NULL "
         "OR picked_questions_json::text IN ('[]', 'null'))",
+        {"ws": ws},
     )
     return unpicked, no_questions
 
@@ -126,7 +153,7 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
     from . import queries
 
     counts = queries.step_counts(db, scope=scope)
-    unpicked, no_questions = _pick_counts(db)
+    unpicked, no_questions = _pick_counts(db, scope)
     failures = failed_jobs(db)
 
     pending = counts["pending_review"]
@@ -158,14 +185,24 @@ def build_overview(db: Session, *, scope: KScopeContext | None = None) -> dict[s
     # n8n **刻意**把文章落成草稿等人工发布。派单成功 ≠ 读者能看到 ——
     # 2026-08-03 用户发了两篇,任务 success、地址也有,匿名访问却是 404。
     # 发布的战报只说到派单、不说到读者能不能看见,那就是报了个假成功。
-    drafts = _scalar(
+    _ws = normalize_scope_context(scope).workspace_key
+    _geo_drafts = _scalar(
         db,
         "SELECT count(*) FROM geo_content_items WHERE wp_post_id IS NOT NULL "
-        "AND coalesce(wp_status,'') <> 'publish'",
-    ) + _scalar(
+        "AND coalesce(wp_status,'') <> 'publish' AND workspace_key = :ws",
+        {"ws": _ws},
+    )
+    _seo_drafts = _scalar(
         db,
         "SELECT count(*) FROM seo_content_items WHERE wp_post_id IS NOT NULL "
-        "AND coalesce(wp_status,'') <> 'publish'",
+        "AND coalesce(wp_status,'') <> 'publish' AND workspace_key = :ws",
+        {"ws": _ws},
+    )
+    # 任一条查不动就不报数字——宁可不显示,也不报一个假的 0。
+    drafts = (
+        (_geo_drafts or 0) + (_seo_drafts or 0)
+        if _geo_drafts is not None and _seo_drafts is not None
+        else None
     )
     if drafts:
         todos.append(

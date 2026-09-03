@@ -22,6 +22,10 @@ from sqlalchemy.orm import Session
 from ...api.deps import get_current_user
 from ...core.config import get_settings
 from ...core.roles import is_super_admin_role
+from ...core.target_org_guard import (
+    INTERNATIONAL_TRADE_ORG_NAME,
+    enforce_caller_is_target_org,
+)
 from ...db.session import get_db
 from ...models.user import User
 from ...services.permission_service import resolve_current_user_permission_info
@@ -60,6 +64,16 @@ def _require_p_permission(permission_key: str):
         db: Session = Depends(get_db),
         user: User = Depends(get_current_user),
     ) -> User:
+        # H1: P upload jobs have no org_id column; enforce cross-org isolation at
+        # the gate (owner exempt). Blocks another org's super_admin from reading
+        # this org's upload jobs. Machine endpoints use X-Job-Token, not this gate.
+        enforce_caller_is_target_org(
+            request,
+            db,
+            user,
+            target_name=INTERNATIONAL_TRADE_ORG_NAME,
+            detail="You do not have access to upload tools.",
+        )
         permissions = resolve_current_user_permission_info(db, user, request=request)
         allowed_keys = {permission_key}
         if permission_key == PERMISSION_READ:

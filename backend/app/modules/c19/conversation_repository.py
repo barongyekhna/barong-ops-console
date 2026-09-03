@@ -26,6 +26,7 @@ class ConversationListRow:
     settings: C19ConversationUserSettingRecord | None
     active_member_count: int
     direct_peer_profile: C19ProfileRecord | None
+    direct_peer_is_bot: bool = False
 
 
 def list_authorized_affiliations(
@@ -293,6 +294,7 @@ def list_actor_conversations(
             C19ConversationUserSettingRecord,
             active_count.label("active_member_count"),
             C19ProfileRecord,
+            User.is_bot,
         )
         .join(
             actor_member,
@@ -319,6 +321,7 @@ def list_actor_conversations(
             C19ProfileRecord,
             C19ProfileRecord.user_id == peer_member.user_id,
         )
+        .outerjoin(User, User.id == peer_member.user_id)
         .where(*base_filters)
         .order_by(
             C19ConversationRecord.updated_at.desc(),
@@ -334,6 +337,7 @@ def list_actor_conversations(
             settings=row[2],
             active_member_count=int(row[3]),
             direct_peer_profile=row[4],
+            direct_peer_is_bot=bool(row[5]),
         )
         for row in db.execute(statement).all()
     ]

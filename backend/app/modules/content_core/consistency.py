@@ -28,6 +28,9 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ..k_series.product_knowledge.scope_shim import normalize_scope_context
+from ...services.data_isolation import SKIP_ORG_DATA_ISOLATION
+
 logger = logging.getLogger(__name__)
 
 # 表名/列名是**代码里写死的常量**,不是用户输入。但它们仍然会被拼进 SQL,
@@ -97,10 +100,22 @@ CHECKS: tuple[ProductionCheck, ...] = (
 )
 
 
-def find_stranded(db: Session, *, checks: tuple[ProductionCheck, ...] = CHECKS) -> list[dict[str, Any]]:
+def find_stranded(
+    db: Session,
+    *,
+    checks: tuple[ProductionCheck, ...] = CHECKS,
+    failed_labels: list[str] | None = None,
+    scope: Any | None = None,
+) -> list[dict[str, Any]]:
     """所有「标了完成却没有产物」的记录。**只读,不出网,不改任何东西。**
 
     一条判据查不动(比如表还没建)不该让整个面板打不开——单条吞掉并记日志。
+
+    **但吞掉不等于当作没事**:2026-08-31 体检发现这几条判据被 C18G 全部拒掉
+    (裸 SQL 不带 org_id),于是每次都返回空列表,页面渲染成「✓ 内容自检 无异常」——
+    一次都没跑成,却报了绿灯。这违反「事实检查必须 fail-closed」的死规矩。
+    调用方传 ``failed_labels`` 进来就能拿到跑挂的判据名,据此把结论标成
+    「没跑成」而不是「没问题」。
     """
     out: list[dict[str, Any]] = []
     for check in checks:
@@ -111,6 +126,7 @@ def find_stranded(db: Session, *, checks: tuple[ProductionCheck, ...] = CHECKS) 
                     SELECT p.id, p.{check.name_column} AS display_name, p.status
                     FROM {check.parent} p
                     WHERE p.status = ANY(:done)
+                      AND p.workspace_key = :ws
                       AND NOT EXISTS (
                           SELECT 1 FROM {check.child} c
                           WHERE c.{check.child_fk} = p.id
@@ -118,10 +134,13 @@ def find_stranded(db: Session, *, checks: tuple[ProductionCheck, ...] = CHECKS) 
                     ORDER BY p.created_at
                     """
                 ),
-                {"done": list(check.done_status)},
+                {"done": list(check.done_status), "ws": normalize_scope_context(scope).workspace_key},
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             ).mappings().all()
         except Exception:  # noqa: BLE001 - 一条判据坏掉不该毁掉整块面板
             logger.exception("consistency check failed: %s", check.label)
+            if failed_labels is not None:
+                failed_labels.append(check.label)
             continue
         for row in rows:
             out.append(
@@ -147,6 +166,7 @@ def reset_stranded(
     kind: str,
     record_ids: list[str],
     checks: tuple[ProductionCheck, ...] = CHECKS,
+    scope: Any | None = None,
 ) -> int:
     """把卡死的记录复位,让它重新能被派单。
 
@@ -166,6 +186,7 @@ def reset_stranded(
             UPDATE {check.parent} p
             SET status = :reset_to
             WHERE p.id = ANY(CAST(:ids AS uuid[]))
+              AND p.workspace_key = :ws
               AND p.status = ANY(:done)
               AND NOT EXISTS (
                   SELECT 1 FROM {check.child} c
@@ -173,7 +194,13 @@ def reset_stranded(
               )
             """
         ),
-        {"reset_to": check.reset_to, "ids": ids, "done": list(check.done_status)},
+        {
+            "reset_to": check.reset_to,
+            "ids": ids,
+            "done": list(check.done_status),
+            "ws": normalize_scope_context(scope).workspace_key,
+        },
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     db.commit()
     return result.rowcount or 0

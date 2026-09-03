@@ -50,6 +50,7 @@ from ..modules.k_series.product_knowledge.image_render_jobs import (
     _asset_file_bytes,
 )
 from .auth import TokenGuard, actor_user_id
+from ..services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 # FastMCP 用 typing.get_type_hints 解析工具签名;本文件开了 future annotations,
 # ``ctx: Context`` 是字符串,必须在模块作用域能找到 Context。主后端镜像没装 mcp
@@ -463,7 +464,7 @@ def build_app() -> Starlette:
         # 启动只验「数据库可连」;身份逐请求由个人钥匙决定,没有固定执行者。
         def _check() -> None:
             with SessionLocal() as db:
-                db.execute(text("SELECT 1"))
+                db.execute(text("SELECT 1"), execution_options=SKIP_ORG_DATA_ISOLATION)
 
         await anyio.to_thread.run_sync(_check)
         _LOGGER.info("k-mcp ready (per-user tokens); endpoint %s", MCP_PATH)

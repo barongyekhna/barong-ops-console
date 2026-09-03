@@ -11,6 +11,10 @@ from sqlalchemy.orm import Session
 
 from ....api.deps import get_current_user
 from ....core.roles import is_super_admin_role
+from ....core.target_org_guard import (
+    INTERNATIONAL_TRADE_ORG_NAME,
+    enforce_caller_is_target_org,
+)
 from ....db.session import get_db
 from ....models.user import User
 from ....services.permission_service import (
@@ -60,6 +64,16 @@ def _require_b2b_permission(permission_key: str):
             db,
             user,
             request=request,
+        )
+        # H1: B2B prospects/wholesale/templates have no org_id column; enforce
+        # cross-org isolation at the gate (owner exempt). Blocks another org's
+        # super_admin from reading this org's customer leads (business secret).
+        enforce_caller_is_target_org(
+            request,
+            db,
+            user,
+            target_name=INTERNATIONAL_TRADE_ORG_NAME,
+            detail="You do not have access to wholesale tools.",
         )
         allowed_keys = {permission_key}
         if permission_key == PERMISSION_READ:

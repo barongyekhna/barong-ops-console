@@ -27,6 +27,7 @@ class C19AffiliationBundle:
 class C19ProfileBundle:
     profile: C19ProfileRecord
     affiliations: tuple[C19AffiliationBundle, ...]
+    is_bot: bool = False
 
 
 def _authoritative_membership_join():
@@ -53,6 +54,11 @@ def _load_active_profile_bundles(
         )
     )
     profiles_by_id = {profile.user_id: profile for profile in profiles}
+    bot_user_ids = set(
+        db.scalars(
+            select(User.id).where(User.id.in_(user_ids), User.is_bot.is_(True))
+        )
+    )
     affiliation_rows = db.execute(
         select(C19AffiliationRecord, OrganizationRecord)
         .join(
@@ -88,6 +94,7 @@ def _load_active_profile_bundles(
         C19ProfileBundle(
             profile=profiles_by_id[user_id],
             affiliations=tuple(affiliations_by_user.get(user_id, ())),
+            is_bot=user_id in bot_user_ids,
         )
         for user_id in user_ids
         if user_id in profiles_by_id

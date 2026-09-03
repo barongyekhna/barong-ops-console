@@ -352,10 +352,13 @@ def list_topics(
     """第①②步的清单:待挑的选题、还没挑问句的簇、挑了但还没写的。不出网。"""
     from . import topics
 
+    # scope 必须一路传下去:这三个函数以前直接查模型、不带 workspace_key,
+    # 成了绕过 GEO/SEO 自身隔离的旁路(2026-08-31 体检 P0)。
+    scope = _scope(request)
     return {
-        "seo_candidates": topics.seo_candidates(db),
-        "clusters": topics.geo_clusters(db),
-        "awaiting_generation": topics.picked_awaiting_generation(db),
+        "seo_candidates": topics.seo_candidates(db, scope=scope),
+        "clusters": topics.geo_clusters(db, scope=scope),
+        "awaiting_generation": topics.picked_awaiting_generation(db, scope=scope),
     }
 
 

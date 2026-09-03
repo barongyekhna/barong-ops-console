@@ -55,6 +55,7 @@ from .image_render_jobs import (
 )
 from .models import KProductKnowledgeMediaAsset, KProductKnowledgeProduct
 from .scope_shim import KScopeContext, apply_scope_filters
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 # 单张交稿上限(解码前字节)。gpt-image-2 的 2K PNG 约 5-8MB,4K 也在此之下;
 # 超过这个量基本是拼版/未压缩的意外,直接拒,别让它进后处理。
@@ -655,6 +656,7 @@ def submission_status(
             """
         ),
         {"product_id": product.id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).scalar()
     return {
         "sku": product.sku,

@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -101,8 +102,26 @@ def _thumb_url(url: str) -> str:
     return f"{url}{THUMB_SUFFIX}"
 
 
+def _url_digest(url: str) -> str:
+    """缓存文件名里代表「这一条图源」的短哈希。
+
+    死规矩：缓存 key 必须含 URL。2026-08-03 熊猫花洒(PSPE-002)事故——本函数
+    原本按 ``{candidate_id}_{variant}`` 命名缓存，而 K 的多图导入
+    (manual_reference.attach_manual_reference_images) 对同一产品的 N 个 URL 传
+    的是同一个 candidate_id，于是第 1 张落盘后，第 2~N 张全部命中它、把第一张
+    的字节当成自己的内容返回。库里 6 条记录的 source_url 各不相同、看着完全
+    正常，只有文件内容悄悄是同一张——伪装得极好，靠肉眼永远看不出来。
+    后果是 AI 从没见过配件与其他角度，只能凭空编（编出了实际不存在的配件）。
+    """
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+
+
 def get_candidate_image(candidate_id: str, image_url: str, variant: str) -> tuple[bytes, str]:
-    """取候选图字节（磁盘缓存优先，未命中回源并落盘）。返回 (bytes, mime)。"""
+    """取候选图字节（磁盘缓存优先，未命中回源并落盘）。返回 (bytes, mime)。
+
+    缓存按 (candidate_id, variant, image_url) 三者定位——URL 一定要参与，
+    见 :func:`_url_digest`。
+    """
     if variant not in VARIANTS:
         variant = "thumb"
     url = (image_url or "").strip()
@@ -112,7 +131,7 @@ def get_candidate_image(candidate_id: str, image_url: str, variant: str) -> tupl
         raise FImageUnavailableError("图源域名不在白名单内。")
 
     cache_dir = _cache_dir()
-    cache_file = cache_dir / f"{candidate_id}_{variant}.img"
+    cache_file = cache_dir / f"{candidate_id}_{variant}_{_url_digest(url)}.img"
     if cache_file.is_file():
         data = cache_file.read_bytes()
         if data:

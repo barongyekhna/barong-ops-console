@@ -19,7 +19,7 @@ from decimal import Decimal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from ....services.data_isolation import without_org_data_isolation
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
 
 _REVIEW_CONF_FLOOR = Decimal("0.6")
 _GOOGLE_PATH_SEPARATOR = re.compile(r"\s*[>›]\s*")
@@ -80,6 +80,7 @@ def _google_category_by_id(
             "FROM k_category_google WHERE id = :google_id"
         ),
         {"google_id": google_id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().first()
     return dict(row) if row is not None else None
 
@@ -92,6 +93,7 @@ def _google_categories_named(db: Session, name: str) -> list[dict[str, object]]:
             "FROM k_category_google WHERE lower(name) = lower(:name)"
         ),
         {"name": name},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     return [dict(row) for row in rows]
 
@@ -279,7 +281,8 @@ def ensure_amazon_category(
     if not cat_id:
         return False
     if db.execute(
-        text("SELECT 1 FROM k_category_amazon WHERE id = :i"), {"i": cat_id}
+        text("SELECT 1 FROM k_category_amazon WHERE id = :i"), {"i": cat_id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).first():
         return False
     leaf = (name or _leaf_name(cat_path, cat_id))[:512]
@@ -291,6 +294,7 @@ def ensure_amazon_category(
             "VALUES (:i,:n,:p,NULL,:l,true,'US') ON CONFLICT (id) DO NOTHING"
         ),
         {"i": cat_id, "n": leaf, "p": (cat_path or leaf)[:1024], "l": level},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
     _deterministic_align(db, cat_id, cat_path or leaf, leaf)
     return True
@@ -305,11 +309,13 @@ def _deterministic_align(db: Session, amazon_id: str, apath: str, aname: str) ->
             "WHERE amazon_id = :a AND marketplace = 'US'"
         ),
         {"a": amazon_id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).first():
         return
     rows = db.execute(
         text("SELECT id, name, full_path FROM k_category_google WHERE lower(name) = :n"),
-        {"n": _norm(aname)},  # lower+normalized-ish; exact-name fast path
+        {"n": _norm(aname)},  # lower+normalized-ish; exact-name fast path,
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).fetchall()
     # Fall back to key-normalized candidates when exact-lower found nothing.
     if not rows:
@@ -319,6 +325,7 @@ def _deterministic_align(db: Session, amazon_id: str, apath: str, aname: str) ->
                 "WHERE lower(name) LIKE :like"
             ),
             {"like": f"%{_norm(aname)}%"},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).fetchall()
     google_id: str | None = None
     conf: Decimal | None = None
@@ -341,6 +348,7 @@ def _deterministic_align(db: Session, amazon_id: str, apath: str, aname: str) ->
             "ON CONFLICT (amazon_id,marketplace) DO NOTHING"
         ),
         {"a": amazon_id, "g": google_id, "m": method, "c": conf},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     )
 
 
@@ -351,6 +359,7 @@ def google_for_amazon(db: Session, amazon_id: str) -> tuple[str | None, Decimal 
             "WHERE amazon_id = :a AND marketplace = 'US'"
         ),
         {"a": amazon_id},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).first()
     return (row[0], row[1]) if row else (None, None)
 

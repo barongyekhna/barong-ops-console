@@ -228,19 +228,90 @@ WIDGET_CTA = "Request wholesale pricing"
 # ⚠️ 这段是全站最容易踩虚假陈述的地方:品类跨度大,不解释清楚,采购的第一反应
 # 不是"实力雄厚"而是"这是贸易公司吧"——在这行里专精的工厂比什么都做的可信。
 #
-# 刻意**不写**年限/员工数/产能/认证/客户案例:用户因 Misrepresentation 被封过
-# 两次、**只剩一次申诉机会**,网站上任何一句查不实的话都是在那根线上跳舞。
+# 刻意**不写**年限/员工数/产能/客户案例:用户因 Misrepresentation 被封过两次、
+# **只剩一次申诉机会**,网站上任何一句查不实的话都是在那根线上跳舞。
 # 下面每一句都可核实,且和 /contact/ 页的主体、地址一致。
+#
+# ── 关于「年限」,2026-09-02 用户拍板**删掉,并写回这份禁写清单**。
+# 2026-08-01 那版曾把「年限」从清单里划掉、正文写了首次出货年份。
+# 年份本身是真的,不构成任何问题 —— 删它跟真假无关,是因为**开厂时间
+# 对买手的采购决策不产生任何影响**,它唯一的作用是给对方一个可以拿去
+# 掂量你"够不够老"的把柄。这一页要立的是"我们跑过四省三十多家电机厂"
+# 这种别人抄不走的具体事实,不是资历。少一个可被拿来称重的数字,
+# 就少一处不必要的暴露面。
+# **以后要往公开页面加任何时间/年限,先回来看这段。**
+#
+# ── 2026-08-01 重写。原版全是**类别词**("我们做装配""我们外协电机"),
+# 任何一家贸易公司都能一字不改抄走,买手看了不会更信,只会归档成"标准话术"。
+# 可信只来自两件事,这一版两件都上:
+#   ① 一个别人抄不走的具体例子 —— 用户亲自跑供应商的数字(见下)和潜水泵密封;
+#   ② 主动说出自己不做什么 —— 敢划边界的供应商才像真做实业的。
 WHOLESALE_INTRO_TITLE = "Why our range crosses categories"
 WHOLESALE_INTRO_LEAD = (
-    "We're an assembly and integration factory, not a single-product plant."
+    "We're a product engineering and assembly plant - our own design, "
+    "our own line, our own process technology."
 )
-WHOLESALE_INHOUSE = ("assembly", "function testing", "packing", "outgoing QC")
-WHOLESALE_PARTNERED = ("tooling", "batteries", "motors", "raw materials")
+WHOLESALE_INHOUSE = (
+    "product design",
+    "process development",
+    "assembly",
+    "100% function testing",
+    "retail packing",
+    "outgoing QC",
+)
+WHOLESALE_PARTNERED = (
+    "motors",
+    "battery cells",
+    "PCBA",
+    "injection tooling",
+    "raw materials",
+)
+# ⚠️ 数字全部来自用户 2026-08-01 口述,**一个都不许改写、不许"约等于"**:
+# 电机 4 省 30+ 家、电池 不到 10 家、电路板 17 家、模具 3 省 12 家现固定 2 家。
+# 这段是全页最值钱的一段——贸易公司编不出"背着包跑了三十多家电机厂"。
+# ⚠️ **认证一个字都不许写上公开页面**(用户 2026-08-01 拍板,他吃过亏)。
+# 骗认证是这行的常见套路:装成买家要走认证文件,拿到就拉黑,压根不下单。
+# 而且比"认证被白拿"更严重的是——**认证文件上印着供应商的名字**,发出去
+# 泄的是四省跑三十多家才敲定的供应链名单,那往往才是对方真正想要的东西。
+#
+# 门槛这层意思用 "We turned down almost all of them" 表达:同样说明有标准、
+# 有取舍,但**不给对方一个可以伸手要文件的抓手**。谁要文件谁开口,给不给
+# 是逐单人工决定,不是页面上的公开承诺。
+WHOLESALE_INTRO_SOURCING = (
+    "We picked every supplier on foot. Before the plant shipped its first "
+    "unit, we visited more than thirty motor factories across four "
+    "provinces, close to ten battery makers, seventeen PCBA shops, and "
+    "twelve tooling shops across three provinces. We turned down almost "
+    "all of them. The ones we kept are the ones we still buy from today."
+)
+# ⚠️ "泡了一个月"刻意写成**我们自己做过的一次测试**,不是产品规格。
+# 写成 "30-day submersion rated" 就等于给零售商一条可索赔的性能承诺,
+# 而我们的退货口径只认瑕疵、不接受无理由退——承诺必须配机制,这条没机制。
+#
+# ── 2026-09-02 加固:这层保护原本**只活在这条 Python 注释里**,
+# 看页面的人什么都读不到,照样可能把它当耐久指标去索赔。现在把
+# "our own bench test on one unit, not a published rating" 写进正文,
+# 让免责和事实出现在同一句话里。这正是「承诺必须配机制」的正解:
+# 没有机制兜底的话,就在原地说清楚它不是承诺 —— 而不是指望没人误读。
+# (措辞用 rating 不用 rated:测试禁的是 "rated" 那种规格化说法。)
 WHOLESALE_INTRO_CLOSE = (
-    "That's how a product goes from concept to a finished, packed, "
-    "export-ready SKU - and why our range crosses categories. The constant "
-    "is the line that builds and checks it, not the product type."
+    "Our camping shower is the clearest example of what that buys you. "
+    "The battery, motor, and PCBA are all sealed inside the main housing, "
+    "and the whole unit sits underwater the entire time it runs. We "
+    "developed that sealing process ourselves because nothing off the "
+    "shelf survived it - we left one running in a tank for a month and it "
+    "still worked. That was our own bench test on one unit, not a "
+    "published rating. Immersion heaters come off the same line for the same "
+    "reason: the hard part is sealing and testing, and that's the part we "
+    "own."
+)
+# 边界段。**反直觉但真实**:采购最信的是敢说"这个我们不做"的供应商。
+# 顺带把责任落到发票和保修上——那才是零售商真正在担的风险。
+WHOLESALE_INTRO_LIMITS = (
+    "What we don't do: we don't wind motors or make battery cells. We "
+    "qualify those suppliers and we take responsibility for the finished "
+    "unit - which is what your invoice and your customer's warranty "
+    "actually depend on."
 )
 # ⚠️ 2026-07-31 更正:这里原来写 "our own facility in Guangzhou",**是错的**。
 # 广州龙杰是**销售主体**(开票、收款、GMC 账户、独立站注册主体),注册地是天河区

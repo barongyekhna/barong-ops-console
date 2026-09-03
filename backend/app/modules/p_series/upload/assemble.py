@@ -68,6 +68,7 @@ from .description_html import (
 )
 from .product_schema import project_verified_product_specs
 from .wc_categories import ensure_wc_category_path
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 LAYOUT_SKILL_VERSION = "p-product-page-layout-v1"
 logger = logging.getLogger(__name__)
@@ -201,6 +202,7 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
                 "p": str(product.id),
                 "p_hex": str(product.id).replace("-", ""),
             },
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).scalars().all()
         if not variant_prices:
             blockers.append("变体缺失(多变体产品至少需要一个变体)")
@@ -240,6 +242,7 @@ def _non_webp_image_blockers(db: Session, product: Any) -> list[str]:
                 "GROUP BY mime_type"
             ),
             {"p": str(product.id)},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().all()
     except Exception:  # noqa: BLE001 - gate must convert infrastructure errors
         logger.exception(
@@ -443,6 +446,7 @@ def _image_assets(
             "ORDER BY (metadata_json->>'position')::int ASC NULLS LAST"
         ),
         {"p": str(product.id)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
 
     out: list[ImageAsset] = []
@@ -526,6 +530,7 @@ def _image_assets(
             "ORDER BY updated_at DESC"
         ),
         {"p": str(product.id)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     for index, r in enumerate(legacy, start=1):
         asset_id = str(r["id"])
@@ -569,6 +574,7 @@ def _colorway_image_urls(
                 "ORDER BY updated_at DESC"
             ),
             {"p": str(product.id)},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).mappings().all()
     except Exception:  # noqa: BLE001 - fail-safe garnish
         return {}
@@ -601,6 +607,7 @@ def _variants(
             "p": str(product.id),
             "p_hex": str(product.id).replace("-", ""),
         },
+        execution_options=SKIP_ORG_DATA_ISOLATION,
     ).mappings().all()
     out: list[Variant] = []
     for r in rows:

@@ -13,6 +13,17 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+# 与 backend.app.services.data_isolation.ORG_DATA_ISOLATION_SKIP_OPTION 同值。
+# **刻意不 import 而是本地定义**:r_system_v2 → backend.app.services.data_isolation
+# → backend.app.db.session → data_isolation 是一条循环链,worker 从 r_system_v2
+# 这一侧进入会当场 ImportError(2026-08-31 实测 r-w-worker 崩溃循环)。
+# 两边不同步的风险由 tests/backend/test_c18g_raw_sql_guard_contract.py 兜住。
+SKIP_ORG_DATA_ISOLATION = {"skip_org_data_isolation": True}
+
+# R-W 整个模块在路由依赖层就绑死单一组织(require_r_series_org),
+# 这些表没有也不需要 org_id 列。走 API 传进来的是受管 session,
+# 不给单语句逃生口就会被 C18G 拒成 403(2026-08-31 体检:/rw/pipeline)。
+
 
 DEFAULT_FAILURE_MAX_RETRIES = 3
 DEAD_LETTER_PREFIX = "dead_letter:"
@@ -345,7 +356,9 @@ def _fetch_mappings(
     try:
         return [
             _json_safe(dict(row))
-            for row in db.execute(text(sql), params or {}).mappings().all()
+            for row in db.execute(
+                text(sql), params or {}, execution_options=SKIP_ORG_DATA_ISOLATION
+            ).mappings().all()
         ]
     except SQLAlchemyError:
         db.rollback()
@@ -358,7 +371,9 @@ def _fetch_one(
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     try:
-        row = db.execute(text(sql), params or {}).mappings().first()
+        row = db.execute(
+            text(sql), params or {}, execution_options=SKIP_ORG_DATA_ISOLATION
+        ).mappings().first()
     except SQLAlchemyError:
         db.rollback()
         return None

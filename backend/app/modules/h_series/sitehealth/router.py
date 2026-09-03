@@ -18,6 +18,10 @@ from sqlalchemy.orm import Session
 
 from ....api.deps import get_current_user
 from ....core.roles import is_super_admin_role
+from ....core.target_org_guard import (
+    INTERNATIONAL_TRADE_ORG_NAME,
+    enforce_caller_is_target_org,
+)
 from ....db.session import get_db
 from ....models.user import User
 from ....services.permission_service import resolve_current_user_permission_info
@@ -39,6 +43,16 @@ def _require_h_permission(permission_key: str):
         db: Session = Depends(get_db),
         user: User = Depends(get_current_user),
     ) -> User:
+        # H1: H site-health runs/findings have no org_id column; enforce
+        # cross-org isolation at the gate (owner exempt). /wp/redirects already
+        # scopes by the caller's own org, so this covers runs/findings.
+        enforce_caller_is_target_org(
+            request,
+            db,
+            user,
+            target_name=INTERNATIONAL_TRADE_ORG_NAME,
+            detail="You do not have access to site-health tools.",
+        )
         permissions = resolve_current_user_permission_info(db, user, request=request)
         allowed_keys = {permission_key}
         if permission_key == PERMISSION_READ:

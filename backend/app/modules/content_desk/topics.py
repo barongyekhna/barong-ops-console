@@ -32,14 +32,26 @@ logger = logging.getLogger(__name__)
 MAX_CANDIDATES = 12
 
 
-def seo_candidates(db: Session, *, limit: int = MAX_CANDIDATES) -> list[dict[str, Any]]:
-    """待挑的 SEO 选题,分高的在前。"""
+def seo_candidates(
+    db: Session,
+    *,
+    limit: int = MAX_CANDIDATES,
+    scope: KScopeContext | None = None,
+) -> list[dict[str, Any]]:
+    """待挑的 SEO 选题,分高的在前。
+
+    **必须按 workspace 过滤**:seo_topics 是带租户列的,GEO/SEO 自己的端点都过滤了,
+    内容台这条以前没过滤,成了绕过隔离的旁路(2026-08-31 体检)。
+    """
+    from ..k_series.product_knowledge.scope_shim import normalize_scope_context
     from ..seo_series.content.models import SeoTopic
     from .workflow import PICK_SCORE_FLOOR
 
+    ws = normalize_scope_context(scope).workspace_key
     rows = db.execute(
         select(SeoTopic)
         .where(
+            SeoTopic.workspace_key == ws,
             SeoTopic.status == "candidate",
             SeoTopic.score >= PICK_SCORE_FLOOR,
             SeoTopic.geo_reachable.is_(False),
@@ -69,7 +81,9 @@ def seo_candidates(db: Session, *, limit: int = MAX_CANDIDATES) -> list[dict[str
     return out
 
 
-def geo_clusters(db: Session) -> list[dict[str, Any]]:
+def geo_clusters(
+    db: Session, *, scope: KScopeContext | None = None
+) -> list[dict[str, Any]]:
     """**所有**话题簇 + 各自挑了几条 / 还有多少候选。
 
     2026-08-03 用户问:「那次选题出来 60 多个,内容台选题里怎么看不到?」
@@ -87,6 +101,9 @@ def geo_clusters(db: Session) -> list[dict[str, Any]]:
 
     from ..geo_series.content.models import GeoContentCluster, GeoMinedQuestion
 
+    from ..k_series.product_knowledge.scope_shim import normalize_scope_context
+
+    ws = normalize_scope_context(scope).workspace_key
     mined = dict(
         db.execute(
             select(GeoMinedQuestion.cluster_id, func.count())
@@ -94,7 +111,10 @@ def geo_clusters(db: Session) -> list[dict[str, Any]]:
         ).all()
     )
     out = []
-    for cluster in db.execute(select(GeoContentCluster)).scalars():
+    # 同上:簇必须按 workspace 过滤,否则内容台把别的组织的选题储备也端出来。
+    for cluster in db.execute(
+        select(GeoContentCluster).where(GeoContentCluster.workspace_key == ws)
+    ).scalars():
         if cluster.status == "archived":
             continue
         picked = len(cluster.picked_questions_json or [])
@@ -206,17 +226,25 @@ def generate_geo(
     return len(jobs)
 
 
-def picked_awaiting_generation(db: Session) -> list[dict[str, Any]]:
-    """已挑中但还没有文章的 —— 第②步的待办。"""
+def picked_awaiting_generation(
+    db: Session, *, scope: KScopeContext | None = None
+) -> list[dict[str, Any]]:
+    """已挑中但还没有文章的 —— 第②步的待办。同样必须按 workspace 过滤。"""
+    from ..k_series.product_knowledge.scope_shim import normalize_scope_context
     from ..seo_series.content.models import SeoContentItem, SeoTopic
 
+    ws = normalize_scope_context(scope).workspace_key
     written = {
         row[0]
-        for row in db.execute(select(SeoContentItem.topic_id)).all()
+        for row in db.execute(
+            select(SeoContentItem.topic_id).where(SeoContentItem.workspace_key == ws)
+        ).all()
     }
     out = []
     for topic in db.execute(
-        select(SeoTopic).where(SeoTopic.status == "picked")
+        select(SeoTopic).where(
+            SeoTopic.workspace_key == ws, SeoTopic.status == "picked"
+        )
     ).scalars():
         if topic.id in written:
             continue

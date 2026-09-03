@@ -58,12 +58,20 @@ def ensure_image_derivative(
     kind: str,
     max_side: int,
     contents: bytes | None = None,
+    force: bool = False,
 ) -> tuple[Path, str, str]:
     """Create a cached WebP derivative if Pillow is available.
 
     When Pillow is unavailable, fall back to the original path without writing a
     mislabeled derivative. This keeps local tests dependency-light while the
     deployed backend still serves real thumbnails.
+
+    ``force=True`` rebuilds even when a derivative already exists — required
+    whenever the ORIGINAL bytes were replaced under the same object_key. The
+    cache keys off the path only, so without this an updated original keeps
+    serving its stale derivative (2026-08-04: the reference-image repair fixed
+    six originals but every preview stayed identical, and every vision call —
+    pose tagging, geometry gate, physics gate — kept seeing one same old photo).
     """
 
     original_path = storage_path(root, object_key)
@@ -72,7 +80,7 @@ def ensure_image_derivative(
 
     target_key = derived_object_key(object_key, kind)
     target_path = storage_path(root, target_key)
-    if target_path.is_file():
+    if target_path.is_file() and not force:
         return target_path, target_key, "image/webp"
 
     if contents is None:

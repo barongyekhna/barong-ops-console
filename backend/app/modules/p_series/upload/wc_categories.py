@@ -26,6 +26,7 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from ....core.config import Settings, get_settings
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,7 @@ def _read_cached_terms(
         rows = db.execute(
             _READ_CACHE,
             {"google_ids": [node.google_id for node in nodes]},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
         ).all()
         cached: dict[str, int] = {}
         expected = {node.google_id for node in nodes}
@@ -278,6 +280,7 @@ def _write_cached_terms(db: Session, mappings: Mapping[str, int]) -> None:
                     "wc_term_id": wc_term_id,
                     "synced_at": synced_at,
                 },
+                execution_options=SKIP_ORG_DATA_ISOLATION,
             )
         db.commit()
     except Exception:  # noqa: BLE001 - a valid WC id is still safe to return

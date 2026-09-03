@@ -28,6 +28,7 @@ from ..schemas.user import (
     DEFAULT_INITIAL_PASSWORD,
     UserCreate,
     UserUpdate,
+    generate_initial_password,
     initial_must_change_password_for_role,
     validate_user_management_role,
 )
@@ -194,7 +195,7 @@ def create_managed_user(
     payload: UserCreate,
     actor: User,
     audit: AuditContext,
-) -> User:
+) -> tuple[User, str]:
     try:
         role = validate_user_management_role(payload.role)
     except ValueError as exc:
@@ -218,11 +219,14 @@ def create_managed_user(
     ):
         raise UserOrganizationNotFoundError("Organization not found.")
 
+    # Random one-time initial password instead of the guessable "123456";
+    # plaintext is returned to the creator once and never stored in cleartext.
+    initial_password = generate_initial_password()
     try:
         user = create_user_record(
             db,
             username=username,
-            password_hash=hash_password(DEFAULT_INITIAL_PASSWORD),
+            password_hash=hash_password(initial_password),
             role=role,
             job_title=job_title,
             organization_id=organization_id,
@@ -254,7 +258,7 @@ def create_managed_user(
         raise
 
     db.refresh(user)
-    return user
+    return user, initial_password
 
 
 def update_managed_user(

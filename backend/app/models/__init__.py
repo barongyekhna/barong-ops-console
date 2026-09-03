@@ -19,8 +19,12 @@ from .c19 import (
     UserAvatarRecord,
     C19UserBlockRecord,
 )
-from .contact_identity import ContactIdentityRecord
 from .context import ContextPacket
+# 2026-09-01 移除 ContactIdentityRecord / MessageRecord:
+# 它们属于 C19 微信化重构**之前**的旧消息栈,对应的 router 早已不再挂载,
+# 生产库里 messages / contact_identities 两张表存在但都是 0 行。
+# 之前它们仍被这里无条件 import,于是进了 Base.metadata、每个容器启动都加载一遍
+# ——业务上死了两个月,进程里还天天跑。
 from .error import SystemError
 from .execution_state import (
     CallbackStateRecord,
@@ -35,7 +39,6 @@ from .key_health import KeyHealthCheck, KeyHealthRun, KeyHealthState
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
 from .module_binding import ModuleBindingRecord
 from .module_control import ModuleControlStateRecord
-from .message import MessageRecord
 from .observability import (
     AnomalyEventRecord,
     AuditLogRecord,
@@ -162,7 +165,6 @@ __all__ = [
     "UserAvatarRecord",
     "C19RelationshipRecord",
     "C19UserBlockRecord",
-    "ContactIdentityRecord",
     "CSMessage",
     "CSReply",
     "ContextPacket",
@@ -213,7 +215,6 @@ __all__ = [
     "KProductKnowledgeWorkflowExecution",
     "MemoryEvent",
     "MemorySummary",
-    "MessageRecord",
     "ModuleBindingRecord",
     "ModuleControlStateRecord",
     "ModuleRegistry",

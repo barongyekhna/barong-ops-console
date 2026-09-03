@@ -373,7 +373,15 @@ def update_draft(
     if subject is not None:
         row.subject = subject[:255]
     if body is not None:
-        row.body = body
+        # 落款按渲染规则重新补一次。生成时补过，但人在界面上改正文可能把它删掉
+        # ——冷邮件缺 CAN-SPAM 落款是法律问题，不能靠人记得别删。
+        # with_compliance_footer 自己会判重（policy_line_present），改动了正文
+        # 但落款还在的情况不会被加第二份。
+        row.body = catalog.with_compliance_footer(
+            body,
+            kind=row.kind,
+            language=row.language,
+        )
     if status is not None:
         if status not in ("draft", "sent", "skipped"):
             raise OutreachError(f"未知状态：{status}")

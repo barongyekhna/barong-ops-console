@@ -19,7 +19,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, NoInspectionAvailable, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from ....services.data_isolation import without_org_data_isolation
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
 from .models import (
     KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
@@ -406,6 +406,7 @@ def _synchronize_product_sku_family(
                             "                WHERE sku = :new)"
                         ),
                         {"new": sku, "old": old_sku},
+                        execution_options=SKIP_ORG_DATA_ISOLATION,
                     )
         except SQLAlchemyError:
             logger.debug(

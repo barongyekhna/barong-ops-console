@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -75,8 +76,44 @@ class C19ProfileRecord(Base):
         primary_key=True,
     )
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Self-service nickname; when set, the UI shows "nickname(display_name)".
+    nickname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     avatar_ref: Mapped[str | None] = mapped_column(String(512), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Per-user appearance preference: "light" | "dark" | "system" (null = dark default).
+    theme_pref: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    @property
+    def resolved_display_name(self) -> str:
+        """Shown name: "nickname（realname）" when a nickname is set, else realname."""
+        nick = (self.nickname or "").strip()
+        return f"{nick}（{self.display_name}）" if nick else self.display_name
+
+
+class UserAvatarRecord(Base):
+    """Avatar image bytes for a user (DB is source of truth; served inline)."""
+
+    __tablename__ = "user_avatars"
+
+    user_id: Mapped[int] = mapped_column(
+        _user_id_type(),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    content_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
