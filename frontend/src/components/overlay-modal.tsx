@@ -51,6 +51,12 @@ export type OverlayModalProps = {
   width?: string;
   /** 额外的键盘处理（比如 ←/→ 翻页）。返回 true 表示已消费，浮窗不再处理。 */
   onKeyDown?: (event: KeyboardEvent) => boolean | void;
+  /**
+   * 摆位。默认 "center"（居中浮窗，原有全部使用方走这条，行为一字不变）。
+   * "drawer" = 右侧全高抽屉，适合长文档：内容更适合从上往下读，
+   * 而且抽屉不遮挡左侧的导航，读的时候还能看见自己在哪。
+   */
+  placement?: "center" | "drawer";
 };
 
 export function OverlayModal({
@@ -59,6 +65,7 @@ export function OverlayModal({
   children,
   width,
   onKeyDown,
+  placement = "center",
 }: OverlayModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   // onKeyDown 放 ref：让它不进下面那个 effect 的依赖，避免调用方忘了
@@ -150,11 +157,23 @@ export function OverlayModal({
   if (typeof document === "undefined") return null;
 
   return createPortal(
-    <div className={styles.overlay} onClick={handleBackdropClick} role="presentation">
+    <div
+      className={
+        placement === "drawer"
+          ? `${styles.overlay} ${styles.overlayDrawer}`
+          : styles.overlay
+      }
+      onClick={handleBackdropClick}
+      role="presentation"
+    >
       <div
         aria-label={label}
         aria-modal="true"
-        className={styles.modal}
+        className={
+          placement === "drawer"
+            ? `${styles.modal} ${styles.modalDrawer}`
+            : styles.modal
+        }
         ref={dialogRef}
         role="dialog"
         style={width ? { width } : undefined}

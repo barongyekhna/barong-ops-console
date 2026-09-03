@@ -94,3 +94,43 @@
     animation: none;
   }
 }
+
+/* ── 抽屉摆位（placement="drawer"，2026-09-02 追加）─────────────────────
+   右侧全高滑出，给长文档用：内容适合从上往下读，而且不遮挡左侧导航。
+   默认的居中摆位一字未动 —— 5 个现有使用方不传 placement，走的还是上面那套。 */
+
+.overlayDrawer {
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 0;
+  overflow: hidden;
+}
+
+.modalDrawer {
+  width: min(880px, 100%);
+  height: 100dvh;
+  max-height: 100dvh;
+  border-width: 0 0 0 1px;
+  border-radius: 0;
+  animation: drawer-in 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(28px);
+    opacity: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .modalDrawer {
+    width: 100%;
+    border-left-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modalDrawer {
+    animation: none;
+  }
+}
