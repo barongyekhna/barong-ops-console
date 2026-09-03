@@ -14,8 +14,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from backend.app.core.security import hash_password
 from backend.app.db.session import SessionLocal, engine as db_engine
+from backend.app.models.org_membership import OrgMembershipRecord
 from backend.app.models.user import User
 from backend.app.modules.w_series.shipping.models import WOrder, WSyncJob
+from tests.backend.conftest import DEFAULT_TEST_ORG_DB_ID
 from backend.app.services.permission_service import (
     grant_permission,
     upsert_permission_registry,
@@ -257,10 +259,27 @@ def test_read_permission_can_list_but_cannot_write_or_delete(
             password_hash=hash_password(password),
             role="viewer",
             is_active=True,
+            # 已完成入职的测试账号。模型里 must_change_password 默认为 True，
+            # 而「强制改密码门」会把这类用户挡在所有业务接口之外（403）——
+            # 不显式声明的话，测的就不是本条断言想测的东西。
+            must_change_password=False,
         )
         db.add(reader)
         db.flush()
         reader_id = reader.id
+        # 组织成员关系。少了这一行，C18H 中间件解析不出组织上下文，
+        # 整个 /api/app/* 直接 403 —— 权限本身根本轮不到被检查。
+        # （真实系统里账号是从用户管理建的，那条路会一并写成员关系；
+        #  测试里直接 ORM 造用户就必须自己补。）
+        db.add(
+            OrgMembershipRecord(
+                membership_id=str(uuid4()),
+                user_id=str(reader_id),
+                org_id=DEFAULT_TEST_ORG_DB_ID,
+                role="member",
+                status="active",
+            )
+        )
         db.commit()
         grant_permission(
             db,

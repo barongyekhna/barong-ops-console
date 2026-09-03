@@ -31,6 +31,10 @@ def create_review_audit_user(
             role=role,
             is_active=True,
             organization_id=org_id if role == "super_admin" else None,
+            # 已完成入职的测试账号。模型里 must_change_password 默认为 True，
+            # 而「强制改密码门」会把这类用户挡在所有业务接口之外（403）——
+            # 不显式声明的话，测的就不是本条断言想测的东西。
+            must_change_password=False,
         )
         db.add(user)
         db.flush()
