@@ -1,4 +1,6 @@
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 from threading import Lock
 from time import monotonic
@@ -107,7 +109,7 @@ from .core.config import get_settings
 from .core.environments import is_production_like
 from .core.security_headers import apply_security_headers
 from .core.session_cookies import get_session_id_from_request
-from .core.roles import is_owner_role, normalize_role
+from .core.roles import is_owner_role, is_super_admin_role, normalize_role
 from .db.session import managed_read_session
 from .models.auth_session import AuthSession
 from .models.organization import OrganizationRecord
@@ -120,7 +122,7 @@ from .middleware.event_collector import capture_audit_events
 from .middleware.data_isolation import enforce_org_data_isolation
 from .middleware.org_context import org_context_middleware
 from .middleware.permission import enforce_permission_isolation
-from .services.event_collector import emit_event
+from .services.event_collector import DEFAULT_EVENT_EMITTER, emit_event
 from .services.data_isolation import without_org_data_isolation
 from .services.auth_service import (
     AuthenticatedSession,
@@ -166,6 +168,80 @@ from .services.unified_permission_engine import UnifiedPermissionRequest
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+# --- 应用日志 ---------------------------------------------------------------
+#
+# 2026-09-02 之前，这个进程里的应用 logger **没有任何 handler**、有效级别是
+# WARNING —— `logger.info()` 写不到任何地方，整个生产日志里一条应用级 INFO
+# 都没有。后果是所有「靠日志证明后台任务在跑」的观测手段全是摆设
+# （本轮在留存清理上实地栽过一次：加了每轮一条日志，却怎么都看不到）。
+#
+# 这里只把**自家**命名空间开到 INFO。刻意不动 root、不动第三方：
+# httpx/httpcore 每次出网都记一条、SQLAlchemy 开了 INFO 会把每条 SQL 打出来，
+# 那样应用自己的信息会被彻底淹掉，等于换一种方式看不见。
+#
+# `LOG_LEVEL` 可覆盖（排查时临时调 DEBUG）；第三方始终 WARNING。
+#
+# **作用范围只有本进程（后端 API）。** 9 个 worker 各跑自己的入口
+# （`python -m ...worker_main`），根本不 import 本模块，所以配不到这里。
+# 它们在各自 `main()` 里 `logging.basicConfig(level=INFO)`，日志是通的
+# —— 2026-09-02 实地逐个核对过。下面名单里的 worker 命名空间在本进程内
+# 多数不发言，留着是为了「同一个进程万一 import 到就一并管住」，
+# **不代表 worker 的日志归这里配**。要改 worker 日志，去改它自己的入口。
+_APP_LOGGER_NAMES = (
+    "backend.app",            # 88 处 getLogger(__name__) 全在这个前缀下
+    "barong.audit_events",
+    "agent.c19",
+    "baisuwan-worker",
+    "baisuwan.brain",
+    "baisuwan.client",
+    "baisuwan.patrol",
+    "nijing.brain",
+    "nijing.worker",
+    "f-enrichment",
+    "geo-content-worker",
+    "seo-content-worker",
+    "k-brand-guard",
+    "k-generation-jobs",
+    "k-generation-worker",
+    "k-image-render",
+    "k-image-render-worker",
+    "k-mcp",
+)
+
+
+def _configure_app_logging() -> None:
+    """给自家 logger 装上 stdout handler。
+
+    幂等：重复调用不会叠加 handler（gunicorn 多 worker 各自 import 一次）。
+    """
+    level_name = (os.getenv("LOG_LEVEL") or "INFO").strip().upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(
+        logging.Formatter("[%(asctime)s] [%(levelname)s] %(name)s: %(message)s")
+    )
+    handler.set_name("barong-stdout")
+
+    for name in _APP_LOGGER_NAMES:
+        target = logging.getLogger(name)
+        if not any(h.get_name() == "barong-stdout" for h in target.handlers):
+            target.addHandler(handler)
+        target.setLevel(level)
+        # **保持 propagate=True**。曾经设成 False 来防重复输出，但那是基于猜测：
+        # 实测 uvicorn 只配置 `uvicorn.*` 几个具名 logger，**root 上没有任何
+        # handler**，冒泡到 root 不会产生第二份输出。
+        # 而断掉冒泡的代价很实在：pytest 的 caplog 靠在 root 上挂 handler 抓日志，
+        # propagate=False 会让它一条都抓不到 —— 10 个断言日志内容的测试当场变红。
+        target.propagate = True
+
+    # 第三方保持 WARNING，别让出网和 SQL 日志淹掉自家信息。
+    for noisy in ("httpx", "httpcore", "sqlalchemy.engine", "urllib3"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
+
+_configure_app_logging()
 
 PUBLIC_API_PREFIX = "/api/public"
 APPLICATION_API_PREFIX = "/api/app"
@@ -278,28 +354,38 @@ def _session_from_identity(
 
 
 def _production_error_detail(request: Request, status_code: int) -> str:
+    """消毒后的对外文案。
+
+    消毒本身必须保留（内部堆栈、SQL、路径一个字都不能外泄），但消毒后的话是
+    给人看的。2026-08-31 体检：整站中文界面里冒出 `Invalid request.`
+    `Request failed.`，而且「键名非法」「超长」「已存在」三种情况说的是同一句
+    英文套话 —— 用户既看不懂，也不知道下一步该干嘛。
+
+    这里只改措辞，不改状态码、不放宽消毒。控制面路径仍然一律回「找不到」
+    （不暴露它的存在）。
+    """
     if _is_control_plane_path(request.url.path):
-        return "Not found."
+        return "找不到这个地址。"
     if status_code == status.HTTP_401_UNAUTHORIZED:
-        return "Not authenticated."
+        return "登录已失效，请重新登录。"
     if status_code == status.HTTP_403_FORBIDDEN:
-        return "Forbidden."
+        return "这个账号没有执行该操作的权限。"
     if status_code in {
         status.HTTP_404_NOT_FOUND,
         status.HTTP_405_METHOD_NOT_ALLOWED,
     }:
-        return "Not found."
+        return "找不到这个地址。"
     if status_code == status.HTTP_409_CONFLICT:
-        return "Request conflict."
+        return "和现有数据冲突了（可能已经存在，或刚被别人改过）。请刷新后重试。"
     if status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
-        return "Invalid request."
+        return "提交的内容不符合要求，请检查各字段后重试。"
     if status_code == status.HTTP_429_TOO_MANY_REQUESTS:
-        return "Too many requests."
+        return "操作太频繁，请稍后再试。"
     if status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
-        return "Service unavailable."
+        return "服务暂时不可用，请稍后重试。"
     if status_code >= 500:
-        return "Internal server error."
-    return "Request failed."
+        return "服务端出错了，这不是你的操作问题。请把当前时间告诉维护者。"
+    return "这次请求没成功，请稍后重试。"
 
 
 def _p_publish_gate_conflict_detail_for_production(
@@ -434,11 +520,29 @@ async def _app_lifespan(_app: FastAPI):
     start_session_seen_flush_worker()
     start_api_key_usage_flush_worker()
     start_login_side_effect_worker()
+    # 启动横幅。**不是装饰**：今天两次「改了配置容器却没读到」
+    # （APP_VERSION 改了工作树、EVENT_RETENTION_DAYS 同理 —— 发版脚本读的是
+    # 发版副本里那份 .env.production），本来都能被这一行当场暴露。
+    # 容器到底带着什么版本、什么配置起来的，应该看一眼日志就知道。
+    logger.info(
+        "控制台后端已启动 · 版本 %s · 环境 %s · 观测留存 %s 天 · 日志级别 %s",
+        settings.app_version,
+        settings.app_env,
+        os.getenv("EVENT_RETENTION_DAYS") or "默认",
+        os.getenv("LOG_LEVEL") or "INFO",
+    )
     start_module_control_cache_worker()
+    # C17 观测表留存清理。**必须在这里启动**：它原本挂在 event_collector 的
+    # 队列消费循环上，而那个循环需要 auto_drain=True 才会跑，
+    # DEFAULT_EVENT_EMITTER 用的是默认 False —— 2026-09-02 生产实测
+    # _started=False、_worker=None，那条循环从来没运行过。
+    # 挂在死循环上等于写了个永不执行的功能。
+    DEFAULT_EVENT_EMITTER.start_maintenance()
     refresh_module_control_center_cache_async(force=True)
     try:
         yield
     finally:
+        DEFAULT_EVENT_EMITTER.stop_maintenance()
         stop_login_side_effect_worker()
         stop_module_control_cache_worker()
         stop_api_key_usage_flush_worker()
@@ -637,7 +741,10 @@ def _load_hot_read_payload(
         return response.model_dump_json()
 
     def load_module_registry() -> object:
-        if not (is_owner_role(role) or role == "super_admin"):
+        # 用 is_super_admin_role 而不是裸串比较：那个函数会先 normalize_role，
+        # 裸串比较对 "SUPER_ADMIN"、" super_admin " 这类值会静默判假 ——
+        # 全站唯一一处这么写的地方。
+        if not (is_owner_role(role) or is_super_admin_role(role)):
             return {
                 "detail": "Forbidden.",
                 "_status_code": status.HTTP_403_FORBIDDEN,

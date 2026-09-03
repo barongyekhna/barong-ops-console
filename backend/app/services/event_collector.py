@@ -1,7 +1,39 @@
+"""C17 审计事件采集。
+
+事件写入是**同步**的：`emit_event` 把事件落进 `event_streams`（并派生一条
+`storage_events`），请求路径上就完成，不依赖任何后台进程。审计留痕不会因为
+后台没跑而丢失 —— 这一点是这个模块的底线。
+
+## ⚠️ 队列消费默认关闭，这是有意的决定，不是 bug
+
+`DEFAULT_EVENT_EMITTER` 用的是 `auto_drain=False`，全仓也没有任何地方调用
+`start()`。也就是说 `_drain()` 那条消费循环**从来没有运行过**，事件写进去之后
+一直停在 `processing_status='queued'`，不会被二次加工（加工是指写进
+`audit_logs` 等派生表）。
+
+2026-09-02 复核时的事实：
+- 自 2026-06-17 建表起累计约 107 万条，其中 98% 停在 queued；
+- 这两个半月里**没有任何功能因此报错**，说明加工后的产物当前没有消费方；
+- 原始审计事件本身照常落库，需要查证时直接查 `event_streams` 即可。
+
+**据此拍板：维持不打开。** 积压随留存窗自然过期（见下方留存策略）。
+
+要打开的话，把 `DEFAULT_EVENT_EMITTER` 换成 `EventQueueBackend(auto_drain=True)`
+或在启动时调 `start()` —— 但**先想清楚谁在消费加工产物**，否则只是把 107 万条
+积压变成几个小时的持续写入负载，换来一堆同样没人看的派生行。
+
+## 留存清理走的是另一条线
+
+`start_maintenance()` 起的独立线程，**不依赖上面那条消费循环**（正因为它从不运行）。
+清理结果写进 `worker_heartbeats` 表而不是日志 —— 这个进程里应用 logger
+没有 handler，`logger.info` 写不到任何地方。
+"""
+
 from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from collections.abc import Mapping
 from contextvars import Token, ContextVar
@@ -27,6 +59,34 @@ DEFAULT_EVENT_QUEUE_BATCH_SIZE = 25
 DEFAULT_EVENT_QUEUE_POLL_INTERVAL_SECONDS = 0.25
 DEFAULT_EVENT_QUEUE_MAX_ATTEMPTS = 3
 COLLECTOR_RECORD_PREFIX = "event-"
+
+# --- 留存策略 -----------------------------------------------------------------
+#
+# 2026-09-01 实测：`event_streams` 2.0 GB / 107 万行，`storage_events` 1.0 GB /
+# 107 万行，两张加起来占整库 64%，每小时各涨约 2,400 行。
+#
+# 而**读取侧只看最新的一小段**：`snapshot()` 按时间倒序取 `_snapshot_limit`
+# （默认 5000）条；`storage_events` 全仓没有任何一处 SELECT，只写不读。
+# 也就是说超过留存窗的行，写进去之后再也不会被任何代码看一眼。
+#
+# 90 天是刻意留宽的：这是审计留痕，不是缓存，宁可多留。真要缩短请改
+# `EVENT_RETENTION_DAYS` 环境变量，别改这里的默认值。
+DEFAULT_EVENT_RETENTION_DAYS = 90
+# 每次删多少行。分批的理由不是性能，是**别开长事务**：一条 DELETE 扫 90 万行
+# 会长时间持锁并把表撑肿，而这两张表正是全库写得最频繁的。
+EVENT_RETENTION_BATCH_ROWS = 5000
+# 两次清理之间至少隔多久。清理不是热路径，一小时一次足够，
+# 频繁跑只会和写入抢锁。
+EVENT_RETENTION_INTERVAL_SECONDS = 3600.0
+# 清理语句自己的超时。全局 statement_timeout 是 8 秒 —— 那是给请求路径定的，
+# 后台维护套用它会让清理在数据量一上来就永远超时，而异常又被吞成日志，
+# 表现为「静默不生效、表继续涨」。2026-09-02 实测撞到过。
+EVENT_RETENTION_STATEMENT_TIMEOUT_MS = 60000
+# 咨询锁编号。生产上 5 个 gunicorn worker 各有一个清理线程，
+# 让它们同时删同一批行只会互相抢锁，不会更快。
+EVENT_RETENTION_ADVISORY_LOCK = 917_231_004
+# 启动后多久跑第一轮。不是「等满一个间隔」——那样重启频繁就永远跑不到。
+EVENT_RETENTION_FIRST_RUN_DELAY_SECONDS = 60.0
 PLATFORM_ORG_ID = "platform"
 VALID_EVENT_MODULES = frozenset(get_args(EventModule))
 VALID_EVENT_SOURCES = frozenset(get_args(EventSource))
@@ -127,6 +187,13 @@ class EventQueueBackend:
         self._emitted = 0
         self._started = False
         self._worker: threading.Thread | None = None
+        # 连续清理失败次数。只写日志的话，「静默不生效」和「一切正常」
+        # 在 stats() 上长得一模一样 —— 这个计数让它们分得开。
+        self._prune_failures = 0
+        self._prune_runs = 0
+        self._maintenance_worker: threading.Thread | None = None
+        self._maintenance_stop = threading.Event()
+        self._prune_lock_session = None
         self._logger = logging.getLogger(EVENT_LOGGER_NAME)
         self._tables_ready = False
 
@@ -247,7 +314,240 @@ class EventQueueBackend:
                 "emitted": self._emitted,
                 "dropped": 0,
                 "failed": self._failed,
+                # >0 表示留存清理连续失败中 —— 那意味着表在无限增长。
+                "prune_failures": self._prune_failures,
+                # 0 表示清理从没跑过 —— 和「跑了但没删」是两回事。
+                "prune_runs": self._prune_runs,
             }
+
+    def _retention_days(self) -> int:
+        """留存天数。0 或负数表示关闭清理（给需要长期取证时留的后门）。"""
+        raw = os.getenv("EVENT_RETENTION_DAYS")
+        if raw is None or not raw.strip():
+            return DEFAULT_EVENT_RETENTION_DAYS
+        try:
+            return int(raw)
+        except ValueError:
+            self._logger.warning(
+                "EVENT_RETENTION_DAYS 不是整数（%r），按默认 %s 天处理。",
+                raw,
+                DEFAULT_EVENT_RETENTION_DAYS,
+            )
+            return DEFAULT_EVENT_RETENTION_DAYS
+
+    def prune_expired(self, *, max_batches: int = 4) -> dict[str, int]:
+        """删掉超过留存窗的观测行。
+
+        分批删而不是一条 DELETE 干完：这两张表是全库写得最频繁的，
+        一条扫 90 万行的 DELETE 会长时间持锁、把表撑肿，还会把正在写入的
+        请求拖住。每批 5000 行、每次最多 4 批，跑不完下一轮接着跑。
+
+        返回删掉的行数，调用方可以据此判断还要不要接着跑。
+        """
+        days = self._retention_days()
+        if days <= 0:
+            return {"event_streams": 0, "storage_events": 0}
+
+        self._ensure_tables()
+        from datetime import datetime, timedelta, timezone
+
+        from sqlalchemy import text
+
+        from ..db.session import managed_session
+        from .data_isolation import (
+            SKIP_ORG_DATA_ISOLATION,
+            without_org_data_isolation,
+        )
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        deleted = {"event_streams": 0, "storage_events": 0}
+
+        # 观测表是跨组织的运维数据，清理按时间不按组织，所以显式跳过 C18G 守卫。
+        # 用 per-statement 逃生口而不是整块 without_org_data_isolation()，
+        # 让豁免范围只覆盖这两条语句。
+        # **顺序不能反**：storage_events.record_id 有外键指向 event_streams.record_id，
+        # 删除规则是 NO ACTION。先删父表会直接违反外键、清理一行都跑不动。
+        # 子表先删干净，父表那一批才删得下去。
+        with without_org_data_isolation():
+            for table in ("storage_events", "event_streams"):
+                for _ in range(max_batches):
+                    with managed_session() as db:
+                        # 后台维护不该用请求路径那 8 秒的预算。分批已经把单条
+                        # 语句的规模压到 5000 行，给 60 秒是留裕量，不是放任。
+                        db.execute(
+                            text(
+                                "SET LOCAL statement_timeout = "
+                                f"{EVENT_RETENTION_STATEMENT_TIMEOUT_MS}"
+                            )
+                        )
+                        result = db.execute(
+                            text(
+                                f"""
+                                DELETE FROM {table}
+                                WHERE ctid IN (
+                                    SELECT ctid FROM {table}
+                                    WHERE created_at < :cutoff
+                                    LIMIT :batch
+                                )
+                                """
+                            ),
+                            {"batch": EVENT_RETENTION_BATCH_ROWS, "cutoff": cutoff},
+                            execution_options=SKIP_ORG_DATA_ISOLATION,
+                        )
+                        db.commit()
+                    removed = result.rowcount or 0
+                    deleted[table] += removed
+                    # **只有删到 0 行才算删完**。曾经写成「删得少于一批就退出」，
+                    # 结果 2026-09-02 清存量时提前收工：报告「完成」，实际
+                    # 还剩 192,474 行过期没删（跑第二遍才删掉）。
+                    # 原因是 `ctid IN (子查询)` 在并发写入下会有部分 ctid 失效，
+                    # 一批删得少于 LIMIT 是常态，**不代表没有更多了**。
+                    if removed == 0:
+                        break
+
+        if deleted["event_streams"] or deleted["storage_events"]:
+            self._logger.debug(
+                "C17 观测留存清理：event_streams -%s 行，storage_events -%s 行"
+                "（保留 %s 天）。",
+                deleted["event_streams"],
+                deleted["storage_events"],
+                days,
+            )
+        return deleted
+
+    def start_maintenance(self) -> None:
+        """启动留存清理线程。
+
+        **刻意不挂在 `_drain` 上**：那个消费循环需要 `auto_drain=True` 或有人
+        显式调 `start()` 才会跑，而 `DEFAULT_EVENT_EMITTER` 用的是默认值
+        `auto_drain=False`，全仓也没有任何地方调用 `start()` ——
+        2026-09-02 在生产实测：`_started=False`、`_worker=None`，
+        那个循环**从来没运行过**（这也是 107 万条事件卡在 queued 的原因）。
+        把清理挂上去等于写了个永不执行的功能。
+
+        所以清理走自己的线程，不依赖队列消费是否开启。
+        """
+        with self._lock:
+            if self._maintenance_worker is not None:
+                return
+            self._maintenance_worker = threading.Thread(
+                target=self._maintenance_loop,
+                name="c17-retention",
+                daemon=True,
+            )
+            self._maintenance_worker.start()
+
+    def _maintenance_loop(self) -> None:
+        # **先等一小段再跑第一轮，而不是等满一小时**：容器重启比一小时频繁时，
+        # 「等满再跑」意味着清理永远轮不到执行 —— 又是一个「看起来做了、其实不跑」。
+        # 60 秒是给应用启动让路，别和冷启的那波请求抢连接。
+        if self._maintenance_stop.wait(EVENT_RETENTION_FIRST_RUN_DELAY_SECONDS):
+            return
+        self._prune_once()
+        while not self._maintenance_stop.wait(EVENT_RETENTION_INTERVAL_SECONDS):
+            self._prune_once()
+
+    def stop_maintenance(self) -> None:
+        self._maintenance_stop.set()
+
+    def _prune_once(self) -> None:
+        """清理一轮。失败只记日志并计数，绝不影响事件落库。"""
+        try:
+            if not self._acquire_prune_lock():
+                return
+            try:
+                deleted = self.prune_expired()
+            finally:
+                self._release_prune_lock()
+            self._prune_failures = 0
+            self._prune_runs += 1
+            self._record_heartbeat(deleted=deleted)
+        except Exception as exc:
+            self._prune_failures += 1
+            # exception 是 ERROR 级，这条能到 stdout；info 不行（见 _record_heartbeat）。
+            self._logger.exception(
+                "C17 观测留存清理失败（连续第 %s 次，不影响事件落库）。",
+                self._prune_failures,
+            )
+            self._record_heartbeat_failure(str(exc))
+
+    def _record_heartbeat(self, *, deleted: dict[str, int]) -> None:
+        """把「这一轮真的跑完了」记进 worker_heartbeats。
+
+        **为什么不用日志**：2026-09-02 实测，这个进程里的应用 logger
+        没有任何 handler、有效级别是 WARNING —— `logger.info()` 写不到任何地方，
+        整个生产日志里一条应用级 INFO 都没有。拿它当观测手段等于没有观测。
+
+        心跳表是 Phase 5 专门为「后台任务到底有没有在干活」建的，
+        不依赖控制台、有独立检查脚本，是这里唯一靠得住的通道。
+
+        一轮删 0 行**也算干成活**：留存窗内没有过期行是一个**已核实**的结论，
+        不是空转。真正要能看见的失败（线程没起来、语句超时）走 record_failure，
+        两者在 last_success_at / last_attempt_at 的距离上分得开。
+        """
+        from ..db.session import managed_session
+        from .worker_heartbeat import record_success
+
+        total = deleted["event_streams"] + deleted["storage_events"]
+        try:
+            with managed_session() as db:
+                record_success(
+                    db,
+                    worker_name="c17-retention",
+                    module_key=f"deleted={total}",
+                    expected_interval_seconds=int(EVENT_RETENTION_INTERVAL_SECONDS * 2),
+                )
+                db.commit()
+        except Exception:
+            self._logger.exception("C17 留存清理心跳写入失败。")
+
+    def _record_heartbeat_failure(self, error: str) -> None:
+        from ..db.session import managed_session
+        from .worker_heartbeat import record_failure
+
+        try:
+            with managed_session() as db:
+                record_failure(
+                    db,
+                    worker_name="c17-retention",
+                    error=error[:500],
+                    expected_interval_seconds=int(EVENT_RETENTION_INTERVAL_SECONDS * 2),
+                )
+                db.commit()
+        except Exception:
+            self._logger.exception("C17 留存清理失败心跳写入失败。")
+
+    def _acquire_prune_lock(self) -> bool:
+        """Postgres 咨询锁：5 个 gunicorn worker 里只让一个真去删。
+
+        拿不到锁就直接跳过 —— 说明别的进程正在清，不必排队。
+        """
+        from sqlalchemy import text
+
+        from ..db.session import managed_session
+
+        with managed_session() as db:
+            if db.get_bind().dialect.name != "postgresql":
+                return True
+            acquired = db.scalar(
+                text("SELECT pg_try_advisory_lock(:key)"),
+                {"key": EVENT_RETENTION_ADVISORY_LOCK},
+            )
+            self._prune_lock_session = db if acquired else None
+            return bool(acquired)
+
+    def _release_prune_lock(self) -> None:
+        from sqlalchemy import text
+
+        from ..db.session import managed_session
+
+        with managed_session() as db:
+            if db.get_bind().dialect.name != "postgresql":
+                return
+            db.execute(
+                text("SELECT pg_advisory_unlock(:key)"),
+                {"key": EVENT_RETENTION_ADVISORY_LOCK},
+            )
 
     def _drain(self) -> None:
         while True:
