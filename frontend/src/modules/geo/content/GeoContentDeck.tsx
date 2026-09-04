@@ -40,11 +40,11 @@ import { OutboundConfirm } from "@/components/outbound-confirm";
 
 /* ------------------------------------------------------------------ tokens */
 
-const GOLD = "#d9a441";
-const BLUE = "#6aa6e8";
-const GREEN = "#55bd88";
-const RED = "#dd6d63";
-const MUTED = "#8b98a8";
+const GOLD = "var(--color-warning)";
+const BLUE = "var(--color-info)";
+const GREEN = "var(--color-success)";
+const RED = "var(--color-error)";
+const MUTED = "var(--color-muted)";
 
 type StatusMeta = { label: string; color: string };
 
@@ -448,7 +448,7 @@ export function GeoContentDeck() {
   return (
     <div style={SHELL}>
       {error ? (
-        <div style={{ ...BANNER, borderColor: "rgba(221,109,99,0.45)", color: RED }}>
+        <div style={{ ...BANNER, borderColor: "color-mix(in srgb, var(--color-error) 45%, transparent)", color: RED }}>
           {error}
         </div>
       ) : null}
@@ -553,7 +553,7 @@ export function GeoContentDeck() {
               ) : null}
 
               {failedJob ? (
-                <div style={{ ...BANNER, borderColor: "rgba(221,109,99,0.45)", color: RED }}>
+                <div style={{ ...BANNER, borderColor: "color-mix(in srgb, var(--color-error) 45%, transparent)", color: RED }}>
                   生成失败：{failedJob.error || "未知错误"}
                   {failedJob.finished_at || failedJob.started_at ? (
                     <span style={{ opacity: 0.6, fontSize: 12 }}>
@@ -594,7 +594,7 @@ export function GeoContentDeck() {
                       style={{
                         appearance: "none",
                         cursor: "pointer",
-                        border: on ? `1px solid ${GOLD}66` : "1px solid rgba(255,255,255,.10)",
+                        border: on ? `1px solid color-mix(in srgb, ${GOLD} 40%, transparent)` : "1px solid color-mix(in srgb, var(--color-text-strong) 10%, transparent)",
                         background: on ? `${GOLD}1a` : "transparent",
                         color: on ? GOLD : "inherit",
                         fontWeight: on ? 600 : 400,
@@ -852,7 +852,7 @@ export function GeoContentDeck() {
                               ))}
   
                               {!auditClean(item) && item.brand_audit ? (
-                                <div style={{ ...BANNER, marginTop: 10, fontSize: 12, color: RED, borderColor: "rgba(221,109,99,0.45)" }}>
+                                <div style={{ ...BANNER, marginTop: 10, fontSize: 12, color: RED, borderColor: "color-mix(in srgb, var(--color-error) 45%, transparent)" }}>
                                   {(item.brand_audit.brand_violations?.length ?? 0) > 0 ? "含第三方品牌词 " : ""}
                                   {(item.brand_audit.cjk_surfaces?.length ?? 0) > 0 ? "含中文 " : ""}
                                   {(item.brand_audit.ungrounded_numbers?.length ?? 0) > 0
@@ -1369,7 +1369,7 @@ export function GeoContentDeck() {
                             key={q.id}
                             style={{
                               border: `1px solid ${
-                                q.terrain === "soft" ? `${GREEN}55` : "rgba(255,255,255,.08)"
+                                q.terrain === "soft" ? `color-mix(in srgb, ${GREEN} 33%, transparent)` : "color-mix(in srgb, var(--color-text-strong) 8%, transparent)"
                               }`,
                               borderRadius: 10,
                               padding: "10px 12px",
@@ -1444,8 +1444,8 @@ const GRID: React.CSSProperties = {
   alignItems: "start",
 };
 const CARD: React.CSSProperties = {
-  background: "rgba(12, 20, 30, 0.55)",
-  border: "1px solid rgba(120, 160, 200, 0.18)",
+  background: "color-mix(in srgb, var(--color-panel-base) 55%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-muted) 18%, transparent)",
   borderRadius: 14,
   overflow: "hidden",
 };
@@ -1469,9 +1469,9 @@ const SECTION_TOGGLE: React.CSSProperties = {
   gap: 8,
   flexWrap: "wrap",
   padding: "12px 16px",
-  background: "rgba(255,255,255,0.02)",
+  background: "color-mix(in srgb, var(--color-text-strong) 2%, transparent)",
   border: "none",
-  borderBottom: "1px solid rgba(120,160,200,0.14)",
+  borderBottom: "1px solid color-mix(in srgb, var(--color-muted) 14%, transparent)",
   color: "inherit",
   font: "inherit",
   cursor: "pointer",
@@ -1496,16 +1496,16 @@ const CLUSTER_BTN: React.CSSProperties = {
   gap: 5,
   padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid rgba(120,160,200,0.14)",
+  border: "1px solid color-mix(in srgb, var(--color-muted) 14%, transparent)",
   borderLeft: "3px solid transparent",
-  background: "rgba(0,0,0,0.22)",
+  background: "color-mix(in srgb, var(--color-text-strong) 7%, transparent)",
   color: "inherit",
   cursor: "pointer",
   textAlign: "left",
 };
 const CLUSTER_BTN_ON: React.CSSProperties = {
-  background: "rgba(217,164,65,0.10)",
-  border: "1px solid rgba(217,164,65,0.35)",
+  background: "color-mix(in srgb, var(--color-warning) 10%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-warning) 35%, transparent)",
   borderLeft: "3px solid",
 };
 const CLUSTER_TITLE: React.CSSProperties = {
@@ -1532,18 +1532,18 @@ const ROW: React.CSSProperties = {
   gap: 8,
   padding: "7px 10px",
   borderRadius: 8,
-  border: "1px solid rgba(120,160,200,0.12)",
-  background: "rgba(0,0,0,0.18)",
+  border: "1px solid color-mix(in srgb, var(--color-muted) 12%, transparent)",
+  background: "color-mix(in srgb, var(--color-text-strong) 6%, transparent)",
   fontSize: 13,
   flexWrap: "wrap",
 };
 const ROW_ON: React.CSSProperties = {
-  border: "1px solid rgba(217,164,65,0.45)",
-  background: "rgba(217,164,65,0.08)",
+  border: "1px solid color-mix(in srgb, var(--color-warning) 45%, transparent)",
+  background: "color-mix(in srgb, var(--color-warning) 8%, transparent)",
 };
 const ITEM_CARD: React.CSSProperties = {
-  background: "rgba(8, 14, 22, 0.5)",
-  border: "1px solid rgba(120, 160, 200, 0.14)",
+  background: "color-mix(in srgb, var(--color-panel-base) 50%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-muted) 14%, transparent)",
   borderRadius: 10,
   padding: 14,
 };
@@ -1552,7 +1552,7 @@ const ANALYSIS_PANEL: React.CSSProperties = {
   padding: 12,
   borderRadius: 10,
   border: `1px solid ${BLUE}44`,
-  background: "rgba(63,127,201,0.07)",
+  background: "color-mix(in srgb, var(--color-info) 7%, transparent)",
   maxHeight: 420,
   overflowY: "auto",
 };
@@ -1561,8 +1561,8 @@ const REVISION_PANEL: React.CSSProperties = {
   marginTop: 10,
   padding: 10,
   borderRadius: 8,
-  border: "1px solid rgba(217,164,65,0.3)",
-  background: "rgba(217,164,65,0.06)",
+  border: "1px solid color-mix(in srgb, var(--color-warning) 30%, transparent)",
+  background: "color-mix(in srgb, var(--color-warning) 6%, transparent)",
 };
 const ANALYSIS_LABEL: React.CSSProperties = {
   fontSize: 11,
@@ -1572,11 +1572,11 @@ const ANALYSIS_LABEL: React.CSSProperties = {
   marginBottom: 2,
 };
 const BANNER: React.CSSProperties = {
-  border: "1px solid rgba(120,160,200,0.25)",
+  border: "1px solid color-mix(in srgb, var(--color-muted) 25%, transparent)",
   borderRadius: 10,
   padding: "10px 14px",
   fontSize: 13,
-  background: "rgba(0,0,0,0.2)",
+  background: "color-mix(in srgb, var(--color-text-strong) 7%, transparent)",
 };
 const HINT: React.CSSProperties = { opacity: 0.6, fontSize: 13, margin: 0 };
 const BODY_TEXT: React.CSSProperties = {
@@ -1590,14 +1590,14 @@ const BADGE: React.CSSProperties = {
   fontWeight: 600,
   padding: "2px 8px",
   borderRadius: 999,
-  border: "1px solid rgba(120,160,200,0.3)",
+  border: "1px solid color-mix(in srgb, var(--color-muted) 30%, transparent)",
   whiteSpace: "nowrap",
 };
 const COUNT_PILL: React.CSSProperties = {
   fontSize: 11,
   padding: "1px 8px",
   borderRadius: 999,
-  background: "rgba(120,160,200,0.16)",
+  background: "color-mix(in srgb, var(--color-muted) 16%, transparent)",
   fontVariantNumeric: "tabular-nums",
 };
 const SCORE_PILL: React.CSSProperties = {
@@ -1610,7 +1610,7 @@ const SKU_PILL: React.CSSProperties = {
   fontWeight: 700,
   padding: "2px 7px",
   borderRadius: 5,
-  background: "rgba(120,160,200,0.2)",
+  background: "color-mix(in srgb, var(--color-muted) 20%, transparent)",
   fontFamily: "monospace",
   whiteSpace: "nowrap",
 };
@@ -1618,7 +1618,7 @@ const TYPE_PILL: React.CSSProperties = {
   fontSize: 11,
   padding: "2px 8px",
   borderRadius: 6,
-  background: "rgba(63,127,201,0.18)",
+  background: "color-mix(in srgb, var(--color-info) 18%, transparent)",
   color: BLUE,
   fontWeight: 600,
   whiteSpace: "nowrap",
@@ -1636,7 +1636,7 @@ const PRIMARY_BTN: React.CSSProperties = {
 const GHOST_BTN: React.CSSProperties = {
   padding: "5px 12px",
   borderRadius: 7,
-  border: "1px solid rgba(120,160,200,0.3)",
+  border: "1px solid color-mix(in srgb, var(--color-muted) 30%, transparent)",
   background: "transparent",
   color: "inherit",
   cursor: "pointer",

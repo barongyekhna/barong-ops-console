@@ -17,16 +17,16 @@
 .factory {
   font-size: 12px;
   letter-spacing: 0.06em;
-  color: rgba(198, 216, 246, 0.72);
+  color: var(--color-muted);
 }
 
 .tabs {
   display: inline-flex;
   gap: 4px;
   padding: 4px;
-  border: 1px solid rgba(120, 170, 255, 0.18);
+  border: 1px solid color-mix(in srgb, var(--color-info) 18%, transparent);
   border-radius: 10px;
-  background: rgba(10, 18, 34, 0.55);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
 }
 
 .tab {
@@ -34,21 +34,21 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: rgba(198, 216, 246, 0.78);
+  color: var(--color-muted);
   font-size: 13px;
   cursor: pointer;
 }
 
 .tab[data-active="true"] {
-  background: rgba(120, 170, 255, 0.22);
-  color: #eaf2ff;
+  background: color-mix(in srgb, var(--color-info) 22%, transparent);
+  color: var(--color-text);
 }
 
 .panel {
   padding: 16px 18px 20px;
-  border: 1px solid rgba(120, 170, 255, 0.16);
+  border: 1px solid color-mix(in srgb, var(--color-info) 16%, transparent);
   border-radius: 14px;
-  background: rgba(8, 14, 28, 0.5);
+  background: color-mix(in srgb, var(--color-panel-base) 50%, transparent);
 }
 
 .panelHead {
@@ -64,7 +64,7 @@
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #eaf2ff;
+  color: var(--color-text);
 }
 
 .actions {
@@ -75,16 +75,16 @@
 
 .btn {
   padding: 7px 14px;
-  border: 1px solid rgba(120, 170, 255, 0.3);
+  border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
   border-radius: 8px;
-  background: rgba(120, 170, 255, 0.12);
-  color: #eaf2ff;
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  color: var(--color-text);
   font-size: 13px;
   cursor: pointer;
 }
 
 .btn:hover:not(:disabled) {
-  background: rgba(120, 170, 255, 0.22);
+  background: color-mix(in srgb, var(--color-info) 22%, transparent);
 }
 
 .btn:disabled {
@@ -94,18 +94,18 @@
 
 .btnPrimary {
   composes: btn;
-  border-color: rgba(111, 227, 165, 0.45);
-  background: rgba(111, 227, 165, 0.16);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
 }
 
 .btnPrimary:hover:not(:disabled) {
-  background: rgba(111, 227, 165, 0.28);
+  background: color-mix(in srgb, var(--color-success) 28%, transparent);
 }
 
 .btnDanger {
   composes: btn;
-  border-color: rgba(255, 143, 143, 0.4);
-  background: rgba(255, 143, 143, 0.12);
+  border-color: color-mix(in srgb, var(--color-error) 40%, transparent);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
 .btnGhost {
@@ -118,24 +118,24 @@
 
 .error {
   padding: 10px 12px;
-  border: 1px solid rgba(255, 143, 143, 0.4);
+  border: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent);
   border-radius: 10px;
-  background: rgba(255, 143, 143, 0.1);
-  color: #ffb3b3;
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   font-size: 13px;
 }
 
 .notice {
   padding: 10px 12px;
-  border: 1px solid rgba(111, 227, 165, 0.35);
+  border: 1px solid color-mix(in srgb, var(--color-success) 35%, transparent);
   border-radius: 10px;
-  background: rgba(111, 227, 165, 0.1);
-  color: #bdf5d6;
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: var(--color-text);
   font-size: 13px;
 }
 
 .muted {
-  color: rgba(198, 216, 246, 0.6);
+  color: var(--color-muted);
   font-size: 12px;
 }
 
@@ -151,17 +151,17 @@
 
 .table th {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(120, 170, 255, 0.2);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-info) 20%, transparent);
   text-align: left;
   font-weight: 500;
-  color: rgba(198, 216, 246, 0.72);
+  color: var(--color-muted);
   white-space: nowrap;
 }
 
 .table td {
   padding: 8px 10px;
-  border-bottom: 1px solid rgba(120, 170, 255, 0.08);
-  color: #dde8fb;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-info) 8%, transparent);
+  color: var(--color-text-strong);
   vertical-align: middle;
 }
 
@@ -170,7 +170,7 @@
 }
 
 .table tr[data-clickable="true"]:hover td {
-  background: rgba(120, 170, 255, 0.06);
+  background: color-mix(in srgb, var(--color-info) 6%, transparent);
 }
 
 .num {
@@ -180,21 +180,21 @@
 }
 
 .pos {
-  color: #6fe3a5;
+  color: var(--color-success);
 }
 
 .neg {
-  color: #ff8f8f;
+  color: var(--color-error);
 }
 
 .zero {
-  color: #ffc46b;
+  color: var(--color-warning);
 }
 
 .code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  color: rgba(198, 216, 246, 0.85);
+  color: var(--color-text);
 }
 
 .tag {
@@ -202,14 +202,14 @@
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px;
-  background: rgba(120, 170, 255, 0.16);
-  color: #cfe0ff;
+  background: color-mix(in srgb, var(--color-info) 16%, transparent);
+  color: var(--color-text-strong);
 }
 
 .tagWarn {
   composes: tag;
-  background: rgba(255, 196, 107, 0.16);
-  color: #ffd89a;
+  background: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  color: var(--color-text);
 }
 
 .filters {
@@ -223,10 +223,10 @@
 .select,
 .textarea {
   padding: 7px 10px;
-  border: 1px solid rgba(120, 170, 255, 0.24);
+  border: 1px solid color-mix(in srgb, var(--color-info) 24%, transparent);
   border-radius: 8px;
-  background: rgba(4, 8, 18, 0.6);
-  color: #eaf2ff;
+  background: color-mix(in srgb, var(--color-panel-base) 60%, transparent);
+  color: var(--color-text);
   font-size: 13px;
   min-width: 0;
 }
@@ -234,7 +234,7 @@
 .input:focus,
 .select:focus,
 .textarea:focus {
-  outline: 1px solid rgba(120, 170, 255, 0.6);
+  outline: 1px solid color-mix(in srgb, var(--color-info) 60%, transparent);
 }
 
 .inputSm {
@@ -258,7 +258,7 @@
   align-items: flex-start;
   justify-content: center;
   padding: 6vh 16px;
-  background: rgba(2, 6, 14, 0.72);
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
   backdrop-filter: blur(4px);
   overflow-y: auto;
 }
@@ -266,9 +266,9 @@
 .dialog {
   width: min(760px, 100%);
   padding: 18px 20px 20px;
-  border: 1px solid rgba(120, 170, 255, 0.26);
+  border: 1px solid color-mix(in srgb, var(--color-info) 26%, transparent);
   border-radius: 14px;
-  background: rgba(8, 14, 28, 0.96);
+  background: color-mix(in srgb, var(--color-panel-base) 96%, transparent);
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
@@ -283,7 +283,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-  color: #eaf2ff;
+  color: var(--color-text);
 }
 
 .form {
@@ -306,7 +306,7 @@
 
 .label {
   font-size: 12px;
-  color: rgba(198, 216, 246, 0.72);
+  color: var(--color-muted);
 }
 
 .footer {
@@ -331,7 +331,7 @@
 
 .hint {
   font-size: 12px;
-  color: rgba(198, 216, 246, 0.55);
+  color: var(--color-muted);
 }
 
 .kv {
@@ -342,18 +342,18 @@
 }
 
 .kv dt {
-  color: rgba(198, 216, 246, 0.6);
+  color: var(--color-muted);
 }
 
 .kv dd {
   margin: 0;
-  color: #eaf2ff;
+  color: var(--color-text);
 }
 
 .empty {
   padding: 26px 0;
   text-align: center;
-  color: rgba(198, 216, 246, 0.55);
+  color: var(--color-muted);
   font-size: 13px;
 }
 

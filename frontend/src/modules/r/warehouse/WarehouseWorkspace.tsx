@@ -612,7 +612,7 @@ function ProductsTable({
           flexWrap: "wrap",
         }}
       >
-        <span style={{ fontSize: "0.82rem", color: "var(--mm-dim, #7d95ae)" }}>
+        <span style={{ fontSize: "0.82rem", color: "var(--mm-dim, var(--color-muted))" }}>
           搬入 K 的分组：
         </span>
         <label style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: "0.85rem" }}>
@@ -624,7 +624,7 @@ function ProductsTable({
           亚马逊
         </label>
         {transferMsg ? (
-          <span style={{ fontSize: "0.82rem", color: "var(--mm-cyan, #39d4ff)" }}>{transferMsg}</span>
+          <span style={{ fontSize: "0.82rem", color: "var(--mm-cyan, var(--color-primary-strong))" }}>{transferMsg}</span>
         ) : null}
       </div>
       <table className={styles.table}>
@@ -713,9 +713,9 @@ function ProductsTable({
                     style={{
                       padding: "4px 10px",
                       borderRadius: 6,
-                      border: "1px solid var(--mm-cyan, rgba(57,212,255,0.4))",
-                      background: "rgba(57,212,255,0.1)",
-                      color: "var(--mm-cyan, #39d4ff)",
+                      border: "1px solid var(--mm-cyan, color-mix(in srgb, var(--color-primary-strong) 40%, transparent))",
+                      background: "color-mix(in srgb, var(--color-primary-strong) 10%, transparent)",
+                      color: "var(--mm-cyan, var(--color-primary-strong))",
                       cursor: "pointer",
                       fontSize: "0.78rem",
                       whiteSpace: "nowrap",

@@ -418,8 +418,8 @@ export function RenderImagesPanel({ productId, hasBrief, onSaved }: RenderImages
                   <span
                     style={{
                       display: "inline-block",
-                      background: "rgba(231,161,44,0.16)",
-                      color: "#b26a00",
+                      background: "color-mix(in srgb, var(--color-warning) 16%, transparent)",
+                      color: "color-mix(in srgb, var(--color-warning) 65%, var(--color-panel-base))",
                       borderRadius: 6,
                       padding: "1px 7px",
                       fontSize: "0.74rem",

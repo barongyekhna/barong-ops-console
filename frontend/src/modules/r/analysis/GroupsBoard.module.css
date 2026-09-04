@@ -26,9 +26,9 @@
 }
 
 .tab[data-active="true"] {
-  border-color: #4dffa1;
-  color: #4dffa1;
-  background: rgba(45, 212, 205, 0.07);
+  border-color: var(--color-success);
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-info) 7%, transparent);
 }
 
 .tabCount {
@@ -73,13 +73,13 @@
 .notice {
   margin: 0;
   font-size: 0.8rem;
-  color: #4dffa1;
+  color: var(--color-success);
 }
 
 .errorNote {
   margin: 0;
   font-size: 0.8rem;
-  color: #ff6b8a;
+  color: var(--color-error);
 }
 
 .empty {
@@ -119,7 +119,7 @@
   height: 64px;
   object-fit: contain;
   border-radius: 6px;
-  background: #0d1826;
+  background: var(--color-surface-solid);
   border: 1px solid var(--color-line);
   flex-shrink: 0;
 }
@@ -170,14 +170,14 @@
 }
 
 .statusBadge[data-kind="approved"] {
-  color: #4dffa1;
-  border: 1px solid rgba(45, 212, 160, 0.5);
+  color: var(--color-success);
+  border: 1px solid color-mix(in srgb, var(--color-success) 50%, transparent);
 }
 
 .statusBadge[data-kind="fulfillment"] {
-  color: #ffb13b;
-  border: 1px solid rgba(255, 177, 59, 0.55);
-  background: rgba(255, 177, 59, 0.08);
+  color: var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 55%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 
 .keywordRow {
@@ -199,8 +199,8 @@
 }
 
 .keywordChip[data-primary="true"] {
-  color: #4dffa1;
-  border-color: rgba(45, 212, 205, 0.55);
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-info) 55%, transparent);
 }
 
 .itemReason {
@@ -217,8 +217,8 @@
 .opusNote {
   margin: 0;
   font-size: 0.76rem;
-  color: #ffb13b;
-  border-left: 2px solid #ffb13b;
+  color: var(--color-warning);
+  border-left: 2px solid var(--color-warning);
   padding-left: 8px;
   line-height: 1.55;
 }
@@ -245,18 +245,18 @@
 }
 
 .actionButton[data-kind="primary"] {
-  border-color: rgba(45, 212, 205, 0.55);
-  color: #4dffa1;
+  border-color: color-mix(in srgb, var(--color-info) 55%, transparent);
+  color: var(--color-success);
 }
 
 .actionButton[data-kind="approve"]:hover {
-  border-color: #4dffa1;
-  color: #4dffa1;
+  border-color: var(--color-success);
+  color: var(--color-success);
 }
 
 .actionButton[data-kind="reject"]:hover {
-  border-color: #ff6b8a;
-  color: #ff6b8a;
+  border-color: var(--color-error);
+  color: var(--color-error);
 }
 
 .actionButton:disabled {
@@ -269,8 +269,8 @@
   padding: 6px 9px;
   font-size: 0.7rem;
   line-height: 1.55;
-  color: #b9a7ff;
-  border-left: 2px solid rgba(154, 120, 255, 0.5);
-  background: rgba(154, 120, 255, 0.06);
+  color: var(--color-text);
+  border-left: 2px solid color-mix(in srgb, var(--color-info) 50%, transparent);
+  background: color-mix(in srgb, var(--color-info) 6%, transparent);
   border-radius: 0 6px 6px 0;
 }

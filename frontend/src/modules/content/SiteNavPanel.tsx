@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { contentRequest, SLOW_WP_TIMEOUT_MS } from "./api-base";
 
-const GOLD = "#d9a441";
-const GREEN = "#55bd88";
-const RED = "#dd6d63";
-const MUTED = "#8b98a8";
+const GOLD = "var(--color-warning)";
+const GREEN = "var(--color-success)";
+const RED = "var(--color-error)";
+const MUTED = "var(--color-muted)";
 
 type Hub = {
   key: string;
@@ -144,7 +144,7 @@ export function SiteNavPanel() {
         <div
           style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}
         >
-          <strong style={{ color: "#dfe6ef", fontSize: 14 }}>站内入口</strong>
+          <strong style={{ color: "var(--color-text-strong)", fontSize: 14 }}>站内入口</strong>
           <span style={{ color: MUTED, fontSize: 12 }}>
             主导航与主页的枢纽入口
           </span>
@@ -157,7 +157,7 @@ export function SiteNavPanel() {
           规矩只有一条：**有内容就挂入口，没内容就摘掉**。文章一发布会自动跑，
           这个按钮只为立刻看效果。
         </div>
-        <ul style={{ color: "#c7d0da", fontSize: 12, margin: "8px 0 0 18px" }}>
+        <ul style={{ color: "var(--color-text)", fontSize: 12, margin: "8px 0 0 18px" }}>
           {(hubs ?? []).map((hub) => (
             <li key={hub.key} style={{ marginBottom: 4 }}>
               {hub.label}（{hub.path}）：
@@ -187,17 +187,17 @@ export function SiteNavPanel() {
 }
 
 const card: React.CSSProperties = {
-  background: "#0d131bcc",
-  border: "1px solid #ffffff1a",
+  background: "color-mix(in srgb, var(--color-panel-base) 80%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 10%, transparent)",
   borderRadius: 10,
   padding: 14,
 };
 
 const ghost: React.CSSProperties = {
   background: "transparent",
-  border: "1px solid #ffffff22",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 13%, transparent)",
   borderRadius: 5,
-  color: "#b9c4d1",
+  color: "var(--color-text)",
   cursor: "pointer",
   fontSize: 11,
   padding: "2px 8px",

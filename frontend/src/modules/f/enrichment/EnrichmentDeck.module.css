@@ -18,9 +18,9 @@
 .statCard {
   position: relative;
   padding: 16px 18px;
-  border: 1px solid rgb(57 212 255 / 35%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 35%, transparent);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgb(57 212 255 / 9%), rgb(57 212 255 / 3%));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary-strong) 9%, transparent), color-mix(in srgb, var(--color-primary-strong) 3%, transparent));
   box-shadow: 0 0 22px rgb(57 212 255 / 10%) inset;
   overflow: hidden;
 }
@@ -30,17 +30,17 @@
   position: absolute;
   inset: 0 0 auto;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgb(57 212 255 / 70%), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-primary-strong) 70%, transparent), transparent);
 }
 
 .statCard[data-tone="success"] {
-  border-color: rgb(61 220 151 / 40%);
-  background: linear-gradient(180deg, rgb(61 220 151 / 9%), rgb(61 220 151 / 3%));
+  border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-success) 9%, transparent), color-mix(in srgb, var(--color-success) 3%, transparent));
 }
 
 .statCard[data-tone="flight"] {
-  border-color: rgb(255 184 76 / 42%);
-  background: linear-gradient(180deg, rgb(255 184 76 / 9%), rgb(255 184 76 / 3%));
+  border-color: color-mix(in srgb, var(--color-warning) 42%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-warning) 9%, transparent), color-mix(in srgb, var(--color-warning) 3%, transparent));
 }
 
 .statLabel {
@@ -48,7 +48,7 @@
   font-size: 0.74rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgb(178 216 232 / 85%);
+  color: var(--color-text);
   margin-bottom: 6px;
 }
 
@@ -56,7 +56,7 @@
   font-size: 1.6rem;
   font-weight: 800;
   line-height: 1;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-variant-numeric: tabular-nums;
 }
 
@@ -72,9 +72,9 @@
 }
 
 .panel {
-  border: 1px solid rgb(57 212 255 / 28%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 28%, transparent);
   border-radius: 16px;
-  background: rgb(8 20 30 / 55%);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
   overflow: hidden;
   padding-bottom: 8px;
 }
@@ -85,7 +85,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px 18px;
-  border-bottom: 1px solid rgb(57 212 255 / 22%);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 22%, transparent);
 }
 
 .panelTitle {
@@ -95,7 +95,7 @@
   font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: #d9f3ff;
+  color: var(--color-text-strong);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -113,32 +113,32 @@
   min-width: 0;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgb(57 212 255 / 30%);
-  background: rgb(6 12 22 / 65%);
-  color: #eafaff;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 65%, transparent);
+  color: var(--color-text-strong);
   font-size: 0.86rem;
 }
 
 .searchInput:focus {
   outline: none;
-  border-color: rgb(95 227 255 / 70%);
+  border-color: color-mix(in srgb, var(--accent-bright) 70%, transparent);
   box-shadow: 0 0 0 3px rgb(57 212 255 / 15%);
 }
 
 .searchHint {
   margin: 8px 16px 0;
   font-size: 0.78rem;
-  color: rgb(157 199 219 / 85%);
+  color: var(--color-muted);
 }
 
 .linkButton {
   background: none;
   border: 0;
   padding: 0;
-  color: rgb(102 214 255);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 0.78rem;
-  border-bottom: 1px dashed rgb(102 214 255 / 55%);
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-primary) 55%, transparent);
 }
 
 .crumbs {
@@ -147,7 +147,7 @@
   align-items: center;
   gap: 2px;
   padding: 10px 16px 0;
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
 }
 
 .crumbItem {
@@ -160,15 +160,15 @@
   background: none;
   border: 0;
   padding: 2px 4px;
-  color: rgb(178 216 232 / 90%);
+  color: var(--color-text);
   font-size: 0.8rem;
   cursor: pointer;
   border-radius: 6px;
 }
 
 .crumbButton:hover {
-  color: #eafaff;
-  background: rgb(57 212 255 / 10%);
+  color: var(--color-text-strong);
+  background: color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
 }
 
 .nodeList {
@@ -188,7 +188,7 @@
 }
 
 .nodeRow:hover {
-  background: rgb(57 212 255 / 6%);
+  background: color-mix(in srgb, var(--color-primary-strong) 6%, transparent);
 }
 
 .expandButton {
@@ -201,13 +201,13 @@
   background: none;
   border: 0;
   border-radius: 6px;
-  color: rgb(157 199 219 / 85%);
+  color: var(--color-muted);
   cursor: pointer;
 }
 
 .expandButton:hover {
-  color: #eafaff;
-  background: rgb(57 212 255 / 12%);
+  color: var(--color-text-strong);
+  background: color-mix(in srgb, var(--color-primary-strong) 12%, transparent);
 }
 
 .expandSpacer {
@@ -226,7 +226,7 @@
 .nodeNameEn {
   flex: none;
   font-size: 0.7rem;
-  color: rgb(157 199 219 / 60%);
+  color: var(--color-subtle);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -237,7 +237,7 @@
   margin-left: 8px;
   font-size: 0.72rem;
   font-weight: 500;
-  color: rgb(157 199 219 / 70%);
+  color: var(--color-subtle);
   letter-spacing: 0;
 }
 
@@ -249,19 +249,19 @@
 }
 
 .nodeCheck input {
-  accent-color: #39d4ff;
+  accent-color: var(--color-primary-strong);
   cursor: pointer;
   width: 16px;
   height: 16px;
 }
 
 .nodeRow[data-selected] {
-  background: rgb(57 212 255 / 10%);
+  background: color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
   box-shadow: inset 2px 0 0 rgb(57 212 255 / 70%);
 }
 
 .nodeRow[data-selected] .nodeName {
-  color: #eafaff;
+  color: var(--color-text-strong);
 }
 
 .nodeMain {
@@ -279,14 +279,14 @@
 }
 
 .nodeName {
-  color: #cfe8f5;
+  color: var(--color-text);
   font-size: 0.86rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.nodeMain:hover .nodeName { color: #eafaff; }
+.nodeMain:hover .nodeName { color: var(--color-text-strong); }
 
 .nodeChips {
   display: inline-flex;
@@ -303,15 +303,15 @@
 }
 
 .chip[data-kind="kw"] {
-  color: rgb(102 214 255);
-  background: rgb(57 212 255 / 12%);
-  border: 1px solid rgb(57 212 255 / 35%);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary-strong) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 35%, transparent);
 }
 
 .chip[data-kind="cand"] {
-  color: rgb(97 240 175);
-  background: rgb(61 220 151 / 10%);
-  border: 1px solid rgb(61 220 151 / 40%);
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
 }
 
 .drillButton {
@@ -320,32 +320,32 @@
   align-items: center;
   gap: 2px;
   background: none;
-  border: 1px solid rgb(57 212 255 / 30%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
   border-radius: 999px;
   padding: 3px 8px;
-  color: rgb(157 199 219 / 90%);
+  color: var(--color-muted);
   font-size: 0.72rem;
   font-weight: 750;
   cursor: pointer;
 }
 
 .drillButton:hover {
-  color: #03121a;
-  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  color: var(--color-on-primary);
+  background: linear-gradient(180deg, var(--accent-bright), var(--color-primary-strong));
   border-color: transparent;
 }
 
 .leafMark {
   flex: none;
   font-size: 0.68rem;
-  color: rgb(157 199 219 / 55%);
+  color: var(--color-subtle);
   padding: 3px 8px;
 }
 
 .pathLine {
   margin: 10px 18px 0;
   font-size: 0.76rem;
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
   font-family: var(--font-mono, monospace);
 }
 
@@ -355,22 +355,22 @@
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgb(178 216 232 / 90%);
+  color: var(--color-text);
 }
 
 .mutedLine {
   margin: 0 18px 10px;
   font-size: 0.82rem;
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
   line-height: 1.7;
 }
 
 .profileBlock {
   margin: 12px 18px 0;
   padding: 12px 14px;
-  border: 1px solid rgb(57 212 255 / 22%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 22%, transparent);
   border-radius: 12px;
-  background: rgb(57 212 255 / 4%);
+  background: color-mix(in srgb, var(--color-primary-strong) 4%, transparent);
 }
 
 .profileHead {
@@ -389,7 +389,7 @@
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgb(178 216 232 / 90%);
+  color: var(--color-text);
 }
 
 .profileList {
@@ -407,19 +407,19 @@
   align-items: baseline;
   gap: 8px;
   padding: 3px 2px;
-  border-bottom: 1px solid rgb(57 212 255 / 8%);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 8%, transparent);
   min-width: 0;
 }
 
 .profileZh {
   flex: none;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 0.84rem;
   font-weight: 600;
 }
 
 .profileEn {
-  color: rgb(102 214 255 / 90%);
+  color: color-mix(in srgb, var(--color-primary) 90%, transparent);
   font-size: 0.76rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -429,7 +429,7 @@
 .profileNote {
   flex: none;
   margin-left: auto;
-  color: rgb(157 199 219 / 70%);
+  color: var(--color-subtle);
   font-size: 0.72rem;
 }
 
@@ -438,9 +438,9 @@
   gap: 8px;
   margin: 12px 18px 0;
   padding: 14px;
-  border: 1px dashed rgb(61 220 151 / 45%);
+  border: 1px dashed color-mix(in srgb, var(--color-success) 45%, transparent);
   border-radius: 12px;
-  background: rgb(61 220 151 / 5%);
+  background: color-mix(in srgb, var(--color-success) 5%, transparent);
 }
 
 .formRow {
@@ -452,16 +452,16 @@
 .formInput {
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgb(57 212 255 / 30%);
-  background: rgb(6 12 22 / 65%);
-  color: #eafaff;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 65%, transparent);
+  color: var(--color-text-strong);
   font-size: 0.84rem;
   min-width: 0;
 }
 
 .formInput:focus {
   outline: none;
-  border-color: rgb(95 227 255 / 70%);
+  border-color: color-mix(in srgb, var(--accent-bright) 70%, transparent);
 }
 
 .candidateList {
@@ -476,7 +476,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 8px;
-  border-bottom: 1px solid rgb(57 212 255 / 10%);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
 }
 
 .candidateMain {
@@ -487,7 +487,7 @@
 }
 
 .candidateMain strong {
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 0.86rem;
   font-weight: 650;
 }
@@ -504,8 +504,8 @@
   height: 44px;
   object-fit: cover;
   border-radius: 8px;
-  border: 1px solid rgb(57 212 255 / 25%);
-  background: rgb(6 12 22 / 65%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 25%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 65%, transparent);
 }
 
 .sourceBadge {
@@ -519,26 +519,26 @@
 }
 
 .sourceBadge[data-source="alibaba1688"] {
-  color: rgb(255 178 102);
-  background: rgb(255 140 50 / 12%);
-  border: 1px solid rgb(255 140 50 / 40%);
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
 }
 
 .sourceBadge[data-source="manual"] {
-  color: rgb(157 199 219);
-  background: rgb(157 199 219 / 10%);
-  border: 1px solid rgb(157 199 219 / 30%);
+  color: var(--color-muted);
+  background: color-mix(in srgb, var(--color-muted) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-muted) 30%, transparent);
 }
 
 .candidateMeta {
   font-size: 0.76rem;
-  color: rgb(157 199 219 / 80%);
+  color: var(--color-muted);
 }
 
 .candidateMeta a {
-  color: rgb(102 214 255);
+  color: var(--color-primary);
   text-decoration: none;
-  border-bottom: 1px dashed rgb(102 214 255 / 55%);
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-primary) 55%, transparent);
 }
 
 .redFlag {
@@ -547,7 +547,7 @@
   gap: 5px;
   font-size: 0.72rem;
   font-weight: 750;
-  color: rgb(255 154 154);
+  color: var(--color-error);
 }
 
 .candidateActions {
@@ -572,19 +572,19 @@
   align-items: center;
   gap: 10px;
   padding: 6px 8px;
-  border-bottom: 1px solid rgb(57 212 255 / 8%);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 8%, transparent);
 }
 
-.keywordRow[data-status="approved"] .keywordText { color: rgb(97 240 175); }
+.keywordRow[data-status="approved"] .keywordText { color: var(--color-success); }
 .keywordRow[data-status="rejected"] .keywordText {
-  color: rgb(157 199 219 / 55%);
+  color: var(--color-subtle);
   text-decoration: line-through;
 }
 
 .keywordText {
   flex: 1;
   min-width: 0;
-  color: #cfe8f5;
+  color: var(--color-text);
   font-size: 0.84rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -594,8 +594,8 @@
 .keywordType {
   flex: none;
   font-size: 0.68rem;
-  color: rgb(157 199 219 / 70%);
-  border: 1px solid rgb(57 212 255 / 25%);
+  color: var(--color-subtle);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 25%, transparent);
   border-radius: 999px;
   padding: 1px 7px;
   white-space: nowrap;
@@ -611,30 +611,30 @@
   width: 24px;
   height: 24px;
   border-radius: 7px;
-  border: 1px solid rgb(57 212 255 / 30%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
   background: none;
-  color: rgb(157 199 219 / 90%);
+  color: var(--color-muted);
   cursor: pointer;
   font-size: 0.78rem;
   line-height: 1;
 }
 
 .kwButton[data-kind="ok"]:hover {
-  color: #03121a;
-  background: rgb(97 240 175);
+  color: var(--color-on-primary);
+  background: var(--color-success);
   border-color: transparent;
 }
 
 .kwButton[data-kind="no"]:hover {
-  color: #fff;
-  background: rgb(255 107 107);
+  color: var(--color-text-strong);
+  background: var(--color-error);
   border-color: transparent;
 }
 
 .keywordDecided {
   flex: none;
   font-size: 0.72rem;
-  color: rgb(157 199 219 / 70%);
+  color: var(--color-subtle);
 }
 
 .statusBadge {
@@ -653,31 +653,31 @@
 .statusBadge[data-status="succeeded"],
 .statusBadge[data-status="approved"],
 .statusBadge[data-status="imported_to_k"] {
-  color: rgb(97 240 175);
-  border-color: rgb(61 220 151 / 45%);
-  background: rgb(61 220 151 / 10%);
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
 }
 
 .statusBadge[data-status="failed"],
 .statusBadge[data-status="rejected"] {
-  color: rgb(255 138 138);
-  border-color: rgb(255 107 107 / 45%);
-  background: rgb(255 107 107 / 10%);
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 45%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .statusBadge[data-status="running"],
 .statusBadge[data-status="pending_review"],
 .statusBadge[data-status="succeeded_barren"],
 .statusBadge[data-status="quota_exhausted"] {
-  color: rgb(255 205 118);
-  border-color: rgb(255 184 76 / 45%);
-  background: rgb(255 184 76 / 10%);
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
 }
 
 .statusBadge[data-status="queued"] {
-  color: rgb(140 190 255);
-  border-color: rgb(120 170 255 / 45%);
-  background: rgb(120 170 255 / 10%);
+  color: var(--color-info);
+  border-color: color-mix(in srgb, var(--color-info) 45%, transparent);
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
 }
 
 .tableScroll {
@@ -696,20 +696,20 @@
   font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgb(157 199 219 / 80%);
-  border-bottom: 1px solid rgb(57 212 255 / 18%);
+  color: var(--color-muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
   white-space: nowrap;
 }
 
 .table td {
   padding: 11px 16px;
-  border-bottom: 1px solid rgb(57 212 255 / 10%);
-  color: #cfe8f5;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
+  color: var(--color-text);
   vertical-align: top;
 }
 
 .table tr:hover td {
-  background: rgb(57 212 255 / 5%);
+  background: color-mix(in srgb, var(--color-primary-strong) 5%, transparent);
 }
 
 .selectionCell {
@@ -722,13 +722,13 @@
 .timeCell {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: rgb(178 216 232 / 85%);
+  color: var(--color-text);
   font-size: 0.78rem;
 }
 
 .errorCell {
   max-width: 260px;
-  color: rgb(255 154 154);
+  color: var(--color-error);
   font-size: 0.78rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -742,23 +742,23 @@
   justify-content: center;
   gap: 10px;
   padding: 42px 16px;
-  color: rgb(157 199 219 / 85%);
+  color: var(--color-muted);
 }
 
 .emptyHint {
   text-align: center;
   padding: 42px 20px;
-  color: rgb(157 199 219 / 85%);
+  color: var(--color-muted);
   line-height: 1.8;
 }
 
 .notice {
   margin: 0;
   padding: 12px 16px;
-  border: 1px solid rgb(61 220 151 / 40%);
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
   border-radius: 12px;
-  background: rgb(61 220 151 / 8%);
-  color: rgb(147 240 197);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  color: var(--color-success);
   font-size: 0.86rem;
 }
 
@@ -771,9 +771,9 @@
 }
 
 .productGroup {
-  border: 1px solid rgb(57 212 255 / 14%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 14%, transparent);
   border-radius: 12px;
-  background: rgb(8 16 28 / 45%);
+  background: color-mix(in srgb, var(--color-panel-base) 45%, transparent);
   overflow: hidden;
 }
 
@@ -786,20 +786,20 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: rgb(57 212 255 / 7%);
-  border-bottom: 1px solid rgb(57 212 255 / 12%);
-  color: #bfefff;
+  background: color-mix(in srgb, var(--color-primary-strong) 7%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 12%, transparent);
+  color: var(--color-text);
   font-size: 0.8rem;
 }
 
 .groupHead strong {
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 0.84rem;
   font-weight: 700;
 }
 
 .groupEn {
-  color: rgb(157 199 219 / 70%);
+  color: var(--color-subtle);
   font-size: 0.72rem;
 }
 
@@ -807,8 +807,8 @@
   margin-left: auto;
   font-size: 0.7rem;
   font-weight: 700;
-  color: rgb(157 199 219 / 85%);
-  background: rgb(157 199 219 / 12%);
+  color: var(--color-muted);
+  background: color-mix(in srgb, var(--color-muted) 12%, transparent);
   border-radius: 999px;
   padding: 1px 8px;
 }
@@ -821,15 +821,15 @@
   border-radius: 999px;
   vertical-align: 1px;
   white-space: nowrap;
-  color: rgb(120 255 190);
-  background: rgb(60 230 140 / 12%);
-  border: 1px solid rgb(60 230 140 / 45%);
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 45%, transparent);
 }
 
 .rankBadge[data-rank="1"] {
-  color: rgb(255 224 120);
-  background: rgb(255 200 60 / 14%);
-  border-color: rgb(255 200 60 / 55%);
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 55%, transparent);
 }
 
 .scoreBadge {
@@ -841,9 +841,9 @@
   vertical-align: 1px;
   white-space: nowrap;
   cursor: help;
-  color: rgb(102 214 255);
-  background: rgb(57 212 255 / 10%);
-  border: 1px solid rgb(57 212 255 / 35%);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 35%, transparent);
 }
 
 .expandGroupBtn {
@@ -854,16 +854,16 @@
   width: 100%;
   padding: 7px 0;
   border: none;
-  border-top: 1px dashed rgb(57 212 255 / 18%);
+  border-top: 1px dashed color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
   background: transparent;
-  color: rgb(102 214 255 / 90%);
+  color: color-mix(in srgb, var(--color-primary) 90%, transparent);
   font-size: 0.74rem;
   font-weight: 700;
   cursor: pointer;
 }
 
 .expandGroupBtn:hover {
-  background: rgb(57 212 255 / 8%);
+  background: color-mix(in srgb, var(--color-primary-strong) 8%, transparent);
 }
 
 .thumbWrap {
@@ -877,12 +877,12 @@
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  border: 1px solid rgb(57 212 255 / 18%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
   background: linear-gradient(
     100deg,
-    rgb(6 12 22 / 65%) 40%,
-    rgb(57 212 255 / 12%) 50%,
-    rgb(6 12 22 / 65%) 60%
+    color-mix(in srgb, var(--color-panel-base) 65%, transparent) 40%,
+    color-mix(in srgb, var(--color-primary-strong) 12%, transparent) 50%,
+    color-mix(in srgb, var(--color-panel-base) 65%, transparent) 60%
   );
   background-size: 200% 100%;
   animation: fThumbShimmer 1.2s linear infinite;
@@ -904,8 +904,8 @@
   width: 320px;
   height: 320px;
   border-radius: 14px;
-  border: 1px solid rgb(95 227 255 / 45%);
-  background: rgb(6 12 22 / 96%);
+  border: 1px solid color-mix(in srgb, var(--accent-bright) 45%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 96%, transparent);
   box-shadow: 0 18px 48px rgb(0 0 0 / 55%), 0 0 24px rgb(57 212 255 / 18%);
   padding: 8px;
   pointer-events: none;
@@ -926,22 +926,22 @@
   gap: 8px;
   flex-wrap: wrap;
   padding: 6px 12px;
-  border-bottom: 1px dashed rgb(57 212 255 / 12%);
-  background: rgb(255 200 60 / 4%);
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-primary-strong) 12%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 4%, transparent);
 }
 
 .marketRefLabel {
   font-size: 0.68rem;
   font-weight: 750;
-  color: rgb(255 224 120 / 90%);
+  color: color-mix(in srgb, var(--color-warning) 90%, transparent);
   white-space: nowrap;
 }
 
 .marketRefLink {
   font-size: 0.72rem;
-  color: rgb(102 214 255);
+  color: var(--color-primary);
   text-decoration: none;
-  border: 1px solid rgb(57 212 255 / 25%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 25%, transparent);
   border-radius: 999px;
   padding: 1px 9px;
   max-width: 220px;
@@ -951,22 +951,22 @@
 }
 
 .marketRefLink:hover {
-  background: rgb(57 212 255 / 10%);
-  border-color: rgb(57 212 255 / 50%);
+  background: color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary-strong) 50%, transparent);
 }
 
 /* 独立站参考链接高亮（用户硬规则：独立站优先），平台/内容站压暗 */
 .marketRefLink[data-site-type="independent"] {
-  color: rgb(120 255 190);
-  border-color: rgb(60 230 140 / 45%);
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
   font-weight: 700;
 }
 
 .marketRefLink[data-site-type="independent"]:hover {
-  background: rgb(60 230 140 / 10%);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
 }
 
 .marketRefLink[data-site-type="content"] {
-  color: rgb(157 199 219 / 70%);
-  border-color: rgb(157 199 219 / 25%);
+  color: var(--color-subtle);
+  border-color: color-mix(in srgb, var(--color-muted) 25%, transparent);
 }

@@ -15,10 +15,10 @@ import {
   type FactsState,
 } from "./api";
 
-const GOLD = "#d9a441";
-const GREEN = "#55bd88";
-const RED = "#dd6d63";
-const MUTED = "#8b98a8";
+const GOLD = "var(--color-warning)";
+const GREEN = "var(--color-success)";
+const RED = "var(--color-error)";
+const MUTED = "var(--color-muted)";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   draft: { label: "待批准", color: GOLD },
@@ -267,7 +267,7 @@ export function CraftFactDeck() {
                 key={`${entry.content_kind}:${entry.content_id}`}
                 style={{ fontSize: 12 }}
               >
-                <span style={{ color: "#dfe6ef" }}>
+                <span style={{ color: "var(--color-text-strong)" }}>
                   {CONTENT_KIND_LABEL[entry.content_kind] ?? entry.content_kind}{" "}
                   {entry.content_id}
                 </span>
@@ -395,7 +395,7 @@ export function CraftFactDeck() {
               ) : null}
             </div>
 
-            <div style={{ color: "#dfe6ef", fontSize: 14, marginTop: 8 }}>
+            <div style={{ color: "var(--color-text-strong)", fontSize: 14, marginTop: 8 }}>
               {fact.claim}
               {fact.value ? (
                 <span style={{ color: GOLD }}>
@@ -418,7 +418,7 @@ export function CraftFactDeck() {
             {revisionsOf === fact.id ? (
               <div
                 style={{
-                  borderTop: "1px solid #ffffff14",
+                  borderTop: "1px solid color-mix(in srgb, var(--color-line-strong) 8%, transparent)",
                   marginTop: 10,
                   paddingTop: 10,
                 }}
@@ -428,7 +428,7 @@ export function CraftFactDeck() {
                     key={revision.version}
                     style={{ color: MUTED, fontSize: 11, marginBottom: 6 }}
                   >
-                    <span style={{ color: "#dfe6ef" }}>v{revision.version}</span>{" "}
+                    <span style={{ color: "var(--color-text-strong)" }}>v{revision.version}</span>{" "}
                     {revision.change_reason ?? "—"}
                     {revision.changed_at
                       ? ` · ${revision.changed_at.slice(0, 19).replace("T", " ")}`
@@ -455,17 +455,17 @@ export function CraftFactDeck() {
 }
 
 const cardStyle: React.CSSProperties = {
-  background: "#0d131bcc",
-  border: "1px solid #ffffff1a",
+  background: "color-mix(in srgb, var(--color-panel-base) 80%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 10%, transparent)",
   borderRadius: 10,
   padding: 14,
 };
 
 const inputStyle: React.CSSProperties = {
-  background: "#0a0f16",
-  border: "1px solid #ffffff22",
+  background: "var(--color-surface-solid)",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 13%, transparent)",
   borderRadius: 6,
-  color: "#dfe6ef",
+  color: "var(--color-text-strong)",
   fontSize: 13,
   padding: "6px 10px",
 };
@@ -482,9 +482,9 @@ const primaryButton: React.CSSProperties = {
 
 const ghostButton: React.CSSProperties = {
   background: "transparent",
-  border: "1px solid #ffffff22",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 13%, transparent)",
   borderRadius: 6,
-  color: "#b9c4d1",
+  color: "var(--color-text)",
   cursor: "pointer",
   fontSize: 12,
   padding: "5px 12px",

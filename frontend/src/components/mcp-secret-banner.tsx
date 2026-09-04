@@ -16,11 +16,11 @@ export type McpSecretPayload = {
 };
 
 const CODE_STYLE = {
-  color: "#e3f0ff",
-  background: "#0b1220",
+  color: "var(--color-text-strong)",
+  background: "var(--color-canvas)",
   padding: "2px 6px",
   borderRadius: 6,
-  border: "1px solid rgba(120,200,255,.25)",
+  border: "1px solid color-mix(in srgb, var(--color-primary) 25%, transparent)",
 } as const;
 
 export function McpSecretBanner({

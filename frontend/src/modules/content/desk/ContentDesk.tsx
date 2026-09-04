@@ -300,9 +300,9 @@ export function ContentDesk() {
       <div className={styles.card}>
         <span className={styles.empty}>
           选题、生成、事实库、阵地监测这些在两个引擎页面里：
-          <a href="/geo" style={{ color: "#d9a441" }}>GEO 内容引擎</a>
+          <a href="/geo" style={{ color: "var(--color-warning)" }}>GEO 内容引擎</a>
           {" · "}
-          <a href="/seo" style={{ color: "#d9a441" }}>SEO 内容引擎</a>
+          <a href="/seo" style={{ color: "var(--color-warning)" }}>SEO 内容引擎</a>
           。平时不用开。
         </span>
       </div>

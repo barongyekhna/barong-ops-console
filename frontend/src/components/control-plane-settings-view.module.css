@@ -43,7 +43,7 @@
 .skinName{font-size:14.5px; font-weight:700; color:var(--color-text-strong)}
 .skinDesc{font-size:12px; color:var(--color-muted); line-height:1.5}
 .skinSwatchRow{display:flex; gap:4px; width:100%}
-.skinSwatch{flex:1; height:14px; border-radius:3px; border:1px solid rgb(128 128 128 / 22%)}
+.skinSwatch{flex:1; height:14px; border-radius:3px; border:1px solid color-mix(in srgb, var(--color-muted) 22%, transparent)}
 .skinCheck{position:absolute; top:14px; right:14px; color:var(--color-primary)}
 
 /* avatar */
@@ -65,14 +65,14 @@
 .input:focus{outline:none; border-color:var(--color-primary); box-shadow:0 0 0 3px var(--color-primary-soft)}
 .saveBtn{height:44px}
 .preview{font-size:13.5px; color:var(--color-muted); margin:14px 0 0}
-.preview strong{color:var(--color-phoenix, var(--color-warning)); font-weight:700}
+.preview strong{color:var(--color-phoenix); font-weight:700}
 
 /* about */
 .aboutTabs{display:flex; gap:6px; margin-bottom:22px; flex-wrap:wrap}
 .aboutTab, .aboutTabOn{font-size:13px; font-weight:600; padding:7px 15px; border-radius:999px; cursor:pointer;
   border:1px solid transparent; background:transparent; color:var(--color-muted); font-family:inherit; transition:.15s}
-.aboutTab:hover{color:var(--color-phoenix, var(--color-warning)); border-color:var(--color-line)}
-.aboutTabOn{color:var(--color-phoenix, var(--color-warning)); background:var(--color-warning-soft); border-color:var(--color-warning)}
+.aboutTab:hover{color:var(--color-phoenix); border-color:var(--color-line)}
+.aboutTabOn{color:var(--color-phoenix); background:var(--color-warning-soft); border-color:var(--color-warning)}
 .version{margin-top:30px; padding-top:18px; border-top:1px solid var(--color-line);
   font-family:var(--font-mono), monospace; font-size:11px; letter-spacing:.08em; color:var(--color-subtle)}
 

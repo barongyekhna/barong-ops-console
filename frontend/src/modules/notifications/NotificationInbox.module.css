@@ -2,14 +2,14 @@
   min-height: 84vh;
   width: 100%;
   overflow: hidden;
-  border: 1px solid rgb(120 200 255 / 14%);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 14%, transparent);
   border-radius: 8px;
 }
 
 .inboxOverlay {
   height: 100%;
   min-height: 0;
-  background: #04070e;
+  background: var(--color-surface-solid);
 }
 
 .inboxOverlay .content {
@@ -58,18 +58,18 @@
   height: 38px;
   padding: 0;
   place-items: center;
-  border: 1px solid rgb(255 107 138 / 42%);
+  border: 1px solid color-mix(in srgb, var(--color-error) 42%, transparent);
   border-radius: 6px;
-  background: rgb(35 8 18 / 72%);
-  color: #ff9db1;
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
+  color: var(--color-error);
   cursor: pointer;
   transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
 }
 
 .closeButton:hover {
   border-color: var(--cc-red);
-  background: rgb(75 12 30 / 82%);
-  color: #fff0f4;
+  background: color-mix(in srgb, var(--color-error) 82%, transparent);
+  color: var(--color-text-strong);
 }
 
 .closeButton:focus-visible,
@@ -115,7 +115,7 @@
   align-items: center;
   gap: 8px;
   margin: 8px 0 4px;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 24px;
   line-height: 1.2;
   letter-spacing: 0;
@@ -139,10 +139,10 @@
   height: 24px;
   padding: 0 6px;
   place-items: center;
-  border: 1px solid rgb(255 107 138 / 55%);
+  border: 1px solid color-mix(in srgb, var(--color-error) 55%, transparent);
   border-radius: 4px;
-  background: rgb(255 107 138 / 14%);
-  color: #ff9db1;
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  color: var(--color-error);
   font: 800 11px var(--cc-mono);
   box-shadow: 0 0 14px rgb(255 107 138 / 18%);
 }
@@ -171,23 +171,23 @@
 
 .secondaryAction {
   border: 1px solid var(--cc-line);
-  background: rgb(7 16 27 / 72%);
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
   color: var(--cc-dim);
 }
 
 .secondaryAction:hover:not(:disabled) {
-  border-color: rgb(57 212 255 / 42%);
-  color: #eafaff;
+  border-color: color-mix(in srgb, var(--color-primary-strong) 42%, transparent);
+  color: var(--color-text-strong);
 }
 
 .primaryAction {
-  border: 1px solid rgb(57 212 255 / 60%);
-  background: #38c8ec;
-  color: #03121a;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 60%, transparent);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .primaryAction:hover:not(:disabled) {
-  background: #62dcf7;
+  background: var(--color-primary);
 }
 
 .secondaryAction:disabled,
@@ -209,7 +209,7 @@
   overflow: hidden;
   border: 1px solid var(--cc-line);
   border-radius: 6px;
-  background: rgb(5 12 22 / 68%);
+  background: color-mix(in srgb, var(--color-panel-base) 68%, transparent);
 }
 
 .filter,
@@ -237,12 +237,12 @@
 }
 
 .filter:hover {
-  color: #eafaff;
-  background: rgb(57 212 255 / 6%);
+  color: var(--color-text-strong);
+  background: color-mix(in srgb, var(--color-primary-strong) 6%, transparent);
 }
 
 .filterActive {
-  background: rgb(57 212 255 / 16%);
+  background: color-mix(in srgb, var(--color-primary-strong) 16%, transparent);
   color: var(--cc-cyan);
   box-shadow: inset 0 -2px 0 var(--cc-cyan);
 }
@@ -272,10 +272,10 @@
   gap: 8px;
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid rgb(255 107 138 / 42%);
+  border: 1px solid color-mix(in srgb, var(--color-error) 42%, transparent);
   border-radius: 6px;
-  background: rgb(50 8 20 / 72%);
-  color: #ffafc0;
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
+  color: var(--color-error);
   font-size: 12px;
 }
 
@@ -285,9 +285,9 @@
   place-content: center;
   justify-items: center;
   gap: 9px;
-  border: 1px dashed rgb(57 212 255 / 24%);
+  border: 1px dashed color-mix(in srgb, var(--color-primary-strong) 24%, transparent);
   border-radius: 8px;
-  background: rgb(6 14 24 / 48%);
+  background: color-mix(in srgb, var(--color-panel-base) 48%, transparent);
   color: var(--cc-dim);
   font: 500 11px var(--cc-mono);
 }
@@ -311,7 +311,7 @@
   overflow: hidden;
   border: 1px solid var(--cc-line);
   border-radius: 7px;
-  background: rgb(6 14 24 / 76%);
+  background: color-mix(in srgb, var(--color-panel-base) 76%, transparent);
   backdrop-filter: blur(8px);
 }
 
@@ -331,13 +331,13 @@
 .item[data-level="error"]::before { background: var(--cc-red); }
 
 .item:hover {
-  border-color: rgb(57 212 255 / 32%);
-  background: rgb(8 19 31 / 84%);
+  border-color: color-mix(in srgb, var(--color-primary-strong) 32%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 84%, transparent);
 }
 
 .itemUnread {
-  border-color: rgb(57 212 255 / 34%);
-  background: rgb(8 25 39 / 82%);
+  border-color: color-mix(in srgb, var(--color-primary-strong) 34%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 82%, transparent);
   box-shadow: inset 0 0 24px rgb(57 212 255 / 4%);
 }
 
@@ -365,7 +365,7 @@
 
 .title {
   min-width: 0;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 13px;
   font-weight: 720;
   letter-spacing: 0;
@@ -385,33 +385,33 @@
 
 .levelTag {
   padding: 3px 6px;
-  border: 1px solid rgb(57 212 255 / 22%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 22%, transparent);
   border-radius: 4px;
-  background: rgb(57 212 255 / 7%);
+  background: color-mix(in srgb, var(--color-primary-strong) 7%, transparent);
   color: var(--cc-cyan);
   font-weight: 750;
 }
 
 .levelTag[data-level="success"] {
-  border-color: rgb(77 255 161 / 28%);
-  background: rgb(77 255 161 / 7%);
+  border-color: color-mix(in srgb, var(--color-success) 28%, transparent);
+  background: color-mix(in srgb, var(--color-success) 7%, transparent);
   color: var(--cc-green);
 }
 
 .levelTag[data-level="warning"] {
-  border-color: rgb(255 177 59 / 30%);
-  background: rgb(255 177 59 / 7%);
+  border-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 7%, transparent);
   color: var(--cc-amber);
 }
 
 .levelTag[data-level="error"] {
-  border-color: rgb(255 107 138 / 30%);
-  background: rgb(255 107 138 / 7%);
-  color: #ff9db1;
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
+  background: color-mix(in srgb, var(--color-error) 7%, transparent);
+  color: var(--color-error);
 }
 
 .source {
-  color: #a8dcec;
+  color: var(--color-text);
 }
 
 .text {
@@ -440,7 +440,7 @@
 }
 
 .refKey {
-  color: #a8dcec;
+  color: var(--color-text);
   font-weight: 700;
 }
 
@@ -474,9 +474,9 @@
   min-width: 76px;
   min-height: 30px;
   padding: 5px 8px;
-  border: 1px solid rgb(57 212 255 / 38%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 38%, transparent);
   border-radius: 5px;
-  background: rgb(57 212 255 / 9%);
+  background: color-mix(in srgb, var(--color-primary-strong) 9%, transparent);
   color: var(--cc-cyan);
   cursor: pointer;
   font: 700 10px var(--cc-mono);
@@ -488,18 +488,18 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  border-color: rgb(255 177 59 / 42%);
-  background: rgb(255 177 59 / 9%);
-  color: #ffd28a;
+  border-color: color-mix(in srgb, var(--color-warning) 42%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 9%, transparent);
+  color: var(--color-warning);
 }
 
 .markButton:hover:not(:disabled),
 .openButton:hover:not(:disabled) {
-  background: rgb(57 212 255 / 17%);
+  background: color-mix(in srgb, var(--color-primary-strong) 17%, transparent);
 }
 
 .openButton:hover:not(:disabled) {
-  background: rgb(255 177 59 / 17%);
+  background: color-mix(in srgb, var(--color-warning) 17%, transparent);
 }
 
 .markButton:disabled,

@@ -7,39 +7,39 @@
   padding: 14px 20px;
   border-radius: 16px;
   margin-bottom: 18px;
-  border: 1px solid rgb(57 212 255 / 16%);
-  background: rgb(10 18 28 / 72%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 16%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
 }
 .bar[data-paused="false"] {
-  border-color: rgb(82 229 163 / 30%);
-  background: rgb(12 26 20 / 60%);
+  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 60%, transparent);
 }
 .left { display: flex; align-items: center; gap: 14px; }
 .dot {
   width: 11px; height: 11px; border-radius: 50%;
-  background: #8b867f; flex: none;
+  background: var(--color-muted); flex: none;
   box-shadow: 0 0 0 4px rgb(139 134 127 / 18%);
 }
 .dot[data-paused="false"] {
-  background: #52e5a3;
+  background: var(--color-success);
   box-shadow: 0 0 0 4px rgb(82 229 163 / 20%);
   animation: pulse 2s ease-in-out infinite;
 }
 @keyframes pulse { 50% { opacity: 0.5; } }
 .status { display: flex; flex-direction: column; gap: 3px; }
-.status strong { color: #eaf6ff; font-size: 0.95rem; }
-.hint { color: rgb(157 199 219 / 72%); font-size: 0.78rem; max-width: 460px; }
+.status strong { color: var(--color-text-strong); font-size: 0.95rem; }
+.hint { color: var(--color-subtle); font-size: 0.78rem; max-width: 460px; }
 .right { display: flex; align-items: center; gap: 16px; }
 .usage { display: flex; flex-direction: column; gap: 1px; text-align: right; }
-.usage span { color: rgb(157 199 219 / 60%); font-size: 0.7rem; }
-.usage strong { color: #eaf6ff; font-size: 0.86rem; }
-.usage em { color: rgb(157 199 219 / 70%); font-size: 0.72rem; font-style: normal; }
+.usage span { color: var(--color-subtle); font-size: 0.7rem; }
+.usage strong { color: var(--color-text-strong); font-size: 0.86rem; }
+.usage em { color: var(--color-subtle); font-size: 0.72rem; font-style: normal; }
 .pause, .resume {
   border-radius: 999px; padding: 9px 20px; font-weight: 600;
   font-size: 0.85rem; cursor: pointer; border: 0; white-space: nowrap;
 }
-.pause { background: #b3261e; color: #fff; }
-.resume { background: #52e5a3; color: #06201a; }
+.pause { background: color-mix(in srgb, var(--color-error) 65%, var(--color-panel-base)); color: var(--color-text-strong); }
+.resume { background: var(--color-success); color: var(--color-surface-solid); }
 .pause:disabled, .resume:disabled { opacity: 0.6; cursor: default; }
-.loading { color: rgb(157 199 219 / 72%); font-size: 0.82rem; }
-.err { color: #ff8a80; font-size: 0.78rem; width: 100%; }
+.loading { color: var(--color-subtle); font-size: 0.82rem; }
+.err { color: var(--color-error); font-size: 0.78rem; width: 100%; }

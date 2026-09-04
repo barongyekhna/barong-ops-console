@@ -29,11 +29,11 @@ import {
 } from "./facts/api";
 import { OutboundConfirm } from "@/components/outbound-confirm";
 
-const GOLD = "#d9a441";
-const BLUE = "#6aa6e8";
-const GREEN = "#55bd88";
-const RED = "#dd6d63";
-const MUTED = "#8b98a8";
+const GOLD = "var(--color-warning)";
+const BLUE = "var(--color-info)";
+const GREEN = "var(--color-success)";
+const RED = "var(--color-error)";
+const MUTED = "var(--color-muted)";
 
 type TabKey = "facts" | "topics" | "items" | "publish" | "monitor";
 
@@ -161,7 +161,7 @@ export function SeoDeck() {
       <div style={card}>
         <div style={{ color: MUTED, fontSize: 12, marginBottom: 10 }}>
           种子来自 K 的已批准关键词、工艺库话题、以及每个已启用店型的采购决策问题。
-          <strong style={{ color: "#dfe6ef" }}>
+          <strong style={{ color: "var(--color-text-strong)" }}>
             {" "}
             GEO 够得到的题不会出现在这里
           </strong>
@@ -238,7 +238,7 @@ export function SeoDeck() {
               ) : null}
             </div>
 
-            <div style={{ color: "#dfe6ef", fontSize: 14, marginTop: 6 }}>
+            <div style={{ color: "var(--color-text-strong)", fontSize: 14, marginTop: 6 }}>
               {topic.keyword}
             </div>
             {topic.geo_reason ? (
@@ -383,7 +383,7 @@ export function SeoDeck() {
               </button>
             </div>
 
-            <div style={{ color: "#dfe6ef", fontSize: 15, marginTop: 8 }}>
+            <div style={{ color: "var(--color-text-strong)", fontSize: 15, marginTop: 8 }}>
               {item.title}
             </div>
             <div style={{ color: MUTED, fontSize: 11, marginTop: 2 }}>
@@ -397,7 +397,7 @@ export function SeoDeck() {
                     <div style={{ color: GOLD, fontSize: 13 }}>
                       {section.heading}
                     </div>
-                    <div style={{ color: "#c7d0da", fontSize: 13, lineHeight: 1.6 }}>
+                    <div style={{ color: "var(--color-text)", fontSize: 13, lineHeight: 1.6 }}>
                       {section.body}
                     </div>
                   </div>
@@ -421,7 +421,7 @@ export function SeoDeck() {
 
                 {item.analysis?.risks?.length ? (
                   <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>
-                    <div style={{ color: "#dfe6ef" }}>批评意见</div>
+                    <div style={{ color: "var(--color-text-strong)" }}>批评意见</div>
                     <ul style={{ margin: "4px 0 0 18px" }}>
                       {item.analysis.risks.map((r) => (
                         <li key={r}>{r}</li>
@@ -554,7 +554,7 @@ export function SeoDeck() {
           「内链网在哪儿」。GEO 那边一直是有标题框的——两边要长一样。 */}
       <div style={{ ...card, display: "grid", gap: 12 }}>
         <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
-          <strong style={{ color: "#dfe6ef", fontSize: 14 }}>内链网</strong>
+          <strong style={{ color: "var(--color-text-strong)", fontSize: 14 }}>内链网</strong>
           <span style={{ color: MUTED, fontSize: 12 }}>
             产品页 · 指南 · 工艺文 · 博文，四边互链
           </span>
@@ -575,7 +575,7 @@ export function SeoDeck() {
             onChange={() => toggleSelected(item.id)}
             type="checkbox"
           />
-          <span style={{ color: "#dfe6ef", fontSize: 13 }}>{item.title}</span>
+          <span style={{ color: "var(--color-text-strong)", fontSize: 13 }}>{item.title}</span>
           <span style={{ color: MUTED, fontSize: 11 }}>/{item.destination}/</span>
           <span style={{ flex: 1 }} />
           {item.wp_post_id ? (
@@ -593,7 +593,7 @@ export function SeoDeck() {
 
       {publishJobs.length > 0 ? (
         <div style={card}>
-          <div style={{ color: "#dfe6ef", fontSize: 13, marginBottom: 8 }}>
+          <div style={{ color: "var(--color-text-strong)", fontSize: 13, marginBottom: 8 }}>
             发布记录
           </div>
           {publishJobs.map((job) => (
@@ -617,7 +617,7 @@ export function SeoDeck() {
       <div style={card}>
         <div style={{ color: MUTED, fontSize: 12, marginBottom: 10 }}>
           和 GEO 的阵地监测共用一套表——只是单位从买家问句换成关键词。
-          可攻度会反过来重排选题：<strong style={{ color: "#dfe6ef" }}>打不动的题会自己沉下去</strong>。
+          可攻度会反过来重排选题：<strong style={{ color: "var(--color-text-strong)" }}>打不动的题会自己沉下去</strong>。
         </div>
         <button
           disabled={busy}
@@ -636,7 +636,7 @@ export function SeoDeck() {
       {monitorRows.map((row) => (
         <div key={row.keyword} style={card}>
           <div style={{ alignItems: "center", display: "flex", gap: 8 }}>
-            <span style={{ color: "#dfe6ef", fontSize: 13, flex: 1 }}>
+            <span style={{ color: "var(--color-text-strong)", fontSize: 13, flex: 1 }}>
               {row.keyword}
             </span>
             {row.attackability !== null ? (
@@ -671,7 +671,7 @@ export function SeoDeck() {
     <div style={{ display: "grid", gap: 16 }}>
       <div
         style={{
-          borderBottom: "1px solid #ffffff1a",
+          borderBottom: "1px solid color-mix(in srgb, var(--color-line-strong) 10%, transparent)",
           display: "flex",
           flexWrap: "wrap",
           gap: 4,
@@ -689,7 +689,7 @@ export function SeoDeck() {
               border: "none",
               borderBottom:
                 tab === entry.key ? `2px solid ${GOLD}` : "2px solid transparent",
-              color: tab === entry.key ? GOLD : "#b9c4d1",
+              color: tab === entry.key ? GOLD : "var(--color-text)",
               cursor: "pointer",
               fontSize: 13,
               padding: "8px 14px",
@@ -721,17 +721,17 @@ export function SeoDeck() {
 }
 
 const card: React.CSSProperties = {
-  background: "#0d131bcc",
-  border: "1px solid #ffffff1a",
+  background: "color-mix(in srgb, var(--color-panel-base) 80%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 10%, transparent)",
   borderRadius: 10,
   padding: 14,
 };
 
 const input: React.CSSProperties = {
-  background: "#0a0f16",
-  border: "1px solid #ffffff22",
+  background: "var(--color-surface-solid)",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 13%, transparent)",
   borderRadius: 6,
-  color: "#dfe6ef",
+  color: "var(--color-text-strong)",
   fontSize: 13,
   padding: "6px 10px",
 };
@@ -748,9 +748,9 @@ const primary: React.CSSProperties = {
 
 const ghost: React.CSSProperties = {
   background: "transparent",
-  border: "1px solid #ffffff22",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 13%, transparent)",
   borderRadius: 6,
-  color: "#b9c4d1",
+  color: "var(--color-text)",
   cursor: "pointer",
   fontSize: 12,
   padding: "5px 12px",

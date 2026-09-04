@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { contentRequest } from "./api-base";
 
-const GOLD = "#d9a441";
-const GREEN = "#55bd88";
-const RED = "#dd6d63";
-const MUTED = "#8b98a8";
+const GOLD = "var(--color-warning)";
+const GREEN = "var(--color-success)";
+const RED = "var(--color-error)";
+const MUTED = "var(--color-muted)";
 
 type Stranded = {
   kind: string;
@@ -94,7 +94,7 @@ export function ContentHealthPanel() {
         <div
           style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}
         >
-          <strong style={{ color: "#dfe6ef", fontSize: 14 }}>内容自检</strong>
+          <strong style={{ color: "var(--color-text-strong)", fontSize: 14 }}>内容自检</strong>
           {rows && rows.length > 0 ? (
             <span style={{ color: GOLD, fontSize: 12 }}>
               ⚠ 有 {rows.length} 条标了完成，却一篇内容都没有
@@ -117,7 +117,7 @@ export function ContentHealthPanel() {
           复位时会再验一次。
         </div>
         {rows && rows.length > 0 ? (
-          <ul style={{ color: "#c7d0da", fontSize: 12, margin: "8px 0 0 18px" }}>
+          <ul style={{ color: "var(--color-text)", fontSize: 12, margin: "8px 0 0 18px" }}>
             {rows.slice(0, 10).map((row) => (
               <li key={row.id}>{row.reason}</li>
             ))}
@@ -129,8 +129,8 @@ export function ContentHealthPanel() {
 }
 
 const card: React.CSSProperties = {
-  background: "#0d131bcc",
-  border: "1px solid #ffffff1a",
+  background: "color-mix(in srgb, var(--color-panel-base) 80%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 10%, transparent)",
   borderRadius: 10,
   padding: 14,
 };
@@ -147,9 +147,9 @@ const primary: React.CSSProperties = {
 
 const ghost: React.CSSProperties = {
   background: "transparent",
-  border: "1px solid #ffffff22",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 13%, transparent)",
   borderRadius: 6,
-  color: "#b9c4d1",
+  color: "var(--color-text)",
   cursor: "pointer",
   fontSize: 12,
   padding: "5px 12px",

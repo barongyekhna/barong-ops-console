@@ -28,7 +28,7 @@ const LINK_BTN_STYLE: CSSProperties = {
   marginLeft: 6,
   background: "none",
   border: "none",
-  color: "#1a73e8",
+  color: "var(--color-info)",
   cursor: "pointer",
   padding: 0,
   font: "inherit",
@@ -261,7 +261,7 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
           >
             {overridden ? (
               <>
-                <ShieldCheck aria-hidden="true" color="#e3a93c" size={17} />
+                <ShieldCheck aria-hidden="true" color="var(--color-warning)" size={17} />
                 <strong>已人工放行</strong> —— 审查结论仅供参考，不再拦截上架
                 {audit.operator_override?.by
                   ? `（${audit.operator_override.by}`
@@ -272,7 +272,7 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
               </>
             ) : audit.clean ? (
               <>
-                <ShieldCheck aria-hidden="true" color="#0f9d58" size={17} />
+                <ShieldCheck aria-hidden="true" color="color-mix(in srgb, var(--color-success) 65%, var(--color-panel-base))" size={17} />
                 <strong>通过</strong> —— 未检出任何第三方品牌（
                 {audit.audited_at?.slice(0, 19).replace("T", " ")}）
                 {audit.blacklist_terms?.length
@@ -281,7 +281,7 @@ export function BrandAuditPanel({ productId }: BrandAuditPanelProps) {
               </>
             ) : (
               <>
-                <ShieldAlert aria-hidden="true" color="#d93025" size={17} />
+                <ShieldAlert aria-hidden="true" color="var(--color-error)" size={17} />
                 <strong>未通过</strong> —— 上架已被拦截，处理下列问题后重新审查
               </>
             )}

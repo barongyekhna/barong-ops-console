@@ -31,9 +31,9 @@
   aspect-ratio: 1;
   border-radius: 50%;
   background:
-    radial-gradient(circle, rgb(57 212 255 / 7%) 0%, rgb(4 10 18 / 92%) 68%),
-    #04121c;
-  border: 1px solid rgb(57 212 255 / 35%);
+    radial-gradient(circle, color-mix(in srgb, var(--color-primary-strong) 7%, transparent) 0%, color-mix(in srgb, var(--color-panel-base) 92%, transparent) 68%),
+    var(--color-surface-solid);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 35%, transparent);
   box-shadow:
     0 0 40px rgb(57 212 255 / 12%),
     inset 0 0 60px rgb(0 0 0 / 55%);
@@ -42,7 +42,7 @@
 
 .ring {
   position: absolute;
-  border: 1px solid rgb(57 212 255 / 22%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 22%, transparent);
   border-radius: 50%;
 }
 
@@ -54,7 +54,7 @@
 .crosshair::after {
   content: "";
   position: absolute;
-  background: rgb(57 212 255 / 18%);
+  background: color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
 }
 
 .crosshair::before {
@@ -79,11 +79,11 @@
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
-    rgb(57 255 176 / 0%) 0deg,
-    rgb(57 255 176 / 4%) 300deg,
-    rgb(57 255 176 / 45%) 352deg,
-    rgb(120 255 210 / 85%) 359deg,
-    rgb(57 255 176 / 0%) 360deg
+    color-mix(in srgb, var(--color-success) 0%, transparent) 0deg,
+    color-mix(in srgb, var(--color-success) 4%, transparent) 300deg,
+    color-mix(in srgb, var(--color-success) 45%, transparent) 352deg,
+    color-mix(in srgb, var(--color-success) 85%, transparent) 359deg,
+    color-mix(in srgb, var(--color-success) 0%, transparent) 360deg
   );
   animation: radarSweep 6s linear infinite;
   opacity: 0.35;
@@ -108,7 +108,7 @@
   height: 8px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: #5fe3ff;
+  background: var(--accent-bright);
   box-shadow: 0 0 12px #39d4ff, 0 0 30px rgb(57 212 255 / 55%);
 }
 
@@ -122,7 +122,7 @@
 }
 
 .blip[data-kind="pass"] {
-  background: #4dffa1;
+  background: var(--color-success);
   box-shadow: 0 0 10px rgb(77 255 161 / 85%);
 }
 
@@ -130,7 +130,7 @@
   width: 5px;
   height: 5px;
   margin: -2.5px 0 0 -2.5px;
-  background: rgb(255 107 138 / 65%);
+  background: color-mix(in srgb, var(--color-error) 65%, transparent);
   box-shadow: 0 0 6px rgb(255 107 138 / 45%);
 }
 
@@ -152,7 +152,7 @@
 }
 
 .radarReadout [data-status] {
-  color: #4dffa1;
+  color: var(--color-success);
   text-shadow: 0 0 10px rgb(77 255 161 / 45%);
 }
 
@@ -173,7 +173,7 @@
   font-family: var(--cc-mono, ui-monospace, monospace);
   font-size: 0.64rem;
   letter-spacing: 0.28em;
-  color: #39d4ff;
+  color: var(--color-primary-strong);
 }
 
 .consolePanel h2 {
@@ -200,11 +200,11 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid rgb(57 212 255 / 35%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 35%, transparent);
   border-radius: 10px;
   padding: 6px 6px 6px 14px;
-  background: rgb(4 12 20 / 55%);
-  color: #39d4ff;
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
+  color: var(--color-primary-strong);
 }
 
 .inputRow input {
@@ -226,14 +226,14 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border: 1px solid rgb(57 212 255 / 60%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 60%, transparent);
   border-radius: 8px;
   padding: 9px 18px;
   font-weight: 700;
   font-size: 0.82rem;
   letter-spacing: 0.04em;
-  color: #03121a;
-  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  color: var(--color-on-primary);
+  background: linear-gradient(180deg, var(--accent-bright), var(--color-primary-strong));
   box-shadow: 0 8px 22px -8px rgb(57 212 255 / 55%);
   cursor: pointer;
   transition: transform 0.15s ease, filter 0.15s ease;
@@ -270,11 +270,11 @@
 }
 
 .errorLine {
-  color: #ff6b8a;
+  color: var(--color-error);
 }
 
 .warnLine {
-  color: #ffb13b;
+  color: var(--color-warning);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -3,26 +3,26 @@
 
 .explainer, .panel {
   padding: 16px 18px 20px; border-radius: 14px;
-  border: 1px solid rgba(120, 170, 255, 0.16);
-  background: rgba(8, 14, 28, 0.5);
+  border: 1px solid color-mix(in srgb, var(--color-info) 16%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 50%, transparent);
 }
 .explainer h2 { margin: 0 0 10px; font-size: 16px; letter-spacing: 0.04em; }
 .panel h3 { margin: 0 0 10px; font-size: 15px; letter-spacing: 0.04em; }
 .explainer p {
   margin: 0 0 10px; font-size: 13px; line-height: 1.7;
-  color: rgba(198, 216, 246, 0.78);
+  color: var(--color-muted);
 }
 .explainer p:last-child { margin-bottom: 0; }
 .gate {
   padding: 10px 12px; border-radius: 10px;
-  border: 1px solid rgba(255, 196, 107, 0.28);
-  background: rgba(90, 62, 18, 0.28);
-  color: #ffd79a !important;
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 28%, transparent);
+  color: var(--color-warning) !important;
 }
 .panelHead { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .panelHead h3 { margin: 0; }
-.hint { margin: 0; font-size: 12px; line-height: 1.6; color: rgba(190, 208, 240, 0.66); }
-.empty { margin: 0; padding: 14px 0; font-size: 13px; color: rgba(190, 208, 240, 0.6); }
+.hint { margin: 0; font-size: 12px; line-height: 1.6; color: var(--color-muted); }
+.empty { margin: 0; padding: 14px 0; font-size: 13px; color: var(--color-muted); }
 
 .summaryRow {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
@@ -30,59 +30,59 @@
 .summaryCard {
   display: flex; flex-direction: column; gap: 6px;
   padding: 14px 16px; border-radius: 12px;
-  border: 1px solid rgba(120, 170, 255, 0.18);
-  background: rgba(10, 18, 34, 0.55);
+  border: 1px solid color-mix(in srgb, var(--color-info) 18%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
 }
 .summaryLabel {
-  font-size: 12px; letter-spacing: 0.06em; color: rgba(198, 216, 246, 0.72);
+  font-size: 12px; letter-spacing: 0.06em; color: var(--color-muted);
 }
 .valueOk, .valueWarn, .valueMuted { font-size: 26px; font-weight: 600; line-height: 1; }
-.valueOk { color: #6fe3a5; }
-.valueWarn { color: #ffc46b; }
-.valueMuted { color: rgba(198, 216, 246, 0.5); }
+.valueOk { color: var(--color-success); }
+.valueWarn { color: var(--color-warning); }
+.valueMuted { color: var(--color-muted); }
 
 .error {
   margin: 0; padding: 9px 12px; border-radius: 8px;
-  font-size: 13px; color: #ffb4b4; background: rgba(120, 30, 40, 0.28);
+  font-size: 13px; color: var(--color-error); background: color-mix(in srgb, var(--color-error) 28%, transparent);
 }
 .notice {
   margin: 0; padding: 9px 12px; border-radius: 8px;
-  font-size: 13px; line-height: 1.6; color: #a8e9c6; background: rgba(24, 84, 60, 0.28);
+  font-size: 13px; line-height: 1.6; color: var(--color-success); background: color-mix(in srgb, var(--color-success) 28%, transparent);
 }
 
 .primaryButton {
   height: 34px; padding: 0 16px; border-radius: 8px; border: 1px solid transparent;
-  font-size: 13px; cursor: pointer; background: #2f6bd8; color: #fff;
+  font-size: 13px; cursor: pointer; background: var(--color-info); color: var(--color-text-strong);
 }
-.primaryButton:hover:not(:disabled) { background: #3a7bef; }
+.primaryButton:hover:not(:disabled) { background: var(--color-info); }
 .primaryButton:disabled { cursor: not-allowed; opacity: 0.45; }
 
 .itemList, .jobList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .item {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
   padding: 10px 12px; border-radius: 10px;
-  border: 1px solid rgba(120, 170, 255, 0.14);
-  background: rgba(10, 18, 34, 0.5);
+  border: 1px solid color-mix(in srgb, var(--color-info) 14%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 50%, transparent);
 }
-.sku { font-size: 12px; font-weight: 600; color: rgba(198, 216, 246, 0.62); min-width: 74px; }
+.sku { font-size: 12px; font-weight: 600; color: var(--color-muted); min-width: 74px; }
 .name { flex: 1 1 220px; font-size: 13px; }
 .stateTag { font-size: 12px; white-space: nowrap; }
-.stateTag[data-state="live"] { color: #6fe3a5; }
-.stateTag[data-state="missing_price"] { color: #ffc46b; }
-.stateTag[data-state="not_uploaded"] { color: rgba(198, 216, 246, 0.45); }
+.stateTag[data-state="live"] { color: var(--color-success); }
+.stateTag[data-state="missing_price"] { color: var(--color-warning); }
+.stateTag[data-state="not_uploaded"] { color: var(--color-subtle); }
 
 .job {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
   padding: 10px 12px; border-radius: 10px;
-  border: 1px solid rgba(120, 170, 255, 0.14);
-  background: rgba(10, 18, 34, 0.5);
+  border: 1px solid color-mix(in srgb, var(--color-info) 14%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 50%, transparent);
 }
 .jobStatus { font-size: 12px; font-weight: 600; min-width: 56px; }
-.jobStatus[data-status="success"] { color: #6fe3a5; }
-.jobStatus[data-status="failed"] { color: #ffb4b4; }
-.jobStatus[data-status="dispatched"], .jobStatus[data-status="queued"] { color: #ffc46b; }
-.jobMeta { font-size: 12px; color: rgba(198, 216, 246, 0.66); }
-.jobError { flex: 1 1 100%; font-size: 12px; color: #ffb4b4; }
+.jobStatus[data-status="success"] { color: var(--color-success); }
+.jobStatus[data-status="failed"] { color: var(--color-error); }
+.jobStatus[data-status="dispatched"], .jobStatus[data-status="queued"] { color: var(--color-warning); }
+.jobMeta { font-size: 12px; color: var(--color-muted); }
+.jobError { flex: 1 1 100%; font-size: 12px; color: var(--color-error); }
 
 @media (max-width: 720px) {
   .summaryRow { grid-template-columns: 1fr; }

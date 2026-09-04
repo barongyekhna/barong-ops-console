@@ -17,21 +17,21 @@
 
 .contextBar h2 {
   margin: 3px 0 0;
-  color: #eafaff;
+  color: var(--color-text-strong);
   text-shadow: 0 0 24px rgb(57 212 255 / 20%);
 }
 
 .contextBar p {
   margin: 6px 0 0;
   max-width: 640px;
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   font-size: 12.5px;
   line-height: 1.55;
 }
 
 .eyebrow {
   display: block;
-  color: var(--mm-cyan, #39d4ff);
+  color: var(--mm-cyan, var(--color-primary-strong));
   font: 700 9px var(--mm-mono, ui-monospace, monospace);
   letter-spacing: 0.28em;
   text-transform: uppercase;
@@ -51,8 +51,8 @@
   min-width: 0;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(8 15 26 / 55%);
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
 }
 
 .kContextDetails strong {
@@ -60,7 +60,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 13px;
 }
 
@@ -70,10 +70,10 @@
 .field input,
 .field select,
 .field textarea {
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
   border-radius: 9px;
-  background: rgb(6 14 24 / 75%);
-  color: #eafaff;
+  background: color-mix(in srgb, var(--color-panel-base) 75%, transparent);
+  color: var(--color-text-strong);
   font: inherit;
 }
 
@@ -89,8 +89,8 @@
 .kContext select option,
 .libraryFilters select option,
 .field select option {
-  background: #0a1420;
-  color: #eafaff;
+  background: var(--color-canvas);
+  color: var(--color-text-strong);
 }
 
 .kContext select:focus,
@@ -100,7 +100,7 @@
 .field select:focus,
 .field textarea:focus {
   outline: 0;
-  border-color: rgb(57 212 255 / 55%);
+  border-color: color-mix(in srgb, var(--color-primary-strong) 55%, transparent);
   box-shadow: 0 0 0 3px rgb(57 212 255 / 12%);
 }
 
@@ -110,17 +110,17 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
   border-radius: 9px;
-  background: rgb(10 20 34 / 55%);
-  color: var(--mm-dim, #7d95ae);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
+  color: var(--mm-dim, var(--color-muted));
   cursor: pointer;
   flex: 0 0 auto;
 }
 
 .clearKContextButton:hover {
-  border-color: rgb(255 107 138 / 50%);
-  color: var(--mm-red, #ff6b8a);
+  border-color: color-mix(in srgb, var(--color-error) 50%, transparent);
+  color: var(--mm-red, var(--color-error));
 }
 
 /* 创作台 —— 一次只显示一个板块，分段切换 */
@@ -135,8 +135,8 @@
   gap: 5px;
   padding: 5px;
   border-radius: 14px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(6 12 22 / 70%);
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 70%, transparent);
   box-shadow: inset 0 0 24px rgb(0 0 0 / 30%);
 }
 
@@ -148,20 +148,20 @@
   border: 0;
   border-radius: 10px;
   background: none;
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   font: 700 14px "Inter", system-ui, sans-serif;
   cursor: pointer;
   transition: color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .modeSwitch button:hover {
-  color: var(--mm-ink, #d6e8f6);
+  color: var(--mm-ink, var(--color-text));
 }
 
 .modeSwitch button[data-on="true"] {
-  color: #03121a;
-  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
-  box-shadow: 0 8px 22px -8px rgb(57 212 255 / 60%);
+  color: var(--color-on-primary);
+  background: linear-gradient(180deg, var(--color-primary), var(--color-primary-strong));
+  box-shadow: 0 8px 22px -8px color-mix(in srgb, var(--color-primary) 60%, transparent);
 }
 
 /* 高级参数折叠 */
@@ -171,10 +171,10 @@
   gap: 9px;
   align-self: start;
   padding: 9px 14px;
-  border: 1px dashed var(--mm-line, rgb(120 200 255 / 16%));
+  border: 1px dashed var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
   border-radius: 9px;
-  background: rgb(10 20 34 / 40%);
-  color: var(--mm-dim, #7d95ae);
+  background: color-mix(in srgb, var(--color-panel-base) 40%, transparent);
+  color: var(--mm-dim, var(--color-muted));
   font: 700 12px var(--mm-mono, ui-monospace, monospace);
   letter-spacing: 0.04em;
   cursor: pointer;
@@ -182,16 +182,16 @@
 }
 
 .advancedToggle:hover {
-  color: var(--mm-cyan, #39d4ff);
-  border-color: rgb(57 212 255 / 40%);
+  color: var(--mm-cyan, var(--color-primary-strong));
+  border-color: color-mix(in srgb, var(--color-primary-strong) 40%, transparent);
 }
 
 .advancedToggle svg:first-child {
-  color: var(--mm-cyan, #39d4ff);
+  color: var(--mm-cyan, var(--color-primary-strong));
 }
 
 .advancedHint {
-  color: rgb(125 149 174 / 70%);
+  color: var(--color-subtle);
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
@@ -214,8 +214,8 @@
   gap: 14px;
   padding: 18px;
   border-radius: 12px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(8 15 26 / 58%);
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 58%, transparent);
   backdrop-filter: blur(9px);
   box-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%);
 }
@@ -228,7 +228,7 @@
   position: absolute;
   width: 14px;
   height: 14px;
-  border: 2px solid var(--mm-amber, #ffb13b);
+  border: 2px solid var(--mm-amber, var(--color-warning));
   opacity: 0.5;
   pointer-events: none;
 }
@@ -257,13 +257,13 @@
 
 .panelTitle h3 {
   margin: 0;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 14px;
   letter-spacing: 0.4px;
 }
 
 .panelTitle svg {
-  color: var(--mm-amber, #ffb13b);
+  color: var(--mm-amber, var(--color-warning));
 }
 
 .libraryHeader {
@@ -275,7 +275,7 @@
 
 .libraryHeader h3 {
   margin: 2px 0 0;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 14px;
 }
 
@@ -285,7 +285,7 @@
 }
 
 .field span {
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   font: 600 10px var(--mm-mono, ui-monospace, monospace);
   letter-spacing: 1.2px;
   text-transform: uppercase;
@@ -301,30 +301,30 @@
 .field input::placeholder,
 .field textarea::placeholder,
 .libraryFilters input::placeholder {
-  color: rgb(125 149 174 / 70%);
+  color: var(--color-subtle);
   opacity: 1;
 }
 
 .field input[type="file"] {
   padding: 9px 12px;
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   cursor: pointer;
 }
 
 .field input[type="file"]::file-selector-button {
   margin-right: 12px;
   padding: 7px 12px;
-  border: 1px solid rgb(57 212 255 / 40%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 40%, transparent);
   border-radius: 7px;
-  background: rgb(57 212 255 / 10%);
-  color: var(--mm-cyan, #39d4ff);
+  background: color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
+  color: var(--mm-cyan, var(--color-primary-strong));
   font: 600 12px "Inter", system-ui, sans-serif;
   cursor: pointer;
 }
 
 .helpText {
   margin: -1px 0 0;
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   font-size: 11px;
   line-height: 1.5;
 }
@@ -339,21 +339,21 @@
 .candidateSurface {
   display: grid;
   gap: 14px;
-  border-top: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border-top: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
   padding-top: 14px;
 }
 
 .promptBox {
   display: grid;
   gap: 6px;
-  border-left: 3px solid var(--mm-cyan, #39d4ff);
+  border-left: 3px solid var(--mm-cyan, var(--color-primary-strong));
   border-radius: 0 8px 8px 0;
-  background: rgb(57 212 255 / 7%);
+  background: color-mix(in srgb, var(--color-primary-strong) 7%, transparent);
   padding: 10px 12px;
 }
 
 .promptBox span {
-  color: var(--mm-cyan, #39d4ff);
+  color: var(--mm-cyan, var(--color-primary-strong));
   font: 700 9px var(--mm-mono, ui-monospace, monospace);
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -361,7 +361,7 @@
 
 .promptBox p {
   margin: 0;
-  color: var(--mm-ink, #d6e8f6);
+  color: var(--mm-ink, var(--color-text));
   font-size: 12.5px;
   line-height: 1.55;
 }
@@ -375,9 +375,9 @@
 .candidateCard {
   display: grid;
   gap: 10px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
   border-radius: 10px;
-  background: rgb(10 18 30 / 55%);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
   padding: 10px;
 }
 
@@ -407,9 +407,9 @@
   align-items: center;
   gap: 5px;
   border-radius: 999px;
-  background: rgb(4 10 18 / 82%);
-  border: 1px solid rgb(57 212 255 / 30%);
-  color: var(--mm-cyan, #39d4ff);
+  background: color-mix(in srgb, var(--color-panel-base) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
+  color: var(--mm-cyan, var(--color-primary-strong));
   font: 700 11px var(--mm-mono, ui-monospace, monospace);
   padding: 4px 9px;
   opacity: 0;
@@ -428,8 +428,8 @@
   width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: 8px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(4 10 18 / 60%);
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 60%, transparent);
   object-fit: cover;
 }
 
@@ -439,7 +439,7 @@
 }
 
 .candidateMeta strong {
-  color: #eafaff;
+  color: var(--color-text-strong);
   font: 600 12px var(--mm-mono, ui-monospace, monospace);
   overflow-wrap: anywhere;
 }
@@ -447,7 +447,7 @@
 .candidateMeta span,
 .saveRow span,
 .empty {
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   font-size: 12px;
 }
 
@@ -470,10 +470,10 @@
 }
 
 .fileChips span {
-  border: 1px solid rgb(57 212 255 / 25%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 25%, transparent);
   border-radius: 999px;
-  background: rgb(57 212 255 / 8%);
-  color: var(--mm-cyan, #39d4ff);
+  background: color-mix(in srgb, var(--color-primary-strong) 8%, transparent);
+  color: var(--mm-cyan, var(--color-primary-strong));
   font: 600 11px var(--mm-mono, ui-monospace, monospace);
   padding: 4px 10px;
 }
@@ -525,14 +525,14 @@
   overflow: hidden;
   height: 100%;
   border-radius: 11px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(4 10 18 / 60%);
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 60%, transparent);
   line-height: 0;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 
 .mediaThumb:hover {
-  border-color: rgb(57 212 255 / 45%);
+  border-color: color-mix(in srgb, var(--color-primary-strong) 45%, transparent);
   box-shadow: 0 0 24px -6px rgb(57 212 255 / 40%);
   transform: translateY(-2px);
   z-index: 3;
@@ -551,9 +551,10 @@
   top: 8px;
   z-index: 2;
   border-radius: 999px;
-  background: rgb(4 10 18 / 78%);
-  border: 1px solid rgb(57 212 255 / 25%);
-  color: var(--mm-cyan, #39d4ff);
+  /* 角标压在照片上，底必须不透明：半透明底在浅色主题下会让文字直接坐在照片像素上 */
+  background: var(--color-surface-solid);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 25%, transparent);
+  color: var(--color-primary-strong);
   font: 700 9px var(--mm-mono, ui-monospace, monospace);
   letter-spacing: 0.08em;
   padding: 3px 9px;
@@ -568,7 +569,7 @@
   justify-content: center;
   gap: 8px;
   padding: 12px;
-  background: linear-gradient(180deg, transparent 45%, rgb(2 6 12 / 82%));
+  background: linear-gradient(180deg, transparent 45%, color-mix(in srgb, var(--color-panel-base) 82%, transparent));
   opacity: 0;
   transition: opacity 0.16s;
 }
@@ -585,17 +586,17 @@
   width: 38px;
   height: 38px;
   border-radius: 9px;
-  border: 1px solid rgb(57 212 255 / 35%);
-  background: rgb(8 18 30 / 85%);
-  color: var(--mm-ink, #d6e8f6);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 35%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 85%, transparent);
+  color: var(--mm-ink, var(--color-text));
   cursor: pointer;
   transition: 0.14s;
 }
 
 .mediaIcon:hover {
-  border-color: rgb(57 212 255 / 70%);
-  color: var(--mm-cyan, #39d4ff);
-  background: rgb(14 30 48 / 92%);
+  border-color: color-mix(in srgb, var(--color-primary-strong) 70%, transparent);
+  color: var(--mm-cyan, var(--color-primary-strong));
+  background: color-mix(in srgb, var(--color-panel-base) 92%, transparent);
 }
 
 /* 灯箱 */
@@ -605,7 +606,7 @@
   z-index: 90;
   display: grid;
   place-items: center;
-  background: rgb(2 6 12 / 82%);
+  background: color-mix(in srgb, var(--color-panel-base) 82%, transparent);
   backdrop-filter: blur(6px);
   padding: 22px;
 }
@@ -618,8 +619,8 @@
   width: min(1120px, 100%);
   max-height: min(92vh, 980px);
   border-radius: 14px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(8 15 26 / 97%);
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 97%, transparent);
   box-shadow: 0 40px 90px -34px rgb(0 0 0 / 85%);
   padding: 16px;
 }
@@ -630,7 +631,7 @@
   position: absolute;
   width: 15px;
   height: 15px;
-  border: 2px solid var(--mm-amber, #ffb13b);
+  border: 2px solid var(--mm-amber, var(--color-warning));
   opacity: 0.55;
 }
 
@@ -662,13 +663,13 @@
 }
 
 .lightboxHeader strong {
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 14px;
   overflow-wrap: anywhere;
 }
 
 .lightboxHeader span {
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   font: 500 12px var(--mm-mono, ui-monospace, monospace);
 }
 
@@ -678,8 +679,8 @@
   place-items: center;
   overflow: auto;
   border-radius: 10px;
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(2 6 12 / 60%);
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 60%, transparent);
 }
 
 .lightboxImageWrap img {
@@ -691,15 +692,15 @@
 
 /* 灯箱 portal 到 body 后不在 .mm-page 作用域内，按钮需自带暗色 */
 .lightbox :global(.secondary-button) {
-  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border: 1px solid var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
   border-radius: 8px;
-  background: rgb(10 20 34 / 75%);
-  color: var(--mm-ink, #d6e8f6);
+  background: color-mix(in srgb, var(--color-panel-base) 75%, transparent);
+  color: var(--mm-ink, var(--color-text));
 }
 
 .lightbox :global(.secondary-button):hover {
-  border-color: rgb(57 212 255 / 45%);
-  color: #eafaff;
+  border-color: color-mix(in srgb, var(--color-primary-strong) 45%, transparent);
+  color: var(--color-text-strong);
 }
 
 /* 提示条 */
@@ -713,21 +714,21 @@
 }
 
 .notice {
-  border: 1px solid rgb(77 255 161 / 25%);
-  background: rgb(77 255 161 / 8%);
-  color: var(--mm-green, #4dffa1);
+  border: 1px solid color-mix(in srgb, var(--color-success) 25%, transparent);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  color: var(--mm-green, var(--color-success));
 }
 
 .error {
-  border: 1px solid rgb(255 107 138 / 25%);
-  background: rgb(255 107 138 / 8%);
-  color: var(--mm-red, #ff6b8a);
+  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  color: var(--mm-red, var(--color-error));
 }
 
 .empty {
-  border: 1px dashed var(--mm-line, rgb(120 200 255 / 16%));
-  background: rgb(8 15 26 / 40%);
-  color: var(--mm-dim, #7d95ae);
+  border: 1px dashed var(--mm-line, color-mix(in srgb, var(--color-primary) 16%, transparent));
+  background: color-mix(in srgb, var(--color-panel-base) 40%, transparent);
+  color: var(--mm-dim, var(--color-muted));
   text-align: center;
 }
 
@@ -735,20 +736,20 @@
 .progressPanel {
   display: grid;
   gap: 8px;
-  border: 1px solid rgb(57 212 255 / 25%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 25%, transparent);
   border-radius: 11px;
-  background: rgb(57 212 255 / 6%);
+  background: color-mix(in srgb, var(--color-primary-strong) 6%, transparent);
   padding: 13px 15px;
 }
 
 .progressPanel[data-status="done"] {
-  border-color: rgb(77 255 161 / 30%);
-  background: rgb(77 255 161 / 7%);
+  border-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+  background: color-mix(in srgb, var(--color-success) 7%, transparent);
 }
 
 .progressPanel[data-status="failed"] {
-  border-color: rgb(255 107 138 / 30%);
-  background: rgb(255 107 138 / 7%);
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
+  background: color-mix(in srgb, var(--color-error) 7%, transparent);
 }
 
 .progressHeader {
@@ -760,7 +761,7 @@
 
 .progressHeader span,
 .progressHeader strong {
-  color: #eafaff;
+  color: var(--color-text-strong);
   font: 700 12px var(--mm-mono, ui-monospace, monospace);
 }
 
@@ -768,29 +769,29 @@
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(120 200 255 / 12%);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 .progressTrack span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #39d4ff, #22a7d8);
+  background: linear-gradient(90deg, var(--color-primary-strong), var(--color-primary-strong));
   box-shadow: 0 0 12px rgb(57 212 255 / 60%);
   transition: width 360ms ease;
 }
 
 .progressPanel[data-status="done"] .progressTrack span {
-  background: linear-gradient(90deg, #4dffa1, #2fd483);
+  background: linear-gradient(90deg, var(--color-success), var(--color-success));
 }
 
 .progressPanel[data-status="failed"] .progressTrack span {
-  background: linear-gradient(90deg, #ff6b8a, #d43d5c);
+  background: linear-gradient(90deg, var(--color-error), var(--color-error));
 }
 
 .progressPanel p {
   margin: 0;
-  color: var(--mm-dim, #7d95ae);
+  color: var(--mm-dim, var(--color-muted));
   font-size: 12px;
 }
 

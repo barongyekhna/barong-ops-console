@@ -162,7 +162,7 @@ export function FaqEditorPanel({
             <div
               key={index}
               style={{
-                border: "1px solid var(--border, #333)",
+                border: "1px solid var(--color-line)",
                 borderRadius: 10,
                 display: "grid",
                 gap: 8,
@@ -205,7 +205,7 @@ export function FaqEditorPanel({
       )}
       {notice ? <p className={styles.sellingPointsHint}>{notice}</p> : null}
       {error ? (
-        <p className={styles.sellingPointsHint} style={{ color: "#e5484d" }}>
+        <p className={styles.sellingPointsHint} style={{ color: "var(--color-error)" }}>
           {error}
         </p>
       ) : null}

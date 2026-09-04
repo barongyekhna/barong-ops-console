@@ -343,9 +343,9 @@ export function McpKeysPanel() {
                       ) : state === "none" ? (
                         <span className="section-index">未申请</span>
                       ) : state === "disabled" ? (
-                        <span className="section-index" style={{ color: "#ff9db2" }}>已停用 · {u.mcp_token?.token_prefix}…</span>
+                        <span className="section-index" style={{ color: "var(--color-text)" }}>已停用 · {u.mcp_token?.token_prefix}…</span>
                       ) : (
-                        <span className="section-index" style={{ color: "#4dffa1" }}>正常 · {u.mcp_token?.token_prefix}…</span>
+                        <span className="section-index" style={{ color: "var(--color-success)" }}>正常 · {u.mcp_token?.token_prefix}…</span>
                       )}
                     </td>
                     <td>{formatTime(u.mcp_token?.last_used_at)}</td>

@@ -6,7 +6,7 @@
   padding: 20px;
   place-items: center;
   overflow: hidden;
-  background: rgb(1 5 11 / 78%);
+  background: color-mix(in srgb, var(--color-panel-base) 78%, transparent);
   backdrop-filter: blur(8px) saturate(82%);
   animation: backdropIn 160ms ease-out;
 }

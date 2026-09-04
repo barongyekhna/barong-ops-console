@@ -28,9 +28,9 @@ export function RaSubnav() {
             key={link.href}
             href={link.href}
             style={{
-              border: `1px solid ${active ? "#2dd4cd" : "var(--color-line)"}`,
-              color: active ? "#2dd4cd" : "var(--color-muted)",
-              background: active ? "rgba(45, 212, 205, 0.07)" : "transparent",
+              border: `1px solid ${active ? "var(--color-info)" : "var(--color-line)"}`,
+              color: active ? "var(--color-info)" : "var(--color-muted)",
+              background: active ? "color-mix(in srgb, var(--color-info) 7%, transparent)" : "transparent",
               borderRadius: 999,
               padding: "5px 14px",
               fontSize: "0.78rem",

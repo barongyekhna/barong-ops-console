@@ -13,7 +13,7 @@
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   overflow: hidden;
-  border: 1px solid rgb(120 160 200 / 18%);
+  border: 1px solid color-mix(in srgb, var(--color-muted) 18%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-canvas-soft) 62%, transparent);
 }
@@ -22,7 +22,7 @@
   position: relative;
   padding: 15px 16px;
   border: 0;
-  border-right: 1px solid rgb(120 160 200 / 18%);
+  border-right: 1px solid color-mix(in srgb, var(--color-muted) 18%, transparent);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -31,18 +31,18 @@
 }
 
 .step:hover {
-  background: rgb(120 160 200 / 7%);
+  background: color-mix(in srgb, var(--color-muted) 7%, transparent);
 }
 
 .step:focus-visible {
-  outline: 2px solid #d9a441;
+  outline: 2px solid var(--color-warning);
   outline-offset: -2px;
 }
 
 /* 当前打开的那一步。和「卡在这」是两回事：卡在哪是系统算的，
    打开哪一步是你自己点的。 */
 .stepActive {
-  background: rgb(120 160 200 / 12%);
+  background: color-mix(in srgb, var(--color-muted) 12%, transparent);
 }
 
 .stepActive .stepTitle {
@@ -54,7 +54,7 @@
   position: absolute;
   inset: 0 0 auto;
   height: 2px;
-  background: rgb(120 160 200 / 55%);
+  background: color-mix(in srgb, var(--color-muted) 55%, transparent);
 }
 
 .step:last-child {
@@ -91,7 +91,7 @@
 }
 
 .stepHere {
-  background: linear-gradient(180deg, rgb(217 164 65 / 14%), transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-warning) 14%, transparent), transparent);
 }
 
 .stepHere::after {
@@ -99,16 +99,16 @@
   position: absolute;
   inset: auto 0 0;
   height: 2px;
-  background: #d9a441;
+  background: var(--color-warning);
 }
 
 .stepHere .stepTitle,
 .stepHere .stepWho {
-  color: #d9a441;
+  color: var(--color-warning);
 }
 
 .stepDone .stepValue {
-  color: #55bd88;
+  color: var(--color-success);
 }
 
 /* ---------- 待办 ---------- */
@@ -124,7 +124,7 @@
 }
 
 .card {
-  border: 1px solid rgb(120 160 200 / 18%);
+  border: 1px solid color-mix(in srgb, var(--color-muted) 18%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--color-canvas-soft) 62%, transparent);
   padding: 15px 17px;
@@ -137,7 +137,7 @@
 }
 
 .todoRow.actionable {
-  border-color: rgb(217 164 65 / 42%);
+  border-color: color-mix(in srgb, var(--color-warning) 42%, transparent);
 }
 
 .bead {
@@ -145,7 +145,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #d9a441;
+  background: var(--color-warning);
 }
 
 .todoMain {
@@ -169,7 +169,7 @@
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 19px;
   font-variant-numeric: tabular-nums;
-  color: #d9a441;
+  color: var(--color-warning);
 }
 
 /* ---------- 机器在跑 ---------- */
@@ -179,28 +179,28 @@
   flex-wrap: wrap;
   gap: 8px 22px;
   padding: 14px 17px;
-  border: 1px solid rgb(85 189 136 / 20%);
+  border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
   border-radius: 10px;
-  background: rgb(85 189 136 / 5%);
+  background: color-mix(in srgb, var(--color-success) 5%, transparent);
   font-size: 13px;
   color: var(--color-muted);
 }
 
 .machineWarn {
-  border-color: rgb(217 164 65 / 32%);
-  background: rgb(217 164 65 / 5%);
+  border-color: color-mix(in srgb, var(--color-warning) 32%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 5%, transparent);
 }
 
 .ok {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12px;
-  color: #55bd88;
+  color: var(--color-success);
 }
 
 .warn {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12px;
-  color: #d9a441;
+  color: var(--color-warning);
 }
 
 /* ---------- 按钮 ---------- */
@@ -208,17 +208,17 @@
 .btn {
   flex: none;
   padding: 7px 15px;
-  border: 1px solid rgb(217 164 65 / 50%);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 50%, transparent);
   border-radius: 7px;
-  background: rgb(217 164 65 / 13%);
-  color: #d9a441;
+  background: color-mix(in srgb, var(--color-warning) 13%, transparent);
+  color: var(--color-warning);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 
 .btn:hover:not(:disabled) {
-  background: rgb(217 164 65 / 22%);
+  background: color-mix(in srgb, var(--color-warning) 22%, transparent);
 }
 
 .btn:disabled {
@@ -227,28 +227,28 @@
 }
 
 .btn:focus-visible {
-  outline: 2px solid #d9a441;
+  outline: 2px solid var(--color-warning);
   outline-offset: 2px;
 }
 
 .btnQuiet {
-  border-color: rgb(120 160 200 / 30%);
+  border-color: color-mix(in srgb, var(--color-muted) 30%, transparent);
   background: transparent;
   color: var(--color-text);
 }
 
 .btnQuiet:hover:not(:disabled) {
-  background: rgb(120 160 200 / 10%);
+  background: color-mix(in srgb, var(--color-muted) 10%, transparent);
 }
 
 .btnGo {
-  border-color: rgb(85 189 136 / 50%);
-  background: rgb(85 189 136 / 14%);
-  color: #55bd88;
+  border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success);
 }
 
 .btnGo:hover:not(:disabled) {
-  background: rgb(85 189 136 / 24%);
+  background: color-mix(in srgb, var(--color-success) 24%, transparent);
 }
 
 .btnTiny {
@@ -264,7 +264,7 @@
   display: flex;
   gap: 14px;
   padding: 18px 56px 16px 22px;
-  border-bottom: 1px solid rgb(120 160 200 / 18%);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-muted) 18%, transparent);
 }
 
 .modalTitle {
@@ -285,7 +285,7 @@
 
 .chip {
   padding: 3px 10px;
-  border: 1px solid rgb(120 160 200 / 30%);
+  border: 1px solid color-mix(in srgb, var(--color-muted) 30%, transparent);
   border-radius: 20px;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10.5px;
@@ -294,13 +294,13 @@
 }
 
 .chipOk {
-  border-color: rgb(85 189 136 / 42%);
-  color: #55bd88;
+  border-color: color-mix(in srgb, var(--color-success) 42%, transparent);
+  color: var(--color-success);
 }
 
 .chipBad {
-  border-color: rgb(221 109 99 / 45%);
-  color: #dd6d63;
+  border-color: color-mix(in srgb, var(--color-error) 45%, transparent);
+  color: var(--color-error);
 }
 
 .modalBody {
@@ -315,7 +315,7 @@
   align-items: center;
   gap: 10px;
   padding: 15px 22px;
-  border-top: 1px solid rgb(120 160 200 / 18%);
+  border-top: 1px solid color-mix(in srgb, var(--color-muted) 18%, transparent);
 }
 
 .footHint {
@@ -330,7 +330,7 @@
   margin: 20px 0 6px;
   font-size: 14px;
   font-weight: 600;
-  color: #d9a441;
+  color: var(--color-warning);
 }
 
 .articleHeading:first-child {
@@ -367,7 +367,7 @@
 .panel {
   margin-top: 18px;
   padding: 15px 16px;
-  border: 1px solid rgb(120 160 200 / 18%);
+  border: 1px solid color-mix(in srgb, var(--color-muted) 18%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--color-canvas-soft) 55%, transparent);
 }
@@ -398,11 +398,11 @@
 }
 
 .good {
-  color: #55bd88;
+  color: var(--color-success);
 }
 
 .risk {
-  color: #d9a441;
+  color: var(--color-warning);
 }
 
 .finding {
@@ -410,7 +410,7 @@
   align-items: baseline;
   gap: 8px;
   padding: 7px 0;
-  border-bottom: 1px solid rgb(120 160 200 / 10%);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-muted) 10%, transparent);
   font-size: 13px;
   color: var(--color-text);
 }
@@ -441,13 +441,13 @@
 }
 
 .error {
-  border-color: rgb(221 109 99 / 42%);
-  color: #dd6d63;
+  border-color: color-mix(in srgb, var(--color-error) 42%, transparent);
+  color: var(--color-error);
 }
 
 .notice {
-  border-color: rgb(85 189 136 / 42%);
-  color: #55bd88;
+  border-color: color-mix(in srgb, var(--color-success) 42%, transparent);
+  color: var(--color-success);
 }
 
 @media (max-width: 720px) {
@@ -460,6 +460,6 @@
   }
 
   .step:nth-child(-n + 2) {
-    border-bottom: 1px solid rgb(120 160 200 / 18%);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-muted) 18%, transparent);
   }
 }

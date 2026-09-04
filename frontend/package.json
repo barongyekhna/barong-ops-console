@@ -11,7 +11,8 @@
     "test:ci": "node --test tests/frontend/*.test.mjs",
     "test:unit": "cd .. && node --test tests/frontend/*.test.mjs",
     "typecheck": "node scripts/clean-next-dev-types.mjs && tsc --noEmit",
-    "verify": "node scripts/verify-foundation.mjs"
+    "verify": "node scripts/verify-foundation.mjs && node scripts/verify-theme-literals.mjs",
+    "audit:theme": "node scripts/theme-contrast-audit.mjs"
   },
   "dependencies": {
     "lucide-react": "1.17.0",

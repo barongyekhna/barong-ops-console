@@ -1,7 +1,7 @@
 .page {
   min-height: 84vh;
   overflow: hidden;
-  border: 1px solid rgb(120 200 255 / 12%);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 12%, transparent);
   border-radius: 8px;
 }
 
@@ -40,7 +40,7 @@
 
 .titleBlock h1 {
   margin: 7px 0 3px;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 24px;
   line-height: 1.2;
   letter-spacing: 0;
@@ -62,10 +62,10 @@
   min-width: 112px;
   min-height: 38px;
   padding: 9px 14px;
-  border: 1px solid rgb(57 212 255 / 55%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 55%, transparent);
   border-radius: 8px;
-  background: #38c8ec;
-  color: #03121a;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   cursor: pointer;
   font-size: 13px;
   font-weight: 750;
@@ -73,7 +73,7 @@
 }
 
 .runButton:hover:not(:disabled) {
-  background: #62dcf7;
+  background: var(--color-primary);
 }
 
 .runButton:disabled {
@@ -100,7 +100,7 @@
   margin: 20px 0 12px;
   border: 1px solid var(--cc-line);
   border-radius: 8px;
-  background: rgb(5 12 22 / 66%);
+  background: color-mix(in srgb, var(--color-panel-base) 66%, transparent);
   backdrop-filter: blur(8px);
 }
 
@@ -156,10 +156,10 @@
 .errorBanner {
   margin: 10px 0;
   padding: 10px 12px;
-  border: 1px solid rgb(255 107 138 / 45%);
+  border: 1px solid color-mix(in srgb, var(--color-error) 45%, transparent);
   border-radius: 6px;
-  background: rgb(50 8 20 / 72%);
-  color: #ffafc0;
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
+  color: var(--color-error);
   font-size: 12px;
 }
 
@@ -178,13 +178,13 @@
   padding: 14px 16px;
   border: 1px solid var(--cc-line);
   border-radius: 8px;
-  background: rgb(6 14 24 / 74%);
+  background: color-mix(in srgb, var(--color-panel-base) 74%, transparent);
   backdrop-filter: blur(8px);
 }
 
 .keyRow:hover {
-  border-color: rgb(57 212 255 / 32%);
-  background: rgb(8 19 31 / 82%);
+  border-color: color-mix(in srgb, var(--color-primary-strong) 32%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 82%, transparent);
 }
 
 .keyIdentity,
@@ -194,7 +194,7 @@
 
 .keyName {
   overflow: hidden;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0;
@@ -223,10 +223,10 @@
   max-width: 100%;
   overflow: hidden;
   padding: 3px 6px;
-  border: 1px solid rgb(57 212 255 / 20%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 20%, transparent);
   border-radius: 4px;
-  color: #a8dcec;
-  background: rgb(57 212 255 / 5%);
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-primary-strong) 5%, transparent);
   font: 500 9px var(--cc-mono);
   letter-spacing: 0;
   text-overflow: ellipsis;
@@ -273,19 +273,19 @@
   flex: 0 0 14px;
 }
 
-.healthy { color: var(--cc-green); background: rgb(77 255 161 / 7%); }
-.warning { color: var(--cc-amber); background: rgb(255 177 59 / 7%); }
-.failed { color: var(--cc-red); background: rgb(255 107 138 / 7%); }
-.idle { color: var(--cc-cyan); background: rgb(57 212 255 / 7%); }
+.healthy { color: var(--cc-green); background: color-mix(in srgb, var(--color-success) 7%, transparent); }
+.warning { color: var(--cc-amber); background: color-mix(in srgb, var(--color-warning) 7%, transparent); }
+.failed { color: var(--cc-red); background: color-mix(in srgb, var(--color-error) 7%, transparent); }
+.idle { color: var(--cc-cyan); background: color-mix(in srgb, var(--color-primary-strong) 7%, transparent); }
 
 .empty {
   display: grid;
   min-height: 180px;
   place-items: center;
-  border: 1px dashed rgb(57 212 255 / 24%);
+  border: 1px dashed color-mix(in srgb, var(--color-primary-strong) 24%, transparent);
   border-radius: 8px;
   color: var(--cc-dim);
-  background: rgb(6 14 24 / 48%);
+  background: color-mix(in srgb, var(--color-panel-base) 48%, transparent);
   font: 500 11px var(--cc-mono);
   letter-spacing: 0;
 }

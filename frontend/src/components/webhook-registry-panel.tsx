@@ -90,7 +90,7 @@ export function WebhookRegistryPanel() {
       </div>
 
       {error ? (
-        <p role="alert" style={{ color: "#ff8a8a", margin: "6px 0" }}>
+        <p role="alert" style={{ color: "var(--color-error)", margin: "6px 0" }}>
           {error}
         </p>
       ) : null}

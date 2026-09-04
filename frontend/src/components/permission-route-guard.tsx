@@ -48,7 +48,7 @@ function RWarehouseNoPermissionPopup() {
       aria-modal="true"
       style={{
         alignItems: "center",
-        background: "rgb(15 23 42 / 38%)",
+        background: "color-mix(in srgb, var(--color-panel-base) 38%, transparent)",
         display: "grid",
         inset: 0,
         justifyItems: "center",
@@ -62,7 +62,7 @@ function RWarehouseNoPermissionPopup() {
           background: "var(--color-surface)",
           border: "1px solid var(--color-line)",
           borderRadius: 8,
-          boxShadow: "0 20px 60px rgb(15 23 42 / 22%)",
+          boxShadow: "0 20px 60px color-mix(in srgb, var(--color-panel-base) 22%, transparent)",
           color: "var(--color-text-strong)",
           fontWeight: 760,
           maxWidth: 420,

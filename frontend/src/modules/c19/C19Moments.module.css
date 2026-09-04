@@ -13,8 +13,8 @@
 .momentComposer,
 .feedColumn,
 .momentCard {
-  background: var(--color-surface, #0d1826);
-  border: 1px solid var(--color-line, #1c2f47);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
   border-radius: 18px;
   box-shadow: 0 14px 36px rgb(15 23 42 / 5%);
 }
@@ -49,7 +49,7 @@
 
 .composerHeading span,
 .feedHeading > div:first-child > span {
-  color: #39d4ff;
+  color: var(--color-primary-strong);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -58,19 +58,19 @@
 
 .composerHeading h3,
 .feedHeading h3 {
-  color: #dce9f7;
+  color: var(--color-text-strong);
   margin: 0;
 }
 
 .composerHeading h3 { font-size: 18px; }
-.composerHeading > svg { color: #1a90c4; }
+.composerHeading > svg { color: var(--color-primary-strong); }
 
 .momentComposer textarea,
 .commentForm textarea {
-  background: #0d1826;
-  border: 1px solid #24384f;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-line-strong);
   border-radius: 11px;
-  color: #dce9f7;
+  color: var(--color-text-strong);
   font: inherit;
   line-height: 1.5;
   outline: none;
@@ -81,18 +81,18 @@
 
 .momentComposer textarea:focus,
 .commentForm textarea:focus {
-  border-color: #39d4ff;
+  border-color: var(--color-primary-strong);
   box-shadow: 0 0 0 3px rgb(57 212 255 / 16%);
 }
 
 .momentComposer textarea:disabled,
 .commentForm textarea:disabled {
-  background: #0a1524;
+  background: var(--color-canvas);
   cursor: not-allowed;
 }
 
 .characterCount {
-  color: #8299b4;
+  color: var(--color-muted);
   font-size: 10px;
   margin-top: -8px;
   text-align: right;
@@ -100,7 +100,7 @@
 
 .visibilityPicker,
 .audiencePicker {
-  border: 1px solid #1c2f47;
+  border: 1px solid var(--color-line);
   border-radius: 12px;
   display: flex;
   flex-wrap: wrap;
@@ -111,7 +111,7 @@
 
 .visibilityPicker legend,
 .audiencePicker legend {
-  color: #8299b4;
+  color: var(--color-muted);
   font-size: 11px;
   font-weight: 800;
   padding: 0 4px;
@@ -120,10 +120,10 @@
 .visibilityPicker label,
 .audiencePicker label {
   align-items: center;
-  background: #0a1524;
-  border: 1px solid #1c2f47;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
   border-radius: 9px;
-  color: #b3c6dc;
+  color: var(--color-subtle);
   cursor: pointer;
   display: inline-flex;
   font-size: 11px;
@@ -132,7 +132,7 @@
 }
 
 .audiencePicker label { flex: 1 1 140px; }
-.audiencePicker small { color: #8299b4; }
+.audiencePicker small { color: var(--color-muted); }
 
 .visibilityPicker label:has(input:disabled) {
   cursor: not-allowed;
@@ -159,10 +159,10 @@
 .retryNotice button,
 .runtimeError button {
   align-items: center;
-  background: #0d1826;
-  border: 1px solid #24384f;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-line-strong);
   border-radius: 9px;
-  color: #b3c6dc;
+  color: var(--color-subtle);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -186,17 +186,17 @@
   opacity: 0.48;
 }
 
-.addImagesButton { background: #0a1524; }
+.addImagesButton { background: var(--color-canvas); }
 
 .publishButton {
-  background: #dce9f7;
-  border-color: #dce9f7;
-  color: #0d1826;
+  background: var(--color-text-strong);
+  border-color: var(--color-text-strong);
+  color: var(--color-surface-solid);
   width: 100%;
 }
 
 .composerBoundary {
-  color: #8299b4;
+  color: var(--color-muted);
   font-size: 10px;
   line-height: 1.45;
   text-align: center;
@@ -209,8 +209,8 @@
 
 .selectedMomentImages article {
   align-items: center;
-  background: #0a1524;
-  border: 1px solid #1c2f47;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
   border-radius: 10px;
   display: grid;
   gap: 8px;
@@ -232,24 +232,24 @@
 }
 
 .selectedMomentImages strong {
-  color: #dce9f7;
+  color: var(--color-text-strong);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.selectedMomentImages span { color: #8299b4; font-size: 9px; }
+.selectedMomentImages span { color: var(--color-muted); font-size: 9px; }
 .selectedMomentImages progress { height: 5px; width: 100%; }
 
 .selectedMomentImages article > button,
 .deleteMomentButton,
 .commentRow > button {
   align-items: center;
-  background: #0d1826;
-  border: 1px solid #4a2230;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-error-soft);
   border-radius: 8px;
-  color: #ff6b8a;
+  color: var(--color-error);
   cursor: pointer;
   display: inline-flex;
   height: 30px;
@@ -263,10 +263,10 @@
 
 .retryNotice {
   align-items: flex-start;
-  background: #241a05;
-  border: 1px solid #4a3410;
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning-soft);
   border-radius: 10px;
-  color: #ffb13b;
+  color: var(--color-warning);
   flex-direction: column;
   font-size: 10px;
   padding: 9px;
@@ -281,7 +281,7 @@
 
 .feedHeading {
   align-items: flex-start;
-  border-bottom: 1px solid #1c2f47;
+  border-bottom: 1px solid var(--color-line);
   padding-bottom: 15px;
 }
 
@@ -293,7 +293,7 @@
 }
 
 .feedHeading p {
-  color: #8299b4;
+  color: var(--color-muted);
   font-size: 12px;
   margin: 0;
 }
@@ -305,10 +305,10 @@
 
 .feedRuntime > span {
   align-items: center;
-  background: #0b1f18;
-  border: 1px solid #2f7a52;
+  background: color-mix(in srgb, var(--color-success) 12%, var(--color-panel-base));
+  border: 1px solid color-mix(in srgb, var(--color-success) 55%, transparent);
   border-radius: 999px;
-  color: #4dffa1;
+  color: var(--color-success);
   display: inline-flex;
   font-size: 10px;
   font-weight: 800;
@@ -318,15 +318,15 @@
 
 .feedRuntime > span[data-mode="polling"],
 .feedRuntime > span[data-mode="connecting"] {
-  background: #0e2036;
-  border-color: #2a5573;
-  color: #39d4ff;
+  background: var(--color-elevated);
+  border-color: var(--color-line-strong);
+  color: var(--color-primary-strong);
 }
 
 .feedRuntime > span[data-mode="offline"] {
-  background: #240d12;
-  border-color: #4a2230;
-  color: #ff6b8a;
+  background: var(--color-error-soft);
+  border-color: var(--color-error-soft);
+  color: var(--color-error);
 }
 
 .momentList { display: grid; gap: 14px; }
@@ -344,10 +344,10 @@
 
 .momentAvatar {
   align-items: center;
-  background: linear-gradient(135deg, #0e2438, #0e2438);
-  border: 1px solid #2a5573;
+  background: linear-gradient(135deg, var(--color-elevated), var(--color-elevated));
+  border: 1px solid var(--color-line-strong);
   border-radius: 12px;
-  color: #39d4ff;
+  color: var(--color-primary-strong);
   display: inline-flex;
   flex: 0 0 auto;
   font-size: 12px;
@@ -365,12 +365,12 @@
   width: 100%;
 }
 
-.momentHeader strong { color: #dce9f7; font-size: 14px; }
-.momentHeader > div > span { color: #8299b4; font-size: 10px; line-height: 1.4; }
+.momentHeader strong { color: var(--color-text-strong); font-size: 14px; }
+.momentHeader > div > span { color: var(--color-muted); font-size: 10px; line-height: 1.4; }
 .deleteMomentButton { margin-left: auto; }
 
 .momentContent {
-  color: #c2d4e8;
+  color: var(--color-text);
   font-size: 14px;
   line-height: 1.65;
   margin: 0;
@@ -402,7 +402,7 @@
 }
 
 .momentImageButton {
-  background: #0c1a2b;
+  background: var(--color-surface-solid);
   border: 0;
   border-radius: 10px;
   cursor: pointer;
@@ -428,10 +428,10 @@
 
 .momentImageButton > span {
   align-items: center;
-  background: rgb(15 23 42 / 72%);
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
   bottom: 6px;
   border-radius: 7px;
-  color: #0d1826;
+  color: var(--color-surface-solid);
   display: inline-flex;
   font-size: 9px;
   gap: 4px;
@@ -443,10 +443,10 @@
 .momentImagePlaceholder {
   align-items: center;
   aspect-ratio: 1;
-  background: #0c1a2b;
-  border: 1px dashed #24384f;
+  background: var(--color-surface-solid);
+  border: 1px dashed var(--color-line-strong);
   border-radius: 10px;
-  color: #8299b4;
+  color: var(--color-muted);
   display: flex;
   flex-direction: column;
   font-size: 10px;
@@ -457,10 +457,10 @@
 }
 
 .momentImagePlaceholder button {
-  background: #0d1826;
-  border: 1px solid #24384f;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-line-strong);
   border-radius: 7px;
-  color: #b3c6dc;
+  color: var(--color-subtle);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -470,17 +470,17 @@
 
 .imageLoading,
 .inlineError {
-  color: #8299b4;
+  color: var(--color-muted);
   display: block;
   font-size: 9px;
   margin-top: 4px;
 }
 
-.inlineError { color: #ffb13b; }
+.inlineError { color: var(--color-warning); }
 
 .lightbox {
   align-items: center;
-  background: rgb(2 6 23 / 90%);
+  background: color-mix(in srgb, var(--color-panel-base) 90%, transparent);
   display: flex;
   inset: 0;
   justify-content: center;
@@ -505,10 +505,10 @@
 
 .lightboxToolbar button {
   align-items: center;
-  background: rgb(13 24 38 / 94%);
+  background: color-mix(in srgb, var(--color-surface-solid) 94%, transparent);
   border: 0;
   border-radius: 9px;
-  color: #dce9f7;
+  color: var(--color-text-strong);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -519,23 +519,23 @@
 }
 
 .momentActions {
-  border-top: 1px solid #1c2f47;
+  border-top: 1px solid var(--color-line);
   justify-content: flex-start;
   padding-top: 11px;
 }
 
 .momentActions .likedButton {
-  background: #240d12;
-  border-color: #4a2230;
-  color: #ff6b8a;
+  background: var(--color-error-soft);
+  border-color: var(--color-error-soft);
+  color: var(--color-error);
 }
 
 .likesPanel,
 .commentsPanel {
-  background: #0a1524;
-  border: 1px solid #1c2f47;
+  background: var(--color-canvas);
+  border: 1px solid var(--color-line);
   border-radius: 11px;
-  color: #8299b4;
+  color: var(--color-muted);
   display: grid;
   font-size: 11px;
   gap: 8px;
@@ -544,17 +544,17 @@
 
 .likeNames {
   align-items: flex-start;
-  color: #b3c6dc;
+  color: var(--color-subtle);
   display: flex;
   gap: 6px;
   line-height: 1.5;
 }
 
-.likeNames svg { color: #ff6b8a; flex: 0 0 auto; margin-top: 1px; }
+.likeNames svg { color: var(--color-error); flex: 0 0 auto; margin-top: 1px; }
 
 .commentRow {
   align-items: flex-start;
-  border-bottom: 1px solid #1c2f47;
+  border-bottom: 1px solid var(--color-line);
   display: flex;
   gap: 9px;
   justify-content: space-between;
@@ -563,9 +563,9 @@
 
 .commentRow:last-of-type { border-bottom: 0; }
 .commentRow > div { display: grid; gap: 2px; min-width: 0; }
-.commentRow strong { color: #39d4ff; font-size: 11px; }
-.commentRow p { color: #b3c6dc; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-.commentRow time { color: #6b83a0; font-size: 9px; }
+.commentRow strong { color: var(--color-primary-strong); font-size: 11px; }
+.commentRow p { color: var(--color-subtle); line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.commentRow time { color: var(--color-muted); font-size: 9px; }
 .commentRow > button { flex: 0 0 auto; height: 26px; width: 26px; }
 
 .commentForm {
@@ -576,7 +576,7 @@
 }
 
 .commentForm textarea { min-height: 52px; resize: vertical; }
-.cancelCommentRetry { border-color: #4a3410; color: #ffb13b; justify-self: start; }
+.cancelCommentRetry { border-color: var(--color-warning-soft); color: var(--color-warning); justify-self: start; }
 .moreCommentsButton { justify-self: start; }
 
 .runtimeError,
@@ -589,15 +589,15 @@
 }
 
 .runtimeError {
-  background: #240d12;
-  border-color: #4a2230;
-  color: #ff6b8a;
+  background: var(--color-error-soft);
+  border-color: var(--color-error-soft);
+  color: var(--color-error);
 }
 
 .runtimeWarning {
-  background: #241a05;
-  border-color: #4a3410;
-  color: #ffb13b;
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .runtimeError button {
@@ -610,10 +610,10 @@
 
 .feedState {
   align-items: center;
-  background: #0a1524;
-  border: 1px dashed #24384f;
+  background: var(--color-canvas);
+  border: 1px dashed var(--color-line-strong);
   border-radius: 12px;
-  color: #8299b4;
+  color: var(--color-muted);
   display: flex;
   font-size: 12px;
   gap: 7px;

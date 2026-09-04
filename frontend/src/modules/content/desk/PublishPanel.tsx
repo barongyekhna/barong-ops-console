@@ -110,7 +110,7 @@ export function PublishPanel({
                     <a
                       href={`https://barongyekhna.com/wp-admin/post.php?post=${row.wp_post_id}&action=edit`}
                       rel="noreferrer"
-                      style={{ color: "#d9a441" }}
+                      style={{ color: "var(--color-warning)" }}
                       target="_blank"
                     >
                       {row.title.slice(0, 26)}
@@ -137,7 +137,7 @@ export function PublishPanel({
                   <a
                     href={row.url ?? "#"}
                     rel="noreferrer"
-                    style={{ color: "#55bd88" }}
+                    style={{ color: "var(--color-success)" }}
                     target="_blank"
                   >
                     {row.title.slice(0, 26)}

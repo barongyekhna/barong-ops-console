@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { contentRequest, SLOW_WP_TIMEOUT_MS } from "./api-base";
 
-const GOLD = "#d9a441";
-const GREEN = "#55bd88";
-const RED = "#dd6d63";
-const MUTED = "#8b98a8";
+const GOLD = "var(--color-warning)";
+const GREEN = "var(--color-success)";
+const RED = "var(--color-error)";
+const MUTED = "var(--color-muted)";
 
 type LinkNetState = {
   fingerprint: string;
@@ -86,7 +86,7 @@ export function LinkNetPanel() {
       {/* ---- 文章内链：全自动 ---- */}
       <div style={card}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <strong style={{ color: "#dfe6ef", fontSize: 14 }}>文章内链</strong>
+          <strong style={{ color: "var(--color-text-strong)", fontSize: 14 }}>文章内链</strong>
           <span style={{ color: MUTED, fontSize: 12 }}>
             覆盖 {summary.posts ?? 0} 篇 · {summary.products ?? 0} 张产品卡 ·{" "}
             {summary.guides ?? 0} 篇指南 · {summary.factory ?? 0} 篇工艺文
@@ -135,7 +135,7 @@ export function LinkNetPanel() {
       {/* ---- 产品页链接：人工，因为它是投放落地页 ---- */}
       <div style={card}>
         <div style={{ alignItems: "center", display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <strong style={{ color: "#dfe6ef", fontSize: 14 }}>产品页链接</strong>
+          <strong style={{ color: "var(--color-text-strong)", fontSize: 14 }}>产品页链接</strong>
           {pages.stale_count > 0 ? (
             <span style={{ color: GOLD, fontSize: 12 }}>
               ⚠ 有 {pages.stale_count} 个产品页的链接已过期
@@ -167,7 +167,7 @@ export function LinkNetPanel() {
           产品页是投放落地页，所以**由你决定什么时候变**——这一侧不自动刷新。
         </div>
         {pages.reasons.length > 0 ? (
-          <ul style={{ color: "#c7d0da", fontSize: 12, margin: "8px 0 0 18px" }}>
+          <ul style={{ color: "var(--color-text)", fontSize: 12, margin: "8px 0 0 18px" }}>
             {pages.reasons.slice(0, 8).map((reason) => (
               <li key={reason}>{reason}</li>
             ))}
@@ -179,8 +179,8 @@ export function LinkNetPanel() {
 }
 
 const card: React.CSSProperties = {
-  background: "#0d131bcc",
-  border: "1px solid #ffffff1a",
+  background: "color-mix(in srgb, var(--color-panel-base) 80%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 10%, transparent)",
   borderRadius: 10,
   padding: 14,
 };
@@ -197,9 +197,9 @@ const primary: React.CSSProperties = {
 
 const ghost: React.CSSProperties = {
   background: "transparent",
-  border: "1px solid #ffffff22",
+  border: "1px solid color-mix(in srgb, var(--color-line-strong) 13%, transparent)",
   borderRadius: 6,
-  color: "#b9c4d1",
+  color: "var(--color-text)",
   cursor: "pointer",
   fontSize: 12,
   padding: "5px 12px",

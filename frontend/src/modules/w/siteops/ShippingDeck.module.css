@@ -16,9 +16,9 @@
 .statCard {
   position: relative;
   padding: 16px 18px;
-  border: 1px solid rgb(57 212 255 / 35%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 35%, transparent);
   border-radius: 14px;
-  background: linear-gradient(180deg, rgb(57 212 255 / 9%), rgb(57 212 255 / 3%));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-primary-strong) 9%, transparent), color-mix(in srgb, var(--color-primary-strong) 3%, transparent));
   box-shadow: 0 0 22px rgb(57 212 255 / 10%) inset;
   overflow: hidden;
 }
@@ -28,22 +28,22 @@
   position: absolute;
   inset: 0 0 auto;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgb(57 212 255 / 70%), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-primary-strong) 70%, transparent), transparent);
 }
 
 .statCard[data-tone="success"] {
-  border-color: rgb(61 220 151 / 40%);
-  background: linear-gradient(180deg, rgb(61 220 151 / 9%), rgb(61 220 151 / 3%));
+  border-color: color-mix(in srgb, var(--color-success) 40%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-success) 9%, transparent), color-mix(in srgb, var(--color-success) 3%, transparent));
 }
 
 .statCard[data-tone="flight"] {
-  border-color: rgb(255 184 76 / 42%);
-  background: linear-gradient(180deg, rgb(255 184 76 / 9%), rgb(255 184 76 / 3%));
+  border-color: color-mix(in srgb, var(--color-warning) 42%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-warning) 9%, transparent), color-mix(in srgb, var(--color-warning) 3%, transparent));
 }
 
 .statCard[data-tone="failed"] {
-  border-color: rgb(255 107 107 / 42%);
-  background: linear-gradient(180deg, rgb(255 107 107 / 9%), rgb(255 107 107 / 3%));
+  border-color: color-mix(in srgb, var(--color-error) 42%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-error) 9%, transparent), color-mix(in srgb, var(--color-error) 3%, transparent));
 }
 
 .statLabel {
@@ -51,7 +51,7 @@
   font-size: 0.74rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: rgb(178 216 232 / 85%);
+  color: var(--color-text);
   margin-bottom: 6px;
 }
 
@@ -59,14 +59,14 @@
   font-size: 1.6rem;
   font-weight: 800;
   line-height: 1;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-variant-numeric: tabular-nums;
 }
 
 .panel {
-  border: 1px solid rgb(57 212 255 / 28%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 28%, transparent);
   border-radius: 16px;
-  background: rgb(8 20 30 / 55%);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
   overflow: hidden;
   padding-bottom: 8px;
 }
@@ -77,7 +77,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 14px 18px;
-  border-bottom: 1px solid rgb(57 212 255 / 22%);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 22%, transparent);
 }
 
 .panelTitle {
@@ -87,7 +87,7 @@
   font-size: 0.9rem;
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: #d9f3ff;
+  color: var(--color-text-strong);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -97,7 +97,7 @@
 .mutedLine {
   margin: 0 18px 10px;
   font-size: 0.82rem;
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
   line-height: 1.7;
 }
 
@@ -120,9 +120,9 @@
 .statusBadge[data-status="synced"],
 .statusBadge[data-status="delivered"],
 .statusBadge[data-status="success"] {
-  color: rgb(97 240 175);
-  border-color: rgb(61 220 151 / 45%);
-  background: rgb(61 220 151 / 10%);
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
 }
 
 .statusBadge[data-status="failed"],
@@ -130,9 +130,9 @@
 .statusBadge[data-status="exception"],
 .statusBadge[data-status="expired"],
 .statusBadge[data-status="not_found"] {
-  color: rgb(255 138 138);
-  border-color: rgb(255 107 107 / 45%);
-  background: rgb(255 107 107 / 10%);
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 45%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
 }
 
 .statusBadge[data-status="running"],
@@ -143,17 +143,17 @@
 .statusBadge[data-status="info_received"],
 .statusBadge[data-status="in_transit"],
 .statusBadge[data-status="out_for_delivery"] {
-  color: rgb(255 205 118);
-  border-color: rgb(255 184 76 / 45%);
-  background: rgb(255 184 76 / 10%);
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
 }
 
 .statusBadge[data-status="queued"],
 .statusBadge[data-status="draft"],
 .statusBadge[data-status="none"] {
-  color: rgb(140 190 255);
-  border-color: rgb(120 170 255 / 45%);
-  background: rgb(120 170 255 / 10%);
+  color: var(--color-info);
+  border-color: color-mix(in srgb, var(--color-info) 45%, transparent);
+  background: color-mix(in srgb, var(--color-info) 10%, transparent);
 }
 
 .tableScroll {
@@ -172,32 +172,32 @@
   font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgb(157 199 219 / 80%);
-  border-bottom: 1px solid rgb(57 212 255 / 18%);
+  color: var(--color-muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 18%, transparent);
   white-space: nowrap;
 }
 
 .table td {
   padding: 11px 16px;
-  border-bottom: 1px solid rgb(57 212 255 / 10%);
-  color: #cfe8f5;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-strong) 10%, transparent);
+  color: var(--color-text);
   vertical-align: top;
 }
 
 .table tr:hover td {
-  background: rgb(57 212 255 / 5%);
+  background: color-mix(in srgb, var(--color-primary-strong) 5%, transparent);
 }
 
 .timeCell {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: rgb(178 216 232 / 85%);
+  color: var(--color-text);
   font-size: 0.78rem;
 }
 
 .errorCell {
   max-width: 260px;
-  color: rgb(255 154 154);
+  color: var(--color-error);
   font-size: 0.78rem;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -211,23 +211,23 @@
   justify-content: center;
   gap: 10px;
   padding: 42px 16px;
-  color: rgb(157 199 219 / 85%);
+  color: var(--color-muted);
 }
 
 .emptyHint {
   text-align: center;
   padding: 42px 20px;
-  color: rgb(157 199 219 / 85%);
+  color: var(--color-muted);
   line-height: 1.8;
 }
 
 .notice {
   margin: 0;
   padding: 12px 16px;
-  border: 1px solid rgb(61 220 151 / 40%);
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
   border-radius: 12px;
-  background: rgb(61 220 151 / 8%);
-  color: rgb(147 240 197);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  color: var(--color-success);
   font-size: 0.86rem;
 }
 
@@ -237,8 +237,8 @@
   gap: 4px;
   padding: 4px;
   border-radius: 12px;
-  background: rgb(6 12 22 / 65%);
-  border: 1px solid rgb(57 212 255 / 22%);
+  background: color-mix(in srgb, var(--color-panel-base) 65%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 22%, transparent);
 }
 
 .tab {
@@ -250,17 +250,17 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 650;
-  color: rgb(157 199 219 / 85%);
+  color: var(--color-muted);
   background: none;
   border: 0;
   transition: 0.15s;
 }
 
-.tab:hover { color: #eafaff; }
+.tab:hover { color: var(--color-text-strong); }
 
 .tabOn {
-  color: #03121a;
-  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  color: var(--color-on-primary);
+  background: linear-gradient(180deg, var(--accent-bright), var(--color-primary-strong));
   box-shadow: 0 6px 18px -8px rgb(57 212 255 / 55%);
 }
 
@@ -269,14 +269,14 @@
   font-weight: 800;
   padding: 1px 7px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 14%);
+  background: color-mix(in srgb, var(--color-surface-solid) 14%, transparent);
 }
 
-.tabOn .tabCount { background: rgb(3 18 26 / 18%); }
+.tabOn .tabCount { background: color-mix(in srgb, var(--color-canvas) 18%, transparent); }
 
 .productCell strong {
   display: block;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-weight: 650;
   max-width: 340px;
   overflow: hidden;
@@ -286,7 +286,7 @@
 
 .productCell span {
   font-size: 0.76rem;
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
   font-family: var(--font-mono, monospace);
 }
 
@@ -295,15 +295,15 @@
   min-width: 0;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgb(57 212 255 / 30%);
-  background: rgb(6 12 22 / 65%);
-  color: #eafaff;
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 30%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 65%, transparent);
+  color: var(--color-text-strong);
   font-size: 0.86rem;
 }
 
 .formInput:focus {
   outline: none;
-  border-color: rgb(95 227 255 / 70%);
+  border-color: color-mix(in srgb, var(--accent-bright) 70%, transparent);
   box-shadow: 0 0 0 3px rgb(57 212 255 / 15%);
 }
 
@@ -311,10 +311,10 @@
   background: none;
   border: 0;
   padding: 0;
-  color: rgb(102 214 255);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 0.78rem;
-  border-bottom: 1px dashed rgb(102 214 255 / 55%);
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-primary) 55%, transparent);
 }
 
 .headActions {
@@ -409,7 +409,7 @@
 
 .orderItemSource + .orderItemSource {
   padding-top: 10px;
-  border-top: 1px solid rgb(57 212 255 / 12%);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary-strong) 12%, transparent);
 }
 
 .orderItemSourceLine {
@@ -428,7 +428,7 @@
 .orderItemIdentity strong {
   max-width: 320px;
   overflow: hidden;
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -436,7 +436,7 @@
 
 .orderItemIdentity small,
 .sourceMeta {
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
   font-family: var(--font-mono, monospace);
   font-size: 0.7rem;
   line-height: 1.45;
@@ -465,27 +465,27 @@
 }
 
 .sourceLinkButton {
-  color: rgb(255 222 166);
-  border: 1px solid rgb(255 153 51 / 52%);
-  background: linear-gradient(180deg, rgb(255 153 51 / 18%), rgb(255 153 51 / 8%));
+  color: var(--color-text);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 52%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-warning) 18%, transparent), color-mix(in srgb, var(--color-warning) 8%, transparent));
   box-shadow: 0 0 16px rgb(255 153 51 / 9%) inset;
 }
 
 .sourceLinkButton:hover {
-  border-color: rgb(255 184 76 / 82%);
-  color: #fff4df;
+  border-color: color-mix(in srgb, var(--color-warning) 82%, transparent);
+  color: var(--color-text-strong);
 }
 
 .missingSourceButton {
   cursor: pointer;
-  color: rgb(255 205 118);
-  border: 1px solid rgb(255 184 76 / 48%);
-  background: rgb(255 184 76 / 10%);
+  color: var(--color-warning);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 48%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
 }
 
 .missingSourceButton:hover:not(:disabled) {
-  border-color: rgb(255 205 118 / 80%);
-  background: rgb(255 184 76 / 17%);
+  border-color: color-mix(in srgb, var(--color-warning) 80%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 17%, transparent);
 }
 
 .missingSourceButton:disabled {
@@ -498,9 +498,9 @@
   grid-template-columns: repeat(6, minmax(100px, 1fr));
   gap: 10px;
   padding: 14px;
-  border: 1px solid rgb(57 212 255 / 24%);
+  border: 1px solid color-mix(in srgb, var(--color-primary-strong) 24%, transparent);
   border-radius: 12px;
-  background: rgb(4 14 24 / 72%);
+  background: color-mix(in srgb, var(--color-panel-base) 72%, transparent);
   box-shadow: 0 0 24px rgb(57 212 255 / 5%) inset;
 }
 
@@ -515,7 +515,7 @@
   align-content: start;
   gap: 5px;
   min-width: 0;
-  color: rgb(178 216 232 / 82%);
+  color: var(--color-text);
   font-size: 0.72rem;
   letter-spacing: 0.04em;
 }
@@ -547,16 +547,16 @@
 
 .sourceFormError,
 .sourcePanelError {
-  color: rgb(255 154 154);
+  color: var(--color-error);
   font-size: 0.78rem;
 }
 
 .sourcePanelError {
   margin: 0 16px 12px;
   padding: 10px 12px;
-  border: 1px solid rgb(255 107 107 / 38%);
+  border: 1px solid color-mix(in srgb, var(--color-error) 38%, transparent);
   border-radius: 10px;
-  background: rgb(255 107 107 / 8%);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
 }
 
 .sourceEditorWrap {
@@ -571,27 +571,27 @@
 }
 
 .sourceSku {
-  color: #eafaff;
+  color: var(--color-text-strong);
   font-family: var(--font-mono, monospace);
   font-weight: 750;
   white-space: nowrap;
 }
 
 .sourceTextLink {
-  color: rgb(255 205 118);
+  color: var(--color-warning);
   text-decoration: none;
-  border-bottom: 1px dashed rgb(255 184 76 / 55%);
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-warning) 55%, transparent);
   white-space: nowrap;
 }
 
 .sourceTextLink:hover {
-  color: #fff4df;
+  color: var(--color-text-strong);
 }
 
 .sourceNotes {
   min-width: 180px;
   max-width: 320px;
-  color: rgb(178 216 232 / 82%);
+  color: var(--color-text);
   line-height: 1.5;
   white-space: pre-wrap;
 }
@@ -602,7 +602,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px 4px;
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
   font-size: 0.78rem;
 }
 
@@ -651,17 +651,17 @@
 .stickyActionCell {
   position: sticky;
   right: 0;
-  background: rgb(8 16 26 / 97%);
+  background: color-mix(in srgb, var(--color-panel-base) 97%, transparent);
   box-shadow: -12px 0 14px -12px rgb(0 0 0 / 65%);
 }
 
 .table tr:hover .stickyActionCell {
-  background: rgb(13 24 36 / 97%);
+  background: color-mix(in srgb, var(--color-panel-base) 97%, transparent);
 }
 
 .zoneRateHint {
   font-size: 0.74rem;
-  color: rgb(157 199 219 / 75%);
+  color: var(--color-subtle);
   line-height: 1.5;
 }
 
