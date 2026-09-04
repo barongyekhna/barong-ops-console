@@ -101,6 +101,11 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
   structured_specs_json?: Record<string, unknown> | null;
   specs_incomplete?: boolean;
   missing_required_specs?: string[];
+  // 尺寸/重量:读模型 2026-09-04 起回传,供「基础档案」面板回填。
+  dimensions_json?: Record<string, unknown> | null;
+  weight_json?: Record<string, unknown> | null;
+  package_dimensions_json?: Record<string, unknown> | null;
+  package_weight_json?: Record<string, unknown> | null;
   selling_points_candidates_json?: Record<string, unknown> | null;
   selling_points_approved_json?: Record<string, unknown> | null;
   faq_research_json?: Record<string, unknown> | null;
@@ -191,7 +196,48 @@ export type ProductKnowledgeUpdatePayload = Partial<{
   product_name_en: string;
   package_includes_json: string[] | null;
   structured_specs_json: Record<string, unknown> | null;
+  // 「基础档案」面板:类型只在变体行齐的情况下才允许裸 PATCH(后端 409 守卫),
+  // 切类型请走 syncProductVariants。
+  product_type: "simple_product" | "variable_product";
+  dimensions_json: Record<string, unknown> | null;
+  weight_json: Record<string, unknown> | null;
+  package_dimensions_json: Record<string, unknown> | null;
+  package_weight_json: Record<string, unknown> | null;
 }>;
+
+/** PUT /k/products/{id}/variants:带 variant_id 原地更新(sku 不变),不带 = 新建。 */
+export type ProductVariantSyncItem = ProductVariantInput & {
+  variant_id?: string | null;
+};
+
+export type ProductVariantsSyncPayload = {
+  product_type: "simple_product" | "variable_product";
+  variants: ProductVariantSyncItem[];
+};
+
+/** 一条参考图链接的落库结果,逐条回,不压扁。 */
+export type ReferenceImageOutcome = {
+  url: string;
+  status: "stored" | "failed" | "skipped";
+  variant_sku: string | null;
+  asset_id: string | null;
+  error: string | null;
+};
+
+export type ProductVariantsSyncResponse = {
+  product: ProductKnowledgeDetail;
+  reference_images: ReferenceImageOutcome[];
+};
+
+export type ProductReferenceImagesPayload = {
+  urls: string[];
+  variant_id?: string | null;
+};
+
+export type ProductReferenceImagesResponse = {
+  product: ProductKnowledgeDetail;
+  items: ReferenceImageOutcome[];
+};
 
 export type ProductCreateFormPayload = Omit<
   ProductKnowledgeCreatePayload,

@@ -38,7 +38,7 @@ def _registered() -> set[tuple[str, str]]:
 
 def test_route_count_is_pinned() -> None:
     """路由总数的基准。改了要有意识地改这个数字。"""
-    assert len(_registered()) == 81, sorted(_registered())
+    assert len(_registered()) == 83, sorted(_registered())
 
 
 def test_every_dual_path_alias_is_still_registered() -> None:
@@ -104,6 +104,8 @@ EXPECTED_ROUTES: tuple[tuple[str, str], ...] = (
     ('PATCH', '/k/products/{product_id}/keywords'),
     ('PATCH', '/k/products/{product_id}/risk-terms'),
     ('PATCH', '/k/products/{product_id}/variant-prices'),
+    ('POST', '/k/products/{product_id}/reference-images'),
+    ('PUT', '/k/products/{product_id}/variants'),
     ('PATCH', '/k/risk/{risk_id}'),
     ('PATCH', '/k/risks/{risk_id}'),
     ('POST', '/k/keyword-research/start'),

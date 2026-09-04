@@ -22,6 +22,7 @@ import {
   updateProduct,
   updateVariantPrices,
 } from "./api";
+import { BasicDossierPanel } from "./BasicDossierPanel";
 import { CopyArtDirection } from "./CopyArtDirection";
 import { ProductMediaPanel } from "./ProductMediaPanel";
 import { ProductSpecsPanel } from "./ProductSpecsPanel";
@@ -649,6 +650,20 @@ export function ProductDetail({
           <dd>{formatDate(product.updated_at)}</dd>
         </div>
       </dl>
+
+      {/* 基础档案：新建表单里的类型/变体、尺寸重量、参考图链接，建好之后在这里改。
+          用 currentShippingProduct（详情读模型才带 dimensions_json 等），未加载时不渲染。 */}
+      {currentShippingProduct ? (
+        <BasicDossierPanel
+          key={`dossier-${currentShippingProduct.id}`}
+          mediaAssets={mediaAssets}
+          onDeleteMedia={onDeleteMedia}
+          onProductPatched={onProductPatched}
+          onRefreshDetail={refreshProductDetail}
+          onRefreshWorkflow={onRefreshWorkflow}
+          productDetail={currentShippingProduct}
+        />
+      ) : null}
 
       {(product.variants?.length ?? 0) > 0 ? (
         <VariantPricesPanel

@@ -23,6 +23,10 @@ import type {
   KCategoryTree,
   SpecPasteParseResponse,
   WShippingClassOption,
+  ProductReferenceImagesPayload,
+  ProductReferenceImagesResponse,
+  ProductVariantsSyncPayload,
+  ProductVariantsSyncResponse,
 } from "./types";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 import { ApiError, apiRequest } from "@/lib/api";
@@ -247,6 +251,26 @@ export async function updateProduct(
     body: payload,
     method: "PATCH",
   });
+}
+
+export async function syncProductVariants(
+  productId: string,
+  payload: ProductVariantsSyncPayload,
+): Promise<ProductVariantsSyncResponse> {
+  return kRequest<ProductVariantsSyncResponse>(
+    `${K_PRODUCTS_PATH}/${productId}/variants`,
+    { body: payload, method: "PUT" },
+  );
+}
+
+export async function addProductReferenceImages(
+  productId: string,
+  payload: ProductReferenceImagesPayload,
+): Promise<ProductReferenceImagesResponse> {
+  return kRequest<ProductReferenceImagesResponse>(
+    `${K_PRODUCTS_PATH}/${productId}/reference-images`,
+    { body: payload, method: "POST" },
+  );
 }
 
 export async function updateVariantPrices(

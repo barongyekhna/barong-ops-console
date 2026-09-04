@@ -15,7 +15,9 @@ from .errors import (
     KConflictError,
     KInvalidStateError,
     KProductNotFoundError,
+    KProductTypeVariantsMismatchError,
     KValidationError,
+    KVariantHasMediaError,
 )
 from .models import (
     KProductKnowledgeAIEvent,
@@ -39,6 +41,7 @@ from .schemas import (
     ProductKnowledgeRiskTermPatch,
     ProductKnowledgeUpdate,
     ProductKnowledgeVariantPricePatch,
+    ProductKnowledgeVariantsSync,
 )
 from .scope_shim import KScopeContext, apply_scope_filters, normalize_scope_context
 from .sku_allocator import ensure_product_sku
@@ -90,6 +93,8 @@ PRODUCT_UPDATE_FIELDS = frozenset(
         "price_currency",
         "dimensions_json",
         "weight_json",
+        "package_dimensions_json",
+        "package_weight_json",
         "structured_specs_json",
         "package_includes_json",
         "short_description_en",
@@ -334,6 +339,15 @@ def update_product(
     )
     if facts_changed:
         invalidate_evidence_outputs(product)
+    if (
+        "product_type" in updates
+        and updates["product_type"] != product.product_type
+    ):
+        # 切类型必须连变体行一起收敛(sync_product_variants),
+        # 裸 PATCH 只会把产品改成「多变体却只有 default 行」的半残状态。
+        _ensure_product_type_matches_variants(
+            db, product=product, product_type=str(updates["product_type"])
+        )
     for field_name, value in updates.items():
         setattr(product, field_name, value)
     if "structured_specs_json" in updates:
@@ -342,6 +356,233 @@ def update_product(
     _commit(db)
     db.refresh(product)
     return product
+
+
+def _variant_is_default(variant: KProductKnowledgeVariant) -> bool:
+    attrs = variant.attributes_json if isinstance(variant.attributes_json, dict) else {}
+    return bool(attrs.get("default_variant"))
+
+
+def _product_variants_ordered(
+    db: Session, product: KProductKnowledgeProduct
+) -> list[KProductKnowledgeVariant]:
+    return list(
+        db.scalars(
+            select(KProductKnowledgeVariant)
+            .where(KProductKnowledgeVariant.product_id == product.id)
+            .order_by(KProductKnowledgeVariant.created_at.asc())
+        )
+    )
+
+
+def _ensure_product_type_matches_variants(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    product_type: str,
+) -> None:
+    variants = _product_variants_ordered(db, product)
+    real_variants = [variant for variant in variants if not _variant_is_default(variant)]
+    if product_type == "variable_product" and not real_variants:
+        raise KProductTypeVariantsMismatchError()
+    if product_type == "simple_product" and (len(variants) > 1 or real_variants):
+        raise KProductTypeVariantsMismatchError()
+
+
+def _variant_media_assets(
+    db: Session, variant: KProductKnowledgeVariant
+) -> list[KProductKnowledgeMediaAsset]:
+    return list(
+        db.scalars(
+            select(KProductKnowledgeMediaAsset).where(
+                KProductKnowledgeMediaAsset.product_id == variant.product_id,
+                or_(
+                    KProductKnowledgeMediaAsset.variant_id == variant.id,
+                    KProductKnowledgeMediaAsset.variant_sku == variant.variant_sku,
+                ),
+            )
+        )
+    )
+
+
+def _variant_display_name(variant: KProductKnowledgeVariant) -> str:
+    parts = [
+        str(value).strip()
+        for value in (variant.color, variant.size, variant.function)
+        if value and str(value).strip()
+    ]
+    if variant.quantity is not None:
+        parts.append(f"x{variant.quantity}")
+    return " / ".join(parts) if parts else variant.variant_sku
+
+
+def _delete_variant_or_conflict(
+    db: Session, variant: KProductKnowledgeVariant
+) -> None:
+    """删变体前查它名下的图。活图 ⇒ 409 带名字和张数;已删除的图只解绑不动历史。"""
+
+    assets = _variant_media_assets(db, variant)
+    active = [asset for asset in assets if asset.status != "removed"]
+    if active:
+        raise KVariantHasMediaError(
+            f"变体「{_variant_display_name(variant)}」({variant.variant_sku})"
+            f"还绑着 {len(active)} 张图片,先在图片管理里删掉再删变体。"
+        )
+    for asset in assets:
+        asset.variant_id = None
+    db.delete(variant)
+
+
+def _merge_variant_attributes(
+    existing: object, data: dict[str, object]
+) -> dict[str, object]:
+    """与建品路径 _variant_rows_for_payload 同一口径:attributes + physical + reference_image_url。
+
+    原地更新时先剥掉我们管理的三个键(default_variant / physical / reference_image_url),
+    其余未知键保留,不吞别人写进去的东西。
+    """
+
+    base = dict(existing) if isinstance(existing, dict) else {}
+    for managed in ("default_variant", "physical", "reference_image_url"):
+        base.pop(managed, None)
+    base.update(dict(data.get("attributes") or {}))
+    physical = {
+        key: value
+        for key, value in (
+            ("dimensions", data.get("dimensions_json")),
+            ("weight", data.get("weight_json")),
+        )
+        if value
+    }
+    if physical:
+        base["physical"] = physical
+    if data.get("reference_image_url"):
+        base["reference_image_url"] = data["reference_image_url"]
+    return base
+
+
+def sync_product_variants(
+    db: Session,
+    *,
+    product_id: UUID,
+    payload: ProductKnowledgeVariantsSync,
+    scope_context: KScopeContext,
+) -> tuple[KProductKnowledgeProduct, list[KProductKnowledgeVariant]]:
+    """建好之后改类型与变体(「基础档案」面板)。
+
+    - 带 variant_id 的行原地更新,**variant_sku / variant_hash 不变**:媒体、P 上传、
+      colorway 出图全按 sku 绑定,改属性不换身份。
+    - 不带 id 的行新建,走建品同一套 _variant_identity。
+    - payload 里缺席的现有行删除;还绑着活图的行 409(KVariantHasMediaError)。
+    - 单产品:保留第一条现有行并打回 default_variant(F 搬进来的参考图就绑在它上面),
+      多余行按删除规则处理;一条都没有时 ensure_default_product_variant 补一条。
+    - 多变体:variant_group_key = product_key、父体价置空,对齐建品规则。
+
+    返回 (product, 参考图链接新增/变更过的变体列表) —— 下载入库由路由层 fail-safe 处理,
+    结果逐条回给前端。
+    """
+
+    product = _require_scoped_product(db, product_id, scope_context)
+    if product.product_status == "archived":
+        raise KInvalidStateError("Archived K products cannot be updated.")
+
+    existing = _product_variants_ordered(db, product)
+    by_id = {variant.id: variant for variant in existing}
+    for item in payload.variants:
+        if item.variant_id is not None and item.variant_id not in by_id:
+            raise KValidationError("Variant does not belong to this product.")
+
+    parent_sku = ensure_product_sku(db, product)
+    used_variant_hashes = {variant.variant_hash for variant in existing}
+    used_variant_skus = {variant.variant_sku for variant in existing}
+    keep: list[KProductKnowledgeVariant] = []
+    reference_touched: list[KProductKnowledgeVariant] = []
+
+    if payload.product_type == "variable_product":
+        for index, item in enumerate(payload.variants):
+            data = item.model_dump()
+            new_reference = str(data.get("reference_image_url") or "").strip() or None
+            if item.variant_id is not None:
+                variant = by_id[item.variant_id]
+                old_attrs = (
+                    variant.attributes_json
+                    if isinstance(variant.attributes_json, dict)
+                    else {}
+                )
+                old_reference = str(old_attrs.get("reference_image_url") or "").strip() or None
+                variant.parent_sku = parent_sku
+                variant.color = data.get("color")
+                variant.size = data.get("size")
+                variant.function = data.get("function")
+                variant.quantity = data.get("quantity")
+                variant.price_override = data.get("price_override")
+                variant.attributes_json = _merge_variant_attributes(old_attrs, data)
+                if new_reference and new_reference != old_reference:
+                    reference_touched.append(variant)
+                keep.append(variant)
+                continue
+            seed = {
+                "attributes": data.get("attributes") or {},
+                "color": data.get("color"),
+                "function": data.get("function"),
+                "index": len(existing) + index,
+                "size": data.get("size"),
+            }
+            variant_hash, variant_sku = _variant_identity(
+                db,
+                parent_sku=parent_sku,
+                seed=seed,
+                used_variant_hashes=used_variant_hashes,
+                used_variant_skus=used_variant_skus,
+            )
+            variant = KProductKnowledgeVariant(
+                id=uuid4(),
+                product_id=product.id,
+                parent_sku=parent_sku,
+                variant_sku=variant_sku,
+                variant_hash=variant_hash,
+                color=data.get("color"),
+                size=data.get("size"),
+                function=data.get("function"),
+                quantity=data.get("quantity"),
+                price_override=data.get("price_override"),
+                attributes_json=_merge_variant_attributes({}, data),
+                image_folder=_variant_image_folder(product.product_key, variant_sku),
+            )
+            db.add(variant)
+            keep.append(variant)
+            if new_reference:
+                reference_touched.append(variant)
+        product.variant_group_key = product.product_key
+        product.regular_price = None
+    else:
+        if existing:
+            default = existing[0]
+            default.parent_sku = parent_sku
+            default.color = None
+            default.size = None
+            default.function = None
+            default.quantity = None
+            default.price_override = None
+            default.attributes_json = {"default_variant": True}
+            keep.append(default)
+        product.variant_group_key = None
+
+    keep_ids = {variant.id for variant in keep}
+    for variant in existing:
+        if variant.id not in keep_ids:
+            _delete_variant_or_conflict(db, variant)
+
+    product.product_type = payload.product_type
+    db.flush()
+    if payload.product_type == "simple_product" and not keep:
+        ensure_default_product_variant(db, product)
+
+    _commit(db)
+    db.refresh(product)
+    for variant in reference_touched:
+        db.refresh(variant)
+    return product, reference_touched
 
 
 def update_variant_prices(

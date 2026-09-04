@@ -56,3 +56,21 @@ class KInvalidStateError(KProductKnowledgeError):
     code = "KInvalidState"
     status_code = status.HTTP_409_CONFLICT
     default_message = "K Product Knowledge state transition is not allowed."
+
+
+class KProductTypeVariantsMismatchError(KConflictError):
+    """产品类型与现有变体行对不上(多变体却只有 default 行 / 单产品却有多行)。
+
+    2026-09-04 起 PATCH /products/{id} 不再默默接受这种半残状态——
+    切类型请走 PUT /products/{id}/variants,由服务端一起收敛变体行。
+    """
+
+    code = "PRODUCT_TYPE_VARIANTS_MISMATCH"
+    default_message = "产品类型与变体行不一致,请在「基础档案」里保存变体来切换类型。"
+
+
+class KVariantHasMediaError(KConflictError):
+    """要删的变体还绑着图片。fail-closed:让人先在图片管理里删图,绝不留孤儿。"""
+
+    code = "VARIANT_HAS_MEDIA"
+    default_message = "该变体还绑着图片,先删图再删变体。"

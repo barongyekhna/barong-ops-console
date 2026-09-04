@@ -93,7 +93,13 @@ from .constants import (
     PERMISSION_WORKFLOW_EXECUTE,
     TARGET_ORGANIZATION_NAME,
 )
-from .errors import KConflictError, KProductKnowledgeError, KProductNotFoundError
+from .errors import (
+    KConflictError,
+    KInvalidStateError,
+    KProductKnowledgeError,
+    KProductNotFoundError,
+    KValidationError,
+)
 from .evidence_guard import TitleEvidenceConsistencyError
 from .models import (
     KProductKnowledgeAIEvent,
@@ -128,6 +134,11 @@ from .schemas import (
     ProductKnowledgeVariantListResponse,
     ProductKnowledgeVariantPricePatch,
     ProductKnowledgeVariantRead,
+    ProductKnowledgeVariantsSync,
+    ProductKnowledgeVariantsSyncResponse,
+    ProductReferenceImagesRequest,
+    ProductReferenceImagesResponse,
+    ReferenceImageOutcome,
     ProductKnowledgeWorkflowControlRequest,
     ProductKnowledgeWorkflowExecutionRead,
     ProductKnowledgeWorkflowExportRequest,
@@ -254,6 +265,7 @@ from .service import (
     patch_attributes,
     patch_keywords,
     patch_risk_terms,
+    sync_product_variants,
     update_product,
     update_variant_prices,
 )
@@ -1038,6 +1050,120 @@ def product_knowledge_variant_prices_patch(
         ProductKnowledgeVariantRead.model_validate(variant) for variant in variants
     ]
     return ProductKnowledgeVariantListResponse(items=items, count=len(items))
+
+
+@router.put(
+    "/products/{product_id}/variants",
+    response_model=ProductKnowledgeVariantsSyncResponse,
+)
+def product_knowledge_variants_sync(
+    product_id: UUID,
+    payload: ProductKnowledgeVariantsSync,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> ProductKnowledgeVariantsSyncResponse:
+    """建好之后改类型与变体(「基础档案」面板)。
+
+    变体行同步在事务里一次落定;变体参考图链接的下载入库放在事务之后
+    fail-safe 执行(与建品同一口径:图失败绝不回滚变体),结果逐条回。
+    """
+
+    try:
+        product, reference_touched = sync_product_variants(
+            db,
+            product_id=product_id,
+            payload=payload,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+
+    outcomes: list[dict[str, Any]] = []
+    if reference_touched:
+        from .manual_reference import attach_reference_image_urls
+
+        for variant in reference_touched:
+            attrs = variant.attributes_json if isinstance(variant.attributes_json, dict) else {}
+            url = str(attrs.get("reference_image_url") or "").strip()
+            if not url:
+                continue
+            try:
+                outcomes.extend(
+                    attach_reference_image_urls(
+                        db, product=product, urls=[url], variant=variant, user=user
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 - 图是配菜,变体已落定
+                logger.exception(
+                    "variant reference attach failed product=%s variant=%s",
+                    product.id,
+                    variant.variant_sku,
+                )
+                outcomes.append(
+                    {
+                        "url": url,
+                        "status": "failed",
+                        "variant_sku": variant.variant_sku,
+                        "asset_id": None,
+                        "error": str(exc)[:200],
+                    }
+                )
+        if any(item.get("status") == "stored" for item in outcomes):
+            db.commit()
+            db.refresh(product)
+    return ProductKnowledgeVariantsSyncResponse(
+        product=_product_read(db, product),
+        reference_images=[ReferenceImageOutcome(**item) for item in outcomes],
+    )
+
+
+@router.post(
+    "/products/{product_id}/reference-images",
+    response_model=ProductReferenceImagesResponse,
+)
+def product_knowledge_reference_images_add(
+    product_id: UUID,
+    payload: ProductReferenceImagesRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> ProductReferenceImagesResponse:
+    """建好之后补参考图链接。逐条入库、逐条回结果,域名不在白名单的原话回。"""
+
+    from .manual_reference import attach_reference_image_urls
+
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+        if product.product_status == "archived":
+            raise KInvalidStateError("Archived K products cannot be updated.")
+        variant = None
+        if payload.variant_id is not None:
+            variant = db.scalar(
+                select(KProductKnowledgeVariant).where(
+                    KProductKnowledgeVariant.id == payload.variant_id,
+                    KProductKnowledgeVariant.product_id == product.id,
+                )
+            )
+            if variant is None:
+                raise KValidationError("Variant does not belong to this product.")
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+
+    outcomes = attach_reference_image_urls(
+        db, product=product, urls=payload.urls, variant=variant, user=user
+    )
+    if any(item.get("status") == "stored" for item in outcomes):
+        db.commit()
+        db.refresh(product)
+    return ProductReferenceImagesResponse(
+        product=_product_read(db, product),
+        items=[ReferenceImageOutcome(**item) for item in outcomes],
+    )
 
 
 @router.patch(

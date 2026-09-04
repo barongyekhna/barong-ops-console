@@ -336,7 +336,14 @@ test("product management uses full-list route, safe delete, and clean K labels",
   assert.match(productApiSource, /\/images\/submit/);
   assert.match(productFormSource, /variantAttributeBuilder/);
   assert.match(productFormSource, /addVariantAttribute/);
-  assert.match(productFormSource, /attribute_schema: "attribute_builder_v1"/);
+  // 2026-09-04 建品表单的纯函数搬到 form-helpers.ts（「基础档案」面板共用），装配口径在那边。
+  assert.match(
+    readFileSync(
+      new URL("../../frontend/src/modules/k/product-knowledge/form-helpers.ts", import.meta.url),
+      "utf8",
+    ),
+    /attribute_schema: "attribute_builder_v1"/,
+  );
   assert.doesNotMatch(productFormSource, /attributesJson|attributes_text|Variant SKU Preview/);
   assert.match(proxySource, /method === "GET" \|\| method === "PATCH" \|\| method === "DELETE"/);
 

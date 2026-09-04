@@ -338,6 +338,10 @@ class ProductKnowledgeUpdate(BaseModel):
     price_currency: str | None = Field(default=None, max_length=3)
     dimensions_json: dict[str, Any] | list[Any] | None = None
     weight_json: dict[str, Any] | list[Any] | None = None
+    # 包装尺寸/重量:运费引擎优先读它们(w_series/shipping/engine.py),
+    # 建品表单没有入口,「基础档案」面板补上。结构与 dimensions_json/weight_json 同构。
+    package_dimensions_json: dict[str, Any] | list[Any] | None = None
+    package_weight_json: dict[str, Any] | list[Any] | None = None
     structured_specs_json: dict[str, Any] | None = None
     package_includes_json: list[str] | None = None
     short_description_en: str | None = None
@@ -346,7 +350,12 @@ class ProductKnowledgeUpdate(BaseModel):
     target_customer_en: str | None = None
     manual_notes: str | None = None
 
-    @field_validator("dimensions_json", "weight_json")
+    @field_validator(
+        "dimensions_json",
+        "weight_json",
+        "package_dimensions_json",
+        "package_weight_json",
+    )
     @classmethod
     def validate_physical_json(cls, value: Any) -> Any:
         return reject_sensitive_data(value)
@@ -446,6 +455,11 @@ class ProductKnowledgeRead(BaseModel):
     specs_incomplete: bool = False
     missing_required_specs: list[str] = Field(default_factory=list)
     package_includes_json: list[str] | None = None
+    # 产品/包装的尺寸重量:PATCH 早就收,读模型以前不回,前端无从回填。
+    dimensions_json: Any | None = None
+    weight_json: Any | None = None
+    package_dimensions_json: Any | None = None
+    package_weight_json: Any | None = None
     selling_points_candidates_json: dict[str, Any] | None = None
     selling_points_approved_json: dict[str, Any] | None = None
     faq_research_json: dict[str, Any] | None = None
@@ -511,6 +525,89 @@ class ProductKnowledgeVariantPricePatch(BaseModel):
 class ProductKnowledgeVariantListResponse(BaseModel):
     items: list[ProductKnowledgeVariantRead] = Field(default_factory=list)
     count: int = 0
+
+
+class ProductKnowledgeVariantSyncItem(ProductKnowledgeVariantItem):
+    """变体同步的一行。带 ``variant_id`` = 原地更新(variant_sku 不变,
+    媒体/上架绑定不丢);不带 = 新建。"""
+
+    variant_id: UUID | None = None
+
+
+class ProductKnowledgeVariantsSync(BaseModel):
+    """建好之后改类型与变体(「基础档案」面板)。
+
+    规则与建品一致:多变体 ⇒ 至少一条、每条必须有价;单产品 ⇒ 不收变体行
+    (服务端自己收敛成一条 default 变体)。payload 里缺席的现有变体会被删除,
+    但还绑着图片的变体拒绝删除(409 VARIANT_HAS_MEDIA),绝不静默留孤儿。
+    """
+
+    product_type: ProductType
+    variants: list[ProductKnowledgeVariantSyncItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _variant_rules(self) -> "ProductKnowledgeVariantsSync":
+        if self.product_type == "variable_product":
+            if not self.variants:
+                raise ValueError("variable_product requires at least one variant.")
+            if any(item.price_override is None for item in self.variants):
+                raise ValueError("多变体产品的每个变体都必须填写价格")
+        elif self.variants:
+            raise ValueError("simple_product does not accept variant rows.")
+        seen: set[UUID] = set()
+        for item in self.variants:
+            if item.variant_id is None:
+                continue
+            if item.variant_id in seen:
+                raise ValueError("同一个变体在 payload 里出现了两次。")
+            seen.add(item.variant_id)
+        return self
+
+
+class ReferenceImageOutcome(BaseModel):
+    """一条参考图链接的落库结果。逐条回,不压扁成一个布尔。"""
+
+    url: str
+    status: Literal["stored", "failed", "skipped"]
+    variant_sku: str | None = None
+    asset_id: UUID | None = None
+    error: str | None = None
+
+
+class ProductKnowledgeVariantsSyncResponse(BaseModel):
+    product: ProductKnowledgeRead
+    reference_images: list[ReferenceImageOutcome] = Field(default_factory=list)
+
+
+class ProductReferenceImagesRequest(BaseModel):
+    """建好之后补参考图链接。不带 variant_id = 产品级参考图(产品还没有主参考图
+    时第一张存成功的成为主参考图);带 = 该变体(颜色)的专属参考图。"""
+
+    urls: list[str] = Field(min_length=1, max_length=8)
+    variant_id: UUID | None = None
+
+    @field_validator("urls")
+    @classmethod
+    def _validate_urls(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for raw in value:
+            url = (raw or "").strip()
+            if not url:
+                continue
+            if not url.lower().startswith(("http://", "https://")):
+                raise ValueError("参考图链接必须以 http:// 或 https:// 开头")
+            if len(url) > 2000:
+                raise ValueError("参考图链接过长")
+            if url not in cleaned:
+                cleaned.append(url)
+        if not cleaned:
+            raise ValueError("至少提供一条参考图链接")
+        return cleaned
+
+
+class ProductReferenceImagesResponse(BaseModel):
+    product: ProductKnowledgeRead
+    items: list[ReferenceImageOutcome] = Field(default_factory=list)
 
 
 class ProductKnowledgeAttributePatch(BaseModel):

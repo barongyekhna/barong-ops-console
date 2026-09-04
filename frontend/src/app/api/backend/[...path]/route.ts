@@ -2003,6 +2003,25 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "PATCH";
   }
 
+  // 「基础档案」面板（2026-09-04）：建好之后改类型与变体（PUT 同步），
+  // 以及补参考图链接（POST 逐条入库）。漏登记 = 前端红条。
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "variants"
+  ) {
+    return method === "PUT";
+  }
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "reference-images"
+  ) {
+    return method === "POST";
+  }
+
   if (
     path.length === 4 &&
     path[1] === "products" &&

@@ -1,0 +1,88 @@
+/* ---------------------------------------------------------------------------
+ * 基础档案面板（2026-09-04）：参考图列表 + 逐条入库结果。
+ * 布局类复用 ProductKnowledge.module.css 那一族；这两块是面板自己的，单独成文件，
+ * 不往共享 css 里追加（2026-09-04 另一个会话正在整份重写那个文件）。
+ * ------------------------------------------------------------------------- */
+.dossierReferenceList {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dossierReferenceList > li {
+  align-items: center;
+  border: 1px solid var(--pk-line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  padding: 8px 10px;
+}
+
+.dossierReferenceList img {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  height: 56px;
+  object-fit: cover;
+  width: 56px;
+}
+
+.dossierReferenceList > li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dossierReferenceList > li > div > span {
+  color: var(--text-muted, var(--color-info));
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dossierOutcomes {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dossierOutcomes > li {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  gap: 8px;
+}
+
+.dossierOutcomes > li > span {
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  padding: 1px 8px;
+}
+
+.dossierOutcomes > li[data-status="stored"] > span {
+  color: var(--color-success);
+}
+
+.dossierOutcomes > li[data-status="failed"] > span {
+  color: var(--color-error);
+}
+
+.dossierOutcomes > li > code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.dossierOutcomes > li > em {
+  color: var(--color-error);
+  font-style: normal;
+  width: 100%;
+}

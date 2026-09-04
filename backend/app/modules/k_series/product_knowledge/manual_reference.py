@@ -234,3 +234,91 @@ def attach_manual_reference_images(
             main_assigned = True
         results.append(result)
     return results
+
+
+def attach_reference_image_urls(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    urls: list[str],
+    variant: object | None,
+    user: User | None,
+) -> list[dict[str, Any]]:
+    """建好之后补参考图链接(「基础档案」面板),逐条入库、逐条回结果。
+
+    - ``variant`` 为 None:产品级参考图;产品还没有主参考图时,第一张存成功的
+      成为主参考图(不覆盖已有主图——后补的图是补充,不是替换)。
+    - 给了 ``variant``:该变体(颜色)的专属参考图,打 ``variant_reference`` +
+      ``variant_color`` 标记,与建品时 attach_variant_reference_images 同口径,
+      colorway 出图能认。
+    - 每条 URL 一个 savepoint,单条失败不拖累其他;域名不在白名单直接判
+      ``host_not_allowed``,不走网络。
+    返回 ``[{url, status, variant_sku, asset_id, error}]``。
+    """
+
+    from ...f_series.enrichment.images import (
+        FImageUnavailableError,
+        _host_allowed,
+        get_candidate_image,
+    )
+    from .image_render_jobs import store_reference_image_asset
+
+    variant_sku = getattr(variant, "variant_sku", None)
+    variant_color = str(getattr(variant, "color", None) or "").strip() or None
+    extra_metadata = (
+        {"variant_reference": True, "variant_color": variant_color}
+        if variant is not None
+        else None
+    )
+    results: list[dict[str, Any]] = []
+    for url in urls:
+        entry: dict[str, Any] = {
+            "url": url,
+            "status": "failed",
+            "variant_sku": variant_sku,
+            "asset_id": None,
+            "error": None,
+        }
+        if not _host_allowed(url):
+            entry["error"] = (
+                "host_not_allowed: 只收 1688(alicdn)/ Amazon 图片直链,"
+                "其他图请在图片管理里用本地上传。"
+            )
+            results.append(entry)
+            continue
+        cache_key = (
+            f"k-variant-ref-{product.id}-{variant_sku}"
+            if variant is not None
+            else f"k-manual-{product.id}"
+        )
+        try:
+            with db.begin_nested():
+                contents, mime_type = get_candidate_image(cache_key, url, "full")
+                asset = store_reference_image_asset(
+                    db,
+                    product=product,
+                    contents=contents,
+                    mime_type=mime_type,
+                    source_url=url,
+                    user=user,
+                    variant=variant,  # type: ignore[arg-type]
+                    extra_metadata=extra_metadata,
+                )
+                if variant is None and not (product.reference_image_url or "").strip():
+                    product.reference_image_url = url
+                    db.add(product)
+                db.flush()
+            entry["status"] = "stored"
+            entry["asset_id"] = asset.id
+        except FImageUnavailableError as exc:
+            entry["error"] = str(exc)[:200]
+        except Exception as exc:  # noqa: BLE001 - 单条失败不拖累其他,但要原话回给人
+            logger.warning(
+                "reference image attach failed product=%s url=%s: %s",
+                product.id,
+                url[:120],
+                str(exc)[:200],
+            )
+            entry["error"] = getattr(exc, "message", None) or str(exc)[:200]
+        results.append(entry)
+    return results
