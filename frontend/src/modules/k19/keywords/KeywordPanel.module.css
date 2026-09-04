@@ -270,7 +270,7 @@
 
 .archived {
   color: var(--color-line-strong);
-  background: color-mix(in srgb, var(--color-surface-solid) 4%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 4%, transparent);
   border-color: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
@@ -312,7 +312,7 @@
 
 .sourceManual {
   color: var(--color-line-strong);
-  background: color-mix(in srgb, var(--color-surface-solid) 4%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 4%, transparent);
   border-color: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 

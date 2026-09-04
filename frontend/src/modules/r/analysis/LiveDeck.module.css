@@ -102,9 +102,15 @@
 }
 
 .emptyStage {
+  position: relative;
+  z-index: 1;
   display: grid;
   justify-items: center;
   gap: 10px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  /* 自带底色：直播切换那一瞬它会压在恒深的终端屏上，透明底就成了深底上的深字 */
+  background: var(--color-surface);
   color: var(--color-muted);
   font-size: 0.85rem;
   max-width: 360px;

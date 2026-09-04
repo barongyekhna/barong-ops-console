@@ -5110,7 +5110,7 @@ h4 {
 }
 
 .runtime-fallback-banner strong {
-  color: color-mix(in srgb, var(--color-warning) 70%, white);
+  color: var(--color-warning); /* 原来混 30% 白：白天档在浅底上只有 2.5:1 */
 }
 
 /* ---- Status: ERROR ---- */
@@ -7676,16 +7676,16 @@ h4 {
   --color-line-strong: rgb(244 226 234 / 26%);
   --color-text: #f4e2ea;
   --color-text-strong: #fff7fb;
-  --color-muted: #ab8798;
-  --color-subtle: #927587;
+  --color-muted: #c3a9b5;
+  --color-subtle: #977c8d;
   --color-primary: #ee6f98;
-  --color-primary-strong: #d85683;
+  --color-primary-strong: #db648d;
   --color-primary-soft: rgb(238 111 152 / 16%);
   --color-success: #7cdaa8;
   --color-success-soft: rgb(124 218 168 / 16%);
   --color-warning: #e5b563;
   --color-warning-soft: rgb(229 181 99 / 16%);
-  --color-error: #ee6076;
+  --color-error: #ef6a7e;
   --color-error-soft: rgb(238 96 118 / 16%);
   --color-info: #ee6f98;
   --color-info-soft: rgb(238 111 152 / 16%);
@@ -7693,19 +7693,19 @@ h4 {
   --shadow-card: 0 20px 48px rgb(0 0 0 / 55%);
   --shadow-subtle: 0 16px 36px rgb(0 0 0 / 45%);
   --ink: #f4e2ea;
-  --muted: #ab8798;
+  --muted: #c3a9b5;
   --line: rgb(244 226 234 / 14%);
   --surface: rgb(34 21 31 / 72%);
   --canvas: #190f16;
   --sidebar: #190f16;
   --sidebar-muted: #ab8798;
   --signal: #ee6f98;
-  --signal-dark: #d85683;
+  --signal-dark: #db648d;
   --warning: #e5b563;
   --accent: #ee6f98;
   --accent-bright: #f68fae;
   --accent-soft: #f6bcd0;
-  --accent-deep: #d85683;
+  --accent-deep: #db648d;
   --accent-violet: #8b5cf6;
   --color-panel-base: #130a10;
   --color-shell-glow: color-mix(in srgb, var(--color-primary) 22%, var(--color-canvas));
@@ -7727,36 +7727,36 @@ h4 {
   --color-line-strong: rgb(217 228 218 / 26%);
   --color-text: #d9e4da;
   --color-text-strong: #eef5ef;
-  --color-muted: #7f907f;
-  --color-subtle: #6d7d6d;
-  --color-primary: #e0705c;
-  --color-primary-strong: #c65a48;
+  --color-muted: #9fac9f;
+  --color-subtle: #7c8a7c;
+  --color-primary: #e37d6b;
+  --color-primary-strong: #cf7363;
   --color-primary-soft: rgb(224 112 92 / 16%);
   --color-success: #7cb69e;
   --color-success-soft: rgb(124 182 158 / 16%);
   --color-warning: #d3a552;
   --color-warning-soft: rgb(211 165 82 / 16%);
-  --color-error: #e0705c;
+  --color-error: #e37d6b;
   --color-error-soft: rgb(224 112 92 / 16%);
-  --color-info: #e0705c;
+  --color-info: #e37d6b;
   --color-info-soft: rgb(224 112 92 / 16%);
   --color-phoenix: #7cb69e;
   --shadow-card: 0 20px 48px rgb(0 0 0 / 52%);
   --shadow-subtle: 0 16px 36px rgb(0 0 0 / 42%);
   --ink: #d9e4da;
-  --muted: #7f907f;
+  --muted: #9fac9f;
   --line: rgb(217 228 218 / 14%);
   --surface: rgb(22 31 24 / 72%);
   --canvas: #0f1412;
   --sidebar: #0f1412;
   --sidebar-muted: #7f907f;
-  --signal: #e0705c;
-  --signal-dark: #c65a48;
+  --signal: #e37d6b;
+  --signal-dark: #cf7363;
   --warning: #d3a552;
-  --accent: #e0705c;
+  --accent: #e37d6b;
   --accent-bright: #ec9280;
   --accent-soft: #f0bcb0;
-  --accent-deep: #c65a48;
+  --accent-deep: #cf7363;
   --accent-violet: #8b5cf6;
   --color-panel-base: #0a0e0c;
   --color-shell-glow: color-mix(in srgb, var(--color-primary) 22%, var(--color-canvas));
@@ -7886,15 +7886,15 @@ h4 {
     --color-primary: #923127;
     --color-primary-strong: #8f2e24;
     --color-primary-soft: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
-    --color-success: #32594c;
+    --color-success: #2f5447;
     --color-success-soft: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
-    --color-warning: #6a4c14;
+    --color-warning: #664913;
     --color-warning-soft: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
     --color-error: #923127;
     --color-error-soft: color-mix(in srgb, var(--color-error) 10%, var(--color-surface));
     --color-info: #923127;
     --color-info-soft: color-mix(in srgb, var(--color-info) 12%, var(--color-surface));
-    --color-phoenix: #32594c;
+    --color-phoenix: #2f5447;
     --shadow-card: 0 16px 40px rgb(20 35 25 / 9%);
     --shadow-subtle: 0 10px 26px rgb(20 35 25 / 6%);
     --ink: #202821;
@@ -7906,7 +7906,7 @@ h4 {
     --sidebar-muted: #8ea08c;
     --signal: #923127;
     --signal-dark: #8f2e24;
-    --warning: #6a4c14;
+    --warning: #664913;
     --accent: #923127;
     --accent-bright: #923127;
     --accent-soft: #896d68;
@@ -8041,15 +8041,15 @@ h4 {
   --color-primary: #923127;
   --color-primary-strong: #8f2e24;
   --color-primary-soft: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface));
-  --color-success: #32594c;
+  --color-success: #2f5447;
   --color-success-soft: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
-  --color-warning: #6a4c14;
+  --color-warning: #664913;
   --color-warning-soft: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
   --color-error: #923127;
   --color-error-soft: color-mix(in srgb, var(--color-error) 10%, var(--color-surface));
   --color-info: #923127;
   --color-info-soft: color-mix(in srgb, var(--color-info) 12%, var(--color-surface));
-  --color-phoenix: #32594c;
+  --color-phoenix: #2f5447;
   --shadow-card: 0 16px 40px rgb(20 35 25 / 9%);
   --shadow-subtle: 0 10px 26px rgb(20 35 25 / 6%);
   --ink: #202821;
@@ -8061,7 +8061,7 @@ h4 {
   --sidebar-muted: #8ea08c;
   --signal: #923127;
   --signal-dark: #8f2e24;
-  --warning: #6a4c14;
+  --warning: #664913;
   --accent: #923127;
   --accent-bright: #923127;
   --accent-soft: #896d68;
@@ -8141,16 +8141,16 @@ h4 {
   --color-line-strong: rgb(244 226 234 / 26%);
   --color-text: #f4e2ea;
   --color-text-strong: #fff7fb;
-  --color-muted: #ab8798;
-  --color-subtle: #927587;
+  --color-muted: #c3a9b5;
+  --color-subtle: #977c8d;
   --color-primary: #ee6f98;
-  --color-primary-strong: #d85683;
+  --color-primary-strong: #db648d;
   --color-primary-soft: rgb(238 111 152 / 16%);
   --color-success: #7cdaa8;
   --color-success-soft: rgb(124 218 168 / 16%);
   --color-warning: #e5b563;
   --color-warning-soft: rgb(229 181 99 / 16%);
-  --color-error: #ee6076;
+  --color-error: #ef6a7e;
   --color-error-soft: rgb(238 96 118 / 16%);
   --color-info: #ee6f98;
   --color-info-soft: rgb(238 111 152 / 16%);
@@ -8158,19 +8158,19 @@ h4 {
   --shadow-card: 0 20px 48px rgb(0 0 0 / 55%);
   --shadow-subtle: 0 16px 36px rgb(0 0 0 / 45%);
   --ink: #f4e2ea;
-  --muted: #ab8798;
+  --muted: #c3a9b5;
   --line: rgb(244 226 234 / 14%);
   --surface: rgb(34 21 31 / 72%);
   --canvas: #190f16;
   --sidebar: #190f16;
   --sidebar-muted: #ab8798;
   --signal: #ee6f98;
-  --signal-dark: #d85683;
+  --signal-dark: #db648d;
   --warning: #e5b563;
   --accent: #ee6f98;
   --accent-bright: #f68fae;
   --accent-soft: #f6bcd0;
-  --accent-deep: #d85683;
+  --accent-deep: #db648d;
   --accent-violet: #8b5cf6;
   --color-panel-base: #130a10;
   --color-shell-glow: color-mix(in srgb, var(--color-primary) 22%, var(--color-canvas));
@@ -8192,36 +8192,36 @@ h4 {
   --color-line-strong: rgb(217 228 218 / 26%);
   --color-text: #d9e4da;
   --color-text-strong: #eef5ef;
-  --color-muted: #7f907f;
-  --color-subtle: #6d7d6d;
-  --color-primary: #e0705c;
-  --color-primary-strong: #c65a48;
+  --color-muted: #9fac9f;
+  --color-subtle: #7c8a7c;
+  --color-primary: #e37d6b;
+  --color-primary-strong: #cf7363;
   --color-primary-soft: rgb(224 112 92 / 16%);
   --color-success: #7cb69e;
   --color-success-soft: rgb(124 182 158 / 16%);
   --color-warning: #d3a552;
   --color-warning-soft: rgb(211 165 82 / 16%);
-  --color-error: #e0705c;
+  --color-error: #e37d6b;
   --color-error-soft: rgb(224 112 92 / 16%);
-  --color-info: #e0705c;
+  --color-info: #e37d6b;
   --color-info-soft: rgb(224 112 92 / 16%);
   --color-phoenix: #7cb69e;
   --shadow-card: 0 20px 48px rgb(0 0 0 / 52%);
   --shadow-subtle: 0 16px 36px rgb(0 0 0 / 42%);
   --ink: #d9e4da;
-  --muted: #7f907f;
+  --muted: #9fac9f;
   --line: rgb(217 228 218 / 14%);
   --surface: rgb(22 31 24 / 72%);
   --canvas: #0f1412;
   --sidebar: #0f1412;
   --sidebar-muted: #7f907f;
-  --signal: #e0705c;
-  --signal-dark: #c65a48;
+  --signal: #e37d6b;
+  --signal-dark: #cf7363;
   --warning: #d3a552;
-  --accent: #e0705c;
+  --accent: #e37d6b;
   --accent-bright: #ec9280;
   --accent-soft: #f0bcb0;
-  --accent-deep: #c65a48;
+  --accent-deep: #cf7363;
   --accent-violet: #8b5cf6;
   --color-panel-base: #0a0e0c;
   --color-shell-glow: color-mix(in srgb, var(--color-primary) 22%, var(--color-canvas));
@@ -8532,3 +8532,47 @@ h4 {
 .module-card-action { color: var(--color-on-primary); }
 input::placeholder,
 textarea::placeholder { color: var(--color-subtle); opacity: 1; }
+
+/* =====================================================================
+   THEME ENGINE · 全站统一 · 补漏二 (2026-09-04)
+   审计在黑夜档抓到 /reviews 的组织/员工卡片是白的：基座第三代 4174 行那条
+   把十几个面板类写死 color:#0f172a / background:#ffffff，Step 8 的通用组件
+   令牌化漏了其中几个（review-org-card / review-user-card / review-filter-bar /
+   session-panel…）。这里按 3233 行那条的语义整组覆盖，黑夜白天都吃令牌。
+   ===================================================================== */
+.record-card,
+.module-registry-table-scroll,
+.module-control-card,
+.api-key-binding-chip,
+.review-filter-bar,
+.review-org-card,
+.review-user-card,
+.review-action-card,
+.approval-decision-panel,
+.product-panel,
+.users-panel,
+.permissions-panel,
+.session-panel,
+.modules-section {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-line);
+  box-shadow: var(--shadow-card);
+}
+.review-org-card,
+.review-user-card,
+.review-action-card,
+.api-key-binding-chip { background: var(--color-surface-muted); box-shadow: none; }
+.record-card:hover,
+.module-control-card:hover,
+.review-org-card:hover,
+.review-user-card:hover,
+.review-action-card:hover {
+  background: var(--color-elevated);
+  border-color: var(--color-line-strong);
+}
+.review-org-card.selected,
+.review-user-card.selected {
+  background: var(--color-primary-soft);
+  border-color: color-mix(in srgb, var(--color-primary) 44%, transparent);
+}

@@ -269,10 +269,10 @@
   font-weight: 800;
   padding: 1px 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface-solid) 14%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 14%, transparent);
 }
 
-.tabOn .tabCount { background: color-mix(in srgb, var(--color-canvas) 18%, transparent); }
+.tabOn .tabCount { background: color-mix(in srgb, var(--color-on-primary) 20%, transparent); color: var(--color-on-primary); }
 
 .productCell strong {
   display: block;

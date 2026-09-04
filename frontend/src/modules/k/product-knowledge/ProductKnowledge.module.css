@@ -266,7 +266,7 @@
   padding: 12px 0 0;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--color-surface-solid) 0%, transparent) 0%,
+    color-mix(in srgb, var(--color-text-strong) 0%, transparent) 0%,
     var(--pk-surface) 34%
   );
   border-top: 1px solid var(--pk-line);
@@ -643,7 +643,7 @@
 .workflowProgress {
   height: 8px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--color-surface-solid) 4%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 4%, transparent);
   border-radius: 999px;
 }
 
@@ -1232,7 +1232,7 @@
   font-size: 0.8rem;
   line-height: 1.6;
   color: var(--color-text);
-  background: color-mix(in srgb, var(--color-surface-solid) 4%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 4%, transparent);
   border-radius: 6px;
   overflow-wrap: anywhere;
 }
@@ -2112,7 +2112,7 @@
   padding: 8px 10px;
   border: 1px solid var(--pk-line);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-surface-solid) 3%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 3%, transparent);
 }
 
 .renderCardFailed {
@@ -2129,7 +2129,7 @@
   color: var(--muted);
   border: 1px solid var(--pk-line);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--color-surface-solid) 4%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 4%, transparent);
 }
 
 .renderThumb img {
@@ -2221,7 +2221,7 @@
   border: 1px solid var(--pk-line);
   border-radius: 12px;
   padding: 12px 16px;
-  background: color-mix(in srgb, var(--color-surface-solid) 3%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 3%, transparent);
 }
 
 .spReadCard p {
@@ -2311,7 +2311,7 @@
   overflow: hidden;
   border: 1px solid var(--pk-line);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--color-surface-solid) 4%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 4%, transparent);
   padding: 0;
   cursor: zoom-in;
 }

@@ -47,7 +47,7 @@ const SHOTS = Boolean(opt("shots", false));
 const FAIL_UNDER = Number(opt("fail-under", 4.5));
 const LARGE_UNDER = 3.0;
 const VIEWPORT_W = 1440;
-const MAX_H = 6000;
+const MAX_H = 4200; // 超长页整页截图会超时（r-w 仪表盘），折叠区之外的文字多是重复行
 
 // ---------- 路由 ----------
 function walk(directory) {

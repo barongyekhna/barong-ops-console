@@ -851,7 +851,7 @@
 
 .messageAssetActions button {
   align-items: center;
-  background: color-mix(in srgb, var(--color-surface-solid) 82%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 82%, transparent);
   border: 1px solid var(--color-line-strong);
   border-radius: 7px;
   color: var(--color-subtle);
@@ -867,7 +867,7 @@
 
 .fileAttachment {
   align-items: center;
-  background: color-mix(in srgb, var(--color-surface-solid) 78%, transparent);
+  background: color-mix(in srgb, var(--color-text-strong) 78%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
   border-radius: 10px;
   display: flex;
