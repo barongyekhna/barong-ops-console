@@ -3,14 +3,15 @@
 import Link from "next/link";
 
 import { LoginForm } from "@/components/login-form";
+import { LoginThemeSwitch } from "@/components/login-theme-switch";
 
 import styles from "./login.module.css";
 
 export function LoginScreen() {
   return (
     <main className={styles.page}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className={styles.dragon} src="/assets/brand/circuit-dragon.svg" alt="" aria-hidden="true" />
+      {/* 龙鳞：一张 SVG 当 mask，颜色随皮肤（见 login.module.css 的 --lg-d1/d2/d3） */}
+      <span className={styles.dragon} aria-hidden="true" />
       <div className={styles.veil} />
 
       <div className={styles.stage}>
@@ -40,12 +41,15 @@ export function LoginScreen() {
       </div>
 
       <footer className={styles.footbar}>
-        <span>仅限授权人员访问 · 所有操作全程留痕</span>
+        <div className={styles.footbarL}>
+          <LoginThemeSwitch />
+          <span>仅限授权人员访问 · 所有操作全程留痕</span>
+        </div>
         <div className={styles.footbarR}>
           <Link href="/terms">使用规范</Link>
-          <span className={styles.sep}>·</span>
+          <span aria-hidden="true" className={styles.sep}>·</span>
           <Link href="/privacy">隐私政策</Link>
-          <span className={styles.sep}>·</span>
+          <span aria-hidden="true" className={styles.sep}>·</span>
           <Link href="/support">技术支持</Link>
           <span className={styles.cr}>© 2026 涌龙麟 · Barong Yekhna</span>
         </div>

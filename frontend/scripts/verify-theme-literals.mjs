@@ -28,7 +28,6 @@ const srcRoot = join(frontendRoot, "src");
 const listOnly = process.argv.includes("--list");
 
 const SKIP_FILES = new Set([
-  "components/login.module.css",
   "components/legal-page.module.css",
   "components/legal-content.module.css",
   "components/control-plane-settings-view.tsx", // 皮肤预览色板必须写死

@@ -1,5 +1,10 @@
 [
-  { "route": "^/login", "reason": "登录页恒深色，品牌门面不随主题（login.module.css 文件头约定）" },
-  { "selector": "terminal", "reason": "R-A LiveDeck 终端屏有意恒深（theme-literal-ok: terminal）" },
-  { "selector": "cc-arcade|arcade", "reason": "深空空战游戏画布有意深色" }
+  {
+    "selector": "terminal",
+    "reason": "R-A LiveDeck 终端屏有意恒深（theme-literal-ok: terminal）"
+  },
+  {
+    "selector": "cc-arcade|arcade",
+    "reason": "深空空战游戏画布有意深色"
+  }
 ]

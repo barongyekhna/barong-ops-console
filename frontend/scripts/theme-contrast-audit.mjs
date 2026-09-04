@@ -64,7 +64,9 @@ function discoverRoutes() {
     .filter((r) => !r.includes("["))
     .sort();
 }
-const ROUTES = opt("routes", null) ? String(opt("routes")).split(",") : discoverRoutes();
+// 公开路由：未登录审（登录后 PublicOnly 会把 /login 弹回 /dashboard，审不到）
+const PUBLIC_ROUTES = ["/login"];
+const ROUTES = opt("routes", null) ? String(opt("routes")).split(",") : [...PUBLIC_ROUTES, ...discoverRoutes()];
 
 // ---------- 允许清单 ----------
 const allowPath = join(here, "theme-audit-allowlist.json");
@@ -397,6 +399,20 @@ async function auditPage(page, route, skin, mode, shotsDir) {
     for (const mode of MODES) {
       const context = await makeContext(browser, skin, mode);
       const page = await context.newPage();
+      // 先审公开路由（此时还没登录），再登录审控制台
+      const publicRoutes = ROUTES.filter((r) => PUBLIC_ROUTES.includes(r));
+      const consoleRoutes = ROUTES.filter((r) => !PUBLIC_ROUTES.includes(r));
+      for (const route of publicRoutes) {
+        try {
+          const r = await auditPage(page, route, skin, mode, shotsDir);
+          results.push(r);
+          console.log(`${skin}/${mode} ${route.padEnd(28)} ${String(r.checked).padStart(4)} texts  ${r.failures.length ? `FAIL ${r.failures.length}` : "ok"}  [${r.attrs.skin}/${r.attrs.mode}] (public)`);
+        } catch (e) {
+          results.push({ route, skin, mode, error: String(e.message || e).split("\n")[0], failures: [], checked: 0 });
+          console.log(`${skin}/${mode} ${route.padEnd(28)} ERROR ${String(e.message || e).split("\n")[0]}`);
+        }
+      }
+      if (!consoleRoutes.length) { await context.close(); writeReport(results, started); continue; }
       try {
         await login(page);
       } catch (e) {
@@ -405,7 +421,7 @@ async function auditPage(page, route, skin, mode, shotsDir) {
         await context.close();
         continue;
       }
-      for (const route of ROUTES) {
+      for (const route of consoleRoutes) {
         try {
           const r = await auditPage(page, route, skin, mode, shotsDir);
           results.push(r);
