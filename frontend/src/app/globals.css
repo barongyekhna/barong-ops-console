@@ -39,6 +39,7 @@
    - 用户管理 · 创建抽屉表单改单列 (2026-09-01)
    - THEME ENGINE · 三皮肤(data-skin) × 白天黑夜(data-mode) (2026-09-03，
      文件末尾，:root 全套令牌，替代上面三条被删的层)
+   - THEME ENGINE · 驾驶舱白天档去灰 (2026-09-04，文件末尾) —— 凤凰 mask 版同日撤回
    - THEME ENGINE · 专属层覆盖 · 第一批：驾驶舱/侧边栏顶栏/登录页
      (.cc-dash/.console-layout/.sidebar/.topbar/.login-page，含三处凤凰
      mask 转换 + 登录页 --lx-* 首次定义) (2026-09-03)
@@ -5322,6 +5323,9 @@ h4 {
   --cc-ink: var(--color-text-strong);
   --cc-dim: var(--color-muted);
   --cc-line: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  --cc-panel-a: color-mix(in srgb, var(--color-canvas-soft) 62%, transparent);
+  --cc-panel-b: color-mix(in srgb, var(--color-canvas-soft) 56%, transparent);
+  --cc-panel-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%);
   --cc-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   position: relative;
   min-height: 84vh;
@@ -5415,7 +5419,7 @@ h4 {
 
 /* 网格 + 卡片 */
 .cc-dash .cc-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 14px; align-items: start; padding: 0 4px 48px; }
-.cc-card { position: relative; padding: 16px; border-radius: 12px; background: linear-gradient(180deg, color-mix(in srgb, var(--color-canvas-soft) 62%, transparent), color-mix(in srgb, var(--color-canvas-soft) 56%, transparent)); border: 1px solid var(--cc-line); backdrop-filter: blur(9px); box-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%); animation: ccPop 0.3s ease both; }
+.cc-card { position: relative; padding: 16px; border-radius: 12px; background: linear-gradient(180deg, var(--cc-panel-a), var(--cc-panel-b)); border: 1px solid var(--cc-line); backdrop-filter: blur(9px); box-shadow: var(--cc-panel-shadow); animation: ccPop 0.3s ease both; }
 @keyframes ccPop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
 .cc-card::before, .cc-card::after { content: ""; position: absolute; width: 13px; height: 13px; border: 2px solid var(--cc-amber); opacity: 0.55; }
 .cc-card::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
@@ -7742,14 +7746,14 @@ h4 {
 @media (prefers-color-scheme: light) {
   :root:not([data-skin="blush"]):not([data-skin="celadon"]):not([data-mode="dark"]) {
     color-scheme: light;
-    --color-canvas: #eaf1f7;
-    --color-canvas-soft: #e2ebf2;
+    --color-canvas: #f5f9fd;
+    --color-canvas-soft: #e9f1f9;
     --color-surface: #ffffff;
     --color-surface-solid: #ffffff;
-    --color-surface-muted: #f2f6fa;
+    --color-surface-muted: #f5f9fc;
     --color-elevated: #ffffff;
-    --color-line: #ccdcea;
-    --color-line-strong: #b7cbdd;
+    --color-line: #cfe0ee;
+    --color-line-strong: #b0c8dc;
     --color-text: #1a2c3e;
     --color-text-strong: #0a1826;
     --color-muted: #5b708a;
@@ -7759,25 +7763,25 @@ h4 {
     --color-primary-soft: rgb(13 126 166 / 12%);
     --color-success: #0d8a5a;
     --color-success-soft: rgb(13 138 90 / 10%);
-    --color-warning: #a95f14;
+    --color-warning: #b8650f;
     --color-warning-soft: rgb(169 95 20 / 12%);
     --color-error: #c0334f;
     --color-error-soft: rgb(192 51 79 / 10%);
     --color-info: #0d7ea6;
     --color-info-soft: rgb(13 126 166 / 12%);
-    --color-phoenix: #a95f14;
-    --shadow-card: 0 16px 40px rgb(15 35 55 / 10%);
+    --color-phoenix: #b8650f;
+    --shadow-card: 0 16px 40px rgb(15 35 55 / 8%);
     --shadow-subtle: 0 10px 26px rgb(15 35 55 / 7%);
     --ink: #1a2c3e;
     --muted: #5b708a;
-    --line: #ccdcea;
+    --line: #cfe0ee;
     --surface: #ffffff;
-    --canvas: #eaf1f7;
+    --canvas: #f5f9fd;
     --sidebar: #0f172a;
     --sidebar-muted: #94a3b8;
     --signal: #0d7ea6;
     --signal-dark: #0a6685;
-    --warning: #a95f14;
+    --warning: #b8650f;
     --accent: #0d7ea6;
     --accent-bright: #3a9dc2;
     --accent-soft: #a8d4e6;
@@ -7879,14 +7883,14 @@ h4 {
 /* 显式标注永远赢——写在 media 块之后，靠源码顺序赢同优先级平局 */
 :root[data-mode="light"] {
   color-scheme: light;
-  --color-canvas: #eaf1f7;
-  --color-canvas-soft: #e2ebf2;
+  --color-canvas: #f5f9fd;
+  --color-canvas-soft: #e9f1f9;
   --color-surface: #ffffff;
   --color-surface-solid: #ffffff;
-  --color-surface-muted: #f2f6fa;
+  --color-surface-muted: #f5f9fc;
   --color-elevated: #ffffff;
-  --color-line: #ccdcea;
-  --color-line-strong: #b7cbdd;
+  --color-line: #cfe0ee;
+  --color-line-strong: #b0c8dc;
   --color-text: #1a2c3e;
   --color-text-strong: #0a1826;
   --color-muted: #5b708a;
@@ -7896,25 +7900,25 @@ h4 {
   --color-primary-soft: rgb(13 126 166 / 12%);
   --color-success: #0d8a5a;
   --color-success-soft: rgb(13 138 90 / 10%);
-  --color-warning: #a95f14;
+  --color-warning: #b8650f;
   --color-warning-soft: rgb(169 95 20 / 12%);
   --color-error: #c0334f;
   --color-error-soft: rgb(192 51 79 / 10%);
   --color-info: #0d7ea6;
   --color-info-soft: rgb(13 126 166 / 12%);
-  --color-phoenix: #a95f14;
-  --shadow-card: 0 16px 40px rgb(15 35 55 / 10%);
+  --color-phoenix: #b8650f;
+  --shadow-card: 0 16px 40px rgb(15 35 55 / 8%);
   --shadow-subtle: 0 10px 26px rgb(15 35 55 / 7%);
   --ink: #1a2c3e;
   --muted: #5b708a;
-  --line: #ccdcea;
+  --line: #cfe0ee;
   --surface: #ffffff;
-  --canvas: #eaf1f7;
+  --canvas: #f5f9fd;
   --sidebar: #0f172a;
   --sidebar-muted: #94a3b8;
   --signal: #0d7ea6;
   --signal-dark: #0a6685;
-  --warning: #a95f14;
+  --warning: #b8650f;
   --accent: #0d7ea6;
   --accent-bright: #3a9dc2;
   --accent-soft: #a8d4e6;
@@ -8188,19 +8192,9 @@ h4 {
   --cc-line: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
-.dsc-phoenix {
-  /* mask 默认按亮度取值，SVG 里 fill="currentColor" 不显式给 color 就是黑色
-     (亮度≈0)，整张 mask 等于全透明，凤凰会“消失”——color:#fff 把它顶到最高
-     亮度；mask-mode:alpha 是双保险，两条谁生效都行。 */
-  color: #fff;
-  background-color: var(--color-phoenix);
-  background-image: none;
-  -webkit-mask: url("/assets/brand/phoenix-mono.svg") center / contain no-repeat;
-  mask: url("/assets/brand/phoenix-mono.svg") center / contain no-repeat;
-  -webkit-mask-mode: alpha;
-  mask-mode: alpha;
-  filter: drop-shadow(0 0 30px color-mix(in srgb, var(--color-phoenix) 40%, transparent));
-}
+/* [2026-09-04 撤回] 这里曾把凤凰改成 phoenix-mono 单色 mask 随 --color-phoenix 变色。
+   用户否决：那只手绘单色凤凰不是品牌 logo（"像一只站起来的乌龟"），原厂
+   barong-phoenix.svg 才是。五处覆盖规则已删，各层原规则重新生效；单色 SVG 已删除。 */
 
 /* ---- 侧边栏 + 顶栏 .console-layout / .sidebar / .topbar ---- */
 .console-layout {
@@ -8213,44 +8207,8 @@ h4 {
   --sh-line: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
-.sidebar .brand-lockup .brand-mark {
-  position: relative;
-  background: color-mix(in srgb, var(--color-phoenix) 8%, transparent);
-  background-image: none;
-  border: 1px solid color-mix(in srgb, var(--color-phoenix) 40%, transparent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--color-phoenix) 30%, transparent);
-}
-.sidebar .brand-lockup .brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  color: #fff;
-  background-color: var(--color-phoenix);
-  -webkit-mask: url("/assets/brand/phoenix-mono.svg") center / 78% no-repeat;
-  mask: url("/assets/brand/phoenix-mono.svg") center / 78% no-repeat;
-  -webkit-mask-mode: alpha;
-  mask-mode: alpha;
-}
 .sidebar .brand-lockup strong { color: var(--color-text-strong); }
 
-.topbar .topbar-brand-mark {
-  position: relative;
-  background: color-mix(in srgb, var(--color-phoenix) 8%, transparent);
-  background-image: none;
-  border: 1px solid color-mix(in srgb, var(--color-phoenix) 40%, transparent);
-  box-shadow: 0 0 14px color-mix(in srgb, var(--color-phoenix) 30%, transparent);
-}
-.topbar .topbar-brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  color: #fff;
-  background-color: var(--color-phoenix);
-  -webkit-mask: url("/assets/brand/phoenix-mono.svg") center / 78% no-repeat;
-  mask: url("/assets/brand/phoenix-mono.svg") center / 78% no-repeat;
-  -webkit-mask-mode: alpha;
-  mask-mode: alpha;
-}
 .topbar h1 { color: var(--color-text-strong); text-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 25%, transparent); }
 
 /* Step 8 里为了不把两批规则各写一半而延后的外壳背景——现在补上，令牌化 */
@@ -8302,26 +8260,6 @@ h4 {
   --lx-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-.login-page .brand-mark {
-  position: relative;
-  background: color-mix(in srgb, var(--color-phoenix) 8%, transparent);
-  background-image: none;
-  border: 1px solid color-mix(in srgb, var(--color-phoenix) 40%, transparent);
-  box-shadow:
-    0 0 18px color-mix(in srgb, var(--color-phoenix) 35%, transparent),
-    inset 0 0 12px color-mix(in srgb, var(--color-phoenix) 20%, transparent);
-}
-.login-page .brand-mark::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  color: #fff;
-  background-color: var(--color-phoenix);
-  -webkit-mask: url("/assets/brand/phoenix-mono.svg") center / 78% no-repeat;
-  mask: url("/assets/brand/phoenix-mono.svg") center / 78% no-repeat;
-  -webkit-mask-mode: alpha;
-  mask-mode: alpha;
-}
 .login-page .input-shell {
   color: var(--lx-dim);
   background: color-mix(in srgb, var(--color-canvas-soft) 70%, transparent);
@@ -8390,19 +8328,6 @@ h4 {
   --cc-red: var(--color-error);
 }
 
-.ra-command-phoenix {
-  color: #fff;
-  background-color: var(--color-phoenix);
-  background-image: none;
-  -webkit-mask: url("/assets/brand/phoenix-mono.svg") center / contain no-repeat;
-  mask: url("/assets/brand/phoenix-mono.svg") center / contain no-repeat;
-  -webkit-mask-mode: alpha;
-  mask-mode: alpha;
-  filter: drop-shadow(0 0 30px color-mix(in srgb, var(--color-phoenix) 40%, transparent));
-}
-.ra-command:hover .ra-command-phoenix {
-  filter: drop-shadow(0 0 44px color-mix(in srgb, var(--color-phoenix) 60%, transparent));
-}
 
 /* =====================================================================
    THEME ENGINE · 专属层皮肤覆盖 · 第四批（CS 客服中心）
@@ -8415,4 +8340,74 @@ h4 {
   --cs-line: color-mix(in srgb, var(--color-primary) 18%, transparent);
   --cs-muted: var(--color-muted);
   --cs-ink: var(--color-text-strong);
+}
+
+/* =====================================================================
+   THEME ENGINE · 驾驶舱白天档去灰 (2026-09-04)
+   用户反馈白天模式"灰了吧唧"：根因是面板/星空底用 --color-canvas-soft 调出来，
+   在浅色令牌下全是灰蓝叠灰蓝。白天档改成白卡片 + 青色网格 + 星云改 multiply
+   （screen 在浅底上只会糊成灰雾）。黑夜档一个值没动。三皮肤共用（网格/线色走
+   --color-primary，自动带皮肤色）。
+   ===================================================================== */
+@media (prefers-color-scheme: light) {
+  :root:not([data-mode="dark"]) .cc-dash {
+    --cc-panel-a: rgb(255 255 255 / 88%);
+    --cc-panel-b: rgb(255 255 255 / 80%);
+    --cc-panel-shadow: 0 18px 40px -26px rgb(10 40 70 / 28%);
+    --cc-line: color-mix(in srgb, var(--color-primary) 24%, transparent);
+  }
+  :root:not([data-mode="dark"]) .dsc-space {
+    background-color: var(--color-canvas);
+    background-image:
+      linear-gradient(color-mix(in srgb, var(--color-primary) 8%, transparent) 1px, transparent 1px),
+      linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 8%, transparent) 1px, transparent 1px),
+      radial-gradient(150% 130% at 50% 26%, #ffffff 0%, var(--color-canvas-soft) 72%);
+  }
+  :root:not([data-mode="dark"]) .dsc-nebula { mix-blend-mode: multiply; opacity: 0.22; }
+  :root:not([data-mode="dark"]) .dsc-stars { opacity: 0.25; }
+}
+:root[data-mode="light"] .cc-dash {
+  --cc-panel-a: rgb(255 255 255 / 88%);
+  --cc-panel-b: rgb(255 255 255 / 80%);
+  --cc-panel-shadow: 0 18px 40px -26px rgb(10 40 70 / 28%);
+  --cc-line: color-mix(in srgb, var(--color-primary) 24%, transparent);
+}
+:root[data-mode="light"] .dsc-space {
+  background-color: var(--color-canvas);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-primary) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-primary) 8%, transparent) 1px, transparent 1px),
+    radial-gradient(150% 130% at 50% 26%, #ffffff 0%, var(--color-canvas-soft) 72%);
+}
+:root[data-mode="light"] .dsc-nebula { mix-blend-mode: multiply; opacity: 0.22; }
+:root[data-mode="light"] .dsc-stars { opacity: 0.25; }
+
+/* 原厂凤凰在白天档的两处适配（同上，2026-09-04） */
+@media (prefers-color-scheme: light) {
+  :root:not([data-mode="dark"]) .sidebar .brand-lockup .brand-mark,
+  :root:not([data-mode="dark"]) .topbar .topbar-brand-mark,
+  :root:not([data-mode="dark"]) .login-page .brand-mark {
+    /* 原厂 logo 是白身+铜羽，为深底而生；白天档给徽标垫一块驾驶舱深底，logo 原样不动 */
+    background: url("/assets/brand/barong-phoenix.svg") center / 78% no-repeat, linear-gradient(180deg, #182742, #0b1020);
+    border-color: rgb(255 177 59 / 55%);
+  }
+  :root:not([data-mode="dark"]) .dsc-phoenix,
+  :root:not([data-mode="dark"]) .ra-command-phoenix {
+    /* 白天档水印：白身在白底上不存在，反相成暗剪影（铜羽经 hue-rotate 回到暖色） */
+    opacity: 0.1;
+    filter: invert(1) hue-rotate(180deg) drop-shadow(0 0 30px rgb(255 140 50 / 30%));
+  }
+}
+:root[data-mode="light"] .sidebar .brand-lockup .brand-mark,
+:root[data-mode="light"] .topbar .topbar-brand-mark,
+:root[data-mode="light"] .login-page .brand-mark {
+  /* 原厂 logo 是白身+铜羽，为深底而生；白天档给徽标垫一块驾驶舱深底，logo 原样不动 */
+  background: url("/assets/brand/barong-phoenix.svg") center / 78% no-repeat, linear-gradient(180deg, #182742, #0b1020);
+  border-color: rgb(255 177 59 / 55%);
+}
+:root[data-mode="light"] .dsc-phoenix,
+:root[data-mode="light"] .ra-command-phoenix {
+  /* 白天档水印：白身在白底上不存在，反相成暗剪影（铜羽经 hue-rotate 回到暖色） */
+  opacity: 0.1;
+  filter: invert(1) hue-rotate(180deg) drop-shadow(0 0 30px rgb(255 140 50 / 30%));
 }
