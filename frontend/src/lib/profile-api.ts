@@ -1,6 +1,5 @@
 import { apiRequest } from "@/lib/api";
-
-export type ThemePref = "light" | "dark" | "system";
+import type { SkinPref, ThemePref } from "@/components/theme-provider";
 
 export type ProfileMe = {
   user_id: number;
@@ -9,6 +8,7 @@ export type ProfileMe = {
   nickname: string | null;
   avatar_url: string | null;
   theme_pref: ThemePref;
+  skin_pref: SkinPref;
   bio: string | null;
 };
 
@@ -21,6 +21,7 @@ export function getMyProfile(): Promise<ProfileMe> {
 export function updateMyProfile(patch: {
   nickname?: string | null;
   theme_pref?: ThemePref;
+  skin_pref?: SkinPref;
 }): Promise<ProfileMe> {
   return apiRequest<ProfileMe>("/profile/me", { method: "PATCH", body: patch });
 }

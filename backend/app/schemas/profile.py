@@ -10,6 +10,7 @@ class ProfileRead(BaseModel):
     nickname: str | None = None
     avatar_url: str | None = None
     theme_pref: str = "dark"
+    skin_pref: str = "cockpit"
     bio: str | None = None
 
 
@@ -28,3 +29,4 @@ class ProfileUpdate(BaseModel):
 
     nickname: str | None = Field(default=None, max_length=64)
     theme_pref: str | None = None
+    skin_pref: str | None = None

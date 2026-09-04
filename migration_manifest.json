@@ -2,10 +2,10 @@
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
   "generated_at": "2026-06-17T00:00:00Z",
   "environment": "staging",
-  "alembic_head": "20260902_02_index_storage_events_record_id",
-  "expected_alembic_head": "20260902_02_index_storage_events_record_id",
+  "alembic_head": "20260903_01_user_skin_pref",
+  "expected_alembic_head": "20260903_01_user_skin_pref",
   "head_locked": true,
-  "migration_count": 110,
+  "migration_count": 111,
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -116,10 +116,11 @@
     "20260901_03_auth_session_active_org",
     "20260901_04_drop_redundant_indexes",
     "20260902_01_drop_unused_observability_indexes",
-    "20260902_02_index_storage_events_record_id"
+    "20260902_02_index_storage_events_record_id",
+    "20260903_01_user_skin_pref"
   ],
-  "migration_order_checksum": "2cd252fca957edca032a1215d0cbd57d3db07afb12dc385cb51721685a553320",
-  "migration_hash": "e25bc59756c5789ab3b26937bbe1a1fdbba1bb9fddb8c392d1e62e7e9dd3556c",
+  "migration_order_checksum": "2cc1ada41e5d671288d7c12dbab70ffcc268109443905ff522677b444dcd1cd2",
+  "migration_hash": "eb62bd1a65323d66206f012e2fd4e2c59e3c5dfc7e803e3d05746aad93b15186",
   "migrations": [
     {
       "version": "f07_core_001",
@@ -889,6 +890,13 @@
       "down_revision": "20260902_01_drop_unused_observability_indexes",
       "path": "backend/alembic/versions/20260902_02_index_storage_events_record_id.py",
       "checksum": "5c001c720857f9d714668f420dfa9e66b2f0f83b78e283641e799482e624fff4",
+      "applied_at": "1970-01-01T00:00:00Z"
+    },
+    {
+      "version": "20260903_01_user_skin_pref",
+      "down_revision": "20260902_02_index_storage_events_record_id",
+      "path": "backend/alembic/versions/20260903_01_user_skin_pref.py",
+      "checksum": "ce1c30701d3e35e5c210ee7e5ef58026b08dfad0b3bbc3622fecd16cc94b207e",
       "applied_at": "1970-01-01T00:00:00Z"
     }
   ]

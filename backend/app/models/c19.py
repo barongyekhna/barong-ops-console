@@ -82,6 +82,8 @@ class C19ProfileRecord(Base):
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Per-user appearance preference: "light" | "dark" | "system" (null = dark default).
     theme_pref: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Per-user color skin: "cockpit" | "blush" | "celadon" (null = cockpit default).
+    skin_pref: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

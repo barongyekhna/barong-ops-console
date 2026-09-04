@@ -23,17 +23,20 @@ const ProfileContext = createContext<ProfileContextValue | null>(null);
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const { setPref } = useTheme();
+  const { setModePref, setSkinPref } = useTheme();
   const [profile, setProfile] = useState<ProfileMe | null>(null);
 
   const applyProfile = useCallback(
     (next: ProfileMe) => {
       setProfile(next);
       if (next.theme_pref) {
-        setPref(next.theme_pref);
+        setModePref(next.theme_pref);
+      }
+      if (next.skin_pref) {
+        setSkinPref(next.skin_pref);
       }
     },
-    [setPref],
+    [setModePref, setSkinPref],
   );
 
   const refresh = useCallback(async () => {

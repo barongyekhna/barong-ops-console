@@ -15,7 +15,11 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useTheme, type ThemePref } from "@/components/theme-provider";
+import {
+  useTheme,
+  type SkinPref,
+  type ThemePref,
+} from "@/components/theme-provider";
 import { LEGAL_DOCS, LegalDocView } from "@/components/legal-content";
 import {
   getMyProfile,
@@ -33,21 +37,48 @@ import { RELEASE_VERSION } from "@/lib/release-metadata";
 
 type Tab = "appearance" | "profile" | "about";
 
-const THEME_OPTIONS: {
-  key: ThemePref;
+const MODE_OPTIONS: { key: ThemePref; label: string; icon: typeof Sun }[] = [
+  { key: "system", label: "跟随系统", icon: Monitor },
+  { key: "light", label: "白天", icon: Sun },
+  { key: "dark", label: "黑夜", icon: Moon },
+];
+
+/** 每套皮肤的黑夜/白天代表色，只用于设置页色板预览——不走 var(--color-*)，
+ * 因为这里要让人同时看到"另外两套长什么样"，不能只显示当前生效的那套。 */
+const SKIN_OPTIONS: {
+  key: SkinPref;
   label: string;
   desc: string;
-  icon: typeof Sun;
+  dark: { canvas: string; primary: string; accent: string };
+  light: { canvas: string; primary: string; accent: string };
 }[] = [
-  { key: "light", label: "白天", desc: "浅色界面(逐页迁移中)", icon: Sun },
-  { key: "dark", label: "黑夜", desc: "深色驾驶舱(默认)", icon: Moon },
-  { key: "system", label: "跟随系统", desc: "随设备自动切换", icon: Monitor },
+  {
+    key: "cockpit",
+    label: "火凤凰驾驶舱",
+    desc: "任务控制中心风，青琥珀主调",
+    dark: { canvas: "#0b1020", primary: "#39d4ff", accent: "#ffb13b" },
+    light: { canvas: "#eaf1f7", primary: "#0d7ea6", accent: "#a95f14" },
+  },
+  {
+    key: "blush",
+    label: "朝霞",
+    desc: "胭脂玫瑰，柔和高可读",
+    dark: { canvas: "#190f16", primary: "#ee6f98", accent: "#e5b563" },
+    light: { canvas: "#fbf0f2", primary: "#cf4f76", accent: "#bf8329" },
+  },
+  {
+    key: "celadon",
+    label: "青瓷",
+    desc: "宋瓷釉色配朱砂",
+    dark: { canvas: "#0f1412", primary: "#e0705c", accent: "#7cb69e" },
+    light: { canvas: "#e8eee8", primary: "#ab392d", accent: "#3d6d5d" },
+  },
 ];
 
 const ABOUT_DOCS = ["terms", "privacy", "support"] as const;
 
 export function ControlPlaneSettingsView() {
-  const { pref, setPref } = useTheme();
+  const { modePref, setModePref, skinPref, setSkinPref } = useTheme();
   const [tab, setTab] = useState<Tab>("appearance");
   const [profile, setProfile] = useState<ProfileMe | null>(null);
   const [nickname, setNickname] = useState("");
@@ -127,8 +158,11 @@ export function ControlPlaneSettingsView() {
         }
         setProfile(data);
         setNickname(data.nickname ?? "");
-        if (data.theme_pref && data.theme_pref !== pref) {
-          setPref(data.theme_pref);
+        if (data.theme_pref && data.theme_pref !== modePref) {
+          setModePref(data.theme_pref);
+        }
+        if (data.skin_pref && data.skin_pref !== skinPref) {
+          setSkinPref(data.skin_pref);
         }
       })
       .catch(() => setError("个人资料加载失败,请刷新重试。"));
@@ -138,12 +172,20 @@ export function ControlPlaneSettingsView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const chooseTheme = useCallback(
+  const chooseMode = useCallback(
     (next: ThemePref) => {
-      setPref(next);
+      setModePref(next);
       updateMyProfile({ theme_pref: next }).catch(() => undefined);
     },
-    [setPref],
+    [setModePref],
+  );
+
+  const chooseSkin = useCallback(
+    (next: SkinPref) => {
+      setSkinPref(next);
+      updateMyProfile({ skin_pref: next }).catch(() => undefined);
+    },
+    [setSkinPref],
   );
 
   const saveNickname = useCallback(async () => {
@@ -217,27 +259,77 @@ export function ControlPlaneSettingsView() {
 
       {tab === "appearance" ? (
         <section className={styles.panel}>
-          <h2 className={styles.h2}>主题</h2>
+          <h2 className={styles.h2}>明暗</h2>
           <p className={styles.hint}>
-            浅色模式还在逐页迁移:已经改用统一配色的页面会变浅,
-            其余页面(大多数模块页)仍是深色,切过去会看到深浅混排。
-            工作台驾驶舱与登录页按设计始终保持深色。
+            跟随系统会随设备的白天/黑夜自动切换；选了白天或黑夜就固定用那一种，
+            不再跟着系统变。
           </p>
-          <div className={styles.themeGrid}>
-            {THEME_OPTIONS.map((option) => {
+          <div className={styles.modeSeg}>
+            {MODE_OPTIONS.map((option) => {
               const Icon = option.icon;
-              const active = pref === option.key;
+              const active = modePref === option.key;
               return (
                 <button
                   key={option.key}
-                  className={active ? styles.themeCardOn : styles.themeCard}
-                  onClick={() => chooseTheme(option.key)}
+                  className={active ? styles.modeSegBtnOn : styles.modeSegBtn}
+                  onClick={() => chooseMode(option.key)}
                   type="button"
                 >
-                  <Icon size={22} />
-                  <span className={styles.themeLabel}>{option.label}</span>
-                  <span className={styles.themeDesc}>{option.desc}</span>
-                  {active ? <Check className={styles.themeCheck} size={16} /> : null}
+                  <Icon size={16} />
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <h2 className={styles.h2} style={{ marginTop: 30 }}>
+            配色皮肤
+          </h2>
+          <p className={styles.hint}>
+            每套皮肤都配了白天黑夜两种版本。卡片上两行小色块，上面一行是它的黑夜色，
+            下面一行是白天色。
+          </p>
+          <div className={styles.skinGrid}>
+            {SKIN_OPTIONS.map((option) => {
+              const active = skinPref === option.key;
+              return (
+                <button
+                  key={option.key}
+                  className={active ? styles.skinCardOn : styles.skinCard}
+                  onClick={() => chooseSkin(option.key)}
+                  type="button"
+                >
+                  <span className={styles.skinName}>{option.label}</span>
+                  <span className={styles.skinDesc}>{option.desc}</span>
+                  <span className={styles.skinSwatchRow}>
+                    <span
+                      className={styles.skinSwatch}
+                      style={{ background: option.dark.canvas }}
+                    />
+                    <span
+                      className={styles.skinSwatch}
+                      style={{ background: option.dark.primary }}
+                    />
+                    <span
+                      className={styles.skinSwatch}
+                      style={{ background: option.dark.accent }}
+                    />
+                  </span>
+                  <span className={styles.skinSwatchRow}>
+                    <span
+                      className={styles.skinSwatch}
+                      style={{ background: option.light.canvas }}
+                    />
+                    <span
+                      className={styles.skinSwatch}
+                      style={{ background: option.light.primary }}
+                    />
+                    <span
+                      className={styles.skinSwatch}
+                      style={{ background: option.light.accent }}
+                    />
+                  </span>
+                  {active ? <Check className={styles.skinCheck} size={16} /> : null}
                 </button>
               );
             })}
@@ -364,7 +456,7 @@ export function ControlPlaneSettingsView() {
           ) : null}
           {mcpIssued ? (
             <div className={styles.panel} style={{ marginTop: 14 }}>
-              <p className={styles.hint} style={{ color: "#ffb13b" }}>
+              <p className={styles.hint} style={{ color: "var(--color-warning)" }}>
                 只显示这一次。复制下面这一行,贴进你电脑的终端,按回车;看到 ✔ 就接好了。
               </p>
               <p className={styles.hint} style={{ margin: "0 0 8px" }}>
@@ -389,9 +481,9 @@ export function ControlPlaneSettingsView() {
                     fontSize: 12,
                     padding: "8px 10px",
                     borderRadius: 8,
-                    background: "#0b1220",
-                    color: "#e3f0ff",
-                    border: "1px solid rgba(120,200,255,.25)",
+                    background: "var(--color-canvas-soft)",
+                    color: "var(--color-text)",
+                    border: "1px solid var(--color-line)",
                   }}
                 >
                   {mcpOs === "windows"

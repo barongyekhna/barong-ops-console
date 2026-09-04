@@ -15,7 +15,7 @@
   overflow: hidden;
   border: 1px solid rgb(120 160 200 / 18%);
   border-radius: 12px;
-  background: rgb(11 18 26 / 62%);
+  background: color-mix(in srgb, var(--color-canvas-soft) 62%, transparent);
 }
 
 .step {
@@ -46,7 +46,7 @@
 }
 
 .stepActive .stepTitle {
-  color: #fff;
+  color: var(--color-text-strong);
 }
 
 .stepActive::before {
@@ -65,13 +65,13 @@
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   letter-spacing: 0.1em;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .stepTitle {
   margin-top: 3px;
   font-size: 14.5px;
-  color: #dfe6ef;
+  color: var(--color-text-strong);
 }
 
 .stepValue {
@@ -79,7 +79,7 @@
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
-  color: #a8b4c2;
+  color: var(--color-muted);
 }
 
 .stepWho {
@@ -87,7 +87,7 @@
   font-size: 10.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .stepHere {
@@ -120,13 +120,13 @@
   font-weight: 500;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .card {
   border: 1px solid rgb(120 160 200 / 18%);
   border-radius: 10px;
-  background: rgb(11 18 26 / 62%);
+  background: color-mix(in srgb, var(--color-canvas-soft) 62%, transparent);
   padding: 15px 17px;
 }
 
@@ -155,13 +155,13 @@
 
 .todoLead {
   font-size: 14.5px;
-  color: #dfe6ef;
+  color: var(--color-text-strong);
 }
 
 .todoNote {
   margin-top: 2px;
   font-size: 12.5px;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .count {
@@ -183,7 +183,7 @@
   border-radius: 10px;
   background: rgb(85 189 136 / 5%);
   font-size: 13px;
-  color: #a8b4c2;
+  color: var(--color-muted);
 }
 
 .machineWarn {
@@ -234,7 +234,7 @@
 .btnQuiet {
   border-color: rgb(120 160 200 / 30%);
   background: transparent;
-  color: #b9c4d1;
+  color: var(--color-text);
 }
 
 .btnQuiet:hover:not(:disabled) {
@@ -273,7 +273,7 @@
   font-weight: 600;
   line-height: 1.4;
   text-wrap: balance;
-  color: #dfe6ef;
+  color: var(--color-text-strong);
 }
 
 .chips {
@@ -290,7 +290,7 @@
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10.5px;
   letter-spacing: 0.06em;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .chipOk {
@@ -321,7 +321,7 @@
 .footHint {
   flex: 1;
   font-size: 12px;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 /* ---------- 正文 ---------- */
@@ -343,14 +343,14 @@
   max-width: 68ch;
   font-size: 14px;
   line-height: 1.75;
-  color: #c7d0da;
+  color: var(--color-text);
 }
 
 .question {
   margin: 20px 0 4px;
   font-size: 14px;
   font-weight: 600;
-  color: #dfe6ef;
+  color: var(--color-text-strong);
 }
 
 .blockLabel {
@@ -359,7 +359,7 @@
   font-size: 11px;
   letter-spacing: 0.11em;
   text-transform: uppercase;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 /* ---------- 解读 / 审查 ---------- */
@@ -369,7 +369,7 @@
   padding: 15px 16px;
   border: 1px solid rgb(120 160 200 / 18%);
   border-radius: 10px;
-  background: rgb(6 12 20 / 55%);
+  background: color-mix(in srgb, var(--color-canvas-soft) 55%, transparent);
 }
 
 .panelRow + .panelRow {
@@ -379,14 +379,14 @@
 .panelLabel {
   font-size: 11.5px;
   letter-spacing: 0.04em;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .panelText {
   margin: 4px 0 0;
   font-size: 13.5px;
   line-height: 1.7;
-  color: #c7d0da;
+  color: var(--color-text);
 }
 
 .panelList {
@@ -394,7 +394,7 @@
   padding-left: 18px;
   font-size: 13.5px;
   line-height: 1.7;
-  color: #c7d0da;
+  color: var(--color-text);
 }
 
 .good {
@@ -412,7 +412,7 @@
   padding: 7px 0;
   border-bottom: 1px solid rgb(120 160 200 / 10%);
   font-size: 13px;
-  color: #c7d0da;
+  color: var(--color-text);
 }
 
 .finding:last-child {
@@ -427,7 +427,7 @@
   flex: none;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .findingMain {
@@ -437,7 +437,7 @@
 
 .empty {
   font-size: 13px;
-  color: #7d8b9b;
+  color: var(--color-muted);
 }
 
 .error {

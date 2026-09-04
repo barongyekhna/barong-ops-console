@@ -26,6 +26,7 @@ from ..deps import get_audit_context, get_current_user, get_db
 router = APIRouter(prefix="/profile", tags=["profile"])
 
 VALID_THEMES = {"light", "dark", "system"}
+VALID_SKINS = {"cockpit", "blush", "celadon"}
 MAX_AVATAR_BYTES = 8 * 1024 * 1024
 AVATAR_SIDE = 256
 
@@ -42,6 +43,7 @@ def _serialize(user: User, profile) -> ProfileRead:
         nickname=profile.nickname,
         avatar_url=profile.avatar_ref,
         theme_pref=(profile.theme_pref or "dark"),
+        skin_pref=(profile.skin_pref or "cockpit"),
         bio=profile.bio,
     )
 
@@ -75,6 +77,14 @@ def update_my_profile(
                 detail="未知的主题偏好。",
             )
         profile.theme_pref = theme
+    if "skin_pref" in data:
+        skin = data["skin_pref"]
+        if skin not in VALID_SKINS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="未知的配色皮肤。",
+            )
+        profile.skin_pref = skin
     db.commit()
     return _serialize(user, profile)
 
