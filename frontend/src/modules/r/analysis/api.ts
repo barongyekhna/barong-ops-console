@@ -216,8 +216,10 @@ export async function getCruiseState(): Promise<RaCruiseState> {
 }
 
 export async function toggleCruise(paused: boolean): Promise<RaCruiseState> {
+  // apiRequest 自己会 JSON.stringify(body)；这里再包一层字符串，后端收到的就是
+  // "\"{\\\"paused\\\":false}\"" 这种双重编码，直接 422「提交的内容不符合要求」。
   return apiRequest<RaCruiseState>(`${RA_API_BASE}/cruise/toggle`, {
     method: "POST",
-    body: JSON.stringify({ paused }),
+    body: { paused },
   });
 }

@@ -50,7 +50,9 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
   function handleLogoClick() {
     setIsNavigationOpen(false);
-    router.push("/");
+    // 直奔 /dashboard：走根路由 "/" 会先渲染一个空的 HomePage 再 replace 过去，
+    // 客户端导航时 (console) 布局树被卸掉，落到 /dashboard 是一页空白，要手动刷新才好。
+    router.push("/dashboard");
   }
 
   const currentCapability = getCapabilityForPath(pathname);
