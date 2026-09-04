@@ -5,7 +5,7 @@
      --lg-d1/d2/d3 龙鳞三段渐变、--lg-card 卡片玻璃 —— 按 html[data-skin][data-mode] 定义，
      火凤凰·黑夜的值就是 v7 的原字面量。
    - 龙鳞 circuit-dragon.svg 只有一条 path，当 mask 用，一张图三种颜色。
-   - 凤凰永远是原厂 phoenix-gold.png，不重画不变色（家规）。
+   - 凤凰是矢量原稿 barong-phoenix.svg 当 mask、名片金色渐变上色：图形不改，只换颜色（家规：只认原厂图）。
    - 六个组合 = 裸 .page(火凤凰黑夜) / [data-skin] 黑夜 ×2 / @media 亮 ×3 / 显式亮 ×3 / 显式暗 ×3，
      与 globals.css 的 THEME ENGINE 同一套写法；跟随系统时 data-mode 缺省由 @media 决定。 */
 
@@ -13,6 +13,9 @@
 .page {
   --lg-mono: var(--font-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --lg-line: color-mix(in srgb, var(--color-phoenix) 22%, transparent);
+  /* 凤凰呼吸光晕：黑夜=琥珀，白天=淡金。 */
+  --lg-phx-glow-a: color-mix(in srgb, var(--color-phoenix) 34%, transparent);
+  --lg-phx-glow-b: color-mix(in srgb, var(--color-phoenix) 60%, transparent);
   /* 火凤凰 · 黑夜（= v7 原值） */
   --lg-base: linear-gradient(155deg, #13243f 0%, #0a1a30 46%, #06111f 100%);
   --lg-ga: rgba(203, 141, 81, 0.12);
@@ -69,6 +72,8 @@
     --lg-d2: #b4744b;
     --lg-d3: #d1935c;
     --lg-card: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.78));
+  --lg-phx-glow-a: rgba(255, 205, 150, 0.45);
+  --lg-phx-glow-b: rgba(255, 215, 165, 0.7);
   }
 /* theme-literal-ok: 登录页装饰变量/皮肤色点，六套皮的原值就该写死 */
   :global(html[data-skin="blush"]:not([data-mode="dark"])) .page {
@@ -80,6 +85,8 @@
     --lg-d2: #c9748f;
     --lg-d3: #e0a4ba;
     --lg-card: linear-gradient(180deg, rgba(255, 250, 252, 0.88), rgba(255, 250, 252, 0.8));
+  --lg-phx-glow-a: rgba(255, 205, 150, 0.45);
+  --lg-phx-glow-b: rgba(255, 215, 165, 0.7);
   }
 /* theme-literal-ok: 登录页装饰变量/皮肤色点，六套皮的原值就该写死 */
   :global(html[data-skin="celadon"]:not([data-mode="dark"])) .page {
@@ -91,6 +98,8 @@
     --lg-d2: #6fae92;
     --lg-d3: #a9d5c0;
     --lg-card: linear-gradient(180deg, rgba(246, 251, 248, 0.88), rgba(246, 251, 248, 0.8));
+  --lg-phx-glow-a: rgba(255, 205, 150, 0.45);
+  --lg-phx-glow-b: rgba(255, 215, 165, 0.7);
   }
 }
 
@@ -104,6 +113,8 @@
   --lg-d2: #b4744b;
   --lg-d3: #d1935c;
   --lg-card: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.78));
+  --lg-phx-glow-a: rgba(255, 205, 150, 0.45);
+  --lg-phx-glow-b: rgba(255, 215, 165, 0.7);
 }
 /* theme-literal-ok: 登录页装饰变量/皮肤色点，六套皮的原值就该写死 */
 :global(html[data-skin="blush"][data-mode="light"]) .page {
@@ -115,6 +126,8 @@
   --lg-d2: #c9748f;
   --lg-d3: #e0a4ba;
   --lg-card: linear-gradient(180deg, rgba(255, 250, 252, 0.88), rgba(255, 250, 252, 0.8));
+  --lg-phx-glow-a: rgba(255, 205, 150, 0.45);
+  --lg-phx-glow-b: rgba(255, 215, 165, 0.7);
 }
 /* theme-literal-ok: 登录页装饰变量/皮肤色点，六套皮的原值就该写死 */
 :global(html[data-skin="celadon"][data-mode="light"]) .page {
@@ -126,6 +139,8 @@
   --lg-d2: #6fae92;
   --lg-d3: #a9d5c0;
   --lg-card: linear-gradient(180deg, rgba(246, 251, 248, 0.88), rgba(246, 251, 248, 0.8));
+  --lg-phx-glow-a: rgba(255, 205, 150, 0.45);
+  --lg-phx-glow-b: rgba(255, 215, 165, 0.7);
 }
 /* theme-literal-ok: 登录页装饰变量/皮肤色点，六套皮的原值就该写死 */
 :global(html[data-mode="dark"]) .page {
@@ -200,7 +215,19 @@
 
 .brand { max-width: 520px; animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .phx { position: relative; width: clamp(160px, 22vw, 250px); margin-bottom: 22px; display: block; }
-.phx img { width: 100%; display: block; animation: glow 6s ease-in-out infinite; }
+/* 凤凰：矢量原稿 barong-phoenix.svg 当 mask（四个圆点都在、任何屏幕都清晰），
+   颜色是名片的金色渐变 —— 图形一笔没改，只换了颜色。以前那张 phoenix-gold.png 是名片截图的
+   紧裁版：圆点被裁掉、350px 在 Retina 上发软、羽毛里的深色阴影落在浅底上是一圈脏边。 */
+/* theme-literal-ok: 名片金色渐变，三皮肤通用的品牌色 */
+.phx .phoenix {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(160deg, #f6dcb3 0%, #e9b77c 22%, #c97f4a 40%, #f1cf9c 56%, #b46a3a 72%, #e6b078 88%, #8e4f27 100%);
+  -webkit-mask: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
+  mask: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
+  animation: glow 6s ease-in-out infinite;
+}
 .phx::before {
   content: "";
   position: absolute;
@@ -395,8 +422,8 @@
 
 @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
 @keyframes glow {
-  0%, 100% { filter: drop-shadow(0 8px 26px color-mix(in srgb, var(--color-phoenix) 34%, transparent)); }
-  50% { filter: drop-shadow(0 10px 40px color-mix(in srgb, var(--color-phoenix) 60%, transparent)); }
+  0%, 100% { filter: drop-shadow(0 8px 26px var(--lg-phx-glow-a)); }
+  50% { filter: drop-shadow(0 10px 40px var(--lg-phx-glow-b)); }
 }
 
 @media (max-width: 820px) {
@@ -406,4 +433,4 @@
   .dragon { opacity: 0.3; right: -30%; height: 70vh; }
   .footbar { position: static; justify-content: center; text-align: center; background: none; margin-top: 10px; }
 }
-@media (prefers-reduced-motion: reduce) { .brand, .card, .phx img, .dragon, .submit :global(svg.spin) { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .brand, .card, .phx .phoenix, .dragon, .submit :global(svg.spin) { animation: none; } }

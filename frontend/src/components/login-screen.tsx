@@ -17,8 +17,8 @@ export function LoginScreen() {
       <div className={styles.stage}>
         <section className={styles.brand}>
           <span className={styles.phx}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/brand/phoenix-gold.png" alt="涌龙麟 火凤凰" />
+            {/* 矢量原稿 barong-phoenix.svg 当 mask，名片金色渐变（见 login.module.css .phoenix） */}
+            <span aria-label="涌龙麟 火凤凰" className={styles.phoenix} role="img" />
           </span>
           <span className={styles.eyebrow}>涌 · 龙 · 麟</span>
           <p className={styles.latin}>Barong&nbsp;&nbsp;Yekhna</p>
