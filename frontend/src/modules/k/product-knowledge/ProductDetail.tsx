@@ -663,9 +663,13 @@ export function ProductDetail({
         </p>
       ) : null}
 
+      {/* 下面四个面板是同级兄弟，key 必须带面板前缀。2026-09-04 事故：
+          四个面板的 key 都只是裸的产品 id，详情异步回来时 React 按 key 对账互相覆盖，
+          旧的「关键词审核」「图片管理」既没复用也没删除，页面上留成僵尸副本。
+          key 的作用只是切产品时重置面板内部状态，前缀不影响这一点。 */}
       {currentShippingProduct ? (
         <ShippingPackagePanel
-          key={currentShippingProduct.id}
+          key={`shipping-${currentShippingProduct.id}`}
           onRefreshDetail={refreshProductDetail}
           productDetail={currentShippingProduct}
         />
@@ -695,7 +699,7 @@ export function ProductDetail({
         generatedKeywords={generatedNonRiskKeywords(workflow)}
         isRetryableStepStatus={isRetryableStepStatus}
         isWorkflowBusy={isWorkflowBusy}
-        key={currentProduct.id}
+        key={`keywords-${currentProduct.id}`}
         keywordProgress={keywordProgress}
         keywordSteps={KEYWORD_STEPS}
         normalizeKeywordKey={normalizeKeywordKey}
@@ -722,7 +726,7 @@ export function ProductDetail({
         complete={imagesComplete}
         dirty={imagesDirty}
         isWorkflowBusy={isWorkflowBusy}
-        key={currentProduct.id}
+        key={`media-${currentProduct.id}`}
         mediaAssets={mediaAssets}
         onBindImage={onBindImage}
         onCreateMedia={onCreateMedia}
@@ -738,7 +742,7 @@ export function ProductDetail({
         complete={sellingPointsComplete}
         dirty={sellingPointsDirty}
         isGeneratingSellingPoints={isGeneratingSellingPoints}
-        key={currentProduct.id}
+        key={`selling-points-${currentProduct.id}`}
         onApprovedChange={setSellingPointsApproved}
         onApproveSellingPoints={onApproveSellingPoints}
         onGenerateSellingPoints={onGenerateSellingPoints}
