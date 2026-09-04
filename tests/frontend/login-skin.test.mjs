@@ -51,3 +51,10 @@ test("the login page is no longer exempt from the theme gate or the contrast all
   assert.doesNotMatch(gate, /components\/login\.module\.css/);
   assert.doesNotMatch(allow, /\^\/login/);
 });
+
+test("with nothing stored the theme provider follows the system, like the pre-paint script", () => {
+  const provider = readFileSync(new URL("../../frontend/src/components/theme-provider.tsx", import.meta.url), "utf8");
+  const fn = provider.slice(provider.indexOf("function readStoredMode"), provider.indexOf("\n}\n", provider.indexOf("function readStoredMode")));
+  assert.match(fn, /return "system";/);
+  assert.equal((fn.match(/return "dark";/g) || []).length, 1, "only the SSR guard may default to dark");
+});

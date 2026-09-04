@@ -60,7 +60,9 @@ function readStoredMode(): ThemePref {
   } catch {
     /* localStorage unavailable — fall through to default */
   }
-  return "dark";
+  // 没存过偏好 = 跟随系统：与首绘前的内联脚本一致（它不写 data-mode）。
+  // 以前兜底是 "dark"，新设备在浅色系统上一点皮肤色点就被翻成黑夜。
+  return "system";
 }
 
 function readStoredSkin(): SkinPref {
