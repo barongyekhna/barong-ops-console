@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
@@ -42,7 +43,16 @@ def ensure_profile(
     name_zh: str | None,
     org_id: str,
 ) -> FCategoryProfile:
-    """有缓存直接回；没有就调 DeepSeek 生成并落库。"""
+    """有缓存直接回；没有就调 DeepSeek 生成并落库。
+
+    并发安全（2026-09-04）：「1688 找货」运行和右栏「生成画像」按钮都会走这里。
+    两边可能同时查不到缓存、各调一次 DeepSeek、再一起插同一个 category_id。
+    以前后插的那个撞 uq_f_profiles_category 抛异常，被运行引擎当成节点失败，
+    整趟找货 0 候选却还报「完成」。现在插在 SAVEPOINT 里，撞了就认对方那份——
+    画像是同一个类目的客观产品清单，谁生成的都一样。
+    代价是偶尔多花一次 DeepSeek（几分钱）；用锁串行化就得把事务开着等
+    DeepSeek 45 秒，比多花几分钱糟得多。
+    """
     cached = get_profile(db, category_id)
     if cached is not None:
         return cached
@@ -67,8 +77,19 @@ def ensure_profile(
         products_json=products,
         provider="deepseek",
     )
-    db.add(profile)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(profile)
+            db.flush()
+    except IntegrityError:
+        # 另一个写入者在我们调 DeepSeek 期间抢先落库了。SAVEPOINT 已回滚，
+        # 外层事务干净，重查认它那份。
+        if profile in db:
+            db.expunge(profile)
+        winner = get_profile(db, category_id)
+        if winner is None:
+            raise
+        return winner
     return profile
 
 

@@ -123,6 +123,9 @@ def execute_run(run_id: UUID) -> None:
         do_keywords = mode in ("full", "keywords_only")
         do_sourcing = mode in ("full", "sourcing_only")
         node_errors: list[str] = []
+        # 兜底 except 收下的「这个节点炸了」，与 channel_note / 降级提示分开记。
+        # 只有它才是判「这趟到底成没成」的依据（2026-09-04）。
+        hard_failures: list[str] = []
 
         api_key = ""
         if do_keywords:
@@ -199,7 +202,9 @@ def execute_run(run_id: UUID) -> None:
                     )
                     keywords = serper_client.extract_keywords(raw)
                 except Exception as exc:  # noqa: BLE001 - 单节点失败不阻断整批
-                    node_errors.append(f"{node.get('name')}: {str(exc)[:120]}")
+                    message = f"{node.get('name')}: {str(exc)[:120]}"
+                    node_errors.append(message)
+                    hard_failures.append(message)
 
             run = db.get(FEnrichmentRun, run_id)
             if run is None or run.status == "cancelled":
@@ -277,9 +282,9 @@ def execute_run(run_id: UUID) -> None:
                     run.alibaba_calls += exc.calls_used
                 except Exception as exc:  # noqa: BLE001 - 单节点失败不阻断整批
                     db.rollback()
-                    node_errors.append(
-                        f"{node.get('name')} 找货: {str(exc)[:160]}"
-                    )
+                    message = f"{node.get('name')} 找货: {str(exc)[:160]}"
+                    node_errors.append(message)
+                    hard_failures.append(message)
                     run = db.get(FEnrichmentRun, run_id)
                     if run is None or run.status == "cancelled":
                         db.rollback()
@@ -292,7 +297,12 @@ def execute_run(run_id: UUID) -> None:
 
         run = db.get(FEnrichmentRun, run_id)
         if run is not None and run.status == "running":
-            run.status = "succeeded"
+            # 跑完循环 ≠ 成功。2026-09-04：画像抢建撞唯一键把找货打死，
+            # 异常被逐节点兜底吃掉，台账照报「完成」，用户看着 0 候选以为跑通了。
+            # 炸了又一无所获，就老实说失败；有产出但带报错，状态留 succeeded、
+            # 报错原文照挂（前端把这种标成「完成·有报错」）。
+            produced = (run.keywords_found or 0) + (run.candidates_found or 0)
+            run.status = "failed" if hard_failures and produced == 0 else "succeeded"
             run.error = "；".join(node_errors)[:500] if node_errors else None
             run.finished_at = _now()
             db.commit()

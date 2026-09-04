@@ -1372,8 +1372,26 @@ export function EnrichmentDeck() {
                     <td>{run.keywords_found}</td>
                     <td>{run.candidates_found}</td>
                     <td>
-                      <span className={styles.statusBadge} data-status={run.status}>
-                        {runStatusLabel(run.status)}
+                      {/* 「完成」不能盖住「什么也没出来」：跑完但零产出的标成
+                          「完成·无产出」（黄）。2026-09-04 用户实测：找货 0 候选
+                          却显示完成，以为跑通了。
+                          只看产出、不看 error 有没有值——error 列还兼着放
+                          「跨境词搜权限未开通」这类说明，出了 149 个货源的运行
+                          也带着它，拿它当报错就成了狼来了。 */}
+                      <span
+                        className={styles.statusBadge}
+                        data-status={
+                          run.status === "succeeded" &&
+                          run.keywords_found + run.candidates_found === 0
+                            ? "succeeded_barren"
+                            : run.status
+                        }
+                        title={run.error || undefined}
+                      >
+                        {run.status === "succeeded" &&
+                        run.keywords_found + run.candidates_found === 0
+                          ? "完成·无产出"
+                          : runStatusLabel(run.status)}
                       </span>
                     </td>
                     <td>
