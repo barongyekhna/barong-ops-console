@@ -667,6 +667,7 @@
 
 .statusBadge[data-status="running"],
 .statusBadge[data-status="pending_review"],
+.statusBadge[data-status="succeeded_barren"],
 .statusBadge[data-status="quota_exhausted"] {
   color: rgb(255 205 118);
   border-color: rgb(255 184 76 / 45%);
