@@ -8587,7 +8587,8 @@ textarea::placeholder { color: var(--color-subtle); opacity: 1; }
    .cc-* 层；这里只放八张卡内部（.hs-*）和右侧浮窗。全部走 var(--color-*) /
    color-mix()，白天黑夜三皮肤自动跟随，不写一个字面色值。
    ===================================================================== */
-.home-store { --hs-line: color-mix(in srgb, var(--color-primary) 16%, transparent); --hs-soft: color-mix(in srgb, var(--color-primary) 7%, transparent); }
+/* 浮窗经 portal 挂在 body 上，拿不到 .cc-dash 的变量；在这里再定义一遍同值，两处都能解析。 */
+.home-store { --hs-line: color-mix(in srgb, var(--color-primary) 16%, transparent); --hs-soft: color-mix(in srgb, var(--color-primary) 7%, transparent); --cc-cyan: var(--color-primary); --cc-amber: var(--color-phoenix); --cc-green: var(--color-success); --cc-red: var(--color-error); --cc-ink: var(--color-text-strong); --cc-dim: var(--color-muted); --cc-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; }
 .home-store .hs-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
 .home-store .cc-card { padding: 0; overflow: hidden; }
 .home-store .hs-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; height: 100%; padding: 16px 16px 12px; cursor: pointer; outline: none; }
@@ -8653,19 +8654,23 @@ textarea::placeholder { color: var(--color-subtle); opacity: 1; }
 @keyframes hsPulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 40%, transparent); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 
 /* 浮窗 */
-.home-store .hs-drawer { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--cc-ink); }
-.home-store .hs-drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 18px 20px 12px; border-bottom: 1px solid var(--hs-line); }
-.home-store .hs-drawer-head h3 { margin: 0; color: var(--color-text-strong); font-size: 16px; font-weight: 650; }
-.home-store .hs-drawer-close { font-size: 18px; line-height: 1; padding: 4px; background: none; border: 0; color: var(--cc-dim); cursor: pointer; }
-.home-store .hs-drawer-close:hover { color: var(--color-error); }
-.home-store .hs-drawer-scroll { flex: 1; min-height: 0; overflow: auto; padding: 14px 20px; }
-.home-store .hs-drawer-body { display: flex; flex-direction: column; gap: 10px; }
-.home-store .hs-drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--hs-line); background: color-mix(in srgb, var(--color-panel-base) 60%, transparent); }
+.home-store.hs-drawer { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--cc-ink); font-size: 13px; line-height: 1.5; background: radial-gradient(120% 60% at 100% 0%, color-mix(in srgb, var(--color-primary) 10%, transparent), transparent 60%); }
+.home-store .hs-drawer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 64px 14px 22px; border-bottom: 1px solid var(--hs-line); background: color-mix(in srgb, var(--color-panel-base) 55%, transparent); }
+.home-store .hs-drawer-title { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.home-store .hs-drawer-title .eyebrow { color: var(--cc-cyan); font-family: var(--cc-mono); letter-spacing: 0.24em; font-size: 0.62rem; text-transform: uppercase; }
+.home-store .hs-drawer-head h3 { margin: 0; color: var(--color-text-strong); font-size: 18px; font-weight: 700; letter-spacing: 0.3px; text-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 22%, transparent); }
+.home-store .hs-drawer-sev { flex: none; margin-top: 18px; }
+.home-store .hs-drawer-scroll { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 20px; }
+.home-store .hs-drawer-body { display: flex; flex-direction: column; gap: 12px; }
+.home-store .hs-drawer-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 22px; border-top: 1px solid var(--hs-line); background: color-mix(in srgb, var(--color-panel-base) 70%, transparent); }
 .home-store .hs-drawer-foot small { max-width: 28ch; }
-.home-store .hs-block { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--hs-line); border-radius: 10px; background: color-mix(in srgb, var(--color-panel-base) 40%, transparent); min-width: 0; }
-.home-store .hs-block-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 600; color: var(--color-text-strong); }
+.home-store .hs-block { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--hs-line); border-radius: 10px; background: linear-gradient(180deg, color-mix(in srgb, var(--color-panel-base) 62%, transparent), color-mix(in srgb, var(--color-panel-base) 50%, transparent)); min-width: 0; }
+.home-store .hs-block-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font: 600 10.5px var(--cc-mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--cc-cyan); }
+.home-store .hs-block-head .hs-muted { text-transform: none; letter-spacing: 0; font: 500 11px var(--cc-mono); }
 .home-store .hs-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.home-store .hs-item { min-width: 0; padding: 10px 12px; border: 1px solid var(--hs-line); border-radius: 10px; background: color-mix(in srgb, var(--color-panel-base) 40%, transparent); }
+.home-store .hs-item { position: relative; min-width: 0; padding: 12px 14px; border: 1px solid var(--hs-line); border-radius: 10px; background: linear-gradient(180deg, color-mix(in srgb, var(--color-panel-base) 62%, transparent), color-mix(in srgb, var(--color-panel-base) 50%, transparent)); box-shadow: var(--shadow-subtle); transition: border-color 0.15s ease; }
+.home-store .hs-item:hover { border-color: color-mix(in srgb, var(--color-primary) 40%, transparent); }
+.home-store .hs-item::before { content: ""; position: absolute; left: -1px; top: -1px; width: 10px; height: 10px; border: 2px solid var(--cc-amber); border-right: 0; border-bottom: 0; opacity: 0.55; }
 .home-store .hs-item-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; font-weight: 500; color: var(--color-text-strong); }
 .home-store .hs-item-head > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .home-store .hs-item-sub { margin: 4px 0 8px; font-size: 12px; color: var(--cc-dim); white-space: pre-wrap; overflow-wrap: anywhere; }

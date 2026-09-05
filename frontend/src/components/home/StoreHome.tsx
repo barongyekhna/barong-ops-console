@@ -220,17 +220,21 @@ export function StoreHome({ bootstrap }: { bootstrap: HomeBootstrapRead }) {
 
       {openDef && openCard ? (
         <OverlayModal label={openDef.title} onClose={closeDrawer} placement="drawer" width="min(520px, 100%)">
-          <div className="hs-drawer">
+          {/* OverlayModal 用 portal 挂到 body，根节点必须自带 .home-store 作用域，
+              否则下面所有 .hs-* 样式和 --cc-* 变量都命中不了。关闭钮由 OverlayModal 自带。 */}
+          <div className="home-store hs-drawer">
             <header className="hs-drawer-head">
-              <div>
+              <div className="hs-drawer-title">
+                <span className="eyebrow">{openDef.group === "外部" ? "外部数据" : openDef.group === "治理" ? "治理" : `模块 · ${openDef.moduleLabel ?? ""}`}</span>
                 <h3>{openDef.title}</h3>
                 <span className="hs-muted">
-                  {openDef.moduleLabel ? `模块 ${openDef.moduleLabel}` : "外部数据"} · 数据截至 {formatClock(openCard.freshness)}
+                  数据截至 {formatClock(openCard.freshness)}
+                  {openCard.count !== null && openDef.module_key !== null ? ` · 待处理 ${openCard.count}` : ""}
                 </span>
               </div>
-              <button aria-label="关闭" className="hs-drawer-close" onClick={closeDrawer} type="button">
-                ×
-              </button>
+              <span className={`hs-drawer-sev hs-pill hs-pill-${openCard.severity === "ok" ? "ok" : openCard.severity === "warn" ? "warn" : "bad"}`}>
+                {openCard.severity === "ok" ? "正常" : openCard.severity === "warn" ? "需留意" : "有异常"}
+              </span>
             </header>
             <div className="hs-drawer-scroll">
               <openDef.Drawer
