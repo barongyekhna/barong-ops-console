@@ -5,7 +5,7 @@
      --lg-d1/d2/d3 龙鳞三段渐变、--lg-card 卡片玻璃 —— 按 html[data-skin][data-mode] 定义，
      火凤凰·黑夜的值就是 v7 的原字面量。
    - 龙鳞 circuit-dragon.svg 只有一条 path，当 mask 用，一张图三种颜色。
-   - 凤凰是矢量原稿 barong-phoenix.svg 当 mask、名片金色渐变上色：图形不改，只换颜色（家规：只认原厂图）。
+   - 凤凰是 Codex 交付的 v5 立体金凤凰原图 phoenix-gold-v5.webp，原样显示不上色（家规：只认原厂图）。
    - 六个组合 = 裸 .page(火凤凰黑夜) / [data-skin] 黑夜 ×2 / @media 亮 ×3 / 显式亮 ×3 / 显式暗 ×3，
      与 globals.css 的 THEME ENGINE 同一套写法；跟随系统时 data-mode 缺省由 @media 决定。 */
 
@@ -215,19 +215,10 @@
 
 .brand { max-width: 520px; animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .phx { position: relative; width: clamp(160px, 22vw, 250px); margin-bottom: 22px; display: block; }
-/* 凤凰：矢量原稿 barong-phoenix.svg 当 mask（四个圆点都在、任何屏幕都清晰），
-   颜色是名片的金色渐变 —— 图形一笔没改，只换了颜色。以前那张 phoenix-gold.png 是名片截图的
-   紧裁版：圆点被裁掉、350px 在 Retina 上发软、羽毛里的深色阴影落在浅底上是一圈脏边。 */
-/* theme-literal-ok: 名片金色渐变，三皮肤通用的品牌色 */
-.phx .phoenix {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  background: linear-gradient(160deg, #f6dcb3 0%, #e9b77c 22%, #c97f4a 40%, #f1cf9c 56%, #b46a3a 72%, #e6b078 88%, #8e4f27 100%);
-  -webkit-mask: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
-  mask: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
-  animation: glow 6s ease-in-out infinite;
-}
+/* 凤凰：Codex 交付的 v5 立体金凤凰（812px 透明底位图，Retina 上 1:1 以上），原图直接显示，
+   保留它自己的金属高光；四个圆点在。以前的 phoenix-gold.png 是名片截图的紧裁版（圆点被裁、
+   350px 发软），中间试过用矢量原稿 mask 上色，用户嫌不够"立体"。 */
+.phx img { display: block; width: 100%; height: auto; animation: glow 6s ease-in-out infinite; }
 .phx::before {
   content: "";
   position: absolute;
@@ -433,4 +424,4 @@
   .dragon { opacity: 0.3; right: -30%; height: 70vh; }
   .footbar { position: static; justify-content: center; text-align: center; background: none; margin-top: 10px; }
 }
-@media (prefers-reduced-motion: reduce) { .brand, .card, .phx .phoenix, .dragon, .submit :global(svg.spin) { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .brand, .card, .phx img, .dragon, .submit :global(svg.spin) { animation: none; } }

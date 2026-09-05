@@ -35,17 +35,17 @@ test("login colours come from tokens; literals only inside the --lg-* decoration
     return /#[0-9a-f]{3,8}\b|rgba?\((?!\s*0[,\s]+0[,\s]+0)/i.test(value);
   });
   // 色点是"皮肤预览"、凤凰是名片金色渐变——这两处的字面量是有意的（同设置页的色板）
-  const allowed = offenders.filter((d) => !/^\s*background: linear-gradient\((135|160)deg, #/.test(d));
+  const allowed = offenders.filter((d) => !/^\s*background: linear-gradient\(135deg, #/.test(d));
   assert.deepEqual(allowed, []);
   assert.doesNotMatch(css, /^\s*--(line|mono|ink|muted|surface|canvas|signal|accent[\w-]*):/m, "must not shadow global aliases");
 });
 
-test("dragon and phoenix are recolourable masks of the original vector artwork", () => {
+test("dragon is a recolourable mask; phoenix is the v5 polished-gold original, shown as-is", () => {
   assert.match(css, /\.dragon \{[\s\S]*?mask: url\("\/assets\/brand\/circuit-dragon\.svg"\)/);
-  assert.match(css, /\.phx \.phoenix \{[\s\S]*?mask: url\("\/assets\/brand\/barong-phoenix\.svg"\)/);
   assert.match(screen, /<span className=\{styles\.dragon\} aria-hidden="true" \/>/);
-  assert.match(screen, /aria-label="涌龙麟 火凤凰" className=\{styles\.phoenix\} role="img"/);
+  assert.match(screen, /src="\/assets\/brand\/phoenix-gold-v5\.webp"/);
   assert.doesNotMatch(screen, /phoenix-gold\.png/, "the tightly cropped card raster (no head dots, soft on Retina) is retired on the login page");
+  assert.doesNotMatch(css, /barong-phoenix\.svg/, "the login phoenix is not a recoloured mask any more");
   assert.match(screen, /<LoginThemeSwitch \/>/);
 });
 
