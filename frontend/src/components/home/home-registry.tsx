@@ -6,6 +6,7 @@ import { GeoTodoCard, GeoTodoDrawer, SeoTodoCard, SeoTodoDrawer } from "./cards/
 import { CsInboxCard, CsInboxDrawer } from "./cards/CsInbox";
 import { SiteHealthCard, SiteHealthDrawer } from "./cards/SiteHealth";
 import { SiteTrafficCard, SiteTrafficDrawer } from "./cards/SiteTraffic";
+import { SmTodoCard, SmTodoDrawer } from "./cards/SmTodo";
 import { WOrdersCard, WOrdersDrawer } from "./cards/WOrders";
 import type { HomeCardDef } from "./home-types";
 
@@ -100,6 +101,18 @@ export const STORE_HOME_CARDS: readonly HomeCardDef[] = [
     moduleLabel: "B2B",
     Card: B2bDraftsCard,
     Drawer: B2bDraftsDrawer,
+    defaultVisible: true,
+  },
+  {
+    id: "sm-todo",
+    title: "社媒待办",
+    desc: "待审帖子 / 真照片缺口 / 排不出来的格子",
+    group: "模块",
+    module_key: "sm.social",
+    moduleHref: "/sm",
+    moduleLabel: "社媒",
+    Card: SmTodoCard,
+    Drawer: SmTodoDrawer,
     defaultVisible: true,
   },
   {

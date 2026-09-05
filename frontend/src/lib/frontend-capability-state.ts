@@ -12,6 +12,7 @@ import {
   LockKeyhole,
   PackageSearch,
   Settings,
+  Share2,
   UserRoundCog,
   type LucideIcon,
 } from "lucide-react";
@@ -181,6 +182,7 @@ const ICONS: Record<string, LucideIcon> = {
   LockKeyhole,
   PackageSearch,
   Settings,
+  Share2,
   UserRoundCog,
 };
 
@@ -212,6 +214,7 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["geo.content", "业务处理"],
   ["seo.content", "业务处理"],
   ["content.desk", "业务处理"],
+  ["sm.social", "业务处理"],
   ["cs.customer_service", "业务处理"],
   ["business.approvals", "业务处理"],
   ["business.reviews", "业务处理"],
@@ -241,6 +244,7 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["geo.content", "GEO 内容引擎"],
   ["seo.content", "SEO 内容引擎"],
   ["content.desk", "内容台"],
+  ["sm.social", "社媒运营"],
   ["cs.customer_service", "客服中心"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
@@ -270,6 +274,7 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["mfg.inventory", 21],
   ["geo.content", 18],
   ["seo.content", 19],
+  ["sm.social", 20],
   ["content.desk", 11],
   ["business.approvals", 10],
   ["business.reviews", 20],
@@ -296,6 +301,7 @@ const H_SITE_HEALTH_MODULE_KEY = "h.site_health";
 const W_SITE_OPS_MODULE_KEY = "w.site_ops";
 const B2B_WHOLESALE_MODULE_KEY = "b2b.wholesale";
 const MFG_INVENTORY_MODULE_KEY = "mfg.inventory";
+const SM_SOCIAL_MODULE_KEY = "sm.social";
 const OWNER_ONLY_ADMIN_MODULE_KEYS = new Set([
   "admin.modules",
 ]);
@@ -719,6 +725,7 @@ const ACTION_SCOPED_EXECUTION_GATE_MODULE_KEYS = new Set([
   W_SITE_OPS_MODULE_KEY,
   B2B_WHOLESALE_MODULE_KEY,
   MFG_INVENTORY_MODULE_KEY,
+  SM_SOCIAL_MODULE_KEY,
 ]);
 
 function usesActionScopedExecutionGate(moduleKey: string | undefined) {

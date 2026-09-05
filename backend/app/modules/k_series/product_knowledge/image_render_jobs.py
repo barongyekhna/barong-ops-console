@@ -546,6 +546,58 @@ def _colorway_specs(
     return specs
 
 
+def _social_specs(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    known_positions: set[int],
+) -> list[dict[str, Any]]:
+    """SM 系列开的 AI 道缺口单 → 简报里的社媒位号(201+)。
+
+    数据源 = ``sm_image_requests``(lane=mcp, status=open, 有 k_position)。
+    锦上添花语义与 _colorway_specs 同:任何失败返回空表,绝不拖垮排图。
+    惰性导入 sm_series,避免 K 与 SM 互相顶层依赖。
+    """
+    try:
+        from ...sm_series.models import SmImageRequest
+
+        rows = db.scalars(
+            select(SmImageRequest)
+            .where(
+                SmImageRequest.seed_product_id == product.id,
+                SmImageRequest.lane == "mcp",
+                SmImageRequest.status == "open",
+                SmImageRequest.k_position.is_not(None),
+            )
+            .order_by(SmImageRequest.k_position.asc())
+        ).all()
+    except Exception:  # noqa: BLE001 - fail-safe garnish
+        return []
+    name = (product.product_name_en or product.primary_keyword or "product").strip()
+    keyword = (product.primary_keyword or name).strip()
+    specs: list[dict[str, Any]] = []
+    for row in rows:
+        position = int(row.k_position or 0)
+        if position <= 200 or position in known_positions:
+            continue
+        specs.append(
+            {
+                "position": position,
+                # 永不 main、永不白底副图:这两条是 resolve_render_specs 的硬校验。
+                "role": "proof_scene",
+                "placement": PLACEMENT_DESCRIPTION,
+                "aspect_ratio": row.ratio or "2:3",
+                "mission": f"Social {row.platform} · {row.pillar}",
+                "prompt": row.prompt_text or f"{name} in a real-world use scene, warm bright daylight.",
+                "title": f"{name} – social {row.platform}"[:180],
+                "alt": f"{keyword} social scene"[:180],
+                "caption": f"Social image for {row.platform}."[:160],
+                "description": f"{name} social scene ({row.pillar}, {row.platform})."[:300],
+                "sm_image_request_id": str(row.id),
+            }
+        )
+    return specs
+
+
 # --- reference photo --------------------------------------------------------
 
 def reference_url_host_allowed(url: str) -> bool:
@@ -1187,6 +1239,12 @@ def resolve_render_specs(
         colorway_position = int(colorway_spec["position"])
         specs.append((colorway_position, colorway_spec))
         known_positions.add(colorway_position)
+    # 社媒缺口单(SM 系列,位号段 201+):Codex 经同一条 MCP 通道交稿,
+    # 交回来走同一个 _store_render_asset → staged → 审查 → 人保存。
+    for social_spec in _social_specs(db, product, known_positions):
+        social_position = int(social_spec["position"])
+        specs.append((social_position, social_spec))
+        known_positions.add(social_position)
 
     gallery_positions = [
         position

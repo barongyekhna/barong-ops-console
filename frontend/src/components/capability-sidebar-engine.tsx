@@ -78,6 +78,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "gmc.",
   "content.",
   "mfg.",
+  "sm.",
 ] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const R_WAREHOUSE_MODULE_KEY = "r.warehouse";

@@ -75,6 +75,8 @@ INTL_TRADE_ONLY_MODULE_KEYS = R_SERIES_MODULE_KEYS | frozenset(
         "geo.content",
         "seo.content",
         "content.desk",
+        # SM 系列社媒运营(2026-09-05):只属于贸易组织,与 geo/seo/content.desk 同一道门。
+        "sm.social",
         # 2026-08-31 体检补齐:这三个模块一直只服务国际贸易组织,但**只在前端遮**
         # (capability-sidebar-engine.tsx 靠比对组织中文名把它们从侧边栏摘掉),
         # 后端白名单漏了。后果是制造组织超管敲 URL 直接进 /products,创建表单

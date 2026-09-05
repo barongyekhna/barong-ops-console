@@ -39,7 +39,7 @@ test("store home endpoints are proxied read-only under /api/app", () => {
   }
 });
 
-test("registry lists the eight design cards in order with backend module keys", () => {
+test("registry lists the nine design cards in order with backend module keys", () => {
   const source = read("components/home/home-registry.tsx");
   const ids = [...source.matchAll(/^\s+id: "([a-z0-9-]+)",$/gm)].map((match) => match[1]);
   assert.deepEqual(ids, [
@@ -50,6 +50,7 @@ test("registry lists the eight design cards in order with backend module keys", 
     "geo-todo",
     "seo-todo",
     "b2b-drafts",
+    "sm-todo",
     "approvals",
   ]);
   const moduleKeys = [...source.matchAll(/module_key: (null|"[a-z0-9_.]+"),/g)].map((match) => match[1]);
@@ -61,6 +62,7 @@ test("registry lists the eight design cards in order with backend module keys", 
     '"geo.content"',
     '"seo.content"',
     '"b2b.wholesale"',
+    '"sm.social"',
     "null",
   ]);
   // 流量卡占两列，且只有它占两列

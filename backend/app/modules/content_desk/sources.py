@@ -119,6 +119,28 @@ def _seo_revise(db: Any, item_id: Any, scope: Any, user: Any) -> None:
     SeoContentOrchestrator(db).revise(item_id=item_id, scope_context=scope, user=user)
 
 
+def _social_item_model() -> Any:
+    from ..sm_series.models import SmPost
+
+    return SmPost
+
+
+def _social_parent_model() -> Any:
+    from ..sm_series.models import SmCalendarSlot
+
+    return SmCalendarSlot
+
+
+def _social_revise(db: Any, item_id: Any, scope: Any, user: Any) -> None:
+    from ..sm_series import service as sm_service
+    from ..sm_series.models import SmPost
+
+    post = db.get(SmPost, item_id)
+    if post is None:
+        raise sm_service.SmServiceError("帖子不存在。", status_code=404)
+    sm_service.revise_post(db, scope, post, user=user)
+
+
 def _seo_item_model() -> Any:
     from ..seo_series.content.models import SeoContentItem
 
@@ -188,6 +210,44 @@ SOURCES: tuple[ContentSource, ...] = (
         item_model_fn=_seo_item_model,
         parent_model_fn=_seo_parent_model,
         revise_fn=_seo_revise,
+    ),
+    # 第三源头(2026-09-05 SM 系列):社媒帖子。父记录是日历格;发布单元是
+    # "external"——不走 WordPress,mock 期由人手发并回填 permalink,
+    # publishing.py 对这个值跳过预览与派单。
+    ContentSource(
+        key="social",
+        label="社媒帖子",
+        kind_labels={
+            "pinterest_pin": "Pinterest 图钉",
+            "instagram_carousel": "Instagram 轮播",
+            "instagram_single": "Instagram 单图",
+            "facebook_mirror": "Facebook 镜像",
+        },
+        kind_column="post_kind",
+        parent_fk="slot_id",
+        parent_label_column="label",
+        body_keys=("sections",),
+        read_permission="sm.social.read",
+        review_permission="sm.social.execute",
+        execute_permission="sm.social.execute",
+        manage_permission="sm.social.manage",
+        review_requires_clean=True,
+        revise_mode="sync",
+        publish_unit="external",
+        extra_columns=(
+            ("platform", "platform"),
+            ("pillar", "pillar"),
+            ("hashtags", "hashtags_json"),
+            ("link_url", "link_url"),
+            ("media_refs", "media_refs_json"),
+            ("facts_used", "facts_used_json"),
+            ("publish_status", "publish_status"),
+            ("permalink", "permalink"),
+        ),
+        resolves_product_labels=False,
+        item_model_fn=_social_item_model,
+        parent_model_fn=_social_parent_model,
+        revise_fn=_social_revise,
     ),
 )
 

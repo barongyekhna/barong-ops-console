@@ -1816,6 +1816,103 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="sm.social",
+        display_name="社媒运营",
+        description=(
+            "SM series — social media operations for image posts (Pinterest / "
+            "Instagram / Facebook). A deterministic planner turns K products, GEO "
+            "guides and craft facts into a 28-day calendar; a skill-driven writer "
+            "fills each slot; brand/fact audits and the content desk review it. "
+            "Mock stage: channels are manual, nothing is published outbound. "
+            "Trade (store) organizations only."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/sm",
+        api_namespace="/sm",
+        navigation=_navigation(
+            group="Registry",
+            label="社媒运营",
+            icon="Share2",
+            order=20,
+        ),
+        required_permissions=("sm.social.read",),
+        permission_manifest=(
+            _permission(
+                module_key="sm.social",
+                permission_key="sm.social.read",
+                category="business",
+                action="read",
+                label="Read social media operations",
+                description="View the calendar, posts, image requests and channel profiles.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="sm.social",
+                permission_key="sm.social.execute",
+                category="business",
+                action="execute",
+                label="Run social media operations",
+                description=(
+                    "Plan the calendar, write posts, swap slots, reject or pick images."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="sm.social",
+                permission_key="sm.social.manage",
+                category="business",
+                action="manage",
+                label="Manage social media operations",
+                description=(
+                    "Register channels, dismiss image requests and record manual publishes."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.sm.social",
+        data_boundary=_data_boundary(
+            reads=(
+                "sm_channels",
+                "sm_calendar_slots",
+                "sm_posts",
+                "sm_media_usage",
+                "sm_image_requests",
+                "sm_rejections",
+                "sm_generation_jobs",
+                "k_product_knowledge_products",
+                "k_product_knowledge_media_assets",
+                "geo_content_items",
+                "craft_facts",
+                "p_upload_jobs",
+            ),
+            writes=(
+                "sm_channels",
+                "sm_calendar_slots",
+                "sm_posts",
+                "sm_media_usage",
+                "sm_image_requests",
+                "sm_rejections",
+                "sm_generation_jobs",
+                # 版式渲染产物与缺口单位号:写 K 的媒体资产表(role=social_layout)
+                "k_product_knowledge_media_assets",
+            ),
+            blocked_objects=("server_local_config", "external_provider_config"),
+        ),
+    ),
+    _manifest(
         module_key="cs.customer_service",
         display_name="客服中心",
         description=(

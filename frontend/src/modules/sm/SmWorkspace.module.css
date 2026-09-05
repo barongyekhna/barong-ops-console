@@ -1,0 +1,498 @@
+/* SM 系列 · 社媒运营：沿用驾驭舱皮肤的深色玻璃感，只用主题令牌，不覆盖全局样式。 */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--color-info) 20%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 50%, transparent);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tab[data-active="true"] {
+  border-color: color-mix(in srgb, var(--color-success) 55%, transparent);
+  background: color-mix(in srgb, var(--color-success) 24%, transparent);
+}
+
+.tabLabel {
+  font-size: 14px;
+  color: var(--color-text-strong);
+}
+
+.tab[data-active="true"] .tabLabel {
+  color: var(--color-success);
+}
+
+.tabHint {
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn {
+  padding: 7px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  color: var(--color-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-info) 22%, transparent);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnPrimary {
+  composes: btn;
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-success) 28%, transparent);
+}
+
+.btnDanger {
+  composes: btn;
+  border-color: color-mix(in srgb, var(--color-error) 40%, transparent);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+}
+
+.btnGhost {
+  composes: btn;
+  border-color: transparent;
+  background: transparent;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.panel {
+  padding: 16px 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 16%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-panel-base) 50%, transparent);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.muted {
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-error) 45%, transparent);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.notice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+/* 库存条 */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.kpi {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 16%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kpi b {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-strong);
+}
+
+.kpi span {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--color-muted);
+}
+
+/* 日历 */
+.calendarWrap {
+  overflow-x: auto;
+}
+
+.calendar {
+  display: grid;
+  grid-template-columns: 92px repeat(3, minmax(220px, 1fr));
+  gap: 6px;
+  min-width: 760px;
+}
+
+.calHead {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  padding: 6px 8px;
+}
+
+.calDay {
+  padding: 8px;
+  font-size: 12px;
+  color: var(--color-muted);
+  border-top: 1px solid color-mix(in srgb, var(--color-line) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.calDay b {
+  color: var(--color-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.calDay[data-weekend="true"] b {
+  color: var(--color-info);
+}
+
+.calCell {
+  padding: 6px;
+  border-top: 1px solid color-mix(in srgb, var(--color-line) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.slot {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 65%, transparent);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.slot:hover {
+  border-color: color-mix(in srgb, var(--color-info) 45%, transparent);
+}
+
+.slot[data-status="blocked"] {
+  border-style: dashed;
+  opacity: 0.7;
+}
+
+.slot[data-status="filled"],
+.slot[data-status="posted"] {
+  border-color: color-mix(in srgb, var(--color-success) 45%, transparent);
+}
+
+.thumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--color-line) 50%, transparent);
+}
+
+.thumbEmpty {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: var(--color-muted);
+  border: 1px dashed color-mix(in srgb, var(--color-line) 80%, transparent);
+}
+
+.slotBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.slotTitle {
+  font-size: 12px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.slotMeta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.pillar {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  border: 1px solid transparent;
+}
+
+.pillar[data-pillar="P1"] {
+  color: var(--color-info);
+  border-color: color-mix(in srgb, var(--color-info) 50%, transparent);
+}
+
+.pillar[data-pillar="P2"] {
+  color: var(--color-success);
+  border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
+}
+
+.pillar[data-pillar="P3"] {
+  color: var(--color-warning);
+  border-color: color-mix(in srgb, var(--color-warning) 50%, transparent);
+}
+
+.pillar[data-pillar="P4"] {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
+}
+
+.pillar[data-pillar="P5"] {
+  color: var(--color-phoenix);
+  border-color: color-mix(in srgb, var(--color-phoenix) 50%, transparent);
+}
+
+.status {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  background: color-mix(in srgb, var(--color-line) 40%, transparent);
+  color: var(--color-muted);
+}
+
+.status[data-status="filled"],
+.status[data-status="posted"],
+.status[data-status="approved"] {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+}
+
+.status[data-status="blocked"],
+.status[data-status="failed"],
+.status[data-status="rejected"] {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+}
+
+.status[data-status="writing"],
+.status[data-status="swapped"],
+.status[data-status="pending"] {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
+.gapBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  color: var(--color-warning);
+  border: 1px dashed color-mix(in srgb, var(--color-warning) 60%, transparent);
+}
+
+/* 抽屉 */
+.drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 28px;
+  color: var(--color-text);
+}
+
+.drawerTitle {
+  margin: 0;
+  font-size: 17px;
+  color: var(--color-text-strong);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.kv dt {
+  color: var(--color-muted);
+}
+
+.kv dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.mediaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.mediaCard {
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 70%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 60%, transparent);
+}
+
+.mediaCard img {
+  width: 116px;
+  height: 116px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.select,
+.input,
+.textarea {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-line) 80%, transparent);
+  background: color-mix(in srgb, var(--color-panel-base) 70%, transparent);
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.caption {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-panel-base) 65%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-line) 60%, transparent);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 60%, transparent);
+}
+
+.table th {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.rowBtn {
+  composes: slot;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.laneHead {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.brief {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.mono {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  word-break: break-all;
+}

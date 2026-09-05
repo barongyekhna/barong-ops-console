@@ -329,6 +329,15 @@ const registryItems = [
     category: "business",
     denied_behavior: "show_locked",
     external_dependencies: [],
+    module_key: "sm.social",
+    required_permissions: ["sm.social.read"],
+    route_namespace: "/sm",
+    status: "active",
+  }),
+  manifest({
+    category: "business",
+    denied_behavior: "show_locked",
+    external_dependencies: [],
     module_key: "content.desk",
     required_permissions: ["content.desk.read"],
     route_namespace: "/content-desk",
@@ -659,7 +668,7 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
   assert.match(
     sidebarSource,
-    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"cs\.",\s*"b2b\.",\s*"geo\.",\s*"seo\.",\s*"gmc\.",\s*"content\.",\s*"mfg\.",?\s*\]/,
+    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"cs\.",\s*"b2b\.",\s*"geo\.",\s*"seo\.",\s*"gmc\.",\s*"content\.",\s*"mfg\.",\s*"sm\.",?\s*\]/,
   );
   // 「哪些模块只属于国际贸易组织」不再由前端判定。
   // 这里原本断言前端有一组 normalized.startsWith("i."/"w."/"f."/"h."/"cs.") 判据，
@@ -1367,6 +1376,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "content.desk",
     "geo.content",
     "seo.content",
+    "sm.social",
     "w.site_ops",
     "cs.customer_service",
     "business.approvals",

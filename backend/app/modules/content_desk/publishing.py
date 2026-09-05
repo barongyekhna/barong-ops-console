@@ -56,6 +56,9 @@ def preview(db: Session, *, scope: KScopeContext | None = None) -> list[dict[str
 
     units: list[dict[str, Any]] = []
     for source in SOURCES:
+        if source.publish_unit == "external":
+            # 社媒帖子不经 WordPress:发布在 SM 模块里手发回填,这里不预览、不派单。
+            continue
         items = _approved(db, source, scope)
         if not items:
             continue
@@ -133,6 +136,10 @@ def dispatch(
     的时候内部 commit,「队列里已有在飞」时什么都不派也不 commit,新建的 job 行
     就只 flush 过。
     """
+    if source.publish_unit == "external":
+        from .actions import DeskActionError
+
+        raise DeskActionError("社媒帖子不在内容台派发，去社媒运营里标记已手动发布。", status_code=409)
     if source.publish_unit == "parent":
         from ..geo_series.content.publish_jobs import create_publish_job
 

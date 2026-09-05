@@ -139,6 +139,15 @@ from ..modules.geo_series.content.models import (
     GeoSiteSetting,
     GeoWpCategoryMap,
 )
+from ..modules.sm_series.models import (
+    SmCalendarSlot,
+    SmChannel,
+    SmGenerationJob,
+    SmImageRequest,
+    SmMediaUsage,
+    SmPost,
+    SmRejection,
+)
 
 __all__ = [
     "AgentMemoryAccessLog",
@@ -257,4 +266,11 @@ __all__ = [
     "UserPermissionAssignment",
     "WorkflowRegistry",
     "WProductSource",
+    "SmCalendarSlot",
+    "SmChannel",
+    "SmGenerationJob",
+    "SmImageRequest",
+    "SmMediaUsage",
+    "SmPost",
+    "SmRejection",
 ]

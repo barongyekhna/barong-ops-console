@@ -65,6 +65,7 @@ ALL_CARD_IDS = [
     "geo-todo",
     "seo-todo",
     "b2b-drafts",
+    "sm-todo",
     "approvals",
 ]
 OTHER_STORE_ORG_ID = "org_33333333333333333333333333333333"
@@ -354,7 +355,7 @@ def test_target_org_only_cards_are_absent_for_another_store_org(home_client: Tes
     traffic = client.get("/api/app/dashboard/home/traffic")
 
     assert payload["org_type"] == "store"
-    assert _card_ids(payload) == ["geo-todo", "seo-todo", "approvals"]
+    assert _card_ids(payload) == ["geo-todo", "seo-todo", "sm-todo", "approvals"]
     assert w_card.status_code == 403
     assert traffic.status_code == 403
     # 本组织照常看得到

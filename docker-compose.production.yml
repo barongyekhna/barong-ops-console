@@ -357,6 +357,39 @@ services:
     networks:
       - barong-ops-console-prod
 
+  # SM 系列 · 社媒运营 worker:排 28 天日历 / 写帖子 / 扫缺口单。
+  # mock 期一条都不外发;心跳记在 worker_heartbeats(sm-worker),验收只认那个时间戳。
+  sm-worker:
+    container_name: sm-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "4"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "8000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      SM_WRITER_CONCURRENCY: "1"
+      SM_WORKER_POLL_SECONDS: "5"
+    command:
+      - python
+      - -m
+      - backend.app.modules.sm_series.worker_main
+    volumes:
+      - console_k_media_data:/var/lib/barong/k-media
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
   # 数字员工 01 · 白苏婉(内容专员)。见 docs/AGENT_BAISUWAN_V1.md。
   # 她只读:权限只有 geo.content.read / seo.content.read,而且 console_client
   # 里根本没实现写端点。刻意不 depends_on console_backend —— 后端重启期间

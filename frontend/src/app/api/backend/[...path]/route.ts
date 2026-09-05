@@ -1027,9 +1027,10 @@ function isAllowedContentDeskPath(method: string, path: string[]) {
     if (path.length === 2) {
       return method === "GET";
     }
-    // /articles/{source}/{item_id}[/action] —— source 只认两个引擎，
-    // item_id 必须是 UUID。代理层就把形状卡死，别让乱七八糟的段打到后端。
-    if (path[2] !== "geo" && path[2] !== "seo") {
+    // /articles/{source}/{item_id}[/action] —— source 只认登记过的内容源
+    // （GEO / SEO / 社媒帖子），item_id 必须是 UUID。代理层就把形状卡死，
+    // 别让乱七八糟的段打到后端。
+    if (path[2] !== "geo" && path[2] !== "seo" && path[2] !== "social") {
       return false;
     }
     if (!isUuidPathSegment(path[3])) {
@@ -1508,6 +1509,53 @@ function isAllowedHPath(method: string, path: string[]) {
     path[2] === "smtp-check"
   ) {
     return method === "POST";
+  }
+  return false;
+}
+
+function isAllowedSmPath(method: string, path: string[]) {
+  // SM 系列社媒运营（/api/app/sm/*）。全是人用端点；mock 期没有机器端点。
+  if (path[0] !== "sm") {
+    return false;
+  }
+  if (path.length === 2) {
+    // GET /sm/profiles|inventory|calendar|posts|image-requests|jobs|channels ; POST /sm/channels
+    if (["profiles", "inventory", "calendar", "posts", "image-requests", "jobs"].includes(path[1])) {
+      return method === "GET";
+    }
+    if (path[1] === "channels") {
+      return method === "GET" || method === "POST";
+    }
+    return false;
+  }
+  if (path.length === 3) {
+    // POST /sm/calendar/plan
+    if (path[1] === "calendar" && path[2] === "plan") {
+      return method === "POST";
+    }
+    // PATCH /sm/channels/{id}
+    if (path[1] === "channels" && isUuidPathSegment(path[2])) {
+      return method === "PATCH";
+    }
+    // GET /sm/posts/{id}
+    if (path[1] === "posts" && isUuidPathSegment(path[2])) {
+      return method === "GET";
+    }
+    return false;
+  }
+  if (path.length === 4 && isUuidPathSegment(path[2]) && method === "POST") {
+    // POST /sm/slots/{id}/write|swap
+    if (path[1] === "slots") {
+      return path[3] === "write" || path[3] === "swap";
+    }
+    // POST /sm/posts/{id}/reject-image|pick-image|mark-posted
+    if (path[1] === "posts") {
+      return ["reject-image", "pick-image", "mark-posted"].includes(path[3]);
+    }
+    // POST /sm/image-requests/{id}/dismiss
+    if (path[1] === "image-requests") {
+      return path[3] === "dismiss";
+    }
   }
   return false;
 }
@@ -2662,6 +2710,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedHomeDashboardPath(method, path) ||
     isAllowedB2bPath(method, path) ||
     isAllowedMfgPath(method, path) ||
+    isAllowedSmPath(method, path) ||
     isAllowedCsPath(method, path) ||
     isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||

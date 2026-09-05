@@ -20,6 +20,7 @@ from ..cs_series import home_card as cs_home_card
 from ..geo_series import home_card as geo_home_card
 from ..h_series import home_card as h_home_card
 from ..seo_series import home_card as seo_home_card
+from ..sm_series import home_card as sm_home_card
 from ..w_series import home_card as w_home_card
 from ..w_series.traffic import service as traffic_service
 from . import approvals_card
@@ -86,6 +87,14 @@ STORE_CARDS: tuple[HomeCardSpec, ...] = (
         True,
         3.0,
         b2b_home_card.load_home_card,
+    ),
+    HomeCardSpec(
+        "sm-todo",
+        "sm.social",
+        frozenset({"sm.social.read", "sm.social.execute", "sm.social.manage"}),
+        False,
+        3.0,
+        sm_home_card.load_home_card,
     ),
     # 审批 + 通知：跨两个模块，归 home 自有；治理权在加载器内部判。排最后，
     # 它是唯一带语句超时的，出事时不影响前面的卡。

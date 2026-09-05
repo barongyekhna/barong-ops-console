@@ -38,7 +38,7 @@ export type ArticlePermissions = {
 };
 
 export type Article = {
-  source: "geo" | "seo";
+  source: "geo" | "seo" | "social";
   source_label: string;
   id: string;
   kind: string;
