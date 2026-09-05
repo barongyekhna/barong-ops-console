@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     c19_record_store_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
     c19_record_event_poll_seconds: float = Field(default=1.0, ge=0.25, le=10.0)
     c19_event_stream_lifetime_seconds: int = Field(default=20, ge=10, le=60)
+    # 贸易公司主页 SSE：每轮比对一次全部卡片（用户拍板「3 秒内」）；流到期即关，
+    # 客户端重连时顺带复验会话。poll 是紧急阀门，负载大了先把它调大。
+    home_stream_poll_seconds: float = Field(default=3.0, ge=1.0, le=30.0)
+    home_stream_lifetime_seconds: int = Field(default=55, ge=10, le=120)
     c19_rate_limit_window_seconds: int = Field(default=60, ge=10, le=3600)
     c19_write_user_rate_limit_attempts: int = Field(
         default=180,
@@ -221,6 +225,8 @@ class Settings(BaseSettings):
         "c19_record_store_timeout_seconds",
         "c19_record_event_poll_seconds",
         "c19_event_stream_lifetime_seconds",
+        "home_stream_poll_seconds",
+        "home_stream_lifetime_seconds",
         "c19_rate_limit_window_seconds",
         "c19_write_user_rate_limit_attempts",
         "c19_write_ip_rate_limit_attempts",
@@ -257,6 +263,8 @@ class Settings(BaseSettings):
             "c19_record_store_timeout_seconds": 5.0,
             "c19_record_event_poll_seconds": 1.0,
             "c19_event_stream_lifetime_seconds": 20,
+            "home_stream_poll_seconds": 3.0,
+            "home_stream_lifetime_seconds": 55,
             "c19_rate_limit_window_seconds": 60,
             "c19_write_user_rate_limit_attempts": 180,
             "c19_write_ip_rate_limit_attempts": 1800,

@@ -1423,6 +1423,32 @@ function isAllowedFPath(method: string, path: string[]) {
   return false;
 }
 
+const HOME_CARD_ID_PATTERN = /^[a-z0-9-]{1,40}$/;
+
+/**
+ * 贸易公司主页：引导 / 单卡 / SSE 流 / 流量区间，全部只读 GET。
+ * `dashboard/home/stream` 是 text/event-stream，代理层不用特殊分支——Accept 透传、
+ * body 直通、x-accel-buffering 透传，C19 事件流已验证同一条路。
+ */
+function isAllowedHomeDashboardPath(method: string, path: string[]) {
+  if (method !== "GET" || path[0] !== "dashboard" || path[1] !== "home") {
+    return false;
+  }
+  if (path.length === 2) {
+    return true;
+  }
+  if (path.length === 3) {
+    return path[2] === "stream" || path[2] === "traffic";
+  }
+  if (path.length === 4 && path[2] === "cards") {
+    return HOME_CARD_ID_PATTERN.test(path[3]);
+  }
+  if (path.length === 4 && path[2] === "traffic") {
+    return path[3] === "range";
+  }
+  return false;
+}
+
 function isAllowedHPath(method: string, path: string[]) {
   if (path[0] !== "h") {
     return false;
@@ -2633,6 +2659,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedIPath(method, path) ||
     isAllowedFPath(method, path) ||
     isAllowedHPath(method, path) ||
+    isAllowedHomeDashboardPath(method, path) ||
     isAllowedB2bPath(method, path) ||
     isAllowedMfgPath(method, path) ||
     isAllowedCsPath(method, path) ||

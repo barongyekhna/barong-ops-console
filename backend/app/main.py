@@ -24,6 +24,7 @@ from .api.routes.callback_handler import router as callback_handler_router
 from .api.routes.capability_bindings import router as capability_bindings_router
 from .api.routes.capability_bootstrap import router as capability_bootstrap_router
 from .api.routes.dashboard import router as dashboard_router
+from .modules.home import router as home_dashboard_router
 from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
 from .api.routes.execution_providers import router as execution_providers_router
@@ -1193,6 +1194,7 @@ app.include_router(w_siteops_public_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(profile_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(home_dashboard_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(arcade_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approvals_router, prefix=APPLICATION_API_PREFIX)

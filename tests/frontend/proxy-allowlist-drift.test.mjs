@@ -64,6 +64,8 @@ const KNOWN_UNPROXIED = new Set([
   // W-S sync callbacks, Woo order ingest and 17TRACK updates are server-to-server only.
   "POST /api/app/w/sync/{job_id}/result",
   "POST /api/app/w/orders/ingest",
+  // Jetpack traffic ingest is pushed by n8n (barongWtraffic001) over the docker network only.
+  "POST /api/app/w/traffic/ingest",
   "POST /api/app/w/tracking/webhook",
   // C19 byte-plane session authorization is called only by Nginx auth_request.
   "GET /api/app/c19/assets/transfers/authorize",

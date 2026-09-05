@@ -66,6 +66,8 @@ services:
       # W-S 物流：模板/单号同步派单 + 订单 ingest 鉴权（n8n 侧工作流用同一 token）
       N8N_W_SYNC_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-w-shipping"
       W_ORDERS_INGEST_TOKEN: "XDDlIDdhCupSE3Fs2Bkd9tYC6Pg-YbkyuI8f7NQRsiY"
+      # 独立站流量采集（barongWtraffic001 → /w/traffic/ingest）。独立一把钥匙，绝不复用上面那把。
+      W_TRAFFIC_INGEST_TOKEN: "tPkAivSN0vac3yXG3FluYdcxle6WOnXpm7SvBr7Xgng"
       P_CALLBACK_BASE: "http://console_backend:8000"
       W_CALLBACK_BASE: "http://console_backend:8000"
       # H-S 站点健康：巡检派单 webhook + 回传 ingest 鉴权（n8n 侧同一 token）

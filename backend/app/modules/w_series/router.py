@@ -46,10 +46,12 @@ from ...core.roles import is_super_admin_role
 from ...core.target_org_guard import (
     INTERNATIONAL_TRADE_ORG_NAME,
     enforce_caller_is_target_org,
+    resolve_target_org,
 )
 from ...db.session import SessionLocal, get_db
 from ...models.user import User
 from ...services.permission_service import resolve_current_user_permission_info
+from ...services.worker_heartbeat import record_failure, record_success
 from ..k_series.product_knowledge.models import KProductKnowledgeProduct
 from . import logistics, product_sources
 from .logistics_schemas import (
@@ -71,6 +73,8 @@ from .logistics_schemas import (
     ZoneRate,
 )
 from .shipping import engine, service
+from .traffic import service as traffic_service
+from .traffic.schemas import TrafficIngestRequest, TrafficIngestResponse
 from .shipping.models import (
     WOrder,
     WProductSource,
@@ -1454,6 +1458,62 @@ def orders_ingest(
         accepted=len(rows),
         created=created,
         updated=updated,
+    )
+
+
+@machine_router.post("/traffic/ingest", response_model=TrafficIngestResponse)
+def traffic_ingest(
+    payload: TrafficIngestRequest,
+    x_ingest_token: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> TrafficIngestResponse:
+    """n8n `barongWtraffic001` 每 10 分钟推一次 Jetpack 原始响应。
+
+    与 `orders_ingest` 同一把门（独立令牌，绝不复用）。成功且真有行写入才刷心跳：
+    空转一圈不该让 `w-traffic` 看起来健康。
+    """
+    expected = os.getenv("W_TRAFFIC_INGEST_TOKEN") or ""
+    supplied = x_ingest_token or ""
+    if not expected or not supplied or not secrets.compare_digest(
+        expected.encode("utf-8"),
+        supplied.encode("utf-8"),
+    ):
+        raise HTTPException(status_code=401, detail="ingest token 无效。")
+    target = resolve_target_org(db, INTERNATIONAL_TRADE_ORG_NAME)
+    if target is None:
+        raise HTTPException(status_code=503, detail="目标组织不可用。")
+    try:
+        normalized = traffic_service.normalize(payload)
+        days_written, hours_written = traffic_service.upsert_traffic(
+            db, workspace_key=target.org_id, normalized=normalized
+        )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - 失败要记进心跳，再抛
+        db.rollback()
+        record_failure(
+            db,
+            worker_name=traffic_service.WORKER_NAME,
+            module_key=traffic_service.WORKER_MODULE_KEY,
+            error=f"{type(exc).__name__}: {exc}",
+            expected_interval_seconds=traffic_service.EXPECTED_INTERVAL_SECONDS,
+        )
+        logger.exception("w-traffic ingest failed")
+        raise HTTPException(status_code=500, detail="流量入库失败。") from None
+    if days_written or hours_written:
+        record_success(
+            db,
+            worker_name=traffic_service.WORKER_NAME,
+            module_key=traffic_service.WORKER_MODULE_KEY,
+            expected_interval_seconds=traffic_service.EXPECTED_INTERVAL_SECONDS,
+        )
+    days = sorted(normalized.days)
+    return TrafficIngestResponse(
+        days_upserted=days_written,
+        hours_upserted=hours_written,
+        day_from=days[0] if days else None,
+        day_to=days[-1] if days else None,
+        utc_offset=normalized.utc_offset,
+        warnings=normalized.warnings,
     )
 
 
