@@ -6,6 +6,7 @@ import { useFrontendCapabilityState } from "@/components/capability-state-provid
 import { ConsoleArcade } from "@/components/console-arcade";
 import { DashboardScene } from "@/components/dashboard-scene";
 import { getHomeBootstrap, type HomeBootstrapRead } from "@/components/home/home-api";
+import { FactoryHome } from "@/components/home/FactoryHome";
 import { StoreHome } from "@/components/home/StoreHome";
 import {
   ActivityFeed,
@@ -269,8 +270,8 @@ function buildActivityFeed({
 /**
  * 分流器：按服务端给的 org_type 换皮。
  * - store  → 贸易公司主页（八张待办卡 + 单条 SSE），见 `components/home/`
- * - 其它 / 引导失败 → 原主页原样（`LegacyOperationsDashboard`，一行没动），
- *   制造公司主页另立项，在那之前不能让 factory 用户看到白屏或半成品。
+ * - factory → 制造公司主页（库存/缺料/单据/霓旌/审批），见 `components/home/FactoryHome.tsx`
+ * - 其它 / 引导失败 → 原主页原样（`LegacyOperationsDashboard`，一行没动）。
  */
 export function OperationsDashboard() {
   const [bootstrap, setBootstrap] = useState<HomeBootstrapRead | null>(null);
@@ -301,6 +302,9 @@ export function OperationsDashboard() {
   }
   if (bootstrap && bootstrap.org_type === "store") {
     return <StoreHome bootstrap={bootstrap} />;
+  }
+  if (bootstrap && bootstrap.org_type === "factory" && bootstrap.cards.length > 0) {
+    return <FactoryHome bootstrap={bootstrap} />;
   }
   return <LegacyOperationsDashboard />;
 }

@@ -71,15 +71,18 @@ test("registry lists the nine design cards in order with backend module keys", (
 });
 
 test("store home keeps the scene first, the arcade after the grid, one stream per tab", () => {
-  const home = read("components/home/StoreHome.tsx");
+  // 骨架抽到了 HomeShell（贸易/制造两张皮共用）；StoreHome 只剩注册表 + 存储键。
+  const home = read("components/home/HomeShell.tsx");
   assert.ok(home.includes("<DashboardScene />"));
   assert.ok(home.indexOf("<DashboardScene />") < home.indexOf('className="cc-head"'));
   assert.ok(home.includes("<ConsoleArcade />"));
   assert.ok(home.indexOf("cc-grid") < home.indexOf("<ConsoleArcade />"));
   assert.ok(home.indexOf("<ConsoleArcade />") < home.indexOf("<OverlayModal"));
   assert.ok(home.includes('placement="drawer"'));
-  assert.ok(home.includes("barong-home-cards-v2:store"));
-  assert.ok(!home.includes("barong-dash-cards-v1"));
+  const store = read("components/home/StoreHome.tsx");
+  assert.ok(store.includes("barong-home-cards-v2:store"));
+  assert.ok(!store.includes("barong-dash-cards-v1"));
+  assert.ok(store.includes("<HomeShell"));
 
   const stream = read("components/home/useHomeStream.ts");
   assert.ok(stream.includes("withCredentials: true"));

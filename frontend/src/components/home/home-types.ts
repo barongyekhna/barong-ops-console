@@ -14,7 +14,7 @@ export type HomeDrawerProps = {
 
 export type HomeCardProps = { card: HomeCardRead; onOpen: () => void };
 
-export type HomeCardGroup = "外部" | "模块" | "治理";
+export type HomeCardGroup = "外部" | "模块" | "治理" | "库存" | "数字员工";
 
 export type HomeCardDef = {
   id: string;

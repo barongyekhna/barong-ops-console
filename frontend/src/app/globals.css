@@ -58,6 +58,8 @@
      (2026-09-03)
    - STORE HOME · 贸易公司主页八卡 + 浮窗 (.home-store，复用 .cc-dash 骨架)
      (2026-09-05，文件末尾)
+   - FACTORY HOME · 制造公司主页皮肤差异 (.home-store.home-factory，眉题琥珀色 + 库存条)
+     (2026-09-06，文件末尾)
 
    ---------------------------------------------------------------------
    2026-09-03 校准：此前目录只登记了 11 层，文件里实际有 21 层 ——
@@ -8699,3 +8701,29 @@ textarea::placeholder { color: var(--color-subtle); opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   .home-store .hs-live-live i { animation: none; }
 }
+
+/* =====================================================================
+   FACTORY HOME · 制造公司主页皮肤差异 (.home-store.home-factory) —— 追加于 2026-09-06
+   ---------------------------------------------------------------------
+   骨架和八卡样式全部复用上面的 STORE HOME 层（作用域类仍是 .home-store）。
+   这里只放制造公司的差异：眉题/角标用凤凰琥珀色（贸易=青、制造=琥珀，一眼分清在哪家），
+   库存条和能力条两种小组件。只用令牌，不写字面色值。
+   ===================================================================== */
+.home-store.home-factory .cc-head .eyebrow { color: var(--color-phoenix); }
+.home-store.home-factory .hs-count { color: var(--color-phoenix); text-shadow: 0 0 14px color-mix(in srgb, var(--color-phoenix) 40%, transparent); }
+.home-store.home-factory .hs-count-zero { color: var(--cc-dim); text-shadow: none; }
+.home-store.home-factory .hs-drawer-title .eyebrow { color: var(--color-phoenix); }
+.home-store.home-factory .hs-block-head { color: var(--color-phoenix); }
+.home-store .hs-stock { display: flex; flex-direction: column; gap: 6px; }
+.home-store .hs-stock-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 12.5px; }
+.home-store .hs-stock-row b { display: block; font-weight: 500; color: var(--cc-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-store .hs-stock-row small { display: block; font: 500 10.5px var(--cc-mono); color: var(--cc-dim); }
+.home-store .hs-stock-row .hs-qty { font: 500 14px var(--cc-mono); font-variant-numeric: tabular-nums; color: var(--color-text-strong); white-space: nowrap; }
+.home-store .hs-stock-row .hs-qty.hs-qty-zero { color: var(--color-error); }
+.home-store .hs-stockbar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--color-phoenix) 70%, var(--color-primary)); margin-top: 3px; }
+.home-store .hs-capacity { display: flex; flex-direction: column; gap: 6px; }
+.home-store .hs-capacity-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--hs-line); font-size: 12.5px; }
+.home-store .hs-capacity-row:first-child { border-top: 0; }
+.home-store .hs-capacity-row .hs-cap { font: 500 14px var(--cc-mono); font-variant-numeric: tabular-nums; color: var(--color-success); white-space: nowrap; }
+.home-store .hs-capacity-row .hs-cap.hs-cap-zero { color: var(--color-error); }
+.home-store .hs-capacity-row small { display: block; font-size: 11px; color: var(--cc-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

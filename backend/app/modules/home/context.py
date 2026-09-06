@@ -25,6 +25,7 @@ from ...services.permission_service import resolve_current_user_permission_info
 from ...services.unified_permission_engine import UnifiedPermissionRequest
 
 STORE_ORG_TYPE = "store"
+FACTORY_ORG_TYPE = "factory"
 
 
 @dataclass(frozen=True)
@@ -32,6 +33,7 @@ class HomeAccess:
     org: OrganizationRecord
     workspace_key: str
     is_store: bool
+    is_factory: bool
     # F/W/H/B2B 的表没有 org 列，只能靠「调用者就是那个唯一目标组织」把门。
     is_target_org: bool
     permission_keys: frozenset[str]
@@ -76,6 +78,7 @@ def resolve_home_access(
         org=org,
         workspace_key=org.org_id,
         is_store=str(org.org_type or "") == STORE_ORG_TYPE,
+        is_factory=str(org.org_type or "") == FACTORY_ORG_TYPE,
         is_target_org=is_target_org,
         permission_keys=frozenset(info.permission_keys),
         is_full_access=is_full_access,

@@ -20,7 +20,8 @@ from ...services.data_isolation import (
 )
 from ..w_series.traffic import service as traffic_service
 from .context import HomeAccess, resolve_home_access
-from .registry import CARDS_BY_ID, HomeCardSpec, allowed, load_cards
+from .factory_registry import cards_for, spec_for
+from .registry import HomeCardSpec, allowed, load_cards
 from .schemas import (
     HomeBootstrapRead,
     HomeCardRead,
@@ -75,6 +76,17 @@ def _store_or_403(access: HomeAccess) -> None:
         )
 
 
+def _home_org_or_403(access: HomeAccess) -> tuple[HomeCardSpec, ...]:
+    """有皮的组织类型（store / factory）才有主页；返回这类组织的卡片集。"""
+    specs = cards_for(access)
+    if not specs:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This home page is not available for this organization type.",
+        )
+    return specs
+
+
 @router.get("", response_model=HomeBootstrapRead)
 def home_bootstrap(
     request: Request,
@@ -82,7 +94,8 @@ def home_bootstrap(
     user: User = Depends(get_current_user),
 ) -> HomeBootstrapRead:
     access = _access_or_403(db, request, user)
-    cards = _load_cards_isolated(db, access=access, user=user) if access.is_store else []
+    specs = cards_for(access)
+    cards = _load_cards_isolated(db, access=access, user=user, specs=list(specs)) if specs else []
     return HomeBootstrapRead(
         org_type=access.org_type,
         org_id=access.workspace_key,
@@ -98,11 +111,11 @@ def home_card(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> HomeCardRead:
-    spec = CARDS_BY_ID.get(card_id)
+    access = _access_or_403(db, request, user)
+    _home_org_or_403(access)
+    spec = spec_for(card_id, access)
     if spec is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown card.")
-    access = _access_or_403(db, request, user)
-    _store_or_403(access)
     if not allowed(spec, access):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Card not available.")
     cards = _load_cards_isolated(db, access=access, user=user, specs=[spec])
@@ -118,13 +131,13 @@ def home_stream(
     user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     access = _access_or_403(db, request, user)
-    _store_or_403(access)
+    specs = _home_org_or_403(access)
     settings = get_settings()
     session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
     # 只用于 digest 基线；引导接口已经把这一份给过前端，流里不重复推。
-    initial_cards = _load_cards_isolated(db, access=access, user=user)
+    initial_cards = _load_cards_isolated(db, access=access, user=user, specs=list(specs))
     return StreamingResponse(
         home_card_stream(
             request=request,
@@ -132,6 +145,8 @@ def home_stream(
             actor_user_id=int(user.id),
             org_id=access.workspace_key,
             initial_cards=initial_cards,
+            specs=specs,
+            expected_org_type=access.org_type,
         ),
         media_type="text/event-stream",
         headers={

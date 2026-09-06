@@ -26,7 +26,7 @@ from ...services.data_isolation import (
     org_data_isolation_context,
 )
 from .context import resolve_home_access
-from .registry import STORE_CARDS, allowed, load_cards
+from .registry import STORE_CARDS, HomeCardSpec, allowed, load_cards
 from .schemas import HomeCardRead
 
 
@@ -47,12 +47,14 @@ async def home_card_stream(
     actor_user_id: int,
     org_id: str,
     initial_cards: list[HomeCardRead],
+    specs: tuple[HomeCardSpec, ...] = STORE_CARDS,
+    expected_org_type: str = "store",
 ) -> AsyncIterator[str]:
     settings = get_settings()
     poll_seconds = float(settings.home_stream_poll_seconds)
     deadline = monotonic() + float(settings.home_stream_lifetime_seconds)
     digests: dict[str, str] = {card.card_id: card_digest(card) for card in initial_cards}
-    last_run: dict[str, float] = {spec.card_id: monotonic() for spec in STORE_CARDS}
+    last_run: dict[str, float] = {spec.card_id: monotonic() for spec in specs}
     audit = get_audit_context(request)
 
     yield "retry: 2000\n\n"
@@ -69,13 +71,17 @@ async def home_card_stream(
                 if int(user.id) != actor_user_id:
                     return
                 access = resolve_home_access(live_db, user=user, org_id=org_id)
-                if access is None or not access.is_store or access.workspace_key != org_id:
+                if (
+                    access is None
+                    or access.org_type != expected_org_type
+                    or access.workspace_key != org_id
+                ):
                     return
 
                 now = monotonic()
                 due = [
                     spec
-                    for spec in STORE_CARDS
+                    for spec in specs
                     if now - last_run[spec.card_id] >= spec.min_refresh_seconds
                 ]
                 isolation = OrgDataIsolationUserContext(

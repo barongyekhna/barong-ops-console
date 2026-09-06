@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import dataclasses
 import json
 from collections.abc import Iterator
@@ -44,6 +45,9 @@ from backend.app.modules.home import stream as home_stream_module
 from backend.app.modules.home.context import resolve_home_access
 from backend.app.modules.home.registry import STORE_CARDS, load_cards
 from backend.app.modules.home.router import home_stream
+
+# `home/__init__.py` 把 router 这个名字导出成 APIRouter 对象，from-import 拿不到模块本体
+home_router_module = importlib.import_module("backend.app.modules.home.router")
 from backend.app.modules.w_series.shipping.models import WOrder
 from backend.app.modules.w_series.traffic.models import WTrafficDaily, WTrafficHourly
 from backend.app.services.approval_service import ApprovalService
@@ -281,7 +285,8 @@ def test_bootstrap_store_owner_sees_all_cards_in_design_order(home_client: TestC
     assert len(traffic["extra"]["days"]) == 7
 
 
-def test_bootstrap_factory_org_gets_no_cards(home_client: TestClient) -> None:
+def test_bootstrap_factory_org_gets_factory_cards(home_client: TestClient) -> None:
+    """制造公司有自己的皮（详见 test_home_factory.py）；这里只守：不是贸易公司的卡、流量端点仍 403。"""
     username, password = _create_org_user(
         org_id=FACTORY_ORG_ID,
         org_name="测试制造公司",
@@ -298,8 +303,9 @@ def test_bootstrap_factory_org_gets_no_cards(home_client: TestClient) -> None:
 
     assert response.status_code == 200, response.text
     assert response.json()["org_type"] == "factory"
-    assert response.json()["cards"] == []
-    assert stream.status_code == 403
+    factory_ids = [card["card_id"] for card in response.json()["cards"]]
+    assert factory_ids and not set(factory_ids) & {"site-traffic", "cs-inbox", "w-orders", "b2b-drafts"}
+    assert stream.status_code == 200
     assert traffic.status_code == 403
 
 
@@ -486,10 +492,11 @@ def test_stream_first_frames_push_only_changed_cards(
     fast_settings = Settings(home_stream_poll_seconds=1.0, home_stream_lifetime_seconds=10)
     fast_settings.home_stream_poll_seconds = 0.01
     monkeypatch.setattr(home_stream_module, "get_settings", lambda: fast_settings)
+    # 流的卡片集由路由的 cards_for 决定；把节流清零打在那里，否则 3 秒内不重算
     monkeypatch.setattr(
-        home_stream_module,
-        "STORE_CARDS",
-        tuple(dataclasses.replace(spec, min_refresh_seconds=0.0) for spec in STORE_CARDS),
+        home_router_module,
+        "cards_for",
+        lambda access: tuple(dataclasses.replace(spec, min_refresh_seconds=0.0) for spec in STORE_CARDS),
     )
 
     with without_org_data_isolation(), SessionLocal() as db:
