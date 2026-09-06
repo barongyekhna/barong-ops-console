@@ -17,6 +17,7 @@ from backend.app.models.user import User
 from backend.app.modules.h_series.sitehealth import service
 from backend.app.modules.h_series.sitehealth.models import HHealthFinding, HHealthRun
 from backend.app.modules.notifications.models import PNotification
+from tests.fixtures.organization_fixtures import DEFAULT_TEST_ORG_DB_ID
 
 pytestmark = pytest.mark.integration
 
@@ -126,6 +127,7 @@ def test_ingest_records_run_findings_alert_and_deduplicates(
                 "level": row.level,
                 "title": row.title,
                 "payload": row.payload,
+                "org_id": row.org_id,
             }
             for row in db.scalars(
                 select(PNotification).where(
@@ -136,6 +138,8 @@ def test_ingest_records_run_findings_alert_and_deduplicates(
         ]
     assert len(alerts) == 1
     assert alerts[0]["level"] == "warning"
+    # 告警归贸易公司，不是全站公告——否则制造公司主页会收到独立站的死链告警
+    assert alerts[0]["org_id"] == DEFAULT_TEST_ORG_DB_ID
     assert alerts[0]["title"] == "站点巡检发现异常：死链 1 个"
     assert alerts[0]["payload"] == {
         "run_id": run_id,

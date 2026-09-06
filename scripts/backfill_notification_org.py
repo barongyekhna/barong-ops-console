@@ -9,9 +9,11 @@ K 品牌门失败、P 上传结果，全都带具体 SKU。
 `notifications/service.py:create_notification` 修好（有 product_id 就从产品表
 推导组织），新通知一律带归属。**这个脚本处理的是存量。**
 
-回填依据只有一条：顺着 `product_id` 查 `k_product_knowledge_products.workspace_key`。
-查不到就**保持为空**——不猜、不兜底到某个组织。站点健康那类没有产品可依的
-（体检时 35 条）会留在原样，它们确实是全站性质的。
+回填依据两条：
+1. 顺着 `product_id` 查 `k_product_knowledge_products.workspace_key`；
+2. `source = 'h_site_health'`（站点健康巡检）归国际贸易公司——独立站只有那一家，
+   按组织名解析、不写死 id（2026-09-06：制造公司主页收到贸易公司死链告警后补上）。
+两条都推不出的**保持为空**——不猜、不兜底到某个组织。
 
 默认只做演练（dry-run），加 --execute 才真写。
 """
@@ -34,6 +36,13 @@ WHERE n.org_id IS NULL
   AND n.product_id IS NOT NULL
   AND p.id = n.product_id
   AND COALESCE(p.workspace_key, '') <> ''
+"""
+
+SITE_HEALTH_SQL = """
+UPDATE p_notifications AS n
+SET org_id = :trade_org_id
+WHERE n.org_id IS NULL
+  AND n.source = 'h_site_health'
 """
 
 PREVIEW_SQL = """
@@ -79,8 +88,16 @@ def main() -> int:
         print("-" * 46)
         print(f"{'合计':<20}{total:>8}{fixable:>16}")
         print()
-        print(f"能回填 {fixable} 条；其余 {total - fixable} 条没有 product_id，")
-        print("按设计保持为空（它们确实是全站性质的，比如站点健康巡检）。")
+        from backend.app.core.target_org_guard import (
+            INTERNATIONAL_TRADE_ORG_NAME,
+            resolve_target_org,
+        )
+
+        trade_org = resolve_target_org(db, INTERNATIONAL_TRADE_ORG_NAME)
+        site_health = sum(int(r["条数"]) for r in rows if r["source"] == "h_site_health")
+        print(f"能按产品回填 {fixable} 条；站点健康 {site_health} 条归贸易公司"
+              f"（{trade_org.org_id if trade_org else '未解析到！'}）；")
+        print(f"其余 {total - fixable - site_health} 条两条依据都推不出，按设计保持为空。")
 
         if not args.execute:
             print()
@@ -90,15 +107,22 @@ def main() -> int:
         result = db.execute(
             text(BACKFILL_SQL), execution_options=SKIP_ORG_DATA_ISOLATION
         )
+        health_rows = 0
+        if trade_org is not None:
+            health_rows = db.execute(
+                text(SITE_HEALTH_SQL),
+                {"trade_org_id": trade_org.org_id},
+                execution_options=SKIP_ORG_DATA_ISOLATION,
+            ).rowcount
         db.commit()
         print()
-        print(f"已回填 {result.rowcount} 条。")
+        print(f"已按产品回填 {result.rowcount} 条，站点健康归贸易公司 {health_rows} 条。")
 
         left = db.execute(
             text("SELECT COUNT(*) FROM p_notifications WHERE org_id IS NULL"),
             execution_options=SKIP_ORG_DATA_ISOLATION,
         ).scalar()
-        print(f"仍为空的还有 {left} 条（预期 = 没有 product_id 的那些）。")
+        print(f"仍为空的还有 {left} 条（预期 = 真正的全站公告）。")
     return 0
 
 

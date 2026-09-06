@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
+from ....core.target_org_guard import INTERNATIONAL_TRADE_ORG_NAME, resolve_target_org
 from ...notifications.models import PNotification
 from ...notifications.service import create_notification
 from .models import HHealthFinding, HHealthRun
@@ -321,11 +322,15 @@ def ingest_run(
         run.urls_broken > 0 or not run.sitemap_ok or not run.homepage_ok
     )
     if should_alert and not _alert_exists(db, run.id):
+        # 站点健康是国际贸易独立站的事，通知必须带组织归属。空 org 在通知模块里
+        # 表示「全站公告」，制造公司的超管会在主页上收到贸易公司的死链告警（2026-09-06 实发）。
+        trade_org = resolve_target_org(db, INTERNATIONAL_TRADE_ORG_NAME)
         create_notification(
             db,
             event_type="h.health_alert",
             level="warning",
             source="h_site_health",
+            org_id=trade_org.org_id if trade_org is not None else None,
             title=_alert_title(
                 urls_broken=run.urls_broken,
                 sitemap_ok=run.sitemap_ok,
