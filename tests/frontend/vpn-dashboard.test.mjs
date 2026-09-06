@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import {
   normalizeNativeVpnEnrollment,
@@ -9,6 +9,9 @@ import {
   normalizeVpnDeviceList,
 } from "../../frontend/src/modules/vpn/devices.ts";
 import {
+  MIN_NATIVE_AGENT_VERSION,
+  isNativeAgentOutdated,
+  nativeAgentOutdatedMessage,
   normalizeNativeVpnIdentity,
   normalizeNativeVpnStatus,
 } from "../../frontend/src/modules/vpn/native.ts";
@@ -236,4 +239,42 @@ test("VPN page: one node component, no manual device creation, cookie-scoped dow
   assert.match(nginx, /location = \/api\/backend\/vpn\/downloads\/android/);
   assert.match(nginx, /auth_request \/_barong_vpn_release_auth;/);
   assert.doesNotMatch(dashboard, /"\/downloads\//);
+});
+
+// 2026-09-06: a PC still on the 0.2.1 client enrolled 13 times with 201 and
+// never handshook (tunnel config baked at install with the old port). The
+// floor mirrors MIN_AGENT_VERSION in backend/vpn_gateway.py.
+test("clients below the version floor are refused before enrolling", () => {
+  assert.equal(MIN_NATIVE_AGENT_VERSION, "0.3.0");
+  for (const version of ["0.3.0-pilot", "0.3.0", "0.3.1", "0.10.0", "1.0.0-rc1"]) {
+    assert.equal(isNativeAgentOutdated(version), false, version);
+  }
+  for (const version of ["0.2.1-pilot", "0.2.99", "", null, undefined, "v0.3.1", "0.3"]) {
+    assert.equal(isNativeAgentOutdated(version), true, String(version));
+  }
+  const message = nativeAgentOutdatedMessage("0.2.1-pilot");
+  assert.match(message, /0\.2\.1-pilot/);
+  assert.match(message, /太旧/);
+  assert.match(message, /0\.3\.0/);
+  assert.match(nativeAgentOutdatedMessage(null), /未知/);
+
+  // Paths are cwd-relative like the rest of this file: the image build runs the
+  // suite from /app with `frontend` symlinked to `.`, and it has no backend/
+  // (the gateway floor is covered by tests/backend/test_vpn_gateway.py).
+  if (existsSync("backend/vpn_gateway.py")) {
+    const gateway = readFileSync("backend/vpn_gateway.py", "utf8");
+    assert.match(gateway, /MIN_AGENT_VERSION = \(0, 3, 0\)/);
+    assert.match(gateway, /if agent_version_too_old\(agent_version\):/);
+  }
+
+  const dashboard = readFileSync("frontend/src/modules/vpn/VpnDashboard.tsx", "utf8");
+  // Refuse on the identity the client hands over, before the enroll request.
+  assert.ok(
+    dashboard.indexOf("isNativeAgentOutdated(identity.agent_version)") <
+      dashboard.indexOf("await enrollNativeVpnDevice(identity, node.id)"),
+  );
+  // And state it on load from the installed client's own version, with installers offered.
+  assert.match(dashboard, /upgradeRequired=\{upgradeRequired\}/);
+  const bar = readFileSync("frontend/src/modules/vpn/ConnectionBar.tsx", "utf8");
+  assert.match(bar, /phase === "browser" \|\| upgradeRequired/);
 });

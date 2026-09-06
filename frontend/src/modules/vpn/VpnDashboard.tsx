@@ -22,6 +22,8 @@ import { DeviceList } from "./DeviceList";
 import type { VpnDevice } from "./devices";
 import {
   getNativeVpnBridge,
+  isNativeAgentOutdated,
+  nativeAgentOutdatedMessage,
   normalizeNativeVpnIdentity,
   normalizeNativeVpnStatus,
   type NativeVpnStatus,
@@ -252,6 +254,9 @@ export function VpnDashboard() {
       if (!identity) {
         throw new Error("本机设备身份格式异常。");
       }
+      if (isNativeAgentOutdated(identity.agent_version)) {
+        throw new Error(nativeAgentOutdatedMessage(identity.agent_version));
+      }
       const enrollment = await enrollNativeVpnDevice(identity, node.id);
       setSwitchStep("正在写入本机隧道配置…");
       await currentBridge.provision(enrollment.provisioning);
@@ -361,6 +366,10 @@ export function VpnDashboard() {
   };
 
   // ---- derived view state -------------------------------------------------
+  // The installed client reports its own version; a too-old one is an error the
+  // page states on load, with the installers in place of the connect button.
+  const installedVersion = nativeStatus?.installed ? nativeStatus.agent_version : null;
+  const upgradeRequired = nativeAvailable && installedVersion !== null && isNativeAgentOutdated(installedVersion);
   let phase: ConnectionPhase;
   if (!nativeAvailable) {
     phase = "browser";
@@ -368,7 +377,7 @@ export function VpnDashboard() {
     phase = "disconnecting";
   } else if (nativeBusy !== null) {
     phase = "connecting";
-  } else if (nativeError) {
+  } else if (nativeError || upgradeRequired) {
     phase = "error";
   } else if (nativeStatus?.connected) {
     phase = "connected";
@@ -392,6 +401,8 @@ export function VpnDashboard() {
     ? "普通浏览器没有本机系统权限。安装控制台 App 后在 App 里打开本页，一键登记本机并连接。"
     : nativeBusy !== null && switchStep
       ? switchStep
+      : upgradeRequired
+      ? nativeAgentOutdatedMessage(installedVersion)
       : nativeError
       ? nativeError
       : phase === "connected"
@@ -452,6 +463,7 @@ export function VpnDashboard() {
         rates={rates}
         totalReceived={sumBytes(scopeDevices, "received_bytes")}
         totalSent={sumBytes(scopeDevices, "sent_bytes")}
+        upgradeRequired={upgradeRequired}
       />
 
       {isLoading && nodes.length === 0 && !nodeError ? (

@@ -48,6 +48,12 @@ DEVICE_ID_PATTERN = re.compile(
 ADDRESS_PATTERN = re.compile(r"^10\.66\.66\.(?:[2-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-4])/32$")
 KEY_PATTERN = re.compile(r"^[A-Za-z0-9+/]{43}=$")
 AGENT_FIELD_PATTERN = re.compile(r"^[A-Za-z0-9._+-]{1,32}$")
+# Clients older than this were built before the node parameters (endpoint,
+# obfuscation) moved into provisioning; their tunnel config is baked at install
+# time and never handshakes. Enrolling them only looks like success.
+MIN_AGENT_VERSION = (0, 3, 0)
+MIN_AGENT_VERSION_LABEL = ".".join(str(part) for part in MIN_AGENT_VERSION)
+AGENT_VERSION_PATTERN = re.compile(r"^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:[-+.][A-Za-z0-9._+-]*)?$")
 NODE_ID_PATTERN = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$")
 ENDPOINT_PATTERN = re.compile(
     r"^(?:(?:\d{1,3}\.){3}\d{1,3}|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+):(\d{2,5})$"
@@ -471,6 +477,30 @@ def build_provisioning(node: Node, node_info: Mapping[str, object], agent_payloa
 # --------------------------------------------------------------------------
 
 
+def parse_agent_version(value: object) -> tuple[int, int, int] | None:
+    """Leading major.minor.patch of a client version string, or None."""
+    if not isinstance(value, str):
+        return None
+    match = AGENT_VERSION_PATTERN.fullmatch(value.strip())
+    if match is None:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def agent_version_too_old(value: object) -> bool:
+    """True when the client must upgrade before enrolling. Unparseable = too old."""
+    parsed = parse_agent_version(value)
+    return parsed is None or parsed < MIN_AGENT_VERSION
+
+
+def _upgrade_required(agent_version: str) -> GatewayError:
+    return GatewayError(
+        426,
+        f"这台设备的控制台 App 版本 {agent_version} 太旧,隧道参数对不上服务器,"
+        f"登记也连不上。请先卸载旧版,再从本页重新下载安装({MIN_AGENT_VERSION_LABEL} 以上),然后再登记本机。",
+    )
+
+
 def _authenticate(cookie: str | None, *, fetcher: FetchJson) -> str:
     if not cookie or len(cookie.encode("utf-8")) > MAX_COOKIE_BYTES:
         raise GatewayError(401, "Not authenticated.")
@@ -642,6 +672,10 @@ def enroll_authenticated_device(
         or AGENT_FIELD_PATTERN.fullmatch(agent_version) is None
     ):
         raise GatewayError(400, "设备信息不正确。")
+    # Refuse before touching any node: an old client cannot use what enrollment
+    # returns, and enrolling it would re-enable/create a peer that never connects.
+    if agent_version_too_old(agent_version):
+        raise _upgrade_required(agent_version)
     # Clients that predate node selection enroll on the default node.
     node = (
         find_node(nodes, request_payload["node_id"])

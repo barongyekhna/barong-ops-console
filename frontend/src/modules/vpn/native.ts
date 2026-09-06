@@ -50,6 +50,45 @@ const NATIVE_PLATFORMS = new Set<NativeVpnPlatform>([
   "windows",
 ]);
 
+// Mirrors MIN_AGENT_VERSION in backend/vpn_gateway.py. Older clients carry a
+// tunnel config baked at install time (old port, no node parameters); the
+// gateway refuses them with 426, and the page says so before even trying.
+export const MIN_NATIVE_AGENT_VERSION = "0.3.0";
+const AGENT_VERSION_PATTERN = /^(\d{1,4})\.(\d{1,4})\.(\d{1,4})(?:[-+.][A-Za-z0-9._+-]*)?$/;
+
+export function parseNativeAgentVersion(
+  value: unknown,
+): [number, number, number] | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = AGENT_VERSION_PATTERN.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/** True when the installed client must be replaced before it can enroll. Unparseable = outdated. */
+export function isNativeAgentOutdated(version: unknown): boolean {
+  const parsed = parseNativeAgentVersion(version);
+  if (!parsed) {
+    return true;
+  }
+  const floor = parseNativeAgentVersion(MIN_NATIVE_AGENT_VERSION) as [number, number, number];
+  for (let index = 0; index < 3; index += 1) {
+    if (parsed[index] !== floor[index]) {
+      return parsed[index] < floor[index];
+    }
+  }
+  return false;
+}
+
+export function nativeAgentOutdatedMessage(version: unknown): string {
+  const label = typeof version === "string" && version.trim() ? version.trim() : "未知";
+  return `这台设备的控制台 App 版本 ${label} 太旧，隧道参数对不上服务器，登记也连不上。请先卸载旧版，再用下面的按钮重新下载安装（${MIN_NATIVE_AGENT_VERSION} 以上），然后再登记本机。`;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

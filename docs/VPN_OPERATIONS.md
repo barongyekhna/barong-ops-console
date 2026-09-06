@@ -24,6 +24,7 @@
 - 设备只能由**登录的客户端自己登记**（`POST /api/backend/vpn/devices/enroll`，自带公钥）。没有"手动添加设备"，服务端永不生成客户端私钥。
 - 登记响应是 **provisioning schema 2**：除 `device_id/address/preshared_key/dns` 外还带 `node{id,name,endpoint,public_key,mtu,obfuscation{Jc,Jmin,Jmax,S1,S2,S3,S4,H1..H4}}`。客户端据此渲染隧道配置，**不内置任何服务器信息**。节点参数来自 agent `GET /v1/node`（读 `awg show`/`awg showconf`），控制台不存副本。
 - 同一设备（同 owner + 同 device_id + 同公钥）重复登记 = 重装或换节点，agent 会**换发新 PSK** 并重新挂 peer。
+- **客户端最低版本 0.3.0**（`MIN_AGENT_VERSION`，网关在碰任何节点之前就拒绝，HTTP 426，页面同步给出「下载最新 App」按钮）。0.2.x 的隧道配置在安装时烧死（旧端口 443、不带节点参数），登记只会看起来成功：2026-09-06 一台 0.2.1 的电脑登记了 13 次全 201、从未握手，还顺手把停用的老设备重新启用。老机器的处置只有一条：卸载后重新下载安装、再登记。
 - 每用户每节点最多 10 台；地址池 10.66.66.2–254。
 - 节点机上的老线路（wg0、`renew_vpn.sh`、`wg_heal*.sh`、ufw 规则、`awg0.conf`）**不归本模块管，不要动**。
 

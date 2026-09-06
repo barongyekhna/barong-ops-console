@@ -8,6 +8,7 @@ from backend.vpn_gateway import (
     Node,
     GatewayError,
     UpstreamUnavailable,
+    agent_version_too_old,
     dependency_health,
     enroll_authenticated_device,
     get_authenticated_devices,
@@ -346,6 +347,35 @@ class VpnGatewayTests(unittest.TestCase):
             "session=opaque", ENROLL_REQUEST, nodes=NODES, agent_token=AGENT_TOKEN, fetcher=fake_fetcher
         )
         self.assertEqual(result["provisioning"]["node"]["id"], "us-la")
+
+    def test_enrollment_refuses_clients_older_than_0_3_0_before_touching_nodes(self) -> None:
+        # 2026-09-06: a 0.2.1 client enrolled 13 times with 201, re-enabled a
+        # parked device and created a peer that can never handshake (its
+        # tunnel config is baked at install time with the old port).
+        def fake_fetcher(url, _method, _headers, _payload, _timeout):
+            if url == AUTH_URL:
+                return 200, {"id": "user-123"}
+            raise AssertionError("agent must not be called for an outdated client")
+
+        for version in ("0.2.1-pilot", "0.2.2-pilot", "0.0.9", "pilot", "v0.3.1"):
+            with self.subTest(version=version):
+                with self.assertRaises(GatewayError) as context:
+                    enroll_authenticated_device(
+                        "session=opaque",
+                        {**ENROLL_REQUEST, "agent_version": version, "node_id": "jp-tyo"},
+                        nodes=NODES,
+                        agent_token=AGENT_TOKEN,
+                        fetcher=fake_fetcher,
+                    )
+                self.assertEqual(context.exception.status_code, 426)
+                self.assertIn("太旧", context.exception.detail)
+                self.assertIn("0.3.0", context.exception.detail)
+
+    def test_agent_version_floor(self) -> None:
+        for version in ("0.3.0-pilot", "0.3.0", "0.3.1", "0.10.0", "1.0.0-rc1", "1.0.0+build.7"):
+            self.assertFalse(agent_version_too_old(version), version)
+        for version in ("0.2.9-pilot", "0.2.99", "", None, 3, "0.3", "0.3.x", "v0.3.1"):
+            self.assertTrue(agent_version_too_old(version), repr(version))
 
     def test_enrollment_rejects_unknown_or_disabled_nodes(self) -> None:
         def fake_fetcher(url, _method, _headers, _payload, _timeout):

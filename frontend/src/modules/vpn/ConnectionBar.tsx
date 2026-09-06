@@ -29,6 +29,8 @@ type ConnectionBarProps = {
   rates: ConnectionRates;
   totalReceived: number | null;
   totalSent: number | null;
+  /** Installed client is too old to enroll: swap the action for the installers. */
+  upgradeRequired?: boolean;
 };
 
 const PHASE_LABELS: Record<ConnectionPhase, string> = {
@@ -58,6 +60,7 @@ export function ConnectionBar({
   rates,
   totalReceived,
   totalSent,
+  upgradeRequired = false,
 }: ConnectionBarProps) {
   const live = phase === "connected";
   return (
@@ -100,14 +103,14 @@ export function ConnectionBar({
 
       <div className="cc-vpn-bar-actions">
         <p className="cc-vpn-bar-detail">{detail}</p>
-        {phase === "browser" ? (
-          <div className="cc-vpn-bar-downloads">
+        {phase === "browser" || upgradeRequired ? (
+          <div className="cc-vpn-bar-downloads" data-upgrade-required={upgradeRequired || undefined}>
             <button
               className="cc-customize"
               onClick={onDownloadWindows}
               type="button"
             >
-              下载 Windows 控制台 App
+              {upgradeRequired ? "下载最新 Windows 控制台 App" : "下载 Windows 控制台 App"}
             </button>
             <button
               className="cc-vpn-secondary"
