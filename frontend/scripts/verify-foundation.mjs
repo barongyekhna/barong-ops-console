@@ -109,8 +109,10 @@ for (const requiredUserModuleSignal of [
   // 2026-09-02 移除 "UserPermissionsPanel"：那个组件（1136 行）在整个 src 里
   // 零 import、无路由、不在任何导航注册表 —— 唯一让它活着的就是这一行字符串
   // 白名单。权限管理的真正入口是 /permissions 页，由 C06 那批断言守着。
-  "DEFAULT_INITIAL_PASSWORD",
-  "123456",
+  // 2026-09-07 换掉 "DEFAULT_INITIAL_PASSWORD"/"123456"：初始密码已是随机一次性，
+  // 前端不再知道也不该知道它的值，只负责把创建响应里的明文展示一次。
+  "initial_password",
+  "一次性初始密码",
   "岗位",
   "组织",
   "job_title: string | null",
