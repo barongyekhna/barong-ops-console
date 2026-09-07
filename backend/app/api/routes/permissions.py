@@ -157,6 +157,7 @@ def _permission_registry_response_item(permission) -> PermissionRegistryRead:
         category=permission_response_category(
             module_key=permission.module_key,
             permission_key=permission.permission_key,
+            category=permission.category,
         ),
         action=permission.action,
         label=permission.label,
@@ -256,6 +257,7 @@ def permissions_registry(
                 if permission_response_category(
                     module_key=permission.module_key,
                     permission_key=permission.permission_key,
+                    category=permission.category,
                 )
                 == "feature"
             ]

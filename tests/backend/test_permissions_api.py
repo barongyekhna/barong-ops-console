@@ -432,6 +432,11 @@ def test_permissions_registry_requires_permissions_read_or_owner(
     }
     assert categories_by_key["artifacts.read"] == "feature"
     assert categories_by_key["permissions.read"] == "control_plane"
+    # Business-module permissions are grantable feature cards, not control plane.
+    assert categories_by_key["k.product_knowledge.read"] == "feature"
+    assert categories_by_key["i.image_system.execute"] == "feature"
+    assert categories_by_key["users.manage"] == "control_plane"
+    assert categories_by_key["system.admin"] == "control_plane"
     assert owner_id != viewer_id
 
     def fail_registry_read(*args, **kwargs):

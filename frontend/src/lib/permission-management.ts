@@ -57,6 +57,20 @@ const FEATURE_PERMISSION_PREFIXES = new Set([
   "reviews",
 ]);
 const MODULE_DISPLAY_LABELS: Record<string, string> = {
+  // 业务模块统一写成「X系列 名称」，分组标题再把 module_key 挂在括号里。
+  "b2b.wholesale": "B2B系列 批发业务",
+  "content.desk": "GEO/SEO系列 内容台",
+  "cs.customer_service": "CS系列 客服中心",
+  "f.enrichment": "F系列 类目富化",
+  "geo.content": "GEO系列 内容引擎",
+  "h.site_health": "H系列 站点健康",
+  "i.image_system": "I系列 图片系统",
+  "k.product_knowledge": "K系列 产品知识库",
+  "mfg.inventory": "M系列 制造库存",
+  "p.upload": "P系列 自动化上传",
+  "seo.content": "SEO系列 内容引擎",
+  "sm.social": "SM系列 社媒运营",
+  "w.site_ops": "W系列 物流网络中枢",
   adapters: "适配器",
   agents: "智能体",
   approvals: "审批",
@@ -83,28 +97,69 @@ const ACTION_DISPLAY_LABELS: Record<string, string> = {
   release: "发布",
   write: "编辑",
 };
+// 卡片名：中文（permission_key）。这里只放中文，括号里的英文键由
+// getPermissionDisplayName 统一追加，保证每张卡片格式一致。
 const PERMISSION_DISPLAY_LABELS: Record<string, string> = {
-  "agents.manage": "管理智能体权限",
-  "agents.read": "查看智能体权限",
-  "approvals.approve": "审批权限",
-  "approvals.read": "查看审批权限",
-  "execution.manage": "管理执行权限",
-  "modules.manage": "管理模块权限",
-  "modules.read": "查看模块权限",
-  "operation_logs.read": "查看操作日志权限",
-  "permissions.manage": "管理权限配置权限",
-  "permissions.read": "查看权限配置权限",
-  "production.release": "生产发布权限",
-  "registry.manage": "管理注册表权限",
-  "registry.read": "查看注册表权限",
-  "reviews.approve": "评审审批权限",
-  "reviews.read": "查看评审权限",
-  "roles.read": "查看角色权限",
-  "settings.manage": "管理系统设置权限",
-  "settings.read": "查看系统设置权限",
-  "system.admin": "系统管理权限",
-  "users.manage": "管理用户权限",
-  "users.read": "查看用户权限",
+  "agents.manage": "管理智能体",
+  "agents.read": "查看智能体",
+  "approvals.approve": "审批",
+  "approvals.read": "查看审批",
+  "b2b.wholesale.export": "导出批发报价单",
+  "b2b.wholesale.manage": "管理批发目录",
+  "b2b.wholesale.read": "查看批发目录",
+  "content.desk.execute": "在内容台操作",
+  "content.desk.manage": "管理内容台",
+  "content.desk.read": "查看内容台",
+  "cs.customer_service.read": "查看客服消息",
+  "cs.customer_service.update": "处理客服消息",
+  "execution.manage": "管理执行",
+  "f.enrichment.execute": "执行类目富化",
+  "f.enrichment.read": "查看类目富化",
+  "f.enrichment.review": "评审富化候选",
+  "geo.content.execute": "生成 GEO 内容",
+  "geo.content.manage": "管理 GEO 内容",
+  "geo.content.read": "查看 GEO 内容",
+  "h.site_health.manage": "管理站点健康",
+  "h.site_health.read": "查看站点健康",
+  "i.image_system.execute": "生成与编辑图片",
+  "i.image_system.manage": "管理媒体库",
+  "i.image_system.read": "查看图片系统",
+  "k.product_knowledge.archive": "归档产品知识",
+  "k.product_knowledge.attributes.manage": "管理产品属性",
+  "k.product_knowledge.create": "新建产品知识",
+  "k.product_knowledge.keywords.manage": "管理产品关键词",
+  "k.product_knowledge.read": "查看产品知识",
+  "k.product_knowledge.risk_terms.manage": "管理产品风险词",
+  "k.product_knowledge.update": "更新产品知识",
+  "mfg.inventory.manage": "管理制造库存",
+  "mfg.inventory.read": "查看制造库存",
+  "modules.manage": "管理模块",
+  "modules.read": "查看模块",
+  "operation_logs.read": "查看操作日志",
+  "p.upload.execute": "派发上传任务",
+  "p.upload.read": "查看上传流水线",
+  "permissions.manage": "管理权限配置",
+  "permissions.read": "查看权限配置",
+  "production.release": "生产发布",
+  "products.read": "查看产品",
+  "registry.manage": "管理注册表",
+  "registry.read": "查看注册表",
+  "reviews.approve": "评审审批",
+  "reviews.read": "查看评审",
+  "roles.read": "查看角色",
+  "seo.content.execute": "生成 SEO 内容",
+  "seo.content.manage": "管理 SEO 内容",
+  "seo.content.read": "查看 SEO 内容",
+  "settings.manage": "管理系统设置",
+  "settings.read": "查看系统设置",
+  "sm.social.execute": "执行社媒运营",
+  "sm.social.manage": "管理社媒运营",
+  "sm.social.read": "查看社媒运营",
+  "system.admin": "系统管理",
+  "users.manage": "管理用户",
+  "users.read": "查看用户",
+  "w.site_ops.manage": "管理站点运营",
+  "w.site_ops.read": "查看站点运营",
 };
 
 function normalizeRole(role: string | null | undefined) {
@@ -360,6 +415,13 @@ export function permissionModuleLabel(moduleKey: string) {
   return MODULE_DISPLAY_LABELS[normalized] ?? normalized.replace(/_/g, " ");
 }
 
+/** 分组标题：「X系列 名称（module_key）」，英文键名留在括号里便于对照后端。 */
+export function permissionModuleGroupTitle(moduleKey: string) {
+  const normalized = moduleKey.trim().toLowerCase();
+  const label = permissionModuleLabel(normalized);
+  return label === normalized ? normalized : `${label}（${normalized}）`;
+}
+
 function permissionActionLabel(action: string) {
   const normalized = action.trim().toLowerCase();
   return ACTION_DISPLAY_LABELS[normalized] ?? normalized.replace(/_/g, " ");
@@ -411,21 +473,24 @@ export function getPermissionDisplayName(
     | null
     | undefined,
 ) {
-  const permissionKey =
+  const permissionKey = (
     typeof permission === "string"
       ? permission
-      : permission?.permission_key ?? "";
+      : permission?.permission_key ?? ""
+  ).trim();
+  const withKey = (name: string) =>
+    permissionKey && name !== permissionKey ? `${name}（${permissionKey}）` : name;
   const mapped = PERMISSION_DISPLAY_LABELS[permissionKey];
   if (mapped) {
-    return mapped;
+    return withKey(mapped);
   }
 
   if (typeof permission === "object" && permission !== null) {
     if ("permission_name" in permission && permission.permission_name) {
-      return `${permission.permission_name} 权限`;
+      return withKey(permission.permission_name);
     }
     if ("label" in permission && permission.label) {
-      return `${permission.label} 权限`;
+      return withKey(permission.label);
     }
   }
 
@@ -440,7 +505,7 @@ export function getPermissionDisplayName(
   const moduleLabel = permissionModuleLabel(moduleKey);
   const actionLabel = permissionActionLabel(action);
 
-  return `${actionLabel}${moduleLabel}权限`;
+  return withKey(`${actionLabel}${moduleLabel}`);
 }
 
 export function getPermissionCategoryLabel(category: PermissionUiCategory) {

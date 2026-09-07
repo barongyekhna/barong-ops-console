@@ -242,14 +242,36 @@ test("permission management entry is visible for owner and super admin UI roles"
   assert.equal(canShowPermissionManagementEntry(nonOwnerPermissions), false);
 });
 
-test("permission display names and UI groups do not expose raw keys", () => {
-  assert.equal(getPermissionDisplayName(ordinaryPermission), "查看评审权限");
+test("permission display names read as 中文（permission_key）", () => {
+  assert.equal(
+    getPermissionDisplayName(ordinaryPermission),
+    "查看评审（reviews.read）",
+  );
   assert.equal(
     getPermissionDisplayName({
       permission_key: "reviews.read",
       permission_name: "Read reviews",
     }),
-    "查看评审权限",
+    "查看评审（reviews.read）",
+  );
+  assert.equal(
+    getPermissionDisplayName({
+      permission_key: "k.product_knowledge.read",
+      module_key: "k.product_knowledge",
+      action: "read",
+      label: "Read product knowledge",
+    }),
+    "查看产品知识（k.product_knowledge.read）",
+  );
+  // 没登记中文的键回退到「动作+模块（键）」，不裸露英文标签。
+  assert.equal(
+    getPermissionDisplayName({
+      permission_key: "x.future.read",
+      module_key: "x.future",
+      action: "read",
+      label: "",
+    }),
+    "查看x.future（x.future.read）",
   );
   assert.equal(getPermissionUiCategory(ordinaryPermission), "feature");
   assert.equal(getPermissionUiCategory(highRiskPermission), "control_plane");

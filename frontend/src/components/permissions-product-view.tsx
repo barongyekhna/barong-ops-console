@@ -24,7 +24,7 @@ import {
   getPermissionCategoryLabel,
   getPermissionDisplayName,
   getPermissionUiCategory,
-  permissionModuleLabel,
+  permissionModuleGroupTitle,
   grantUserPermissionAssignment,
   listPermissionRegistry,
   listUserPermissionAssignments,
@@ -205,7 +205,7 @@ export function PermissionsProductView() {
     return Array.from(buckets.entries())
       .map(([moduleKey, items]) => ({
         moduleKey,
-        label: permissionModuleLabel(moduleKey),
+        label: permissionModuleGroupTitle(moduleKey),
         items,
       }))
       .sort(

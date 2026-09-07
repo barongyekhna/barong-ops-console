@@ -20,15 +20,27 @@ FEATURE_PERMISSION_MODULES = frozenset(
 )
 
 
+# Registry categories that are grantable to ordinary staff. Everything a
+# business module registers ("business") is a feature permission; only the
+# platform's own "admin"/"system" rows are control plane. Before 2026-09-07 this
+# ignored the registry category and only the four modules above counted as
+# feature, so the 42 K/F/I/P/GEO/SEO/B2B/M permissions rendered as read-only
+# "系统权限" cards and could never be assigned from the UI.
+FEATURE_REGISTRY_CATEGORIES = frozenset({"business", "feature"})
+
+
 def permission_response_category(
     *,
     module_key: str,
     permission_key: str,
+    category: str | None = None,
 ) -> PermissionResponseCategory:
     normalized_module = module_key.strip().lower()
     permission_prefix = permission_key.split(".", 1)[0].strip().lower()
+    normalized_category = (category or "").strip().lower()
     if (
-        normalized_module in FEATURE_PERMISSION_MODULES
+        normalized_category in FEATURE_REGISTRY_CATEGORIES
+        or normalized_module in FEATURE_PERMISSION_MODULES
         or permission_prefix in FEATURE_PERMISSION_MODULES
     ):
         return "feature"
