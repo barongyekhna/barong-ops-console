@@ -321,3 +321,13 @@
   .keyRow { grid-template-columns: minmax(0, 1fr); }
   .status { grid-column: 1; grid-row: auto; justify-self: start; }
 }
+
+/* 业务 worker 回报的运行时事故（余额 0 / 套餐额度用完） */
+.incidentNote {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-error);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

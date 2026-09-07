@@ -33,6 +33,12 @@ logger = logging.getLogger(__name__)
 
 RUN_LOCK_ID = 1_264_938_312
 NOTIFICATION_REPEAT_AFTER = timedelta(hours=24)
+# 业务 worker 回报的「运行时事故」（余额 0 / 套餐额度用完）在 state.details 里的键。
+# 定时探针都是零消耗的，看不见这两种情况；事故未过期前探针的 healthy 不能把它冲绿。
+RUNTIME_INCIDENT_KEY = "runtime_incident"
+RUNTIME_INCIDENT_TTL = timedelta(hours=24)
+RUNTIME_INCIDENT_STATUS = "provider_error"
+RUNTIME_RECOVERED_REASON = "runtime_call_ok"
 ABANDONED_RUN_AFTER = timedelta(minutes=20)
 DEFAULT_PROBE_CONCURRENCY = 4
 MAX_PROBE_CONCURRENCY = 8
@@ -311,12 +317,6 @@ def _persist_result(
         )
         previous_status = state.current_status if state is not None else None
         previous_notified_at = state.last_notified_at if state is not None else None
-        notify = _should_notify(
-            previous_status=previous_status,
-            previous_notified_at=previous_notified_at,
-            new_status=result.status,
-            now=now,
-        )
         if state is None:
             state = KeyHealthState(
                 key_id=target.key_id,
@@ -333,16 +333,32 @@ def _persist_result(
             )
             db.add(state)
 
+        incident = _active_runtime_incident(state.details_json, now=now)
+        effective_status = result.status
+        effective_reason = result.reason_code
+        if incident is not None:
+            # 探针零消耗看不见余额/套餐，业务侧回报的事故未过期前不许冲绿。
+            state_details[RUNTIME_INCIDENT_KEY] = incident
+            if result.status == HEALTHY:
+                effective_status = RUNTIME_INCIDENT_STATUS
+                effective_reason = str(incident.get("reason_code") or result.reason_code)
+        notify = _should_notify(
+            previous_status=previous_status,
+            previous_notified_at=previous_notified_at,
+            new_status=effective_status,
+            now=now,
+        )
+
         state.org_id = target.org_id
         state.key_name = target.name
         state.key_hash_prefix = target.key_hash_prefix
         state.key_type = target.key_type
         state.adapter = result.adapter
-        state.current_status = result.status
-        state.reason_code = result.reason_code
+        state.current_status = effective_status
+        state.reason_code = effective_reason
         state.last_checked_at = now
         state.details_json = state_details
-        if result.status == HEALTHY:
+        if effective_status == HEALTHY:
             state.last_success_at = now
             state.consecutive_failures = 0
         else:
@@ -350,7 +366,7 @@ def _persist_result(
             state.consecutive_failures = int(state.consecutive_failures or 0) + 1
 
         if notify:
-            recovered = result.status == HEALTHY and previous_status != HEALTHY
+            recovered = effective_status == HEALTHY and previous_status != HEALTHY
             level, event_type, title, body = _notification_text(
                 target,
                 result,
@@ -376,6 +392,200 @@ def _persist_result(
                 )
             if owner_user_ids:
                 state.last_notified_at = now
+
+
+# ------------------------------------------------- runtime incident reports
+def _parse_iso(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _active_runtime_incident(
+    details: dict[str, object] | None,
+    *,
+    now: datetime,
+) -> dict[str, object] | None:
+    incident = (details or {}).get(RUNTIME_INCIDENT_KEY)
+    if not isinstance(incident, dict):
+        return None
+    expires_at = _parse_iso(incident.get("expires_at"))
+    if expires_at is None or expires_at <= now:
+        return None
+    return dict(incident)
+
+
+def _active_keys_of_type(db: Session, key_type: str) -> list[ApiKeyRecord]:
+    keys = list(
+        db.scalars(
+            select(ApiKeyRecord)
+            .where(ApiKeyRecord.status == "active")
+            .order_by(ApiKeyRecord.id.asc())
+        )
+    )
+    matched: list[ApiKeyRecord] = []
+    for row in keys:
+        try:
+            inferred = infer_key_type_from_record(
+                name=row.name,
+                url=row.url,
+                metadata=dict(row.metadata_json or {}),
+            )
+        except Exception:
+            continue
+        if inferred == key_type:
+            matched.append(row)
+    return matched
+
+
+def report_runtime_incident(
+    *,
+    key_type: str,
+    reason_code: str,
+    message: str,
+    source: str = "worker",
+    ttl: timedelta = RUNTIME_INCIDENT_TTL,
+) -> int:
+    """业务调用撞上「余额不足 / 套餐额度用完」时由 worker 回报。
+
+    定时探针零消耗，看不见这两种事故（DeepSeek models 列表照样 200、1688 只探
+    网关可达），2026-09-05 就这样绿了三天。回报后 state 立刻变 provider_error，
+    事故带 24h 过期时间，期间探针的 healthy 不冲绿；同 provider 一次业务成功
+    调 report_runtime_recovered 清掉。不建 KeyHealthCheck 行（(run_id,key_id)
+    唯一约束是给定时探针的）。返回命中的 key 数。
+    """
+    now = utc_now()
+    owner_user_ids = _owner_user_ids()
+    incident = {
+        "reason_code": reason_code,
+        "message": str(message)[:500],
+        "source": source,
+        "reported_at": now.isoformat(),
+        "expires_at": (now + ttl).isoformat(),
+    }
+    with without_org_data_isolation(), managed_session() as db:
+        keys = _active_keys_of_type(db, key_type)
+        for key in keys:
+            state = db.scalar(
+                select(KeyHealthState).where(KeyHealthState.key_id == key.key_id)
+            )
+            previous_status = state.current_status if state is not None else None
+            previous_notified_at = state.last_notified_at if state is not None else None
+            if state is None:
+                state = KeyHealthState(
+                    key_id=key.key_id,
+                    org_id=key.org_id,
+                    key_name=key.name,
+                    key_hash_prefix=key.key_hash_prefix,
+                    key_type=key_type,
+                    adapter=key_type,
+                    current_status=RUNTIME_INCIDENT_STATUS,
+                    reason_code=reason_code,
+                    last_checked_at=now,
+                    consecutive_failures=0,
+                    details_json={},
+                )
+                db.add(state)
+            details = dict(state.details_json or {})
+            details[RUNTIME_INCIDENT_KEY] = incident
+            state.details_json = details
+            state.current_status = RUNTIME_INCIDENT_STATUS
+            state.reason_code = reason_code
+            state.last_failure_at = now
+            state.consecutive_failures = int(state.consecutive_failures or 0) + 1
+            if _should_notify(
+                previous_status=previous_status,
+                previous_notified_at=previous_notified_at,
+                new_status=RUNTIME_INCIDENT_STATUS,
+                now=now,
+            ):
+                identity = f"{key.name} (hash {key.key_hash_prefix})"
+                for owner_user_id in owner_user_ids:
+                    create_notification(
+                        db,
+                        event_type="key_health.failed",
+                        title="密钥运行时告警",
+                        body=f"{identity} 业务调用报 {reason_code}：{incident['message'][:200]}",
+                        level="error",
+                        source="key.health",
+                        org_id=key.org_id,
+                        recipient_user_id=owner_user_id,
+                        external_refs={"url": "/key-health"},
+                        payload={
+                            "key_hash_prefix": key.key_hash_prefix,
+                            "status": RUNTIME_INCIDENT_STATUS,
+                            "reason_code": reason_code,
+                            "adapter": state.adapter,
+                            "runtime_source": source,
+                        },
+                    )
+                if owner_user_ids:
+                    state.last_notified_at = now
+        return len(keys)
+
+
+def report_runtime_recovered(*, key_type: str, source: str = "worker") -> int:
+    """同 provider 一次业务调用成功：清掉运行时事故，状态回 healthy。"""
+    now = utc_now()
+    owner_user_ids = _owner_user_ids()
+    with without_org_data_isolation(), managed_session() as db:
+        keys = _active_keys_of_type(db, key_type)
+        cleared = 0
+        for key in keys:
+            state = db.scalar(
+                select(KeyHealthState).where(KeyHealthState.key_id == key.key_id)
+            )
+            if state is None:
+                continue
+            details = dict(state.details_json or {})
+            if RUNTIME_INCIDENT_KEY not in details:
+                continue
+            details.pop(RUNTIME_INCIDENT_KEY, None)
+            details["runtime_recovered_at"] = now.isoformat()
+            details["runtime_recovered_source"] = source
+            previous_status = state.current_status
+            previous_notified_at = state.last_notified_at
+            state.details_json = details
+            state.current_status = HEALTHY
+            state.reason_code = RUNTIME_RECOVERED_REASON
+            state.last_success_at = now
+            state.consecutive_failures = 0
+            cleared += 1
+            if _should_notify(
+                previous_status=previous_status,
+                previous_notified_at=previous_notified_at,
+                new_status=HEALTHY,
+                now=now,
+            ):
+                identity = f"{key.name} (hash {key.key_hash_prefix})"
+                for owner_user_id in owner_user_ids:
+                    create_notification(
+                        db,
+                        event_type="key_health.recovered",
+                        title="密钥检测已恢复",
+                        body=f"{identity} 业务调用已恢复正常（{source}）。",
+                        level="success",
+                        source="key.health",
+                        org_id=key.org_id,
+                        recipient_user_id=owner_user_id,
+                        external_refs={"url": "/key-health"},
+                        payload={
+                            "key_hash_prefix": key.key_hash_prefix,
+                            "status": HEALTHY,
+                            "reason_code": RUNTIME_RECOVERED_REASON,
+                            "adapter": state.adapter,
+                            "runtime_source": source,
+                        },
+                    )
+                if owner_user_ids:
+                    state.last_notified_at = now
+        return cleared
 
 
 def _finish_run(

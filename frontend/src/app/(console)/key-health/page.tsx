@@ -90,6 +90,9 @@ const reasonLabels: Record<string, string> = {
   secret_decryption_failed: "密钥解密失败",
   access_token_expired: "访问令牌已过期",
   oauth_refresh_rejected: "OAuth 刷新失败",
+  provider_credits_exhausted: "余额已耗尽（需充值）",
+  provider_quota_exhausted: "套餐额度用完（业务调用回报）",
+  runtime_call_ok: "业务调用已恢复正常",
 };
 
 function statusClass(status: string) {
@@ -119,6 +122,29 @@ function formatTime(value: string | null) {
 function detailNumber(item: HealthItem, key: string) {
   const value = item.details[key];
   return typeof value === "number" ? value : null;
+}
+
+// DeepSeek 探针附带的余额：{ currency, total_balance }。
+function detailBalance(item: HealthItem) {
+  const value = item.details.balance;
+  if (!value || typeof value !== "object") return null;
+  const record = value as { currency?: unknown; total_balance?: unknown };
+  if (typeof record.total_balance !== "number") return null;
+  const currency = typeof record.currency === "string" ? record.currency : "";
+  return `${record.total_balance.toFixed(2)}${currency ? ` ${currency}` : ""}`;
+}
+
+// 业务 worker 回报的运行时事故（余额 0 / 套餐额度用完），探针看不见的那种。
+function detailIncident(item: HealthItem) {
+  const value = item.details.runtime_incident;
+  if (!value || typeof value !== "object") return null;
+  const record = value as { message?: unknown; source?: unknown; reported_at?: unknown };
+  const message = typeof record.message === "string" ? record.message : "";
+  if (!message) return null;
+  const source = typeof record.source === "string" ? record.source : "worker";
+  const reportedAt =
+    typeof record.reported_at === "string" ? ` · ${formatTime(record.reported_at)}` : "";
+  return `${source} 回报：${message}${reportedAt}`;
 }
 
 export default function KeyHealthPage() {
@@ -251,6 +277,8 @@ export default function KeyHealthPage() {
           {orderedItems.map((item) => {
             const latency = detailNumber(item, "latency_ms");
             const tokensLeft = detailNumber(item, "tokens_left");
+            const balance = detailBalance(item);
+            const incident = detailIncident(item);
             return (
               <article className={styles.keyRow} key={item.key_id}>
                 <div className={styles.keyIdentity}>
@@ -276,7 +304,9 @@ export default function KeyHealthPage() {
                     {formatTime(item.last_checked_at)}
                     {latency !== null ? ` · ${latency} ms` : ""}
                     {tokensLeft !== null ? ` · ${tokensLeft} tokens` : ""}
+                    {balance ? ` · 余额 ${balance}` : ""}
                   </span>
+                  {incident ? <span className={styles.incidentNote}>{incident}</span> : null}
                 </div>
 
                 <div className={`${styles.status} ${statusClass(item.status)}`}>

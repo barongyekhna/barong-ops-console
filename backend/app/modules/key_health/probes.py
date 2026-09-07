@@ -230,6 +230,9 @@ def _status_from_http(
         )
     if response.status_code in {401, 403}:
         status, reason = "invalid", "authentication_rejected"
+    elif response.status_code == 402:
+        # OpenAI 兼容口的「余额不足」（DeepSeek: {"error":{"message":"Insufficient Balance"}}）。
+        status, reason = "provider_error", "provider_credits_exhausted"
     elif response.status_code == 429:
         status, reason = "rate_limited", "provider_rate_limited"
     elif response.status_code >= 500:
@@ -288,6 +291,19 @@ def _probe_openai_compatible(
                 http_status=response.status_code,
             )
         details["models_visible"] = len(models)
+        if adapter == "deepseek":
+            # models 列表在余额 0 时照样 200（2026-09-04 假绿 17.5 万条 402），
+            # 再查一次零消耗的 /user/balance 才算真健康。
+            balance_result = _deepseek_balance_check(
+                target,
+                adapter=adapter,
+                started=started,
+                details=details,
+                enforce_public_network=enforce_public_network,
+                transport=transport,
+            )
+            if balance_result is not None:
+                return balance_result
     return _status_from_http(
         adapter=adapter,
         started=started,
@@ -295,6 +311,84 @@ def _probe_openai_compatible(
         success_reason="models_list_ok",
         details=details,
     )
+
+
+def _deepseek_balance_url(base_url: str) -> str:
+    parsed = urlsplit(base_url)
+    return urlunsplit((parsed.scheme, parsed.netloc, "/user/balance", "", ""))
+
+
+def _deepseek_balance_check(
+    target: ProbeTarget,
+    *,
+    adapter: str,
+    started: float,
+    details: dict[str, Any],
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> ProbeResult | None:
+    """DeepSeek 余额：GET /user/balance → {"is_available": bool, "balance_infos": [...]}.
+
+    余额为 0 或 is_available=false → provider_error/provider_credits_exhausted。
+    余额接口本身不通（非 200 / 解析失败）不算探针失败，只在 details 里记一笔，
+    让 models 列表的判定照旧。
+    """
+    try:
+        response = _request(
+            "GET",
+            _deepseek_balance_url(target.url),
+            allowed_hosts=DEEPSEEK_HOSTS,
+            enforce_public_network=enforce_public_network,
+            transport=transport,
+            headers={"Authorization": f"Bearer {target.secret_value}"},
+        )
+    except Exception:
+        details["balance_probe"] = "unreachable"
+        return None
+    if response.status_code == 402:
+        details["balance_probe"] = "http_402"
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="provider_error",
+            reason_code="provider_credits_exhausted",
+            http_status=402,
+            details=details,
+        )
+    payload = _json_dict(response)
+    if response.status_code != 200 or payload is None:
+        details["balance_probe"] = f"http_{response.status_code}"
+        return None
+    infos = payload.get("balance_infos")
+    total_balance: float | None = None
+    currency: str | None = None
+    if isinstance(infos, list):
+        for item in infos:
+            if not isinstance(item, dict):
+                continue
+            try:
+                value = float(str(item.get("total_balance", "")).strip() or "nan")
+            except ValueError:
+                continue
+            if value != value:  # NaN
+                continue
+            if total_balance is None or value > total_balance:
+                total_balance = value
+                currency = str(item.get("currency") or "") or None
+    available = payload.get("is_available")
+    details["balance"] = {"currency": currency, "total_balance": total_balance}
+    details["balance_probe"] = "ok"
+    exhausted = available is False or (total_balance is not None and total_balance <= 0)
+    if exhausted:
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="provider_error",
+            reason_code="provider_credits_exhausted",
+            http_status=200,
+            details=details,
+        )
+    return None
 
 
 def _probe_serper(
