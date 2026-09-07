@@ -20,7 +20,6 @@ from r_system_v2.rw.core.models import (
     ProductState,
     RuleDecision,
     RuleEvaluation,
-    utc_now_iso,
 )
 from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.processor.feature_extractor import extract_product_features
@@ -213,20 +212,10 @@ class KeepaWorker:
             ]
             product.category_id = record.category_id
             self._apply_category_bestseller_rank(record.category_id, product)
-        if self.deepseek_skill is not None and hasattr(self.deepseek_skill, "translate_title"):
-            translation = await asyncio.to_thread(
-                self.deepseek_skill.translate_title,
-                product.title,
-            )
-            if getattr(translation, "title_zh", None):
-                product.title_zh = translation.title_zh
-                product.title_zh_source = translation.source
-                product.title_zh_updated_at = utc_now_iso()
-            product.features["title_translation"] = (
-                translation.to_dict()
-                if hasattr(translation, "to_dict")
-                else {"source": "deepseek_translation_unavailable"}
-            )
+        # 2026-09-07 起 R-W 不再逐个产品调模型翻译标题：抓回来的绝大多数会被
+        # 规则/初筛/R-A 筛掉，逐个翻是白烧 token。中文名改由 R-A 抽词那一次
+        # DeepSeek 调用顺带产出（只对走到付费搜索的产品），见
+        # r_system_v2/ra/profit_service.persist_title_zh。
         transitions.append(ProductState.ENRICHED.value)
 
         if is_holiday_category_id(record.category_id):

@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
-from r_system_v2.rw.ai.model_config import rw_deepseek_model
+from r_system_v2.rw.ai.model_config import deepseek_thinking_extras, rw_deepseek_model
 from r_system_v2.rw.core.models import DeepSeekScreening, NormalizedProduct
 
 
@@ -99,20 +99,6 @@ class DeepSeekBatchResult:
         }
 
 
-@dataclass(frozen=True)
-class DeepSeekTitleTranslation:
-    title_zh: str | None
-    source: str
-    error: str | None = None
-
-    def to_dict(self) -> dict[str, str | None]:
-        return {
-            "title_zh": self.title_zh,
-            "source": self.source,
-            "error": self.error,
-        }
-
-
 class DeepSeekScreeningSkill:
     """Rule-based batch processor for the documented DeepSeek AI-1 contract."""
 
@@ -148,71 +134,9 @@ class DeepSeekScreeningSkill:
     def api_key_configured(self) -> bool:
         return bool(self.current_api_key())
 
-    def translate_title(self, title: str) -> DeepSeekTitleTranslation:
-        cleaned = " ".join(str(title or "").split())
-        if not cleaned:
-            return DeepSeekTitleTranslation(
-                title_zh=None,
-                source="empty_title",
-                error="empty_title",
-            )
-        api_key = self.current_api_key()
-        if not api_key:
-            return DeepSeekTitleTranslation(
-                title_zh=None,
-                source="deepseek_key_missing",
-                error="deepseek_api_key_missing",
-            )
-        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-        model = rw_deepseek_model()
-        timeout = _float_env("RW_DEEPSEEK_TRANSLATION_TIMEOUT_SECONDS", 8.0)
-        payload = {
-            "model": model,
-            "temperature": 0,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "你是电商产品标题翻译器。只输出简体中文产品名，"
-                        "不要解释，不要加引号，不要输出品牌判断。"
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"翻译这个 Amazon 产品标题：{cleaned}",
-                },
-            ],
-        }
-        request = Request(
-            f"{base_url}/chat/completions",
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=timeout) as response:  # nosec B310 - fixed DeepSeek URL.
-                data = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
-            return DeepSeekTitleTranslation(
-                title_zh=None,
-                source="deepseek_api_error",
-                error=str(exc)[:240],
-            )
-        translated = _extract_translation_text(data)
-        if not translated:
-            return DeepSeekTitleTranslation(
-                title_zh=None,
-                source="deepseek_empty_response",
-                error="deepseek_empty_response",
-            )
-        return DeepSeekTitleTranslation(
-            title_zh=translated,
-            source="deepseek_realtime_title_translation",
-        )
+    # 2026-09-07 删掉了 translate_title：R-W 不再逐个产品调模型翻译标题，
+    # 中文名由 R-A 抽词那一次调用顺带产出（r_system_v2/ra/profit_service.persist_title_zh）。
+    # 本类只剩形态初筛（_deepseek_form_reject），且只在命中风险词时才出网。
 
     def _policy_reject_reason(self, product: NormalizedProduct) -> str | None:
         """决定该产品是否属于食品/液体/粉末/喷雾/杀虫等剔除类型。
@@ -259,6 +183,7 @@ class DeepSeekScreeningSkill:
         payload = {
             "model": model,
             "temperature": 0,
+            **deepseek_thinking_extras(model),
             "messages": [
                 {
                     "role": "system",

@@ -653,8 +653,8 @@ function ProductsTable({
                       <ProductImage product={product} />
                     </div>
                     <div>
-                      <strong>{product.title_zh ?? "中文名翻译中"}</strong>
-                      <span>{product.title}</span>
+                      <strong>{product.title_zh ?? product.title}</strong>
+                      <span>{product.title_zh ? product.title : "中文名待 R-A 选中后翻译"}</span>
                       <span className={styles.metaLine}>
                         <AsinTag asin={product.asin} />
                         <span>{product.brand ?? "未知品牌"}</span>

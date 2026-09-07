@@ -14,11 +14,13 @@ from urllib.request import Request, urlopen
 from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
+from r_system_v2.ra import key_health_bridge
 from r_system_v2.ra.profit_engine import decimal_value
-from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.providers import RAnalysisProviderBinding, ra_deepseek_model
+from r_system_v2.rw.ai.model_config import deepseek_thinking_extras
 
 
-SKILL_VERSION = "ra-supplier-keyword-2026-07-08"
+SKILL_VERSION = "ra-supplier-keyword-2026-09-07"
 SKILL_DOC_PATH = Path(__file__).resolve().parents[1] / "docs" / "ra_supplier_keyword_skill.md"
 
 PACK_UNIT_LABELS = {
@@ -148,11 +150,26 @@ def build_supplier_keyword_profile(
     try:
         response = _call_deepseek_keyword_profile(api_key=api_key, product=product)
     except Exception as exc:
+        if is_deepseek_credits_exhausted(exc):
+            # 余额 0 是账户级事故：定时探针看不见（models 列表照样 200），
+            # 只能由这里回报，健康页才会变红。
+            key_health_bridge.report_incident(
+                key_type="deepseek",
+                reason_code=key_health_bridge.REASON_CREDITS_EXHAUSTED,
+                message=str(exc)[:300],
+            )
         raise RuntimeError(f"DeepSeek 关键词提取失败，已禁止降级启发式：{str(exc)[:180]}") from exc
 
+    key_health_bridge.report_recovered(key_type="deepseek")
     merged = {**fallback, **_dict_value(response)}
     merged["source"] = "deepseek"
     return sanitize_keyword_profile(merged, product=product)
+
+
+def is_deepseek_credits_exhausted(exc: BaseException | str) -> bool:
+    """DeepSeek 余额耗尽：HTTP 402 {"error":{"message":"Insufficient Balance"}}。"""
+    text = str(exc)
+    return "HTTP 402" in text or "insufficient balance" in text.lower()
 
 
 def sanitize_keyword_profile(
@@ -227,6 +244,8 @@ def sanitize_keyword_profile(
         "source": str(profile.get("source") or fallback.get("source") or "heuristic"),
         "brand": brand,
         "forbidden_terms": forbidden,
+        # 抽词那一次调用顺带翻出的中文完整产品名；R-W 不再逐个翻译（2026-09-07）。
+        "title_zh": _clean_title_zh(profile.get("title_zh")),
         "product_type": str(profile.get("product_type") or fallback.get("product_type") or "").strip(),
         "product_type_zh": product_type_zh,
         "core_keywords_zh": core_keywords,
@@ -618,7 +637,8 @@ def _call_deepseek_keyword_profile(*, api_key: str, product: dict[str, Any]) -> 
         "instruction": "按 skill 抽取无品牌供应商搜索关键词和变体对齐要素，返回严格 JSON。",
     }
     body = {
-        "model": os.getenv("RA_DEEPSEEK_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+        "model": ra_deepseek_model(),
+        **deepseek_thinking_extras(ra_deepseek_model()),
         "temperature": 0.1,
         "messages": [
             {
@@ -687,7 +707,8 @@ def _call_deepseek_supplier_alignment(
         ),
     }
     body = {
-        "model": os.getenv("RA_DEEPSEEK_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+        "model": ra_deepseek_model(),
+        **deepseek_thinking_extras(ra_deepseek_model()),
         "temperature": 0,
         "messages": [
             {
@@ -1247,6 +1268,16 @@ def _money(value: Decimal) -> Decimal:
 def _decimal_number(value: Any) -> float | None:
     parsed = decimal_value(value)
     return float(parsed) if parsed is not None else None
+
+
+def _clean_title_zh(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(value.replace("\n", " ").split()).strip(" '\"“”")
+    if not cleaned or not re.search(r"[一-鿿]", cleaned):
+        # 没有一个汉字就不是翻译，宁可留空让 UI 显示英文标题。
+        return None
+    return cleaned[:160]
 
 
 def _deepseek_keyword_enabled() -> bool:

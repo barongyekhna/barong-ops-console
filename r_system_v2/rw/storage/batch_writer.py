@@ -17,6 +17,9 @@ from sqlalchemy.orm import Session
 from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.core.models import PipelineResult
 
+# 中文名三列由 R-A 写入，R-W upsert 只在新值非空时覆盖（见 _bulk_upsert_products）。
+TITLE_ZH_COLUMNS = frozenset({"title_zh", "title_zh_source", "title_zh_updated_at"})
+
 
 metadata = sa.MetaData()
 rw_product_state = postgresql.ENUM(
@@ -205,8 +208,15 @@ class SQLAlchemyBatchWriter:
         update_columns = {
             column.name: getattr(excluded, column.name)
             for column in products_rw.c
-            if column.name not in {"asin", "created_at"}
+            if column.name not in {"asin", "created_at"} | TITLE_ZH_COLUMNS
         }
+        # 中文名由 R-A 选中后写入（2026-09-07 起 R-W 不再翻译）；重抓同一 ASIN
+        # 时 R-W 侧永远是 NULL，全列覆盖会把已有翻译冲掉——只在新值非空时才覆盖。
+        for column_name in TITLE_ZH_COLUMNS:
+            update_columns[column_name] = sa.func.coalesce(
+                getattr(excluded, column_name),
+                getattr(products_rw.c, column_name),
+            )
         db.execute(
             statement.on_conflict_do_update(
                 index_elements=[products_rw.c.asin],

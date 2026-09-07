@@ -549,9 +549,11 @@ function AutoResultRow({ item }: { item: RaAutoProfitItem }) {
         </span>
       </td>
       <td>
-        <strong>{item.title_zh || "等待中文名"}</strong>
+        <strong>{item.title_zh || item.title || "未记录标题"}</strong>
         <ProductPackBadge item={item} />
-        <span className={styles.compactText}>{item.title || "未记录英文标题"}</span>
+        <span className={styles.compactText}>
+          {item.title_zh ? item.title || "未记录英文标题" : "中文名待 R-A 选中后翻译"}
+        </span>
         <span>{item.category || "未标注类目"}</span>
         <MonthlySalesBadge item={item} />
         <span>

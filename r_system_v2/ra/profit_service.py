@@ -293,6 +293,56 @@ def _ensure_candidate(
     )
 
 
+TITLE_ZH_SOURCE_RA_KEYWORD_PROFILE = "ra_keyword_profile"
+
+
+def persist_title_zh(
+    db: Session,
+    *,
+    asin: str,
+    title_zh: str,
+    source: str = TITLE_ZH_SOURCE_RA_KEYWORD_PROFILE,
+    candidate_id: str | None = None,
+) -> bool:
+    """把 R-A 抽词顺带产出的中文名写回 R-W 产品行（只填空，不覆盖已有翻译）。
+
+    2026-09-07 起 R-W 不再逐个产品调模型翻译，中文名只在产品走到 R-A 付费搜索
+    这一步时由抽词那一次 DeepSeek 调用顺手带出来——不多花一次 API。
+    """
+    cleaned = " ".join(str(title_zh or "").split()).strip(" '\"“”")[:160]
+    normalized_asin = str(asin or "").strip().upper()
+    if not cleaned or not normalized_asin:
+        return False
+    result = db.execute(
+        text(
+            """
+            UPDATE products_rw
+            SET title_zh = :title_zh,
+                title_zh_source = :source,
+                title_zh_updated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE asin = :asin
+              AND (title_zh IS NULL OR title_zh = '')
+            """
+        ),
+        {"asin": normalized_asin, "title_zh": cleaned, "source": source},
+    )
+    if candidate_id:
+        db.execute(
+            text(
+                """
+                UPDATE ra_candidates
+                SET title_zh = :title_zh, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :candidate_id
+                  AND (title_zh IS NULL OR title_zh = '')
+                """
+            ),
+            {"candidate_id": candidate_id, "title_zh": cleaned},
+        )
+    db.commit()
+    return bool(getattr(result, "rowcount", 0))
+
+
 def _ensure_candidate_for_run(
     db: Session,
     *,

@@ -84,6 +84,7 @@ R-A 利润测算只寻找可销售的同类产品供应商，不寻找品牌同�
 {
   "brand": "需要禁用的品牌名",
   "forbidden_terms": ["品牌或商标词"],
+  "title_zh": "简体中文完整产品名（不超过 60 字，不含品牌，供人看的商品名而非搜索词）",
   "product_type": "short English product type",
   "product_type_zh": "中文产品主体词",
   "core_keywords_zh": ["中文主体词", "必要属性词"],
