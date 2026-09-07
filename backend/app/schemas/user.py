@@ -14,7 +14,6 @@ from pydantic import (
 from ..core.roles import get_role_display_metadata, normalize_role
 
 ManagedUserRole = str
-DEFAULT_INITIAL_PASSWORD = "123456"
 
 # Length of the one-time random initial password handed to the creator when a
 # managed user is created. Kept comfortably above the 12-char minimum enforced
@@ -26,11 +25,13 @@ INITIAL_PASSWORD_LENGTH = 16
 def generate_initial_password() -> str:
     """Return a random, URL-safe one-time initial password (no fixed default).
 
-    Used instead of DEFAULT_INITIAL_PASSWORD so a newly created account cannot
+    Replaces the old fixed "123456" default so a newly created account cannot
     be taken over by anyone who merely knows the username. The plaintext is
     returned to the creator exactly once (never stored in cleartext).
     """
     return secrets.token_urlsafe(INITIAL_PASSWORD_LENGTH)
+
+
 USER_MANAGEMENT_ROLES = (
     "owner",
     "super_admin",

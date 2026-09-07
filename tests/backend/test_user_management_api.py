@@ -19,7 +19,7 @@ from backend.app.core.security import hash_password, verify_password
 from backend.app.db.session import SessionLocal
 from backend.app.models.operation_log import OperationLog
 from backend.app.models.user import User
-from backend.app.schemas.user import DEFAULT_INITIAL_PASSWORD, USER_MANAGEMENT_ROLES
+from backend.app.schemas.user import USER_MANAGEMENT_ROLES
 
 VIEWER_USERNAME = "managed_viewer"
 VIEWER_PASSWORD = "example-only-viewer-password"
@@ -239,7 +239,8 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
 
     assert stored_user is not None
     assert stored_user.password_hash != VIEWER_PASSWORD
-    assert verify_password(DEFAULT_INITIAL_PASSWORD, stored_user.password_hash)
+    assert created["initial_password"] != "123456"
+    assert verify_password(created["initial_password"], stored_user.password_hash)
     assert stored_user.must_change_password is True
     assert create_log is not None
     assert create_log.actor_type == "user"
@@ -517,6 +518,7 @@ def test_owner_updates_disables_enables_and_resets_user_password(
 ) -> None:
     created = create_user_via_api(owner_client)
     user_id = created["id"]
+    initial_password = created["initial_password"]
 
     updated = owner_client.patch(
         f"/api/app/users/{user_id}",
@@ -537,12 +539,12 @@ def test_owner_updates_disables_enables_and_resets_user_password(
     disabled = owner_client.post(f"/api/app/users/{user_id}/disable")
     disabled_login = owner_client.post(
         "/api/public/auth/login",
-        json={"username": VIEWER_USERNAME, "password": DEFAULT_INITIAL_PASSWORD},
+        json={"username": VIEWER_USERNAME, "password": initial_password},
     )
     enabled = owner_client.post(f"/api/app/users/{user_id}/enable")
     old_login_before_reset = owner_client.post(
         "/api/public/auth/login",
-        json={"username": VIEWER_USERNAME, "password": DEFAULT_INITIAL_PASSWORD},
+        json={"username": VIEWER_USERNAME, "password": initial_password},
     )
     reset = owner_client.post(
         f"/api/app/users/{user_id}/reset-password",
@@ -550,7 +552,7 @@ def test_owner_updates_disables_enables_and_resets_user_password(
     )
     old_login_after_reset = owner_client.post(
         "/api/public/auth/login",
-        json={"username": VIEWER_USERNAME, "password": DEFAULT_INITIAL_PASSWORD},
+        json={"username": VIEWER_USERNAME, "password": initial_password},
     )
     new_login_after_reset = owner_client.post(
         "/api/public/auth/login",

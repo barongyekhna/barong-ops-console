@@ -25,7 +25,6 @@ from ..repositories.users import (
 )
 from ..schemas.user import (
     BotCreate,
-    DEFAULT_INITIAL_PASSWORD,
     UserCreate,
     UserUpdate,
     generate_initial_password,

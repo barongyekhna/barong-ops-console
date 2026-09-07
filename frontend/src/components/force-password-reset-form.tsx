@@ -8,12 +8,14 @@ import { useAuth } from "@/components/auth-provider";
 import { ApiError } from "@/lib/api";
 import { requiresPasswordChange } from "@/lib/auth";
 
-const DEFAULT_INITIAL_PASSWORD = "123456";
 const PASSWORD_LENGTH_MESSAGE = "新密码至少需要 12 个字符。";
 
 function messageFromError(error: unknown) {
   if (error instanceof ApiError && error.status === 401) {
     return "请重新登录后再操作。";
+  }
+  if (error instanceof ApiError && error.status === 400) {
+    return "当前密码不正确，请核对管理员交给你的初始密码。";
   }
   return "密码修改未完成，请重试。";
 }
@@ -41,10 +43,6 @@ export function ForcePasswordResetForm() {
     event.preventDefault();
     setError("");
 
-    if (currentPassword !== DEFAULT_INITIAL_PASSWORD) {
-      setError("当前密码必须与初始密码一致。");
-      return;
-    }
     if (newPassword.length < 12) {
       setError(PASSWORD_LENGTH_MESSAGE);
       return;
@@ -83,7 +81,7 @@ export function ForcePasswordResetForm() {
             <span className="eyebrow">密码重置</span>
             <h1>修改密码</h1>
             <small>
-              首次登录默认密码为 123456，请修改后继续使用系统
+              首次登录请把管理员交给你的一次性初始密码改成自己的密码，改完才能进入系统
             </small>
           </div>
         </div>

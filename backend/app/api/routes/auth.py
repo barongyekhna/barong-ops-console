@@ -165,7 +165,7 @@ def login(
         auth_complete=True,
         require_password_change=authenticated_user.must_change_password,
         message=(
-            "首次登录默认密码为123456，请立即修改密码"
+            "首次登录请先把一次性初始密码改成自己的密码"
             if authenticated_user.must_change_password
             else None
         ),
