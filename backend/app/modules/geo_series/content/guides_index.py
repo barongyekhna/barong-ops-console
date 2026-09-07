@@ -293,7 +293,12 @@ def collect_published_groups(db: Session) -> list[dict[str, Any]]:
             GeoContentItem.item_type,
         )
         .join(GeoContentItem, GeoContentItem.cluster_id == GeoContentCluster.id)
+        # published_url 非空只说明「写进过 WP」。n8n 首推刻意落草稿，等人手动
+        # 发布；草稿的 published_url 是 ``?p=<id>``，访客打开是 404。2026-09-06
+        # H 哨兵报的 7 条死链就是这么来的——目录页把草稿当上线文章列了出来。
+        # 只认 live_state 同步回来的 ``wp_status == "publish"``，和内链网同一把尺。
         .where(GeoContentItem.published_url.is_not(None))
+        .where(GeoContentItem.wp_status == "publish")
         .order_by(GeoContentCluster.created_at, GeoContentItem.item_type)
     ).all()
 

@@ -1842,6 +1842,19 @@ def test_related_guides_requires_a_real_publish_status() -> None:
     assert "wp_bridge" not in src and "httpx" not in src
 
 
+def test_guides_hub_only_lists_articles_wordpress_says_are_live() -> None:
+    """2026-09-06: H 哨兵报 7 条死链，全是 /guides/ 把 WP 草稿(``?p=<id>``)列成了
+    上线文章。published_url 非空 ≠ 访客看得到；目录页必须和内链网同一把尺——
+    只认 live_state 同步回来的 ``wp_status == "publish"``。"""
+    import inspect
+
+    from backend.app.modules.geo_series.content import guides_index
+
+    src = inspect.getsource(guides_index.collect_published_groups)
+    assert 'GeoContentItem.wp_status == "publish"' in src
+    assert "GeoContentItem.published_url.is_not(None)" in src
+
+
 def test_live_state_refresh_is_batched_and_fail_open() -> None:
     import inspect
 
