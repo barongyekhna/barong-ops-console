@@ -159,6 +159,19 @@ OOXML_RELATIONSHIP_TYPE_PREFIXES = (
     "http://purl.oclc.org/ooxml/officeDocument/relationships/",
     "http://schemas.openxmlformats.org/package/2006/relationships/",
 )
+# Clickable hyperlinks are the one external relationship an office file may
+# carry: Office never fetches them on open, so a 1688/Amazon link column in a
+# supplier spreadsheet is inert data. Every other external target (images,
+# oleObject, attachedTemplate, externalLink, frames...) is auto-resolved by the
+# application and stays rejected.
+OOXML_HYPERLINK_RELATIONSHIP_TYPES = frozenset(
+    {
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/hyperlink",
+    }
+)
+OOXML_EXTERNAL_HYPERLINK_SCHEMES = ("http://", "https://", "mailto:")
+OOXML_EXTERNAL_HYPERLINK_MAX_LENGTH = 4096
 OOXML_FAMILY = {
     ".docx": {
         "main_part": "word/document.xml",
@@ -514,16 +527,35 @@ def _parse_ooxml_xml_member(
     return root_tag, relationships, overrides, defaults
 
 
+def _is_inert_external_hyperlink(relation_type: str, target: str) -> bool:
+    if relation_type not in OOXML_HYPERLINK_RELATIONSHIP_TYPES:
+        return False
+    if not target or target != target.strip():
+        return False
+    if len(target) > OOXML_EXTERNAL_HYPERLINK_MAX_LENGTH:
+        return False
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in target):
+        return False
+    return target.casefold().startswith(OOXML_EXTERNAL_HYPERLINK_SCHEMES)
+
+
 def _validate_ooxml_relationships(
     relationships_by_part: dict[str, list[dict[str, str]]],
     names: set[str],
 ) -> None:
-    dangerous_relationship_markers = (
-        "/attachedtemplate",
-        "/control",
-        "/oleobject",
-        "/package",
-        "/vbaproject",
+    # Matched against the relationship *name* (last path segment of the Type
+    # URI), never as a substring of the whole URI: the standard
+    # ".../package/2006/relationships/metadata/core-properties" relationship
+    # that every real Excel/Word file carries for docProps/core.xml contains
+    # "/package" and used to quarantine every genuine Office document.
+    dangerous_relationship_names = frozenset(
+        {
+            "attachedtemplate",
+            "control",
+            "oleobject",
+            "package",
+            "vbaproject",
+        }
     )
     for relationship_part, relationships in relationships_by_part.items():
         relationship_ids = [item.get("Id", "") for item in relationships]
@@ -548,6 +580,8 @@ def _validate_ooxml_relationships(
             if not relation_type.startswith(OOXML_RELATIONSHIP_TYPE_PREFIXES):
                 raise ContentValidationError("non-standard OOXML relationship type")
             if target_mode is not None and target_mode.casefold() != "internal":
+                if _is_inert_external_hyperlink(relation_type, target):
+                    continue
                 raise ContentValidationError("external OOXML relationships are unsupported")
             decoded_target = unquote(target)
             lowered_target = decoded_target.casefold()
@@ -562,10 +596,8 @@ def _validate_ooxml_relationships(
                 or lowered_target.startswith(
                     ("//", "http:", "https:", "file:", "ftp:", "data:")
                 )
-                or any(
-                    marker in relation_type.casefold()
-                    for marker in dangerous_relationship_markers
-                )
+                or relation_type.rstrip("/").rsplit("/", 1)[-1].casefold()
+                in dangerous_relationship_names
             ):
                 raise ContentValidationError("active OOXML relationship is unsupported")
             resolved_parts = list(source_directory.parts)

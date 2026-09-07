@@ -373,18 +373,185 @@ def test_macro_and_embedded_ooxml_are_rejected(tmp_path):
             )
 
 
+CORE_PROPERTIES_TYPE = (
+    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties"
+)
+
+
+def _members_with_root_relationship(extension, relationship_type, target, extra_part=None):
+    """Fixture members as saved by real Office: root rels carry docProps links."""
+    main_part = {".docx": "word/document.xml", ".xlsx": "xl/workbook.xml"}[extension]
+    members = []
+    for name, body in _ooxml_members(extension):
+        if name == "_rels/.rels":
+            body = body.replace(
+                "</Relationships>",
+                f'<Relationship Id="rId2" Type="{relationship_type}" Target="{target}"/>'
+                "</Relationships>",
+            )
+        members.append((name, body))
+    if extra_part is not None:
+        members.append(extra_part)
+    assert main_part in {name for name, _ in members}
+    return members
+
+
+@pytest.mark.parametrize(
+    ("extension", "media_type"),
+    [
+        (
+            ".docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
+        (
+            ".xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    ],
+)
+def test_real_office_core_properties_relationship_is_accepted(
+    tmp_path, extension, media_type
+):
+    # Every genuine Excel/Word save carries this relationship; its Type URI
+    # contains "/package/" and must not be mistaken for an embedded package.
+    filename = f"office{extension}"
+    path = tmp_path / filename
+    core_xml = (
+        '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/'
+        'metadata/core-properties"/>'
+    )
+    _write_zip(
+        path,
+        _members_with_root_relationship(
+            extension,
+            CORE_PROPERTIES_TYPE,
+            "docProps/core.xml",
+            extra_part=("docProps/core.xml", core_xml),
+        ),
+    )
+    assert (
+        validate_content(
+            path,
+            kind="file",
+            filename=filename,
+            declared_media_type=media_type,
+            limits=ValidationLimits(),
+        ).media_type
+        == media_type
+    )
+
+
+@pytest.mark.parametrize(
+    "relationship_type",
+    [
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/package",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/vbaProject",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/control",
+    ],
+)
+def test_embedded_and_active_relationship_names_are_still_rejected(
+    tmp_path, relationship_type
+):
+    path = tmp_path / "active.docx"
+    _write_zip(
+        path,
+        _members_with_root_relationship(
+            ".docx",
+            relationship_type,
+            "word/media/payload.bin",
+            extra_part=("word/media/payload.bin", b"payload"),
+        ),
+    )
+    with pytest.raises(ContentValidationError):
+        validate_content(
+            path,
+            kind="file",
+            filename="active.docx",
+            declared_media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            limits=ValidationLimits(),
+        )
+
+
+def _external_rels(relationship_type, target, part="word/_rels/document.xml.rels"):
+    return (
+        part,
+        (
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            f'<Relationship Id="rId9" Type="{relationship_type}" '
+            f'Target="{target}" TargetMode="External"/>'
+            "</Relationships>"
+        ),
+    )
+
+
+HYPERLINK_TYPE = (
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"
+)
+IMAGE_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "https://example.invalid/",
+        "http://example.invalid/path?x=1&amp;y=%E4%B8%AD#frag",
+        "mailto:buyer@example.invalid",
+        "HTTPS://Example.invalid/Upper",
+    ],
+)
+@pytest.mark.parametrize(
+    ("extension", "part", "media_type"),
+    [
+        (
+            ".docx",
+            "word/_rels/document.xml.rels",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ),
+        (
+            ".xlsx",
+            "xl/worksheets/_rels/sheet1.xml.rels",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    ],
+)
+def test_ooxml_external_web_hyperlinks_are_inert_and_accepted(
+    tmp_path, target, extension, part, media_type
+):
+    # A product-link column in a supplier sheet must not get the file quarantined.
+    filename = f"links{extension}"
+    path = tmp_path / filename
+    members = [*_ooxml_members(extension)]
+    if extension == ".xlsx":
+        members.append(("xl/worksheets/sheet1.xml", "<worksheet/>"))
+    members.append(_external_rels(HYPERLINK_TYPE, target, part))
+    _write_zip(path, members)
+    assert (
+        validate_content(
+            path,
+            kind="file",
+            filename=filename,
+            declared_media_type=media_type,
+            limits=ValidationLimits(),
+        ).media_type
+        == media_type
+    )
+
+
 @pytest.mark.parametrize(
     "extra_member",
     [
-        (
-            "word/_rels/document.xml.rels",
-            (
-                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-                '<Relationship Id="rId9" '
-                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" '
-                'Target="https://example.invalid/" TargetMode="External"/>'
-                "</Relationships>"
-            ),
+        _external_rels(HYPERLINK_TYPE, "file:///etc/passwd"),
+        _external_rels(HYPERLINK_TYPE, "javascript:alert(1)"),
+        _external_rels(HYPERLINK_TYPE, "ftp://example.invalid/"),
+        _external_rels(HYPERLINK_TYPE, "//example.invalid/"),
+        _external_rels(HYPERLINK_TYPE, "https://example.invalid/&#10;"),
+        _external_rels(HYPERLINK_TYPE, "https://" + "a" * 5000),
+        _external_rels(IMAGE_TYPE, "https://example.invalid/tracker.png"),
+        _external_rels(
+            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate",
+            "https://example.invalid/template.dotm",
         ),
         (
             "word/extra.xml",
