@@ -33,8 +33,9 @@ from r_system_v2.ra.competition import ensure_competition_snapshot
 from r_system_v2.ra.deep_enrichment import ensure_deep_enrichment
 from r_system_v2.ra.events import emit_event
 from r_system_v2.ra.profit_service import _json_bind
-from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.providers import RAnalysisProviderBinding, ra_deepseek_model
 from r_system_v2.ra.skill_loader import RASkillBundle, load_ra_skill_bundle
+from r_system_v2.rw.ai.model_config import deepseek_thinking_extras
 
 
 RA_AI_PIPELINE_VERSION = "ra_multi_ai_real_v1"
@@ -703,6 +704,9 @@ def _execute_chat_request(
     spec: dict[str, Any],
 ) -> dict[str, Any]:
     payload = _dict_value(spec.get("payload"))
+    if provider.service == "deepseek":
+        # 初筛/终选/深挖/扩品都是结构化 JSON 抽取，关掉 V4 默认的思考模式（见 model_config）。
+        payload = {**payload, **deepseek_thinking_extras(provider.model)}
     endpoint = str(spec.get("endpoint") or "/v1/chat/completions")
     body = _json_dumps(payload).encode("utf-8")
     raw_body: str | None = None
@@ -1949,7 +1953,7 @@ def _load_provider_configs(db: Session, *, org_id: str) -> dict[str, ProviderCon
         env_base_url="DEEPSEEK_BASE_URL",
         default_base_url="https://api.deepseek.com",
         env_model="RA_DEEPSEEK_MODEL",
-        fallback_model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
+        fallback_model=ra_deepseek_model(),
     )
     gpt = _provider_config(
         role="gpt",

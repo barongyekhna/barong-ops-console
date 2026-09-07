@@ -14,6 +14,20 @@ from typing import Any
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 
 
+# R-A 全部 DeepSeek 调用（抽词/供应商比对/初筛/终选/深挖/类目扩展）统一从这里取
+# 模型名。2026-09-07 用户拍板切 flash：同通道 pro 中位数 19.5s、flash 6.3s，
+# 选品链路每个产品打好几次，便宜快才是对的。R-W 的形态初筛不走这里。
+DEFAULT_RA_DEEPSEEK_MODEL = "deepseek-v4-flash"
+
+
+def ra_deepseek_model() -> str:
+    for env_name in ("RA_DEEPSEEK_MODEL", "DEEPSEEK_MODEL"):
+        value = os.getenv(env_name, "").strip()
+        if value:
+            return value
+    return DEFAULT_RA_DEEPSEEK_MODEL
+
+
 GOOGLE_ADS_BASIC_REVIEW_STATUS_ENV = "RA_GOOGLE_ADS_BASIC_REVIEW_STATUS"
 GOOGLE_ADS_ENABLE_REAL_CALLS_ENV = "RA_GOOGLE_ADS_ENABLE_REAL_CALLS"
 GOOGLE_ADS_PENDING_REVIEW_STATUS = "pending_basic_review"
@@ -240,8 +254,8 @@ class RAnalysisProviderBinding:
                 label="DeepSeek 第一层量化分析",
                 configured=deepseek["configured"],
                 source=deepseek["source"],
-                model_env="DEEPSEEK_MODEL",
-                model_name=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+                model_env="RA_DEEPSEEK_MODEL",
+                model_name=ra_deepseek_model(),
                 base_url_env="DEEPSEEK_BASE_URL",
                 base_url_configured=bool(os.getenv("DEEPSEEK_BASE_URL", "").strip()),
             ),

@@ -309,6 +309,7 @@ class OpenAIAdapter(BaseProviderAdapter):
         "stop",
         "seed",
         "stream",
+        "thinking",
     )
 
     def request_builder(
@@ -344,6 +345,23 @@ class DeepSeekAdapter(OpenAIAdapter):
         "generate": "/v1/chat/completions",
         "selling_points": "/v1/chat/completions",
     }
+
+    def request_builder(
+        self,
+        *,
+        task_type: str,
+        payload: dict[str, Any],
+        model: str | None,
+    ) -> dict[str, Any]:
+        body = super().request_builder(task_type=task_type, payload=payload, model=model)
+        # DeepSeek V4 默认开思考模式：2026-09-07 实测同一份 JSON 抽取开着 69s/9375
+        # 推理 token，关掉 1.5s/203 token。控制台这些任务（卖点/批评/智能体意图）
+        # 都不需要它想；调用方显式传 thinking 时尊重调用方。
+        if "thinking" not in body:
+            from r_system_v2.rw.ai.model_config import deepseek_thinking_extras
+
+            body.update(deepseek_thinking_extras(model))
+        return body
 
 
 ADAPTERS = {

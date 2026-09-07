@@ -144,6 +144,7 @@ def get_recent_prescreen(
             FROM ra_prescreen
             WHERE org_id = :org_id AND UPPER(asin) = :asin
               AND created_at > CURRENT_TIMESTAMP - INTERVAL '{rescore_days()} days'
+              AND COALESCE(payload->>'error', '') = ''
             ORDER BY created_at DESC
             LIMIT 1
             """
