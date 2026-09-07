@@ -379,16 +379,22 @@ def _ra_profit_not_processed_sql(db: Session) -> str:
         dialect = db.get_bind().dialect.name
     except Exception:
         dialect = "postgresql"
+    failed_retry_days = _failed_retry_days()
     if dialect == "postgresql":
         # prescreen_cut 不是死刑：30 天后允许重新进入匹配池重打分。
+        # failed（产品自身原因搜不到供应商：缺图/解析失败）冷却 N 天再回池，
+        # 不然同一批产品每分钟被巡航重选一次（2026-09-05 重试风暴）。
         # CASE 短路：绝大多数行 status 为空，直接命中 ELSE，不做时间戳转换。
         return (
             "CASE COALESCE(features->'ra_profit'->>'status', '') "
             "WHEN 'pass' THEN false "
             "WHEN 'reject' THEN false "
             "WHEN 'blocked' THEN false "
-            "WHEN 'failed' THEN false "
             "WHEN 'quantity_pending' THEN false "
+            "WHEN 'failed' THEN COALESCE("
+            "(features->'ra_profit'->>'calculated_at')::timestamptz, "
+            "TIMESTAMPTZ 'epoch'"
+            f") <= CURRENT_TIMESTAMP - INTERVAL '{failed_retry_days} days' "
             "WHEN 'prescreen_cut' THEN COALESCE("
             "(features->'ra_profit'->>'calculated_at')::timestamptz, "
             "TIMESTAMPTZ 'epoch'"
@@ -397,9 +403,28 @@ def _ra_profit_not_processed_sql(db: Session) -> str:
             "END"
         )
     return (
-        "COALESCE(json_extract(features, '$.ra_profit.status'), '') "
-        "NOT IN ('pass', 'reject', 'blocked', 'failed', 'quantity_pending', 'prescreen_cut')"
+        "CASE COALESCE(json_extract(features, '$.ra_profit.status'), '') "
+        "WHEN 'pass' THEN 0 "
+        "WHEN 'reject' THEN 0 "
+        "WHEN 'blocked' THEN 0 "
+        "WHEN 'quantity_pending' THEN 0 "
+        "WHEN 'prescreen_cut' THEN 0 "
+        "WHEN 'failed' THEN ("
+        "COALESCE(json_extract(features, '$.ra_profit.calculated_at'), '1970-01-01') "
+        f"<= strftime('%Y-%m-%dT%H:%M:%S', 'now', '-{failed_retry_days} days')"
+        ") "
+        "ELSE 1 "
+        "END"
     )
+
+
+def _failed_retry_days() -> int:
+    raw = os.getenv("RA_FAILED_RETRY_DAYS", "").strip()
+    try:
+        value = int(raw) if raw else 7
+    except ValueError:
+        value = 7
+    return max(1, min(value, 365))
 
 
 def _snapshot_item(

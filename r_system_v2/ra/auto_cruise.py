@@ -41,8 +41,7 @@ from r_system_v2.ra.prescreen import (
 )
 from r_system_v2.ra.profit_engine import ProfitInput, calculate_us_profit, decimal_value
 from r_system_v2.ra.quota_ledger import (
-    PROVIDER_1688_CPS_IMAGE_SEARCH,
-    PROVIDER_1688_IMAGE_SEARCH,
+    image_search_providers,
     remaining_today,
 )
 from r_system_v2.ra.supplier_keyword_skill import build_supplier_keyword_profile
@@ -167,7 +166,9 @@ class RaAutoCruiseScheduler:
                 if row is not None:
                     # 有活跃巡库任务，或预算已尽等次日自动续跑——不重复建。
                     return
-                # 防空转：上一个巡库 run 一个产品都没处理（仓库暂无新品）时冷却 30 分钟。
+                # 防空转：上一个巡库 run 一个产品都没处理（仓库暂无新品），或者
+                # 处理了但一个都没走到利润结论（全在供应商搜索这步报错——2026-09-05
+                # 那种整条线断了的情形）时冷却 30 分钟，别每分钟建一个 run 去撞墙。
                 idle_row = db.execute(
                     text(
                         """
@@ -177,7 +178,16 @@ class RaAutoCruiseScheduler:
                           AND channel = 'profit_auto'
                           AND COALESCE(filters->>'auto_cruise', 'false') = 'true'
                           AND status IN ('completed', 'partial')
-                          AND COALESCE((counts->>'processed_products')::int, 0) = 0
+                          AND (
+                            COALESCE((counts->>'processed_products')::int, 0) = 0
+                            OR (
+                              COALESCE((counts->>'profit_pass')::int, 0)
+                              + COALESCE((counts->>'profit_reject')::int, 0)
+                              + COALESCE((counts->>'profit_blocked')::int, 0)
+                              + COALESCE((counts->>'profit_quantity_pending')::int, 0)
+                              + COALESCE((counts->>'prescreen_cut')::int, 0)
+                            ) = 0
+                          )
                           AND COALESCE(finished_at, updated_at)
                               > CURRENT_TIMESTAMP - INTERVAL '30 minutes'
                         LIMIT 1
@@ -203,9 +213,11 @@ class RaAutoCruiseScheduler:
                 if int(failed_today or 0) >= 3:
                     # 防失败风暴：当天连挂 3 次就停手，等人排查。
                     return
-                cross_remaining = remaining_today(db, PROVIDER_1688_IMAGE_SEARCH)
-                cps_remaining = remaining_today(db, PROVIDER_1688_CPS_IMAGE_SEARCH)
-                remaining = (cross_remaining or 0) + (cps_remaining or 0)
+                # 只算在用的图搜通道（RA_1688_IMAGE_CHANNELS），不在列表里的不算。
+                remaining = sum(
+                    remaining_today(db, provider_key) or 0
+                    for provider_key in image_search_providers()
+                )
                 keyword_first = (
                     os.getenv("RA_1688_SEARCH_STRATEGY", "keyword_first")
                     .strip()

@@ -22,14 +22,19 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from r_system_v2.ra import key_health_bridge
 from r_system_v2.ra.profit_service import _json_bind
 from r_system_v2.ra.quota_ledger import (
+    IMAGE_CHANNEL_PROVIDERS,
     PROVIDER_1688_APP_CALLS,
-    PROVIDER_1688_CPS_IMAGE_SEARCH,
-    PROVIDER_1688_IMAGE_SEARCH,
     RAQuotaExhaustedError,
+    image_search_channels,
+    mark_exhausted_today,
+    provider_label,
+    refund,
     try_consume,
 )
+from r_system_v2.ra.supplier_api import is_no_usage_left
 
 
 EXPANSION_VERSION = "ra_category_expansion_v1"
@@ -246,25 +251,18 @@ def run_expansion(
         "version": EXPANSION_VERSION,
     }
 
-    # ① CPS 分销图搜多页（按销量倒序）；CPS 通道额度记账，尽了自动切跨境。
+    # ① 图搜多页（分销图搜按销量倒序）；通道顺序同 R-A 主链（RA_1688_IMAGE_CHANNELS）。
     amazon_image = _product_image_url(product)
     if amazon_image:
         for page in range(1, image_pages + 1):
             try:
-                try:
-                    try_consume(db, PROVIDER_1688_CPS_IMAGE_SEARCH)
-                    payload = provider._call_cps_image_search(
-                        image_url=amazon_image, limit=20, page=page
-                    )
-                    items = _cps_items(payload)
-                except RAQuotaExhaustedError:
-                    try_consume(db, PROVIDER_1688_IMAGE_SEARCH)
-                    payload = provider._call_image_search(
-                        image_url=amazon_image,
-                        keyword_profile=keyword_profile,
-                        limit=20,
-                    )
-                    items = _extract_offer_items(payload)
+                items = _expansion_image_search_page(
+                    db,
+                    provider=provider,
+                    image_url=amazon_image,
+                    keyword_profile=keyword_profile,
+                    page=page,
+                )
                 counts["image_pages"] += 1
                 for item in items:
                     candidate = _candidate_from_item(item, source="image_search")
@@ -333,6 +331,63 @@ def run_expansion(
         selected=selected,
         counts=counts,
     )
+
+
+def _expansion_image_search_page(
+    db: Session,
+    *,
+    provider: Any,
+    image_url: str,
+    keyword_profile: dict[str, Any],
+    page: int,
+) -> list[Any]:
+    """扩品图搜一页：按通道列表瀑布，语义同 supplier_discovery._run_image_search_waterfall。"""
+    from r_system_v2.ra.supplier_api import _extract_offer_items
+
+    channels = image_search_channels()
+    exhausted: RAQuotaExhaustedError | None = None
+    for channel in channels:
+        provider_key = IMAGE_CHANNEL_PROVIDERS[channel]
+        try:
+            try_consume(db, provider_key)
+        except RAQuotaExhaustedError as exc:
+            exhausted = exc
+            continue
+        try:
+            if channel == "cps":
+                payload = provider._call_cps_image_search(
+                    image_url=image_url, limit=20, page=page
+                )
+                items = _cps_items(payload)
+            else:
+                payload = provider._call_image_search(
+                    image_url=image_url,
+                    keyword_profile=keyword_profile,
+                    limit=20,
+                )
+                items = _extract_offer_items(payload)
+        except Exception as exc:
+            refund(db, provider_key)
+            if is_no_usage_left(exc):
+                budget = mark_exhausted_today(db, provider_key)
+                key_health_bridge.report_incident(
+                    key_type="alibaba1688",
+                    reason_code=key_health_bridge.REASON_QUOTA_EXHAUSTED,
+                    message=f"{provider_label(provider_key)}：{str(exc)[:300]}",
+                )
+                exhausted = RAQuotaExhaustedError(provider_key, used=budget, budget=budget)
+                continue
+            if channel == "cps" and "FrequencyLimit" in str(exc):
+                exhausted = RAQuotaExhaustedError(provider_key, used=0, budget=0)
+                continue
+            raise
+        key_health_bridge.report_recovered(key_type="alibaba1688")
+        return items
+    if exhausted is None:
+        exhausted = RAQuotaExhaustedError(
+            IMAGE_CHANNEL_PROVIDERS[channels[-1]], used=0, budget=0
+        )
+    raise exhausted
 
 
 def _cps_items(payload: dict[str, Any]) -> list[Any]:

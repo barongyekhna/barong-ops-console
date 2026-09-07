@@ -61,6 +61,16 @@ def is_acl_denied(exc: BaseException) -> bool:
     return "APIACLDecline" in text or "not allowed(acl)" in text
 
 
+def is_no_usage_left(exc: BaseException | str) -> bool:
+    """网关说该 API 的 SLA 计费包没有剩余次数（gw.NoUsageLeftError）。
+
+    这是套餐级的「没额度」，不是这个产品的错：本地台账看不见远端余量，
+    必须由调用方把当天台账记满并切通道，否则会整天空转（2026-09-05 事故）。
+    """
+    text = str(exc)
+    return "NoUsageLeftError" in text or "no usage left" in text.lower()
+
+
 @dataclass(frozen=True)
 class Alibaba1688Credentials:
     app_key: str | None = None

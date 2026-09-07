@@ -196,9 +196,22 @@ services:
       RA_1688_SEARCH_STRATEGY: "keyword_first"
       # AI 看图模型（走 4sapi「I 系列企业分组备用key」）；节日品只认 same_product。
       RA_VISION_MODEL: "gpt-4o-mini"
-      # 图搜双通道：跨境包 330/天优先，用完切分销包（50万次/6个月→2600/天，至2027-01-17）。
+      # R-A 全部 DeepSeek 调用切 flash（2026-09-07 用户拍板：同通道 pro 19.5s / flash 6.3s）。
+      RA_DEEPSEEK_MODEL: "deepseek-v4-flash"
+      # 抽词是「整份 skill 文档当 system prompt + 严格 JSON」，2026-09-07 北京时间中午
+      # 实测 flash 也要 30-45s；代码默认 12s 把三个产品全判成超时顺延。抽词放到 60s
+      # （与 F 找货一致），供应商比对 30s（代码上限）。
+      RA_DEEPSEEK_KEYWORD_TIMEOUT_SECONDS: "60"
+      RA_DEEPSEEK_MATCH_TIMEOUT_SECONDS: "30"
+      # 图搜通道：跨境包（≈5000 次一次性套餐）2026-07-24 打光，09-05 起远端只回
+      # NoUsageLeft，用户拍板不续 → 只走分销包。要临时切回双通道改成 "cps,cross"。
+      RA_1688_IMAGE_CHANNELS: "cps"
+      # 分销包（50 万次/至 2027-01-17）日额度不再写死：按「包剩余 ÷ 剩余天数 × 0.9」
+      # 每天推算（quota_ledger.cps_package_summary）。显式设 RA_1688_CPS_IMAGE_SEARCH_DAILY_BUDGET
+      # 会压住动态值，所以这里不设。跨境通道额度只在通道列表含 cross 时才生效。
       RA_1688_IMAGE_SEARCH_DAILY_BUDGET: "330"
-      RA_1688_CPS_IMAGE_SEARCH_DAILY_BUDGET: "2600"
+      RA_1688_CPS_PACKAGE_TOTAL: "500000"
+      RA_1688_CPS_PACKAGE_EXPIRES_ON: "2027-01-17"
       # 1688 应用总调用闸：2026-07-11 发布审核通过，正式额度 10 万/天（留余 10% 防撞顶）。
       RA_1688_APP_CALLS_DAILY_BUDGET: "90000"
       # Google Ads Keyword Planner：2026-07-14 Basic 过审（15000 ops/天，留余 10%）。

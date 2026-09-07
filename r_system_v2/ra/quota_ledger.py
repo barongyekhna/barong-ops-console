@@ -7,19 +7,24 @@ provider per UTC day; the worker asks the ledger *before* spending.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+import math
 import os
+import threading
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 
+# 跨境图搜（alibaba.cross.similar.offer.search）：约 5000 次的一次性套餐，
+# 2026-07-24 打完最后一次，09-05 起远端只回 gw.NoUsageLeftError。用户拍板不续，
+# 默认通道列表里没有它（RA_1688_IMAGE_CHANNELS），台账常量留着以便切回。
 PROVIDER_1688_IMAGE_SEARCH = "alibaba1688_image_search"
-# ¥1500 图搜分销功能包：50 万次 / 6 个月（至 2027-01-17）→ ~2600/天 均匀吃满。
+# ¥1500 图搜分销功能包：50 万次 / 6 个月（至 2027-01-17）。日额度不再写死，
+# 按「包总量 − 台账累计 ÷ 到期剩余天数 × 余量系数」每天推算（见 cps_dynamic_daily_budget）。
 PROVIDER_1688_CPS_IMAGE_SEARCH = "alibaba1688_cps_image_search"
-# 1688 应用全局调用总闸：测试期 5000/天（留余量 4500）；应用发布审核
-# 通过后（10 万/天）把 RA_1688_APP_CALLS_DAILY_BUDGET 改 90000。
+# 1688 应用全局调用总闸：2026-07-11 发布审核通过，正式额度 10 万/天，留余 10%。
 # 每个产品按 ~10 次 App 调用估算记账（词搜重试+图搜+供应商详情/运费探测）。
 PROVIDER_1688_APP_CALLS = "alibaba1688_app_calls"
 PROVIDER_RAINFOREST = "rainforest_search"
@@ -60,8 +65,9 @@ PROVIDER_SM_WRITER = "sm_writer_deepseek"
 
 DEFAULT_DAILY_BUDGETS = {
     PROVIDER_1688_IMAGE_SEARCH: 330,
+    # 只在拿不到 db（无法查台账累计）时的兜底；正常路径走动态推算。
     PROVIDER_1688_CPS_IMAGE_SEARCH: 2600,
-    PROVIDER_1688_APP_CALLS: 4500,
+    PROVIDER_1688_APP_CALLS: 90000,
     PROVIDER_RAINFOREST: 330,
     PROVIDER_SERPER: 2000,
     PROVIDER_GOOGLE_ADS_PLANNER: 13500,
@@ -130,7 +136,138 @@ def provider_label(provider: str) -> str:
     }.get(provider, provider)
 
 
-def daily_budget(provider: str) -> int:
+# ---------------------------------------------------------------- 图搜通道
+# 图搜走哪些通道、按什么顺序。默认只走分销包（cps）；要临时切回双通道就配
+# RA_1688_IMAGE_CHANNELS="cps,cross"。未知名字一律忽略，空配置回落默认。
+IMAGE_CHANNEL_PROVIDERS = {
+    "cps": PROVIDER_1688_CPS_IMAGE_SEARCH,
+    "cross": PROVIDER_1688_IMAGE_SEARCH,
+}
+DEFAULT_IMAGE_CHANNELS: tuple[str, ...] = ("cps",)
+
+
+def image_search_channels() -> tuple[str, ...]:
+    raw = os.getenv("RA_1688_IMAGE_CHANNELS", "")
+    channels: list[str] = []
+    for item in raw.split(","):
+        name = item.strip().lower()
+        if name in IMAGE_CHANNEL_PROVIDERS and name not in channels:
+            channels.append(name)
+    return tuple(channels) or DEFAULT_IMAGE_CHANNELS
+
+
+def image_search_providers() -> tuple[str, ...]:
+    return tuple(IMAGE_CHANNEL_PROVIDERS[channel] for channel in image_search_channels())
+
+
+# ------------------------------------------------------- 分销包动态日额度
+# 分销包是「总量 + 到期日」型套餐，不是月配额。日额度 = 剩余量 ÷ 剩余天数 × 余量
+# 系数：前面用得少后面自动放大，永远不会在到期前把包剩下。台账只记本系统
+# 打过的次数，包外消耗（台账上线前/对账差额）用 RA_1688_CPS_PACKAGE_USED_OFFSET 补。
+CPS_PACKAGE_TOTAL_ENV = "RA_1688_CPS_PACKAGE_TOTAL"
+CPS_PACKAGE_EXPIRES_ENV = "RA_1688_CPS_PACKAGE_EXPIRES_ON"
+CPS_PACKAGE_USED_OFFSET_ENV = "RA_1688_CPS_PACKAGE_USED_OFFSET"
+CPS_BUDGET_MARGIN_ENV = "RA_1688_CPS_BUDGET_MARGIN"
+DEFAULT_CPS_PACKAGE_TOTAL = 500_000
+DEFAULT_CPS_PACKAGE_EXPIRES_ON = "2027-01-17"
+DEFAULT_CPS_BUDGET_MARGIN = 0.9
+# 所有吃分销包 credit 的台账桶（R-A 主通道 + F 找货图搜接力）。
+CPS_POOL_PROVIDERS: tuple[str, ...] = (
+    PROVIDER_1688_CPS_IMAGE_SEARCH,
+    PROVIDER_F_1688_IMAGE_SEARCH,
+)
+
+_cps_budget_cache: dict[str, int] = {}
+_cps_budget_lock = threading.Lock()
+
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def cps_package_expires_on() -> date:
+    raw = os.getenv(CPS_PACKAGE_EXPIRES_ENV, "").strip() or DEFAULT_CPS_PACKAGE_EXPIRES_ON
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return date.fromisoformat(DEFAULT_CPS_PACKAGE_EXPIRES_ON)
+
+
+def cps_pool_used_before(db: Session, day: str) -> int:
+    """台账里分销包 credit 在 `day` 之前（不含当天）的累计消耗。"""
+    ensure_quota_schema(db)
+    row = db.execute(
+        text(
+            """
+            SELECT COALESCE(SUM(used), 0)
+            FROM ra_provider_quota_usage
+            WHERE day < :day AND provider IN :providers
+            """
+        ).bindparams(bindparam("providers", expanding=True)),
+        {"day": day, "providers": list(CPS_POOL_PROVIDERS)},
+    ).first()
+    return int(row[0] or 0) if row else 0
+
+
+def cps_package_summary(db: Session, *, today: date | None = None) -> dict[str, Any]:
+    """分销包账面：总量 / 已用 / 剩余 / 剩余天数 / 今日推算额度。"""
+    current = today or datetime.now(UTC).date()
+    total = max(0, _int_env(CPS_PACKAGE_TOTAL_ENV, DEFAULT_CPS_PACKAGE_TOTAL))
+    offset = max(0, _int_env(CPS_PACKAGE_USED_OFFSET_ENV, 0))
+    margin = min(1.0, max(0.1, _float_env(CPS_BUDGET_MARGIN_ENV, DEFAULT_CPS_BUDGET_MARGIN)))
+    expires_on = cps_package_expires_on()
+    ledger_used = cps_pool_used_before(db, current.isoformat())
+    remaining = max(0, total - offset - ledger_used)
+    # 含今天：到期当天仍可用。
+    days_left = (expires_on - current).days + 1
+    if days_left <= 0 or remaining <= 0:
+        # 0 在这张台账里是「不限量」，到期/用尽必须给一个会被拒的正数。
+        budget = 1
+    else:
+        budget = max(1, math.floor(remaining / days_left * margin))
+    return {
+        "total": total,
+        "used_offset": offset,
+        "ledger_used": ledger_used,
+        "remaining": remaining,
+        "expires_on": expires_on.isoformat(),
+        "days_left": max(0, days_left),
+        "margin": margin,
+        "daily_budget": budget,
+    }
+
+
+def cps_dynamic_daily_budget(db: Session) -> int:
+    """今天的分销图搜额度；一天算一次缓存在进程里，当天用量不影响当天额度。"""
+    day = _today()
+    with _cps_budget_lock:
+        cached = _cps_budget_cache.get(day)
+    if cached is not None:
+        return cached
+    budget = int(cps_package_summary(db)["daily_budget"])
+    with _cps_budget_lock:
+        _cps_budget_cache.clear()
+        _cps_budget_cache[day] = budget
+    return budget
+
+
+def daily_budget(provider: str, db: Session | None = None) -> int:
     env_name = BUDGET_ENV_NAMES.get(provider)
     default = DEFAULT_DAILY_BUDGETS.get(provider, 0)
     if env_name:
@@ -140,6 +277,15 @@ def daily_budget(provider: str) -> int:
                 return max(0, int(raw))
             except ValueError:
                 return default
+    if provider == PROVIDER_1688_CPS_IMAGE_SEARCH and db is not None:
+        try:
+            return cps_dynamic_daily_budget(db)
+        except Exception:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return default
     return default
 
 
@@ -169,7 +315,7 @@ def try_consume(db: Session, provider: str, *, amount: int = 1) -> int:
     Returns the new `used` total, or raises RAQuotaExhaustedError when the
     daily budget cannot cover the request.  A budget of 0 means unlimited.
     """
-    budget = daily_budget(provider)
+    budget = daily_budget(provider, db)
     ensure_quota_schema(db)
     day = _today()
     db.execute(
@@ -234,13 +380,52 @@ def refund(db: Session, provider: str, *, amount: int = 1) -> None:
         text(
             """
             UPDATE ra_provider_quota_usage
-            SET used = GREATEST(0, used - :amount), updated_at = CURRENT_TIMESTAMP
+            SET used = CASE WHEN used - :amount < 0 THEN 0 ELSE used - :amount END,
+                updated_at = CURRENT_TIMESTAMP
             WHERE provider = :provider AND day = :day
             """
         ),
         {"provider": provider, "day": _today(), "amount": amount},
     )
     db.commit()
+
+
+def mark_exhausted_today(db: Session, provider: str) -> int:
+    """远端说「没额度了」时把今天本地台账直接记满。
+
+    本地台账只数自己打过的次数，看不见供应商那头的套餐余量；失败又会退款，
+    结果就是台账永远 0/N、永远不切通道（2026-09-05 跨境图搜就是这样空转
+    了三天）。记满之后当天后续 try_consume 本地就拒，UI 也诚实显示 N/N。
+    预算 0（不限量）没有「满」可记，原样返回。
+    """
+    budget = daily_budget(provider, db)
+    if budget <= 0:
+        return 0
+    ensure_quota_schema(db)
+    day = _today()
+    db.execute(
+        text(
+            """
+            INSERT INTO ra_provider_quota_usage (provider, day, used)
+            VALUES (:provider, :day, 0)
+            ON CONFLICT (provider, day) DO NOTHING
+            """
+        ),
+        {"provider": provider, "day": day},
+    )
+    db.execute(
+        text(
+            """
+            UPDATE ra_provider_quota_usage
+            SET used = CASE WHEN used < :budget THEN :budget ELSE used END,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE provider = :provider AND day = :day
+            """
+        ),
+        {"provider": provider, "day": day, "budget": budget},
+    )
+    db.commit()
+    return budget
 
 
 def usage_today(db: Session) -> dict[str, dict[str, Any]]:
@@ -256,6 +441,7 @@ def usage_today(db: Session) -> dict[str, dict[str, Any]]:
     ).mappings()
     used_map = {str(row["provider"]): int(row["used"] or 0) for row in rows}
     payload: dict[str, dict[str, Any]] = {}
+    active_image_providers = set(image_search_providers())
     for provider in (
         PROVIDER_1688_IMAGE_SEARCH,
         PROVIDER_1688_CPS_IMAGE_SEARCH,
@@ -266,7 +452,10 @@ def usage_today(db: Session) -> dict[str, dict[str, Any]]:
         PROVIDER_SERPER,
         PROVIDER_GOOGLE_ADS_PLANNER,
     ):
-        budget = daily_budget(provider)
+        if provider in IMAGE_CHANNEL_PROVIDERS.values() and provider not in active_image_providers:
+            # 不在通道列表里的图搜通道不出芯片，免得 UI 挂一个永远 0/330 的死牌。
+            continue
+        budget = daily_budget(provider, db)
         used = used_map.get(provider, 0)
         payload[provider] = {
             "label": provider_label(provider),
@@ -275,12 +464,17 @@ def usage_today(db: Session) -> dict[str, dict[str, Any]]:
             "remaining": max(0, budget - used) if budget > 0 else None,
             "unlimited": budget <= 0,
         }
+        if provider == PROVIDER_1688_CPS_IMAGE_SEARCH:
+            try:
+                payload[provider]["package"] = cps_package_summary(db)
+            except Exception:
+                pass
     return payload
 
 
 def remaining_today(db: Session, provider: str) -> int | None:
     """Remaining units today, or None when unlimited."""
-    budget = daily_budget(provider)
+    budget = daily_budget(provider, db)
     if budget <= 0:
         return None
     ensure_quota_schema(db)

@@ -635,7 +635,14 @@ class RaProfitJobWorker:
                 counts = _dict_value(row.get("counts") if row else {})
                 if result.get("deferred"):
                     # 顺延产品不计入 processed：让"全员顺延"的空转 run 触发冷却。
+                    # 例外：transient（超时/网络）顺延也计入 processed，让
+                    # max_products_per_job 照样封顶——否则一晚上超时能把 400 个
+                    # 产品的抽词/图搜/看图钱全花掉（2026-09-07 验收 run 实测）。
                     counts["image_deferred"] = int(counts.get("image_deferred") or 0) + 1
+                    if result.get("error_class") == "transient":
+                        counts["processed_products"] = (
+                            int(counts.get("processed_products") or 0) + 1
+                        )
                     if int(counts["image_deferred"]) >= _max_deferred_per_run():
                         # 顺延成灾 = 词搜和图搜今天都指望不上，整体歇到明天。
                         counts["quota_exhausted"] = True
@@ -944,9 +951,129 @@ def _process_product_for_job(
                 "warnings": [],
             }
         return {"asin": asin, "error": str(exc), "quota_exhausted": True}
-    except Exception as exc:  # pragma: no cover - external provider dependent.
+    except Exception as exc:
         message = str(exc)
-        return {"asin": asin, "error": message, "fatal": _is_fatal_supplier_error(message)}
+        fatal = _is_fatal_supplier_error(message)
+        error_class = classify_product_error(message)
+        if error_class in {"provider", "transient"} and not fatal:
+            # 不是这个产品的错：当天不再选它（deferred 事件）。
+            # provider（余额 0 / 套餐尽 / 权限）= 整条线断了，换谁都一样，run 停到明天；
+            # transient（超时 / 网络 / 5xx / 限频）= 可能只是这一下，run 继续跑别的，
+            # 顺延攒到 RA_MAX_DEFERRED_PER_RUN 才整体歇——一次超时不该停掉一整天。
+            # 2026-09-05 之前这里什么都不写，巡航每分钟重选同一批撞了三天。
+            _emit_deferred_event(
+                session_factory,
+                org_id=org_id,
+                run_id=run_id,
+                asin=asin,
+                reason=(
+                    f"供应商线路故障，今日顺延：{message[:160]}"
+                    if error_class == "provider"
+                    else f"供应商调用暂时失败，今日顺延：{message[:160]}"
+                ),
+                error_class=error_class,
+            )
+            return {
+                "asin": asin,
+                "error": message,
+                "error_class": error_class,
+                "deferred": True,
+                "quota_exhausted": error_class == "provider",
+            }
+        if not fatal:
+            # 产品自身问题（缺图/解析失败…）：记 failed 冷却 N 天，别再每轮重选。
+            try:
+                with session_factory() as db:
+                    with _without_org_data_isolation():
+                        _mark_rw_profit_status(
+                            db,
+                            asin=asin,
+                            status="failed",
+                            run_id=run_id,
+                            candidate_id="",
+                            reason=message[:300],
+                            snapshot=None,
+                        )
+            except Exception:
+                pass
+        return {"asin": asin, "error": message, "error_class": error_class, "fatal": fatal}
+
+
+PROVIDER_ERROR_MARKERS = (
+    # DeepSeek 余额 0
+    "http 402",
+    "insufficient balance",
+    # 1688 套餐/权限
+    "nousageleft",
+    "no usage left",
+    "apiacldecline",
+    "not allowed(acl)",
+    "密钥读取失败",
+)
+
+TRANSIENT_ERROR_MARKERS = (
+    # 限频
+    "frequencylimit",
+    "重试后仍被频率限制",
+    # 网络与上游故障
+    "网络失败",
+    "timed out",
+    "timeout",
+    "connection reset",
+    "connection refused",
+    "remote end closed",
+    "incompleteread",
+    "http 500",
+    "http 502",
+    "http 503",
+    "http 504",
+)
+
+
+def classify_product_error(message: str) -> str:
+    """把供应商搜索阶段的异常分成三类。
+
+    provider：整条线断了（余额 0 / 套餐尽 / 权限），换哪个产品都一样，
+              该停 run 顺延到明天，而不是换下一个产品继续撞。
+    transient：超时 / 网络 / 上游 5xx / 限频——可能只是这一下，产品当天顺延，
+               run 继续跑别的；顺延攒多了由 RA_MAX_DEFERRED_PER_RUN 整体刹车。
+    product：只有这个产品有问题（缺图、页面解析失败…），记 failed 冷却即可。
+    """
+    lowered = str(message or "").lower()
+    if any(marker in lowered for marker in PROVIDER_ERROR_MARKERS):
+        return "provider"
+    if any(marker in lowered for marker in TRANSIENT_ERROR_MARKERS):
+        return "transient"
+    if "deepseek" in lowered and ("失败" in lowered or "error" in lowered):
+        # DeepSeek 抽词/匹配其它失败（返回不是 JSON 之类）禁止降级启发式，
+        # 不是产品的错，也不一定是整条线断了：按暂时失败顺延。
+        return "transient"
+    return "product"
+
+
+def _emit_deferred_event(
+    session_factory: sessionmaker[Session],
+    *,
+    org_id: str,
+    run_id: str,
+    asin: str,
+    reason: str,
+    error_class: str,
+) -> None:
+    try:
+        with session_factory() as db:
+            with _without_org_data_isolation():
+                emit_event(
+                    db,
+                    org_id=org_id,
+                    run_id=run_id,
+                    stage="profit_gate",
+                    asin=asin,
+                    verdict="deferred",
+                    detail={"reason": reason, "error_class": error_class},
+                )
+    except Exception:
+        pass
 
 
 def _process_candidate_ai_for_job(
@@ -1150,7 +1277,9 @@ def _mark_rw_profit_status(
         "features": json.dumps(features, ensure_ascii=False),
         "reason": f"R-A利润{_rw_profit_label(normalized_status)}：{reason}"[:500],
     }
-    if normalized_status in {"pass", "quantity_pending"}:
+    # failed 是「这次没搜成」不是「不通过」：只记 features 冷却，不动 state，
+    # 不写 rule_reject_reason，冷却期满自动回池重来。
+    if normalized_status in {"pass", "quantity_pending", "failed"}:
         db.execute(
             text(
                 f"""
@@ -1209,6 +1338,8 @@ def _rw_profit_label(status: str) -> str:
         return "数量待确认"
     if status == "blocked":
         return "阻塞"
+    if status == "failed":
+        return "处理失败（冷却后重试）"
     return "不通过"
 
 

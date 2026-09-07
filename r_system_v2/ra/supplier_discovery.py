@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
+from r_system_v2.ra import key_health_bridge
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import (
     RAProfitError,
@@ -26,6 +27,7 @@ from r_system_v2.ra.profit_service import (
     _insert_supplier_offer,
     _json_bind,
     _load_product,
+    persist_title_zh,
     run_profit_for_existing_offers,
 )
 from r_system_v2.ra.supplier_api import (
@@ -33,15 +35,21 @@ from r_system_v2.ra.supplier_api import (
     Alibaba1688OfficialApiProvider,
     Mock1688OfficialApiProvider,
     SupplierApiProvider,
+    is_no_usage_left,
     supplier_source_mode,
 )
 from r_system_v2.ra.providers import RAnalysisProviderBinding
 from r_system_v2.ra.quota_ledger import (
+    IMAGE_CHANNEL_PROVIDERS,
     PROVIDER_1688_APP_CALLS,
     PROVIDER_1688_CPS_IMAGE_SEARCH,
     PROVIDER_1688_IMAGE_SEARCH,
     PROVIDER_SERPER,
     RAQuotaExhaustedError,
+    daily_budget,
+    image_search_channels,
+    mark_exhausted_today,
+    provider_label,
     refund,
     try_consume,
 )
@@ -295,6 +303,12 @@ def discover_1688_supplier_offers(
         db,
         org_id=org_id,
         product=product,
+    )
+    _adopt_profile_title_zh(
+        db,
+        product=product,
+        keyword_profile=keyword_profile,
+        candidate_id=candidate_id,
     )
     if source_mode != "serper_legacy":
         return _discover_with_supplier_api_provider(
@@ -697,47 +711,24 @@ def _discover_with_supplier_api_provider(
                 search_strategy_used = "keyword_first"
 
     # ② 图搜路径：image_first 策略，或词搜优先未确认同款时的兜底。
-    #    双通道瀑布：跨境图搜（330/天）优先，用完自动切分销图搜（50万次包，2600/天）。
+    #    通道瀑布按 RA_1688_IMAGE_CHANNELS（默认只走分销包）：本地额度尽、远端
+    #    套餐尽（NoUsageLeft）、限频都算「这条通道今天没了」，换下一条；全部
+    #    没了才抛额度异常 → 产品顺延到明天，而不是报错刷屏。
     if offers_from_api is None:
-        image_channel = "cross"
-        image_provider_key = PROVIDER_1688_IMAGE_SEARCH
         if is_real_provider:
             search_strategy_used = (
                 "image_fallback" if strategy == "keyword_first" else "image_first"
             )
-            try:
-                try_consume(db, PROVIDER_1688_IMAGE_SEARCH)
-            except RAQuotaExhaustedError:
-                # 跨境额度尽 → 分销包接力；分销也尽才真正抛额度异常。
-                try_consume(db, PROVIDER_1688_CPS_IMAGE_SEARCH)
-                image_channel = "cps"
-                image_provider_key = PROVIDER_1688_CPS_IMAGE_SEARCH
-                search_strategy_used = (
-                    "cps_image_fallback"
-                    if strategy == "keyword_first"
-                    else "cps_image_first"
-                )
-        # Official 1688 calls can take several seconds per product, especially when
-        # enrichment probes productInfo/freight. End any open SQL transaction before
-        # those network calls so PostgreSQL does not see an idle transaction.
-        _discard_db_transaction(db)
-        try:
-            offers_from_api = provider.search_offers(
-                product=product,
-                keyword_profile=keyword_profile,
-                limit=result_limit,
-                image_channel=image_channel,
-            )
-        except Exception as exc:
-            if is_real_provider:
-                refund(db, image_provider_key)
-            if image_channel == "cps" and "FrequencyLimit" in str(exc):
-                # 分销包配额未到账/被限频：视同该通道今日额度耗尽，
-                # 产品走顺延而不是报错刷屏；配额到账后自动恢复。
-                raise RAQuotaExhaustedError(
-                    PROVIDER_1688_CPS_IMAGE_SEARCH, used=0, budget=0
-                ) from exc
-            raise
+        offers_from_api, image_channel = _run_image_search_waterfall(
+            db,
+            provider=provider,
+            product=product,
+            keyword_profile=keyword_profile,
+            limit=result_limit,
+            is_real_provider=is_real_provider,
+        )
+        if is_real_provider and image_channel == "cps":
+            search_strategy_used = f"cps_{search_strategy_used}"
     if search_strategy_used == "keyword_first":
         query = f"1688官方词搜同款（图片已比对）：{base_query[:80]}"
     elif search_strategy_used.startswith("cps_"):
@@ -987,6 +978,103 @@ def _is_seasonal_product(product: dict[str, Any]) -> bool:
         for key in ("title", "title_zh", "category", "category_path", "source_query")
     )
     return any(keyword in blob for keyword in _SEASONAL_KEYWORDS)
+
+
+def _adopt_profile_title_zh(
+    db: Session,
+    *,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+    candidate_id: str | None,
+) -> None:
+    """抽词顺带出的中文名回写 R-W（只填空）。失败不影响主链。"""
+    if str(product.get("title_zh") or "").strip():
+        return
+    title_zh = str(keyword_profile.get("title_zh") or "").strip()
+    if not title_zh:
+        return
+    try:
+        persist_title_zh(
+            db,
+            asin=str(product.get("asin") or ""),
+            title_zh=title_zh,
+            candidate_id=candidate_id,
+        )
+    except Exception:
+        _discard_db_transaction(db)
+        return
+    product["title_zh"] = title_zh
+
+
+def _run_image_search_waterfall(
+    db: Session,
+    *,
+    provider: SupplierApiProvider,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+    limit: int,
+    is_real_provider: bool,
+) -> tuple[list[Any], str]:
+    """按通道列表依次尝试图搜，返回 (offers, 用到的通道)。
+
+    每条通道三种「今天没了」：本地台账拒（try_consume）、远端套餐拒
+    （gw.NoUsageLeftError → 把本地台账记满 + 回报 key-health）、限频
+    （FrequencyLimit，分销包配额未到账时的表现）。三种都换下一条通道；
+    全部用尽抛最后一条的 RAQuotaExhaustedError，让产品顺延到明天。
+    其它异常（网络/签名/缺图）原样抛出，由 job_queue 分类处理。
+    """
+    channels = image_search_channels()
+    exhausted: RAQuotaExhaustedError | None = None
+    for channel in channels:
+        provider_key = IMAGE_CHANNEL_PROVIDERS[channel]
+        if is_real_provider:
+            try:
+                try_consume(db, provider_key)
+            except RAQuotaExhaustedError as exc:
+                exhausted = exc
+                continue
+        # Official 1688 calls can take several seconds per product, especially when
+        # enrichment probes productInfo/freight. End any open SQL transaction before
+        # those network calls so PostgreSQL does not see an idle transaction.
+        _discard_db_transaction(db)
+        try:
+            offers = provider.search_offers(
+                product=product,
+                keyword_profile=keyword_profile,
+                limit=limit,
+                image_channel=channel,
+            )
+        except Exception as exc:
+            if is_real_provider:
+                refund(db, provider_key)
+            if is_no_usage_left(exc):
+                budget = 0
+                if is_real_provider:
+                    budget = mark_exhausted_today(db, provider_key)
+                key_health_bridge.report_incident(
+                    key_type="alibaba1688",
+                    reason_code=key_health_bridge.REASON_QUOTA_EXHAUSTED,
+                    message=f"{provider_label(provider_key)}：{str(exc)[:300]}",
+                )
+                exhausted = RAQuotaExhaustedError(provider_key, used=budget, budget=budget)
+                exhausted.__cause__ = exc
+                continue
+            if channel == "cps" and "FrequencyLimit" in str(exc):
+                # 分销包配额未到账/被限频：视同该通道今日额度耗尽，
+                # 产品走顺延而不是报错刷屏；配额到账后自动恢复。
+                exhausted = RAQuotaExhaustedError(provider_key, used=0, budget=0)
+                exhausted.__cause__ = exc
+                continue
+            raise
+        if is_real_provider:
+            key_health_bridge.report_recovered(key_type="alibaba1688")
+        return offers, channel
+    if exhausted is None:
+        last_key = IMAGE_CHANNEL_PROVIDERS[channels[-1]]
+        exhausted = RAQuotaExhaustedError(
+            last_key, used=0, budget=daily_budget(last_key, db)
+        )
+    raise exhausted
 
 
 def _supplier_search_strategy() -> str:
