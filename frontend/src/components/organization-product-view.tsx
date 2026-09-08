@@ -15,6 +15,7 @@ import {
   listSuperAdminUsers,
   listUsers,
   type ManagedUser,
+  managedUserDisplayName,
 } from "@/lib/users-api";
 
 type ListResponse<T> = {
@@ -56,7 +57,8 @@ function normalizeIdentifier(value: unknown) {
 }
 
 function formatManagedUser(user: ManagedUser) {
-  return user.username;
+  const name = managedUserDisplayName(user);
+  return name !== user.username ? `${name}（${user.username}）` : name;
 }
 
 function organizationName(organization: OrganizationRecord) {

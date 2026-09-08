@@ -7,6 +7,7 @@ from sqlalchemy import Select, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models.approval import ApprovalDecisionRecord, ApprovalRequestRecord
+from .display_names import display_name_map
 from ..models.organization import OrganizationRecord
 from ..models.user import User
 from ..schemas.reviews import (
@@ -262,10 +263,15 @@ def list_review_audit_employees(
     with _query_context(scope):
         rows = db.execute(statement).all()
 
+    display_names = display_name_map(db, [row.actor_id for row in rows])
     return [
         ReviewAuditEmployee(
             user_id=int(row.actor_id),
-            employee_name=row.username or f"员工 {row.actor_id}",
+            employee_name=(
+                display_names.get(int(row.actor_id))
+                or row.username
+                or f"员工 {row.actor_id}"
+            ),
             employee_role=row.role or "员工",
             job_title=row.job_title,
             action_count=int(row.action_count or 0),
@@ -377,6 +383,9 @@ def list_review_audit_actions(
     with _query_context(scope):
         rows = db.execute(statement).all()
 
+    display_names = display_name_map(
+        db, [decision.actor_id for decision, _r, _u, _o in rows]
+    )
     items: list[ReviewAuditAction] = []
     for decision, request_record, user, organization in rows:
         operation = _operation_type(decision.status)
@@ -391,9 +400,9 @@ def list_review_audit_actions(
                 ),
                 user_id=decision.actor_id or user_id,
                 employee_name=(
-                    user.username
-                    if user is not None and user.username
-                    else f"员工 {decision.actor_id or user_id}"
+                    (decision.actor_id is not None and display_names.get(int(decision.actor_id)))
+                    or (user.username if user is not None and user.username else None)
+                    or f"员工 {decision.actor_id or user_id}"
                 ),
                 approval_module=_approval_module(request_record),
                 operation_type=operation,  # type: ignore[arg-type]

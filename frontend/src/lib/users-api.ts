@@ -25,6 +25,16 @@ export type UserRolesResponse = {
   standard_roles: UserRoleMetadata[];
 };
 
+/** 给人看的名字：C19 资料里的中文显示名 → 登录名。数字员工登录名是拼音，别直接显示 username。 */
+export function managedUserDisplayName(
+  user: Pick<ManagedUser, "username" | "display_name"> | null | undefined,
+) {
+  if (!user) {
+    return "";
+  }
+  return user.display_name?.trim() || user.username;
+}
+
 export type ManagedUser = {
   id: number;
   username: string;

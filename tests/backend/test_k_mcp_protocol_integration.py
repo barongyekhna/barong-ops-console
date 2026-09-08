@@ -160,7 +160,9 @@ def test_mcp_protocol_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         assert fetched.headers["content-type"].startswith("image/")
         assert len(fetched.content) > 100
         # 篡改签名 → 403
-        tampered = client.get(f"{parsed.path}?{parsed.query[:-1]}0")
+        # 末位换成「一定不同」的字符；原来固定换 0，签名末位本来是 0 时等于没篡改 → 假红
+        flipped = "1" if parsed.query[-1] != "1" else "0"
+        tampered = client.get(f"{parsed.path}?{parsed.query[:-1]}{flipped}")
         assert tampered.status_code == 403
 
         refs = _rpc(

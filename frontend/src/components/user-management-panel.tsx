@@ -63,6 +63,7 @@ import {
   type OrganizationOption,
   type UserRoleMetadata,
   type UserRolesResponse,
+  managedUserDisplayName,
 } from "@/lib/users-api";
 
 const PASSWORD_LENGTH_MESSAGE =
@@ -605,7 +606,7 @@ export function UserManagementPanel() {
     }
     if (
       !window.confirm(
-        `彻底删除 ${target.username}？登录会话、组织成员关系、权限、通讯资料都会一起删掉，不可恢复。有业务记录引用的账号会被拒绝。`,
+        `彻底删除 ${managedUserDisplayName(target)}？登录会话、组织成员关系、权限、通讯资料都会一起删掉，不可恢复。有业务记录引用的账号会被拒绝。`,
       )
     ) {
       return;
@@ -656,7 +657,7 @@ export function UserManagementPanel() {
     }
     if (
       !window.confirm(
-        `确认停用 ${target.username}？停用后该账号将无法登录。`,
+        `确认停用 ${managedUserDisplayName(target)}？停用后该账号将无法登录。`,
       )
     ) {
       return;
@@ -665,7 +666,7 @@ export function UserManagementPanel() {
     setPendingAction(`disable-${target.id}`);
     try {
       const updated = await disableUser(target.id);
-      setActionNotice(`已停用账号：${updated.username}。`);
+      setActionNotice(`已停用账号：${managedUserDisplayName(updated)}。`);
       await refreshAfterMutation(target.id);
     } catch (error) {
       setActionError(
@@ -682,14 +683,14 @@ export function UserManagementPanel() {
       setActionError("当前账号不能管理该用户。");
       return;
     }
-    if (!window.confirm(`确认启用 ${target.username}？`)) {
+    if (!window.confirm(`确认启用 ${managedUserDisplayName(target)}？`)) {
       return;
     }
 
     setPendingAction(`enable-${target.id}`);
     try {
       const updated = await enableUser(target.id);
-      setActionNotice(`已启用账号：${updated.username}。`);
+      setActionNotice(`已启用账号：${managedUserDisplayName(updated)}。`);
       await refreshAfterMutation(target.id);
     } catch (error) {
       setActionError(
@@ -731,7 +732,7 @@ export function UserManagementPanel() {
     setPendingAction(`role-${expandedUser.id}`);
     try {
       const updated = await updateUser(expandedUser.id, { role: detailRole });
-      setActionNotice(`已更新 ${updated.username} 的角色。`);
+      setActionNotice(`已更新 ${managedUserDisplayName(updated)} 的角色。`);
       await refreshAfterMutation(expandedUser.id);
     } catch (error) {
       setActionError(
@@ -750,7 +751,7 @@ export function UserManagementPanel() {
     }
     if (
       !window.confirm(
-        `确认给 ${target.username} 换一把新的 MCP 钥匙？旧钥匙立刻失效,新钥匙只显示这一次。`,
+        `确认给 ${managedUserDisplayName(target)} 换一把新的 MCP 钥匙？旧钥匙立刻失效,新钥匙只显示这一次。`,
       )
     ) {
       return;
@@ -764,7 +765,7 @@ export function UserManagementPanel() {
         mac: issued.setup_command_mac,
         windows: issued.setup_command_windows,
       });
-      setActionNotice(`已为 ${target.username} 生成新钥匙。`);
+      setActionNotice(`已为 ${managedUserDisplayName(target)} 生成新钥匙。`);
       await loadUsers();
     } catch (error) {
       setActionError(formatUsersApiError(error, "重置 MCP 钥匙失败。"));
@@ -784,10 +785,10 @@ export function UserManagementPanel() {
     try {
       if (disabled) {
         await enableUserMcpToken(target.id);
-        setActionNotice(`已启用 ${target.username} 的 MCP 钥匙。`);
+        setActionNotice(`已启用 ${managedUserDisplayName(target)} 的 MCP 钥匙。`);
       } else {
         await disableUserMcpToken(target.id);
-        setActionNotice(`已停用 ${target.username} 的 MCP 钥匙,他的 Codex 立刻连不上。`);
+        setActionNotice(`已停用 ${managedUserDisplayName(target)} 的 MCP 钥匙,他的 Codex 立刻连不上。`);
       }
       await loadUsers();
     } catch (error) {
@@ -824,7 +825,7 @@ export function UserManagementPanel() {
 
     if (
       !window.confirm(
-        `确认重置 ${resetTarget.username} 的密码？原密码将立即失效。`,
+        `确认重置 ${managedUserDisplayName(resetTarget)} 的密码？原密码将立即失效。`,
       )
     ) {
       return;
@@ -836,7 +837,7 @@ export function UserManagementPanel() {
         resetTarget.id,
         resetPassword,
       );
-      setActionNotice(`已重置 ${updated.username} 的密码。`);
+      setActionNotice(`已重置 ${managedUserDisplayName(updated)} 的密码。`);
       setResetTarget(null);
       await refreshAfterMutation(resetTarget.id);
     } catch (error) {
@@ -1146,7 +1147,7 @@ export function UserManagementPanel() {
         <form className="users-reset-panel um-modal" onSubmit={handleReset}>
           <div>
             <span className="eyebrow">密码重置</span>
-            <h3>{resetTarget.username}</h3>
+            <h3>{managedUserDisplayName(resetTarget)}</h3>
             <p>
               请输入新的临时密码，提交后不会再次显示。
             </p>
@@ -1541,7 +1542,7 @@ export function UserManagementPanel() {
           <div className="users-panel-heading">
             <div>
               <span className="eyebrow">用户详情</span>
-              <h3>{expandedUser.username}</h3>
+              <h3>{managedUserDisplayName(expandedUser)}</h3>
             </div>
             <button
               className="icon-button"

@@ -21,6 +21,7 @@ from ....core.roles import is_owner_role, is_super_admin_role
 from ....models.organization import OrganizationRecord
 from ....models.user import User
 from ....services.data_isolation import without_org_data_isolation
+from ....services.display_names import user_display_name
 from . import models as M
 from . import schemas as S
 
@@ -100,12 +101,9 @@ def _commit(db: Session) -> None:
         raise
 
 
-def _actor_name(user: User) -> str:
-    for attr in ("display_name", "full_name", "username", "email"):
-        value = getattr(user, attr, None)
-        if value:
-            return str(value)
-    return str(user.id)
+def _actor_name(db: Session, user: User) -> str:
+    """单据操作人给人看的名字：C19 显示名（霓旌/白苏婉的汉字）→ 登录名 → id。"""
+    return user_display_name(db, user)
 
 
 def _q(value: Decimal | int | float | str) -> Decimal:
@@ -206,7 +204,7 @@ def _new_document(
         doc_type=doc_type,
         doc_no=_next_doc_no(db, ctx, doc_type),
         actor_user_id=str(user.id),
-        actor_name=_actor_name(user),
+        actor_name=_actor_name(db, user),
         note=(note or None),
         payload_json=payload,
     )

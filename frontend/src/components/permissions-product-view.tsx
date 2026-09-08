@@ -53,6 +53,7 @@ import {
 import {
   formatUsersApiError,
   listUsers,
+  managedUserDisplayName,
   type ManagedUser,
 } from "@/lib/users-api";
 import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
@@ -103,6 +104,8 @@ function permissionAssignmentForUser(
 function userSearchText(user: ManagedUser) {
   return [
     user.username,
+    user.display_name ?? "",
+    user.nickname ?? "",
     user.job_title ?? "",
     user.organization_id ?? "",
     user.role,
@@ -496,7 +499,7 @@ export function PermissionsProductView() {
         .join("\n");
       if (
         !window.confirm(
-          `以下 ${diff.highRiskGrants.length} 项为高风险权限，确认授予 ${selectedUser.username}？\n\n${names}`,
+          `以下 ${diff.highRiskGrants.length} 项为高风险权限，确认授予 ${managedUserDisplayName(selectedUser)}？\n\n${names}`,
         )
       ) {
         return;
@@ -819,9 +822,15 @@ export function PermissionsProductView() {
                   onClick={() => selectUser(targetUser)}
                   type="button"
                 >
-                  <strong>{targetUser.username}</strong>
+                  <strong>{managedUserDisplayName(targetUser)}</strong>
                   <small>
-                    {[targetUser.job_title, targetUser.organization_id]
+                    {[
+                      managedUserDisplayName(targetUser) !== targetUser.username
+                        ? targetUser.username
+                        : null,
+                      targetUser.job_title,
+                      targetUser.organization,
+                    ]
                       .filter(Boolean)
                       .join(" / ") || roleLabel(targetUser.role)}
                   </small>
@@ -846,12 +855,15 @@ export function PermissionsProductView() {
               <>
                 <div className="ops-panel-heading">
                   <div>
-                    <h3>{selectedUser.username}</h3>
+                    <h3>{managedUserDisplayName(selectedUser)}</h3>
                     <p>
+                      {managedUserDisplayName(selectedUser) !== selectedUser.username
+                        ? `${selectedUser.username} · `
+                        : ""}
                       {roleLabel(selectedUser.role)}
                       {selectedUser.job_title ? ` · ${selectedUser.job_title}` : ""}
-                      {selectedUser.organization_id
-                        ? ` · ${selectedUser.organization_id}`
+                      {selectedUser.organization
+                        ? ` · ${selectedUser.organization}`
                         : ""}
                     </p>
                   </div>
@@ -1284,11 +1296,17 @@ export function PermissionsProductView() {
                         type="checkbox"
                       />
                       <span>
-                        <strong>{targetUser.username}</strong>
+                        <strong>{managedUserDisplayName(targetUser)}</strong>
                         <small>
-                          {[targetUser.job_title, targetUser.organization_id]
+                          {[
+                            managedUserDisplayName(targetUser) !== targetUser.username
+                              ? targetUser.username
+                              : null,
+                            targetUser.job_title,
+                            targetUser.organization,
+                          ]
                             .filter(Boolean)
-                            .join(" / ") || targetUser.role}
+                            .join(" / ") || roleLabel(targetUser.role)}
                         </small>
                       </span>
                       {isPending ? (
