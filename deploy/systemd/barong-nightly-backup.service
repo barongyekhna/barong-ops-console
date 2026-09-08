@@ -1,0 +1,12 @@
+[Unit]
+Description=Barong nightly online backup (databases, n8n, chat files, media, config) + off-site copy
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/barong-ops-console
+ExecStart=/opt/barong-ops-console/scripts/nightly_backup.sh
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=4h
