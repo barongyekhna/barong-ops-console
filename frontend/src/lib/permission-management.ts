@@ -518,8 +518,17 @@ export function canViewPermissionCenter(role: string | null | undefined) {
   return isOwnerRole(role) || isSuperAdminRole(role);
 }
 
+/**
+ * owner 全站可授权；组织管理员（super_admin）可给本组织非管理员成员授权。
+ * 后端 ensure_actor_can_manage_target_permissions 是权威裁判，这里只决定 UI 是否放开。
+ */
 export function canManagePermissionAssignments(role: string | null | undefined) {
-  return isOwnerRole(role);
+  return isOwnerRole(role) || isSuperAdminRole(role);
+}
+
+/** 组织管理员对本组织内置全部功能权限，作为授权目标时不需要也不能单独授权。 */
+export function hasBuiltinFullFeatureAccess(role: string | null | undefined) {
+  return isOwnerRole(role) || isSuperAdminRole(role);
 }
 
 export function filterPermissionRegistryForRole(
@@ -944,7 +953,7 @@ export function formatPermissionAssignmentsApiError(
     return "请重新登录后再管理权限。";
   }
   if (error.status === 403) {
-    return "只有owner可以管理权限分配。";
+    return "只有 owner 或本组织管理员可以管理权限分配，且不能跨组织或给管理员授权。";
   }
   if (error.status === 404) {
     return "未找到用户或权限分配，请刷新后重试。";

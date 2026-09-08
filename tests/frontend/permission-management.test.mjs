@@ -7,6 +7,8 @@ import {
   ROLE_DEFAULT_PERMISSIONS_NOTICE,
   assignedPermissionMap,
   buildPermissionTree,
+  canManagePermissionAssignments,
+  hasBuiltinFullFeatureAccess,
   computeAssignmentDiff,
   moduleCheckState,
   splitPermissionDisplayName,
@@ -519,7 +521,7 @@ test("403, 409, and 422 errors produce safe summaries without sensitive values",
       message: "Authorization: Bearer abc.def.ghi",
       status: 403,
     }),
-    "只有owner可以管理权限分配。",
+    "只有 owner 或本组织管理员可以管理权限分配，且不能跨组织或给管理员授权。",
   );
   assert.equal(
     formatPermissionAssignmentsApiError({
@@ -705,4 +707,15 @@ test("splitPermissionDisplayName separates the Chinese label from the key", () =
     splitPermissionDisplayName(registryItem("zz.unknown.read", { label: "" })),
     { label: "查看zz.unknown", key: "zz.unknown.read" },
   );
+});
+
+test("owner and super admin can write assignments; super admin target has builtin full access", () => {
+  assert.equal(canManagePermissionAssignments("owner"), true);
+  assert.equal(canManagePermissionAssignments("super_admin"), true);
+  assert.equal(canManagePermissionAssignments("org_admin"), true);
+  assert.equal(canManagePermissionAssignments("operator"), false);
+  assert.equal(canManagePermissionAssignments("viewer"), false);
+  assert.equal(hasBuiltinFullFeatureAccess("super_admin"), true);
+  assert.equal(hasBuiltinFullFeatureAccess("owner"), true);
+  assert.equal(hasBuiltinFullFeatureAccess("operator"), false);
 });

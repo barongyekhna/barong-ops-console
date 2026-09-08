@@ -38,6 +38,7 @@ import {
   getPermissionCategoryLabel,
   getPermissionUiCategory,
   grantUserPermissionAssignment,
+  hasBuiltinFullFeatureAccess,
   listPermissionRegistry,
   listUserPermissionAssignments,
   moduleCheckState,
@@ -676,8 +677,17 @@ export function PermissionsProductView() {
   }
 
   const hasData = registry.length > 0 || users.length > 0;
+  // 组织管理员作为目标：本组织全部功能权限内置，树整棵打勾但锁死，不走保存。
+  const targetHasBuiltinAccess =
+    selectedUser !== null && hasBuiltinFullFeatureAccess(selectedUser.role);
   const treeDisabled =
-    !canWriteAssignments || isAssignmentsLoading || isSaving || !selectedUser;
+    !canWriteAssignments ||
+    isAssignmentsLoading ||
+    isSaving ||
+    !selectedUser ||
+    targetHasBuiltinAccess;
+  const isChecked = (key: string) => targetHasBuiltinAccess || draft.has(key);
+  const displayAllState = targetHasBuiltinAccess ? "all" : allState;
 
   return (
     <section className="product-console mm-page pm-page" aria-label="权限管理">
@@ -847,7 +857,9 @@ export function PermissionsProductView() {
                   </div>
                   <div className="pm-head-tools">
                     <span className="ops-source">
-                      线上 {liveGrantableCount} / {featurePermissionCount}
+                      {targetHasBuiltinAccess
+                        ? `内置 ${featurePermissionCount} / ${featurePermissionCount}`
+                        : `线上 ${liveGrantableCount} / ${featurePermissionCount}`}
                     </span>
                   </div>
                 </div>
@@ -855,7 +867,17 @@ export function PermissionsProductView() {
                 {!canWriteAssignments ? (
                   <div className="users-alert users-alert-error" role="note">
                     <ShieldAlert aria-hidden="true" size={18} />
-                    <span>仅 owner 可修改授权，当前为只读视图。</span>
+                    <span>当前角色不能修改授权，这里是只读视图。</span>
+                  </div>
+                ) : null}
+
+                {targetHasBuiltinAccess ? (
+                  <div className="users-alert users-alert-success" role="note">
+                    <ShieldCheck aria-hidden="true" size={18} />
+                    <span>
+                      组织管理员对本组织拥有全部功能权限（内置），不需要也不能单独授权；只有
+                      owner 能调整管理员的角色。
+                    </span>
                   </div>
                 ) : null}
 
@@ -908,12 +930,13 @@ export function PermissionsProductView() {
                         ariaLabel="全选全部功能权限"
                         disabled={treeDisabled}
                         onChange={toggleEverything}
-                        state={allState}
+                        state={displayAllState}
                       />
                       <span className="pm-tree-label">
                         <strong>全选</strong>
                         <small>
-                          已勾 {draft.size} / {featurePermissionCount}
+                          已勾 {targetHasBuiltinAccess ? featurePermissionCount : draft.size} /{" "}
+                          {featurePermissionCount}
                         </small>
                       </span>
                     </label>
@@ -922,9 +945,10 @@ export function PermissionsProductView() {
                       const keys = moduleNode.permissions.map(
                         (p) => p.permission_key,
                       );
-                      const state = moduleCheckState(keys, draft);
-                      const checkedCount = keys.filter((key) => draft.has(key))
-                        .length;
+                      const state = targetHasBuiltinAccess
+                        ? "all"
+                        : moduleCheckState(keys, draft);
+                      const checkedCount = keys.filter(isChecked).length;
                       const collapsed = collapsedModules.has(moduleNode.moduleKey);
                       return (
                         <div
@@ -955,8 +979,8 @@ export function PermissionsProductView() {
                               {moduleNode.permissions.map((permission) => {
                                 const name = splitPermissionDisplayName(permission);
                                 const key = permission.permission_key;
-                                const live = currentMap.has(key);
-                                const wanted = draft.has(key);
+                                const live = targetHasBuiltinAccess || currentMap.has(key);
+                                const wanted = isChecked(key);
                                 const changed = live !== wanted;
                                 return (
                                   <label
@@ -1045,7 +1069,7 @@ export function PermissionsProductView() {
                   </div>
                 )}
 
-                {canWriteAssignments ? (
+                {canWriteAssignments && !targetHasBuiltinAccess ? (
                   <div className={`pm-savebar${isDirty ? " dirty" : ""}`}>
                     <span className="pm-savebar-summary">
                       {isSaving
