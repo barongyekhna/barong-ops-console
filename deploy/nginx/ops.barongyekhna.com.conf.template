@@ -208,8 +208,8 @@ server {
         # values before that subrequest so Barong sees the original PUT/path.
         set $c19_transfer_uri $request_uri;
         set $c19_transfer_method $request_method;
-        client_max_body_size 64m;
-        client_body_timeout 120s;
+        client_max_body_size 256m;
+        client_body_timeout 900s;
         auth_request /_c19_asset_transfer_auth;
         proxy_pass http://127.0.0.1:8092;
         proxy_http_version 1.1;
@@ -226,8 +226,8 @@ server {
         proxy_set_header Connection "";
         proxy_request_buffering off;
         proxy_buffering off;
-        proxy_read_timeout 180s;
-        proxy_send_timeout 180s;
+        proxy_read_timeout 900s;
+        proxy_send_timeout 900s;
     }
 
     location ~ "^/api/backend/c19-assets/d/[A-Za-z0-9_-]{43}$" {
@@ -250,7 +250,7 @@ server {
         proxy_set_header If-Range $http_if_range;
         proxy_buffering off;
         proxy_cache off;
-        proxy_read_timeout 180s;
+        proxy_read_timeout 900s;
     }
 
     # This ordinary prefix is the fallback after the two regex locations above.

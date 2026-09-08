@@ -247,11 +247,33 @@ def test_extension_media_kind_and_compiled_size_validation(client, service_heade
     assert response.status_code == 422
     assert response.json() == {"detail": "invalid request"}
     oversized = upload_payload()
-    oversized["size_bytes"] = 65 * 1024 * 1024
+    oversized["size_bytes"] = 257 * 1024 * 1024
     response = client.post(
         "/v1/upload-intents", headers=service_headers, json=oversized
     )
     assert response.status_code == 422
+    # Programs are refused; every other file is admitted, unknown containers
+    # as an opaque octet stream.
+    executable = upload_payload(
+        filename="setup.exe", media_type="application/octet-stream", kind="file"
+    )
+    response = client.post(
+        "/v1/upload-intents", headers=service_headers, json=executable
+    )
+    assert response.status_code == 422
+    for index, (filename, media_type) in enumerate(
+        (
+            ("演示.mp4", "video/mp4"),
+            ("模具.skp", "application/octet-stream"),
+            ("无扩展名", "application/octet-stream"),
+        )
+    ):
+        admitted = upload_payload(filename=filename, media_type=media_type, kind="file")
+        admitted["client_asset_id"] = f"admitted-any-file-{index}"
+        response = client.post(
+            "/v1/upload-intents", headers=service_headers, json=admitted
+        )
+        assert response.status_code == 201, response.text
     bidi = upload_payload(filename="report\u202epdf.txt")
     response = client.post(
         "/v1/upload-intents", headers=service_headers, json=bidi

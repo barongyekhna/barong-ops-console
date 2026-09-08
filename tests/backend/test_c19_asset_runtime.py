@@ -455,13 +455,33 @@ def test_asset_public_schemas_enforce_filename_type_size_and_one_asset() -> None
         sha256_hex="b" * 64,
     )
     assert valid.filename == "商品证明.jpg"
+    # Any non-executable file is admitted: known containers by their media
+    # type, everything else as an opaque octet stream.
+    for filename, media_type in (
+        ("演示.mp4", "video/mp4"),
+        ("报价.svg", "image/svg+xml"),
+        ("图纸.dwg", "image/vnd.dwg"),
+        ("无扩展名", "application/octet-stream"),
+        ("模具.skp", "application/octet-stream"),
+    ):
+        admitted = ChatAssetUploadIntentRequest(
+            client_asset_id="browser-asset-any",
+            kind="file",
+            filename=filename,
+            media_type=media_type,
+            size_bytes=200 * 1024 * 1024,
+            sha256_hex="b" * 64,
+        )
+        assert admitted.media_type == media_type
 
     invalid_cases = (
         {"filename": "../proof.jpg"},
         {"filename": "safe.jpg\u202eevil.exe"},
         {"filename": "proof.svg", "media_type": "image/svg+xml"},
+        {"filename": "setup.exe", "kind": "file", "media_type": "application/octet-stream"},
         {"filename": "proof.jpg", "kind": "file"},
-        {"filename": "proof.jpg", "size_bytes": 20 * 1024 * 1024 + 1},
+        {"filename": "proof.jpg", "size_bytes": 32 * 1024 * 1024 + 1},
+        {"filename": "demo.mp4", "kind": "file", "media_type": "video/mp4", "size_bytes": 200 * 1024 * 1024 + 1},
     )
     base = valid.model_dump()
     for updates in invalid_cases:

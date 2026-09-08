@@ -9,6 +9,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .config import HARD_MAX_BYTES
+
 
 Identifier = Annotated[str, Field(min_length=1, max_length=128, pattern=r"^[^\x00-\x1f\x7f]+$")]
 AssetId = Annotated[str, Field(pattern=r"^att_[0-9a-f]{32}$")]
@@ -24,7 +26,12 @@ IMAGE_MEDIA_BY_EXTENSION = {
     ".png": "image/png",
     ".webp": "image/webp",
     ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
 }
+# Files with a known container. Anything else that is not an executable is
+# admitted as ``application/octet-stream`` (download only, still scanned).
 FILE_MEDIA_BY_EXTENSION = {
     ".pdf": "application/pdf",
     ".txt": "text/plain",
@@ -33,7 +40,91 @@ FILE_MEDIA_BY_EXTENSION = {
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".zip": "application/zip",
+    # legacy / open office documents
+    ".doc": "application/msword",
+    ".xls": "application/vnd.ms-excel",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".rtf": "application/rtf",
+    ".odt": "application/vnd.oasis.opendocument.text",
+    ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    ".odp": "application/vnd.oasis.opendocument.presentation",
+    ".md": "text/markdown",
+    ".json": "application/json",
+    ".xml": "application/xml",
+    # video
+    ".mp4": "video/mp4",
+    ".m4v": "video/x-m4v",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
+    ".avi": "video/x-msvideo",
+    ".3gp": "video/3gpp",
+    ".wmv": "video/x-ms-wmv",
+    ".flv": "video/x-flv",
+    ".mpg": "video/mpeg",
+    ".mpeg": "video/mpeg",
+    # audio
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+    ".amr": "audio/amr",
+    ".wma": "audio/x-ms-wma",
+    # archives
+    ".rar": "application/vnd.rar",
+    ".7z": "application/x-7z-compressed",
+    ".tar": "application/x-tar",
+    ".gz": "application/gzip",
+    ".tgz": "application/gzip",
+    ".bz2": "application/x-bzip2",
+    ".xz": "application/x-xz",
+    # design / manufacturing
+    ".psd": "image/vnd.adobe.photoshop",
+    ".ai": "application/postscript",
+    ".svg": "image/svg+xml",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+    ".dwg": "image/vnd.dwg",
+    ".dxf": "image/vnd.dxf",
+    ".step": "model/step",
+    ".stp": "model/step",
+    ".igs": "model/iges",
+    ".iges": "model/iges",
+    ".stl": "model/stl",
+    ".obj": "model/obj",
 }
+OCTET_STREAM_MEDIA_TYPE = "application/octet-stream"
+# Programs and script hosts are the only things the chat refuses outright.
+BLOCKED_EXTENSIONS = frozenset(
+    {
+        ".exe", ".dll", ".scr", ".com", ".bat", ".cmd", ".msi", ".msp",
+        ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+        ".hta", ".lnk", ".jar", ".cpl", ".reg", ".sys", ".pif",
+        ".app", ".dmg", ".apk", ".ipa", ".deb", ".rpm",
+    }
+)
+
+
+def filename_extension(filename: str) -> str:
+    dot = filename.rfind(".")
+    return filename[dot:].lower() if dot >= 0 else ""
+
+
+def expected_media_type(kind: str, filename: str) -> str | None:
+    """The single media type a filename may declare for ``kind``; None if refused."""
+
+    extension = filename_extension(filename)
+    if extension in BLOCKED_EXTENSIONS:
+        return None
+    if kind == "image":
+        return IMAGE_MEDIA_BY_EXTENSION.get(extension)
+    if kind != "file" or extension in IMAGE_MEDIA_BY_EXTENSION:
+        return None
+    return FILE_MEDIA_BY_EXTENSION.get(extension, OCTET_STREAM_MEDIA_TYPE)
+
+
 FORBIDDEN_BIDI = {chr(codepoint) for codepoint in range(0x202A, 0x202F)} | {
     chr(codepoint) for codepoint in range(0x2066, 0x206A)
 }
@@ -71,7 +162,7 @@ class UploadIntentRequest(ContractModel):
     kind: Literal["image", "file"]
     filename: str = Field(min_length=1, max_length=255)
     media_type: str = Field(min_length=1, max_length=128)
-    size_bytes: int = Field(gt=0, le=64 * 1024 * 1024)
+    size_bytes: int = Field(gt=0, le=HARD_MAX_BYTES)
     sha256_hex: Sha256Hex
     requested_at: datetime
 
@@ -94,10 +185,7 @@ class UploadIntentRequest(ContractModel):
 
     @model_validator(mode="after")
     def validate_kind_extension_and_media(self) -> "UploadIntentRequest":
-        dot = self.filename.rfind(".")
-        extension = self.filename[dot:].lower() if dot >= 0 else ""
-        allowed = IMAGE_MEDIA_BY_EXTENSION if self.kind == "image" else FILE_MEDIA_BY_EXTENSION
-        if allowed.get(extension) != self.media_type:
+        if expected_media_type(self.kind, self.filename) != self.media_type:
             raise ValueError("filename, kind, and media type do not match")
         return self
 
@@ -111,7 +199,7 @@ class MomentUploadIntentRequest(ContractModel):
     kind: Literal["image"]
     filename: str = Field(min_length=1, max_length=255)
     media_type: str = Field(min_length=1, max_length=128)
-    size_bytes: int = Field(gt=0, le=64 * 1024 * 1024)
+    size_bytes: int = Field(gt=0, le=HARD_MAX_BYTES)
     sha256_hex: Sha256Hex
     requested_at: datetime
 
@@ -174,7 +262,7 @@ class MomentAssetSnapshot(ContractModel):
     kind: Literal["image"]
     filename: str = Field(min_length=1, max_length=255)
     media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"]
-    size_bytes: int = Field(gt=0, le=64 * 1024 * 1024)
+    size_bytes: int = Field(gt=0, le=HARD_MAX_BYTES)
     sha256_hex: Sha256Hex
     version: int = Field(ge=1)
     status: Literal[
@@ -352,7 +440,7 @@ class ScopedTransferInspectResponse(ContractModel):
 class GatewayUploadAuthorizeRequest(ContractModel):
     ticket: Ticket
     method: Literal["PUT"]
-    content_length: int | None = Field(default=None, ge=0, le=64 * 1024 * 1024)
+    content_length: int | None = Field(default=None, ge=0, le=HARD_MAX_BYTES)
 
 
 class GatewayUploadAuthorizeResponse(ContractModel):
@@ -365,7 +453,7 @@ class GatewayUploadAuthorizeResponse(ContractModel):
 
 class GatewayUploadCompleteRequest(ContractModel):
     ticket: Ticket
-    size_bytes: int = Field(gt=0, le=64 * 1024 * 1024)
+    size_bytes: int = Field(gt=0, le=HARD_MAX_BYTES)
     sha256_hex: Sha256Hex
 
 

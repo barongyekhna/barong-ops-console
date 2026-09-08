@@ -310,9 +310,9 @@ def test_role_configuration_isolated_and_fail_closed(tmp_path, monkeypatch):
     api = AssetApiSettings.from_environment()
     assert api.dataset_id == "dataset-1"
     assert api.owner_reserved_file_limit == 2_000
-    assert api.owner_reserved_byte_limit == 2 * 1024 * 1024 * 1024
+    assert api.owner_reserved_byte_limit == 20 * 1024 * 1024 * 1024
     assert api.global_reserved_file_limit == 100_000
-    assert api.global_reserved_byte_limit == 50 * 1024 * 1024 * 1024
+    assert api.global_reserved_byte_limit == 100 * 1024 * 1024 * 1024
     assert api.thumbnail_max_bytes == 2 * 1024 * 1024
     # API configuration does not need or expose any object-volume path.
     assert not hasattr(api, "active_root")

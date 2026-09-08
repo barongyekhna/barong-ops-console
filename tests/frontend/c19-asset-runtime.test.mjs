@@ -57,16 +57,39 @@ test("asset selection applies the exact Stage 4 type and size envelope", () => {
         size: C19_IMAGE_MAX_BYTES + 1,
         type: "image/png",
       }),
-    /20 MiB/,
+    /32 MiB/,
+  );
+  // Every non-executable file is sendable: known containers by media type,
+  // anything else as an opaque octet stream. Programs are refused outright.
+  assert.deepEqual(
+    inspectC19AssetSelection({ name: "演示.mp4", size: 10, type: "video/mp4" }),
+    { filename: "演示.mp4", kind: "file", mediaType: "video/mp4", sizeBytes: 10 },
+  );
+  assert.deepEqual(
+    inspectC19AssetSelection({ name: "payload.svg", size: 10, type: "image/svg+xml" }),
+    { filename: "payload.svg", kind: "file", mediaType: "image/svg+xml", sizeBytes: 10 },
+  );
+  assert.deepEqual(
+    inspectC19AssetSelection({ name: "模具.skp", size: 10, type: "" }),
+    {
+      filename: "模具.skp",
+      kind: "file",
+      mediaType: "application/octet-stream",
+      sizeBytes: 10,
+    },
+  );
+  assert.throws(
+    () => inspectC19AssetSelection({ name: "setup.exe", size: 10, type: "" }),
+    /可执行程序/,
   );
   assert.throws(
     () =>
       inspectC19AssetSelection({
-        name: "payload.svg",
-        size: 10,
-        type: "image/svg+xml",
+        name: "big.mp4",
+        size: C19_FILE_MAX_BYTES + 1,
+        type: "video/mp4",
       }),
-    /仅支持/,
+    /200 MiB/,
   );
   assert.throws(
     () =>

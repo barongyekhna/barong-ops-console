@@ -92,7 +92,8 @@ const RECOVERY_SLOW_HINT_MS = 1500;
 const RECOVERY_ERROR_VISIBLE_THRESHOLD = 3;
 const STATUS_REFRESH_INTERVAL_MS = 15_000;
 const MESSAGE_MAX_LENGTH = 4_000;
-const ASSET_SCAN_POLL_LIMIT = 120;
+// 1.2s 一轮；大视频要先过 ClamAV 再落盘，给到 12 分钟。
+const ASSET_SCAN_POLL_LIMIT = 600;
 const EMOJI_CATEGORIES = [
   {
     id: "common",
@@ -196,7 +197,7 @@ function runtimeErrorMessage(error: unknown, fallback: string) {
     if (error.status === 404) return "会话或消息不存在。";
     if (error.status === 409) return error.message || "消息状态发生冲突，请刷新后重试。";
     if (error.status === 413) return "图片或文件超过资产服务允许的大小。";
-    if (error.status === 415) return "图片或文件类型不受支持。";
+    if (error.status === 415) return error.message || "图片或文件类型不受支持。";
     if (error.status === 422) return error.message || "消息内容不符合发送规则。";
     if (error.status === 429) return "发送过于频繁，请稍后再试。";
     if (error.status >= 500) return "聊天服务暂时不可用，消息未发送成功，请重试。";
@@ -1512,7 +1513,7 @@ export function C19ChatPanel({
         setAssetTransfer({
           phase: "selected",
           progress: 0,
-          statusText: "已选择，发送时会自动检查图片。",
+          statusText: "已选择，发送时会自动做安全检查。",
         });
         setSendError("");
       } catch (error) {
@@ -1520,7 +1521,7 @@ export function C19ChatPanel({
         setSendError(
           error instanceof Error && error.message
             ? error.message
-            : "无法选择这个图片或文件。",
+            : "无法选择这个附件。",
         );
       }
     },
@@ -1601,7 +1602,7 @@ export function C19ChatPanel({
           asset.sha256_hex !== pendingAsset.sha256Hex
         ) {
           throw new C19AssetTransferError(
-            "图片校验不一致，已停止发送，请重新选择。",
+            "附件校验不一致，已停止发送，请重新选择。",
           );
         }
       };
@@ -1613,7 +1614,7 @@ export function C19ChatPanel({
             updateAssetTransfer({
               phase: "hashing",
               progress: 0,
-              statusText: "正在准备图片…",
+              statusText: "正在计算文件指纹…",
             });
             const sha256Hex = await sha256C19File(
               pendingAsset.file,
@@ -1623,7 +1624,7 @@ export function C19ChatPanel({
             rememberAsset(pendingAsset);
           }
           if (!pendingAsset.sha256Hex) {
-            throw new C19AssetTransferError("图片准备失败，请重试。");
+            throw new C19AssetTransferError("文件指纹计算失败，请重试。");
           }
 
           updateAssetTransfer({
@@ -1664,7 +1665,7 @@ export function C19ChatPanel({
             updateAssetTransfer({
               phase: "uploading",
               progress: 0,
-              statusText: "正在上传图片…",
+              statusText: "正在上传…",
             });
             await putC19AssetBytes({
               file: pendingAsset.file,
@@ -1699,7 +1700,7 @@ export function C19ChatPanel({
             updateAssetTransfer({
               phase: "scanning",
               progress: 100,
-              statusText: "正在检查图片…",
+              statusText: "正在做安全扫描…",
             });
             await waitForC19AssetPoll(controller.signal);
             remoteAsset = await getC19AssetStatus(
@@ -1763,9 +1764,9 @@ export function C19ChatPanel({
           if (currentPending.asset) resetAssetComposer(false);
           setSendError(
             !messagePersistenceStarted
-              ? "这张图片已失效，请重新选择后发送。"
+              ? "这个附件已失效，请重新选择后发送。"
               : currentPending.asset
-                ? "原消息已被删除，请重新选择图片后发送。"
+                ? "原消息已被删除，请重新选择附件后发送。"
                 : "原消息已被删除，内容已保留，再次发送即可。",
           );
           return;
@@ -2114,8 +2115,8 @@ export function C19ChatPanel({
         </div>
         <div className={styles.assetPickerRow}>
           <input
-            accept={C19_ASSET_ACCEPT}
-            aria-label="选择一张图片或一个普通文件"
+            accept={C19_ASSET_ACCEPT || undefined}
+            aria-label="选择一张图片、一个视频或一个文件"
             className={styles.assetFileInput}
             disabled={
               renderWindowMode === "older" ||
@@ -2136,9 +2137,9 @@ export function C19ChatPanel({
             type="button"
           >
             <Paperclip aria-hidden="true" size={15} />
-            {selectedAsset ? "更换附件" : "添加图片或文件"}
+            {selectedAsset ? "更换附件" : "添加图片 / 视频 / 文件"}
           </button>
-          <span>图片 ≤ 20 MiB · 文件 ≤ 50 MiB · 每条消息 1 个</span>
+          <span>图片 ≤ 32 MiB · 视频/文件 ≤ 200 MiB · 每条消息 1 个 · 不收可执行程序</span>
         </div>
         {selectedAsset ? (
           <div className={styles.selectedAssetCard}>

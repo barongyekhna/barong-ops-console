@@ -32,7 +32,7 @@ class ClamdScanner:
         host: str,
         port: int = 3310,
         *,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float = 600.0,
         chunk_size: int = 1024 * 1024,
         signature_max_age_hours: int = 48,
         now_provider: Callable[[], datetime] | None = None,

@@ -338,6 +338,8 @@ export function finalizeC19AssetUpload(
       `assets/${encodeURIComponent(assetId)}/finalize`,
     ),
     {
+      // 空 JSON 体：前端代理要求通讯写请求带 application/json，无体 POST 会被 415。
+      body: {},
       method: "POST",
       retryLimit: 0,
       signal,
@@ -617,7 +619,7 @@ export function finalizeC19MomentAssetUpload(
       momentId,
       `assets/${encodeURIComponent(assetId)}/finalize`,
     ),
-    { method: "POST", retryLimit: 0, signal },
+    { body: {}, method: "POST", retryLimit: 0, signal },
   );
 }
 

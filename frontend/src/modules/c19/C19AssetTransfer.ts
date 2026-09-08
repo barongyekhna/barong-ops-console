@@ -1,60 +1,117 @@
 import type { C19AssetKind } from "./types";
 
-export const C19_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
-export const C19_FILE_MAX_BYTES = 50 * 1024 * 1024;
-export const C19_ASSET_ACCEPT = [
-  ".jpg",
-  ".jpeg",
-  ".png",
-  ".webp",
-  ".gif",
-  ".pdf",
-  ".txt",
-  ".csv",
-  ".docx",
-  ".xlsx",
-  ".pptx",
-  ".zip",
-].join(",");
+export const C19_IMAGE_MAX_BYTES = 32 * 1024 * 1024;
+export const C19_FILE_MAX_BYTES = 200 * 1024 * 1024;
+/** Empty: the picker shows every file; the tables below decide what is sent. */
+export const C19_ASSET_ACCEPT = "";
 
-const MEDIA_BY_EXTENSION = new Map<
-  string,
-  { kind: C19AssetKind; mediaType: string }
->([
-  [".jpg", { kind: "image", mediaType: "image/jpeg" }],
-  [".jpeg", { kind: "image", mediaType: "image/jpeg" }],
-  [".png", { kind: "image", mediaType: "image/png" }],
-  [".webp", { kind: "image", mediaType: "image/webp" }],
-  [".gif", { kind: "image", mediaType: "image/gif" }],
-  [".pdf", { kind: "file", mediaType: "application/pdf" }],
-  [".txt", { kind: "file", mediaType: "text/plain" }],
-  [".csv", { kind: "file", mediaType: "text/csv" }],
+const IMAGE_MEDIA_BY_EXTENSION = new Map<string, string>([
+  [".jpg", "image/jpeg"],
+  [".jpeg", "image/jpeg"],
+  [".png", "image/png"],
+  [".webp", "image/webp"],
+  [".gif", "image/gif"],
+  [".bmp", "image/bmp"],
+  [".tif", "image/tiff"],
+  [".tiff", "image/tiff"],
+]);
+
+// Mirrors c19_asset_service/schemas.py FILE_MEDIA_BY_EXTENSION. Anything not
+// listed (and not blocked) travels as application/octet-stream, download only.
+const FILE_MEDIA_BY_EXTENSION = new Map<string, string>([
+  [".pdf", "application/pdf"],
+  [".txt", "text/plain"],
+  [".csv", "text/csv"],
   [
     ".docx",
-    {
-      kind: "file",
-      mediaType:
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    },
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ],
   [
     ".xlsx",
-    {
-      kind: "file",
-      mediaType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    },
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ],
   [
     ".pptx",
-    {
-      kind: "file",
-      mediaType:
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    },
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   ],
-  [".zip", { kind: "file", mediaType: "application/zip" }],
+  [".zip", "application/zip"],
+  [".doc", "application/msword"],
+  [".xls", "application/vnd.ms-excel"],
+  [".ppt", "application/vnd.ms-powerpoint"],
+  [".rtf", "application/rtf"],
+  [".odt", "application/vnd.oasis.opendocument.text"],
+  [".ods", "application/vnd.oasis.opendocument.spreadsheet"],
+  [".odp", "application/vnd.oasis.opendocument.presentation"],
+  [".md", "text/markdown"],
+  [".json", "application/json"],
+  [".xml", "application/xml"],
+  [".mp4", "video/mp4"],
+  [".m4v", "video/x-m4v"],
+  [".mov", "video/quicktime"],
+  [".webm", "video/webm"],
+  [".mkv", "video/x-matroska"],
+  [".avi", "video/x-msvideo"],
+  [".3gp", "video/3gpp"],
+  [".wmv", "video/x-ms-wmv"],
+  [".flv", "video/x-flv"],
+  [".mpg", "video/mpeg"],
+  [".mpeg", "video/mpeg"],
+  [".mp3", "audio/mpeg"],
+  [".wav", "audio/wav"],
+  [".m4a", "audio/mp4"],
+  [".aac", "audio/aac"],
+  [".ogg", "audio/ogg"],
+  [".flac", "audio/flac"],
+  [".amr", "audio/amr"],
+  [".wma", "audio/x-ms-wma"],
+  [".rar", "application/vnd.rar"],
+  [".7z", "application/x-7z-compressed"],
+  [".tar", "application/x-tar"],
+  [".gz", "application/gzip"],
+  [".tgz", "application/gzip"],
+  [".bz2", "application/x-bzip2"],
+  [".xz", "application/x-xz"],
+  [".psd", "image/vnd.adobe.photoshop"],
+  [".ai", "application/postscript"],
+  [".svg", "image/svg+xml"],
+  [".heic", "image/heic"],
+  [".heif", "image/heif"],
+  [".dwg", "image/vnd.dwg"],
+  [".dxf", "image/vnd.dxf"],
+  [".step", "model/step"],
+  [".stp", "model/step"],
+  [".igs", "model/iges"],
+  [".iges", "model/iges"],
+  [".stl", "model/stl"],
+  [".obj", "model/obj"],
 ]);
+
+export const C19_OCTET_STREAM_MEDIA_TYPE = "application/octet-stream";
+
+/** Programs and script hosts: the only things the chat refuses outright. */
+const BLOCKED_EXTENSIONS = new Set([
+  ".exe", ".dll", ".scr", ".com", ".bat", ".cmd", ".msi", ".msp",
+  ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+  ".hta", ".lnk", ".jar", ".cpl", ".reg", ".sys", ".pif",
+  ".app", ".dmg", ".apk", ".ipa", ".deb", ".rpm",
+]);
+
+export function c19AssetMediaFamily(mediaType: string) {
+  if (mediaType.startsWith("video/")) return "video" as const;
+  if (mediaType.startsWith("audio/")) return "audio" as const;
+  if (
+    mediaType === "application/zip" ||
+    mediaType === "application/vnd.rar" ||
+    mediaType === "application/x-7z-compressed" ||
+    mediaType === "application/x-tar" ||
+    mediaType === "application/gzip" ||
+    mediaType === "application/x-bzip2" ||
+    mediaType === "application/x-xz"
+  ) {
+    return "archive" as const;
+  }
+  return "document" as const;
+}
 
 const BIDI_OR_DIRECTIONAL_CONTROL =
   /[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
@@ -110,12 +167,20 @@ export function inspectC19AssetSelection(
     throw new C19AssetTransferError("文件名不符合安全规则，请重命名后再选择。");
   }
 
-  const declaration = MEDIA_BY_EXTENSION.get(fileExtension(filename));
-  if (!declaration) {
+  const extension = fileExtension(filename);
+  if (BLOCKED_EXTENSIONS.has(extension)) {
     throw new C19AssetTransferError(
-      "仅支持 JPG、PNG、WebP、GIF、PDF、TXT、CSV、DOCX、XLSX、PPTX 和 ZIP。",
+      "可执行程序和脚本不能通过聊天发送，请打包后再发或改用其他方式。",
     );
   }
+  const imageMediaType = IMAGE_MEDIA_BY_EXTENSION.get(extension);
+  const declaration: { kind: C19AssetKind; mediaType: string } = imageMediaType
+    ? { kind: "image", mediaType: imageMediaType }
+    : {
+        kind: "file",
+        mediaType:
+          FILE_MEDIA_BY_EXTENSION.get(extension) ?? C19_OCTET_STREAM_MEDIA_TYPE,
+      };
   const declaredBrowserType = file.type.trim().toLowerCase();
   const browserTypeMatchesImage =
     declaredBrowserType === declaration.mediaType ||
@@ -137,8 +202,8 @@ export function inspectC19AssetSelection(
   if (file.size > maximum) {
     throw new C19AssetTransferError(
       declaration.kind === "image"
-        ? "图片不能超过 20 MiB。"
-        : "普通文件不能超过 50 MiB。",
+        ? "图片不能超过 32 MiB。"
+        : "文件或视频不能超过 200 MiB。",
     );
   }
 

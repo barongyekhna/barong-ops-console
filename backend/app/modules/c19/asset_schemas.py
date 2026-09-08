@@ -13,30 +13,105 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 ASSET_ID_PATTERN = r"^att_[0-9a-f]{32}$"
 CLIENT_ASSET_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
-MAX_IMAGE_BYTES = 20 * 1024 * 1024
-MAX_FILE_BYTES = 50 * 1024 * 1024
-MAX_HARD_BYTES = 64 * 1024 * 1024
+MAX_IMAGE_BYTES = 32 * 1024 * 1024
+MAX_FILE_BYTES = 200 * 1024 * 1024
+MAX_HARD_BYTES = 256 * 1024 * 1024
 
-_MEDIA_EXTENSIONS: dict[str, frozenset[str]] = {
-    "image/jpeg": frozenset({".jpg", ".jpeg"}),
-    "image/png": frozenset({".png"}),
-    "image/webp": frozenset({".webp"}),
-    "image/gif": frozenset({".gif"}),
-    "application/pdf": frozenset({".pdf"}),
-    "text/plain": frozenset({".txt"}),
-    "text/csv": frozenset({".csv"}),
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": frozenset(
-        {".docx"}
-    ),
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": frozenset(
-        {".xlsx"}
-    ),
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": frozenset(
-        {".pptx"}
-    ),
-    "application/zip": frozenset({".zip"}),
+# Mirrors c19_asset_service/schemas.py; the asset service is authoritative and
+# re-validates every declaration, this copy only gives users an early answer.
+_IMAGE_MEDIA_BY_EXTENSION: dict[str, str] = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
 }
-_IMAGE_MEDIA_TYPES = frozenset(key for key in _MEDIA_EXTENSIONS if key.startswith("image/"))
+_FILE_MEDIA_BY_EXTENSION: dict[str, str] = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".zip": "application/zip",
+    ".doc": "application/msword",
+    ".xls": "application/vnd.ms-excel",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".rtf": "application/rtf",
+    ".odt": "application/vnd.oasis.opendocument.text",
+    ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    ".odp": "application/vnd.oasis.opendocument.presentation",
+    ".md": "text/markdown",
+    ".json": "application/json",
+    ".xml": "application/xml",
+    ".mp4": "video/mp4",
+    ".m4v": "video/x-m4v",
+    ".mov": "video/quicktime",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
+    ".avi": "video/x-msvideo",
+    ".3gp": "video/3gpp",
+    ".wmv": "video/x-ms-wmv",
+    ".flv": "video/x-flv",
+    ".mpg": "video/mpeg",
+    ".mpeg": "video/mpeg",
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
+    ".amr": "audio/amr",
+    ".wma": "audio/x-ms-wma",
+    ".rar": "application/vnd.rar",
+    ".7z": "application/x-7z-compressed",
+    ".tar": "application/x-tar",
+    ".gz": "application/gzip",
+    ".tgz": "application/gzip",
+    ".bz2": "application/x-bzip2",
+    ".xz": "application/x-xz",
+    ".psd": "image/vnd.adobe.photoshop",
+    ".ai": "application/postscript",
+    ".svg": "image/svg+xml",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
+    ".dwg": "image/vnd.dwg",
+    ".dxf": "image/vnd.dxf",
+    ".step": "model/step",
+    ".stp": "model/step",
+    ".igs": "model/iges",
+    ".iges": "model/iges",
+    ".stl": "model/stl",
+    ".obj": "model/obj",
+}
+OCTET_STREAM_MEDIA_TYPE = "application/octet-stream"
+BLOCKED_EXTENSIONS = frozenset(
+    {
+        ".exe", ".dll", ".scr", ".com", ".bat", ".cmd", ".msi", ".msp",
+        ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh",
+        ".hta", ".lnk", ".jar", ".cpl", ".reg", ".sys", ".pif",
+        ".app", ".dmg", ".apk", ".ipa", ".deb", ".rpm",
+    }
+)
+
+
+def expected_media_type(kind: str, filename: str) -> str | None:
+    """The single media type ``filename`` may declare for ``kind``; None if refused."""
+
+    dot = filename.rfind(".")
+    extension = filename[dot:].casefold() if dot >= 0 else ""
+    if extension in BLOCKED_EXTENSIONS:
+        return None
+    if kind == "image":
+        return _IMAGE_MEDIA_BY_EXTENSION.get(extension)
+    if kind != "file" or extension in _IMAGE_MEDIA_BY_EXTENSION:
+        return None
+    return _FILE_MEDIA_BY_EXTENSION.get(extension, OCTET_STREAM_MEDIA_TYPE)
+
+
 _BIDI_CONTROLS = frozenset(
     chr(value)
     for value in (
@@ -91,18 +166,14 @@ class ChatAssetUploadIntentRequest(BaseModel):
 
     @model_validator(mode="after")
     def enforce_supported_type_size_and_extension(self) -> Self:
-        extensions = _MEDIA_EXTENSIONS.get(self.media_type)
-        if extensions is None:
-            raise ValueError("Asset media type is unsupported.")
-        is_image = self.media_type in _IMAGE_MEDIA_TYPES
-        if (self.kind == "image") != is_image:
-            raise ValueError("Asset kind and media type do not match.")
-        maximum = MAX_IMAGE_BYTES if is_image else MAX_FILE_BYTES
+        expected = expected_media_type(self.kind, self.filename)
+        if expected is None:
+            raise ValueError("Asset filename type is not allowed in chat.")
+        if expected != self.media_type:
+            raise ValueError("Asset filename extension does not match its media type.")
+        maximum = MAX_IMAGE_BYTES if self.kind == "image" else MAX_FILE_BYTES
         if self.size_bytes > maximum:
             raise ValueError("Asset exceeds the allowed size.")
-        lower_name = self.filename.casefold()
-        if not any(lower_name.endswith(extension) for extension in extensions):
-            raise ValueError("Asset filename extension does not match its media type.")
         return self
 
 

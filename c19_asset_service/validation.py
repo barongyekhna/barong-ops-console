@@ -22,7 +22,12 @@ from PIL import Image, ImageOps, ImageSequence
 from pypdf import PdfReader
 from pypdf.generic import ArrayObject, DictionaryObject, IndirectObject
 
-from .schemas import FILE_MEDIA_BY_EXTENSION, IMAGE_MEDIA_BY_EXTENSION
+from .schemas import (
+    BLOCKED_EXTENSIONS,
+    IMAGE_MEDIA_BY_EXTENSION,
+    OCTET_STREAM_MEDIA_TYPE,
+    expected_media_type,
+)
 
 
 class ContentValidationError(RuntimeError):
@@ -60,6 +65,8 @@ IMAGE_FORMAT_MEDIA = {
     "PNG": "image/png",
     "WEBP": "image/webp",
     "GIF": "image/gif",
+    "BMP": "image/bmp",
+    "TIFF": "image/tiff",
 }
 EXECUTABLE_MAGICS = (
     b"MZ",
@@ -84,64 +91,49 @@ ARCHIVE_MAGICS = (
     b"BZh",
     b"\xfd7zXZ\x00",
 )
-FORBIDDEN_ARCHIVE_SUFFIXES = {
-    ".7z",
-    ".apk",
-    ".app",
-    ".bat",
-    ".bz2",
-    ".cmd",
-    ".com",
-    ".cpl",
-    ".deb",
-    ".desktop",
-    ".dll",
-    ".dmg",
-    ".doc",
-    ".docx",
-    ".docm",
-    ".dylib",
-    ".exe",
-    ".gz",
-    ".hta",
-    ".htm",
-    ".html",
-    ".iso",
-    ".jar",
-    ".js",
-    ".lnk",
-    ".mht",
-    ".msi",
-    ".php",
-    ".pl",
-    ".ppt",
-    ".pptx",
-    ".pptm",
-    ".ps1",
-    ".py",
-    ".pyw",
-    ".rar",
-    ".rb",
-    ".reg",
-    ".rpm",
-    ".scr",
-    ".sh",
-    ".so",
-    ".svg",
-    ".sys",
-    ".tar",
-    ".vbe",
-    ".vb",
-    ".vbs",
-    ".wasm",
-    ".wsf",
-    ".wsh",
-    ".xhtml",
-    ".xls",
-    ".xlsx",
-    ".xlsm",
-    ".xz",
-    ".zip",
+# Executables and script hosts are refused both as attachments and as members
+# of a ZIP. Everything else inside an archive is left to ClamAV.
+FORBIDDEN_ARCHIVE_SUFFIXES = BLOCKED_EXTENSIONS
+# Known container signatures for the non-deep-inspected file families. A file
+# whose extension is listed here must start with one of the prefixes (offset 0)
+# or carry the marker at the given offset; families without a stable signature
+# are only checked against the executable magics and ClamAV.
+FILE_SIGNATURES: dict[str, tuple[tuple[int, bytes], ...]] = {
+    ".mp4": ((4, b"ftyp"),),
+    ".m4v": ((4, b"ftyp"),),
+    ".mov": ((4, b"ftyp"), (4, b"moov"), (4, b"mdat"), (4, b"wide"), (4, b"free")),
+    ".3gp": ((4, b"ftyp"),),
+    ".heic": ((4, b"ftyp"),),
+    ".heif": ((4, b"ftyp"),),
+    ".m4a": ((4, b"ftyp"),),
+    ".webm": ((0, b"\x1a\x45\xdf\xa3"),),
+    ".mkv": ((0, b"\x1a\x45\xdf\xa3"),),
+    ".avi": ((0, b"RIFF"),),
+    ".wav": ((0, b"RIFF"),),
+    ".wmv": ((0, b"\x30\x26\xb2\x75"),),
+    ".wma": ((0, b"\x30\x26\xb2\x75"),),
+    ".flv": ((0, b"FLV"),),
+    ".mpg": ((0, b"\x00\x00\x01\xba"), (0, b"\x00\x00\x01\xb3")),
+    ".mpeg": ((0, b"\x00\x00\x01\xba"), (0, b"\x00\x00\x01\xb3")),
+    ".mp3": ((0, b"ID3"), (0, b"\xff\xfb"), (0, b"\xff\xf3"), (0, b"\xff\xf2"), (0, b"\xff\xe3")),
+    ".flac": ((0, b"fLaC"),),
+    ".ogg": ((0, b"OggS"),),
+    ".amr": ((0, b"#!AMR"),),
+    ".rar": ((0, b"Rar!\x1a\x07"),),
+    ".7z": ((0, b"7z\xbc\xaf\x27\x1c"),),
+    ".gz": ((0, b"\x1f\x8b"),),
+    ".tgz": ((0, b"\x1f\x8b"),),
+    ".bz2": ((0, b"BZh"),),
+    ".xz": ((0, b"\xfd7zXZ\x00"),),
+    ".doc": ((0, b"\xd0\xcf\x11\xe0"), (0, b"{\\rtf"), (0, b"PK\x03\x04")),
+    ".xls": ((0, b"\xd0\xcf\x11\xe0"), (0, b"PK\x03\x04")),
+    ".ppt": ((0, b"\xd0\xcf\x11\xe0"), (0, b"PK\x03\x04")),
+    ".rtf": ((0, b"{\\rtf"),),
+    ".odt": ((0, b"PK\x03\x04"),),
+    ".ods": ((0, b"PK\x03\x04"),),
+    ".odp": ((0, b"PK\x03\x04"),),
+    ".psd": ((0, b"8BPS"),),
+    ".ai": ((0, b"%PDF"), (0, b"%!PS")),
 }
 
 OOXML_CONTENT_TYPES_NAMESPACE = (
@@ -382,6 +374,14 @@ def _verify_image_container(path: Path, media_type: str) -> None:
             or int.from_bytes(payload[4:8], "little") + 8 != len(payload)
         ):
             raise ContentValidationError("invalid WebP container")
+        return
+    if media_type == "image/bmp":
+        if len(payload) < 14 or not payload.startswith(b"BM"):
+            raise ContentValidationError("invalid BMP container")
+        return
+    if media_type == "image/tiff":
+        if not payload.startswith((b"II*\x00", b"MM\x00*")):
+            raise ContentValidationError("invalid TIFF container")
         return
     raise ContentValidationError("unsupported image media type")
 
@@ -764,13 +764,8 @@ def _inspect_zip(
                             raise ContentValidationError("archive member size mismatch")
                 if observed != member.file_size:
                     raise ContentValidationError("archive member size mismatch")
-                if not is_ooxml and (
-                    _is_executable_prefix(bytes(prefix))
-                    or bytes(prefix).startswith(ARCHIVE_MAGICS)
-                ):
-                    raise ContentValidationError(
-                        "executable or nested archive member is unsupported"
-                    )
+                if not is_ooxml and _is_executable_prefix(bytes(prefix)):
+                    raise ContentValidationError("executable archive member is unsupported")
     except ContentValidationError:
         raise
     except (OSError, ValueError, zipfile.BadZipFile, RuntimeError) as exc:
@@ -871,7 +866,7 @@ def _validate_file(
     limits: ValidationLimits,
 ) -> None:
     extension = Path(filename).suffix.lower()
-    if FILE_MEDIA_BY_EXTENSION.get(extension) != declared_media_type:
+    if expected_media_type("file", filename) != declared_media_type:
         raise ContentValidationError("file declaration mismatch")
     with path.open("rb") as handle:
         prefix = handle.read(16)
@@ -883,10 +878,19 @@ def _validate_file(
         _validate_text(path, csv_mode=False)
     elif extension == ".csv":
         _validate_text(path, csv_mode=True)
-    else:
+    elif extension in OOXML_FAMILY or extension == ".zip":
         if not zipfile.is_zipfile(path):
             raise ContentValidationError("archive signature mismatch")
         _inspect_zip(path, extension, limits)
+    elif extension in FILE_SIGNATURES:
+        if not any(
+            prefix[offset : offset + len(marker)] == marker
+            for offset, marker in FILE_SIGNATURES[extension]
+        ):
+            raise ContentValidationError("file signature mismatch")
+    elif declared_media_type == OCTET_STREAM_MEDIA_TYPE:
+        # Unknown container: executables were refused above, ClamAV already ran.
+        return
 
 
 def validate_content(

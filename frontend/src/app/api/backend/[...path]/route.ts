@@ -2910,9 +2910,18 @@ async function proxyRequest(
     const idempotencyKey = request.headers.get("idempotency-key");
     const isC19JsonWrite = isC19BoundedJsonWrite(request.method, path);
 
+    // Node hands every non-GET request a body stream, even an empty one, so
+    // "has a body" must be judged from the headers: a body-less POST/DELETE
+    // (finalize, moment comment delete) carries Content-Length: 0 and no
+    // Content-Type, and must not be refused as a non-JSON write.
+    const declaredContentLength = request.headers.get("content-length");
+    const carriesBody =
+      declaredContentLength !== null
+        ? Number(declaredContentLength) > 0
+        : request.body !== null && request.headers.has("transfer-encoding");
     if (
       isC19JsonWrite &&
-      request.body !== null &&
+      carriesBody &&
       contentType?.split(";", 1)[0].trim().toLowerCase() !== "application/json"
     ) {
       return Response.json(

@@ -273,11 +273,26 @@ def test_generic_zip_forces_path_member_and_bomb_limits(tmp_path):
             declared_media_type="application/zip",
             limits=ValidationLimits(),
         )
+    # Nested archives and office documents inside a ZIP are ordinary business
+    # payloads; ClamAV unpacks them. Only executables stay refused.
+    for member_name, body in (
+        ("nested.docx", b"PK\x03\x04nested-package"),
+        ("nested-without-extension", b"PK\x03\x04nested-package"),
+        ("bundle.7z", b"7z\xbc\xaf\x27\x1cnested"),
+    ):
+        allowed = tmp_path / f"allowed-{member_name.replace('.', '-')}.zip"
+        _write_zip(allowed, [(member_name, body)])
+        validate_content(
+            allowed,
+            kind="file",
+            filename="allowed.zip",
+            declared_media_type="application/zip",
+            limits=ValidationLimits(),
+        )
     for member_name, body in (
         ("extensionless", b"\x7fELF" + b"\x00" * 16),
         ("payload.exe.", b"ordinary-looking"),
-        ("nested.docx", b"PK\x03\x04nested-package"),
-        ("nested-without-extension", b"PK\x03\x04nested-package"),
+        ("tool.exe", b"ordinary-looking"),
         ("script", b"#!/bin/sh\nexit 0\n"),
     ):
         disguised = tmp_path / f"disguised-{member_name.replace('.', '-')}.zip"

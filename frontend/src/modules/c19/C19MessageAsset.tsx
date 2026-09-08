@@ -1,10 +1,18 @@
 "use client";
 
-import { Download, FileText, ImageIcon, RefreshCcw } from "lucide-react";
+import {
+  Download,
+  FileArchive,
+  FileText,
+  Film,
+  ImageIcon,
+  Music,
+  RefreshCcw,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createC19AssetAccessIntent } from "./api";
-import { assertC19DownloadLocator } from "./C19AssetTransfer";
+import { assertC19DownloadLocator, c19AssetMediaFamily } from "./C19AssetTransfer";
 import styles from "./C19Workspace.module.css";
 import type { C19AssetReference } from "./types";
 
@@ -184,10 +192,19 @@ export function C19MessageAsset({
     );
   }
 
+  const family = c19AssetMediaFamily(asset.media_type);
+  const FamilyIcon =
+    family === "video"
+      ? Film
+      : family === "audio"
+        ? Music
+        : family === "archive"
+          ? FileArchive
+          : FileText;
   return (
     <div className={styles.messageAsset}>
       <div className={styles.fileAttachment}>
-        <FileText aria-hidden="true" size={22} />
+        <FamilyIcon aria-hidden="true" size={22} />
         <div>
           <strong title={asset.filename}>{asset.filename}</strong>
           <span>{readableAssetSize(asset.size_bytes)} · 点击后签发短时下载票</span>
