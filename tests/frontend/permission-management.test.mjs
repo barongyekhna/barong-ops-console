@@ -5,6 +5,11 @@ import { isAllowedBackendProxyPath } from "../../frontend/src/app/api/backend/[.
 import {
   HIGH_RISK_CONFIRMATION_TEXT,
   ROLE_DEFAULT_PERMISSIONS_NOTICE,
+  assignedPermissionMap,
+  buildPermissionTree,
+  computeAssignmentDiff,
+  moduleCheckState,
+  splitPermissionDisplayName,
   canShowPermissionManagementEntry,
   createGrantRequestBody,
   detectHighRiskPermission,
@@ -536,5 +541,168 @@ test("403, 409, and 422 errors produce safe summaries without sensitive values",
       status: 400,
     }),
     /abc\.def\.ghi/,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 按员工授权的权限树
+// ---------------------------------------------------------------------------
+
+function registryItem(permissionKey, overrides = {}) {
+  const [moduleHead, ...rest] = permissionKey.split(".");
+  return {
+    ...ordinaryPermission,
+    action: rest[rest.length - 1] ?? "read",
+    // 注册表接口回给前端的是 feature / control_plane，不是后端内部的 business / admin
+    category: "feature",
+    id: `permission-${permissionKey}`,
+    label: permissionKey,
+    module_key: rest.length > 1 ? `${moduleHead}.${rest[0]}` : moduleHead,
+    permission_key: permissionKey,
+    risk_level: "medium",
+    ...overrides,
+  };
+}
+
+const treeRegistry = [
+  registryItem("k.product_knowledge.read"),
+  registryItem("k.product_knowledge.create"),
+  registryItem("k.product_knowledge.archive", { risk_level: "high" }),
+  registryItem("f.enrichment.read"),
+  registryItem("users.manage", {
+    action: "manage",
+    category: "control_plane",
+    module_key: "users",
+    risk_level: "high",
+  }),
+  registryItem("artifacts.read", { module_key: "artifacts" }),
+];
+
+function liveAssignment(permissionKey, overrides = {}) {
+  return {
+    ...highRiskAssignment,
+    enabled: true,
+    id: `assignment-${permissionKey}`,
+    is_enabled: true,
+    permission_key: permissionKey,
+    ...overrides,
+  };
+}
+
+test("buildPermissionTree groups business modules first and control plane last as read-only", () => {
+  const tree = buildPermissionTree(treeRegistry, "owner");
+  assert.deepEqual(
+    tree.map((node) => [node.moduleKey, node.grantable, node.permissions.length]),
+    [
+      ["k.product_knowledge", true, 3],
+      ["f.enrichment", true, 1],
+      ["__control_plane__", false, 1],
+    ],
+  );
+  assert.equal(tree[0].title, "K系列 产品知识库（k.product_knowledge）");
+  assert.deepEqual(
+    tree[0].permissions.map((permission) => permission.permission_key),
+    [
+      "k.product_knowledge.archive",
+      "k.product_knowledge.create",
+      "k.product_knowledge.read",
+    ],
+  );
+  assert.ok(
+    tree.every((node) =>
+      node.permissions.every((p) => p.permission_key !== "artifacts.read"),
+    ),
+  );
+
+  const superAdminTree = buildPermissionTree(treeRegistry, "super_admin");
+  assert.ok(superAdminTree.every((node) => node.grantable));
+  assert.deepEqual(buildPermissionTree(treeRegistry, "operator"), []);
+});
+
+test("assignedPermissionMap ignores disabled rows and prefers the global row", () => {
+  const map = assignedPermissionMap([
+    liveAssignment("k.product_knowledge.read", {
+      id: "scoped",
+      scope_key: "org-1",
+      scope_type: "organization",
+    }),
+    liveAssignment("k.product_knowledge.read", { id: "global" }),
+    liveAssignment("k.product_knowledge.archive", {
+      enabled: false,
+      is_enabled: false,
+    }),
+  ]);
+  assert.deepEqual([...map.keys()], ["k.product_knowledge.read"]);
+  assert.equal(map.get("k.product_knowledge.read").id, "global");
+});
+
+test("moduleCheckState reports all / some / none", () => {
+  const keys = ["a.b.read", "a.b.create"];
+  assert.equal(moduleCheckState(keys, new Set()), "none");
+  assert.equal(moduleCheckState(keys, new Set(["a.b.read"])), "some");
+  assert.equal(moduleCheckState(keys, new Set(keys)), "all");
+  assert.equal(moduleCheckState([], new Set(keys)), "none");
+});
+
+test("computeAssignmentDiff: select-all then untick archive grants everything but archive", () => {
+  const tree = buildPermissionTree(treeRegistry, "owner");
+  const current = assignedPermissionMap([]);
+  const draft = new Set([
+    "k.product_knowledge.read",
+    "k.product_knowledge.create",
+    "f.enrichment.read",
+    // 控制面键即使混进草稿也不会被提交
+    "users.manage",
+  ]);
+  const diff = computeAssignmentDiff(current, draft, tree);
+  assert.deepEqual(
+    diff.grants.map((permission) => permission.permission_key),
+    ["k.product_knowledge.create", "k.product_knowledge.read", "f.enrichment.read"],
+  );
+  assert.deepEqual(diff.revokes, []);
+  assert.deepEqual(diff.highRiskGrants, []);
+});
+
+test("computeAssignmentDiff: unticking a live permission revokes that assignment only", () => {
+  const tree = buildPermissionTree(treeRegistry, "owner");
+  const current = assignedPermissionMap([
+    liveAssignment("k.product_knowledge.read"),
+    liveAssignment("k.product_knowledge.create"),
+    liveAssignment("k.product_knowledge.archive", { risk_level: "high" }),
+  ]);
+  const draft = new Set(["k.product_knowledge.read", "k.product_knowledge.create"]);
+  const diff = computeAssignmentDiff(current, draft, tree);
+  assert.deepEqual(diff.grants, []);
+  assert.deepEqual(
+    diff.revokes.map((entry) => [entry.permission.permission_key, entry.assignment.id]),
+    [["k.product_knowledge.archive", "assignment-k.product_knowledge.archive"]],
+  );
+  assert.deepEqual(
+    diff.highRiskRevokes.map((permission) => permission.permission_key),
+    ["k.product_knowledge.archive"],
+  );
+});
+
+test("computeAssignmentDiff flags high-risk grants so the UI can confirm once", () => {
+  const tree = buildPermissionTree(treeRegistry, "owner");
+  const diff = computeAssignmentDiff(
+    assignedPermissionMap([]),
+    new Set(["k.product_knowledge.archive"]),
+    tree,
+  );
+  assert.deepEqual(
+    diff.highRiskGrants.map((permission) => permission.permission_key),
+    ["k.product_knowledge.archive"],
+  );
+});
+
+test("splitPermissionDisplayName separates the Chinese label from the key", () => {
+  assert.deepEqual(
+    splitPermissionDisplayName(registryItem("k.product_knowledge.archive")),
+    { label: "归档产品知识", key: "k.product_knowledge.archive" },
+  );
+  assert.deepEqual(
+    splitPermissionDisplayName(registryItem("zz.unknown.read", { label: "" })),
+    { label: "查看zz.unknown", key: "zz.unknown.read" },
   );
 });

@@ -3,36 +3,51 @@
 import {
   CheckCircle2,
   ChevronDown,
+  KeyRound,
   LoaderCircle,
   RotateCcw,
+  Save,
   Search,
   ShieldAlert,
   ShieldCheck,
+  Undo2,
+  Users,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { DashboardScene } from "@/components/dashboard-scene";
 import {
   HIGH_RISK_CONFIRMATION_TEXT,
+  PERMISSION_TREE_SCOPE_KEY,
+  PERMISSION_TREE_SCOPE_TYPE,
+  assignedPermissionMap,
+  buildPermissionTree,
   canManagePermissionAssignments,
   canViewPermissionCenter,
+  computeAssignmentDiff,
   detectHighRiskPermission,
-  filterGrantablePermissionRegistry,
-  filterPermissionRegistryForRole,
+  formatPermissionAssignmentsApiError,
   getPermissionCategoryLabel,
-  getPermissionDisplayName,
   getPermissionUiCategory,
-  permissionModuleGroupTitle,
   grantUserPermissionAssignment,
   listPermissionRegistry,
   listUserPermissionAssignments,
+  moduleCheckState,
   revokeUserPermissionAssignment,
+  splitPermissionDisplayName,
   updateUserPermissionAssignment,
   type PermissionAssignment,
+  type PermissionCheckState,
   type PermissionRegistryItem,
-  type PermissionUiCategory,
+  type PermissionTreeModule,
 } from "@/lib/permission-management-api";
 import {
   formatUsersApiError,
@@ -42,8 +57,17 @@ import {
 import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
 
 const ASSIGNMENT_REASON = "Permission center assignment update.";
-const GLOBAL_SCOPE_TYPE = "global";
-const GLOBAL_SCOPE_KEY = "*";
+const GLOBAL_SCOPE_TYPE = PERMISSION_TREE_SCOPE_TYPE;
+const GLOBAL_SCOPE_KEY = PERMISSION_TREE_SCOPE_KEY;
+const UNSAVED_PROMPT = "当前员工有未保存的权限改动，放弃这些改动吗？";
+
+type ViewTab = "user" | "permission";
+
+type SaveFailure = {
+  key: string;
+  label: string;
+  message: string;
+};
 
 function roleLabel(role: string) {
   if (isOwnerRole(role)) {
@@ -75,15 +99,6 @@ function permissionAssignmentForUser(
   );
 }
 
-function groupPermissions(
-  permissions: PermissionRegistryItem[],
-  category: PermissionUiCategory,
-) {
-  return permissions.filter(
-    (permission) => getPermissionUiCategory(permission) === category,
-  );
-}
-
 function userSearchText(user: ManagedUser) {
   return [
     user.username,
@@ -95,6 +110,45 @@ function userSearchText(user: ManagedUser) {
     .toLowerCase();
 }
 
+function highRiskConfirmation(permission: PermissionRegistryItem) {
+  return detectHighRiskPermission(permission)
+    ? {
+        confirm_high_risk: true,
+        confirmation_text: HIGH_RISK_CONFIRMATION_TEXT,
+      }
+    : {};
+}
+
+/** 三态复选框：模块行 / 全选行用。indeterminate 只能靠 DOM 属性设。 */
+function TriCheckbox({
+  ariaLabel,
+  disabled,
+  onChange,
+  state,
+}: {
+  ariaLabel: string;
+  disabled?: boolean;
+  onChange: () => void;
+  state: PermissionCheckState;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = state === "some";
+    }
+  }, [state]);
+  return (
+    <input
+      aria-label={ariaLabel}
+      checked={state === "all"}
+      disabled={disabled}
+      onChange={onChange}
+      ref={ref}
+      type="checkbox"
+    />
+  );
+}
+
 function PermissionCard({
   disabled,
   onClick,
@@ -104,13 +158,14 @@ function PermissionCard({
   onClick?: () => void;
   permission: PermissionRegistryItem;
 }) {
+  const name = splitPermissionDisplayName(permission);
   const content = (
     <>
       <span className="permissions-card-kicker">
         {getPermissionCategoryLabel(getPermissionUiCategory(permission))}
       </span>
-      <strong>{getPermissionDisplayName(permission)}</strong>
-      <small>按当前账号范围控制访问。</small>
+      <strong>{name.label}</strong>
+      <small className="pm-key">{name.key}</small>
       <span
         className={
           detectHighRiskPermission(permission)
@@ -145,26 +200,48 @@ export function PermissionsProductView() {
   const canViewControlPlanePermissions = isOwnerRole(role);
   const canView = status === "authenticated" && canViewPermissionCenter(role);
   const canWriteAssignments = canManagePermissionAssignments(role);
+
+  const [activeTab, setActiveTab] = useState<ViewTab>("user");
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [registry, setRegistry] = useState<PermissionRegistryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  // ---- 按员工授权 ----
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [assignments, setAssignments] = useState<PermissionAssignment[]>([]);
+  const [draft, setDraft] = useState<Set<string>>(() => new Set());
+  const [isAssignmentsLoading, setIsAssignmentsLoading] = useState(false);
+  const [assignmentsError, setAssignmentsError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState({ done: 0, total: 0 });
+  const [saveNotice, setSaveNotice] = useState("");
+  const [saveFailures, setSaveFailures] = useState<SaveFailure[]>([]);
+  const [collapsedModules, setCollapsedModules] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  // ---- 按权限查看（保留原有弹窗） ----
   const [selectedPermission, setSelectedPermission] =
     useState<PermissionRegistryItem | null>(null);
   const [dialogAssignments, setDialogAssignments] = useState<
     Record<number, PermissionAssignment | null>
   >({});
   const [dialogSearchQuery, setDialogSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const [isDialogLoading, setIsDialogLoading] = useState(false);
   const [pendingUserId, setPendingUserId] = useState<number | null>(null);
-  const [error, setError] = useState("");
   const [dialogError, setDialogError] = useState("");
   const [dialogNotice, setDialogNotice] = useState("");
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set(),
   );
 
-  const toggleGroup = useCallback((id: string) => {
-    setCollapsedGroups((prev) => {
+  const toggleInSet = (
+    setter: (updater: (prev: Set<string>) => Set<string>) => void,
+    id: string,
+  ) => {
+    setter((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -173,45 +250,38 @@ export function PermissionsProductView() {
       }
       return next;
     });
-  }, []);
+  };
+  const toggleGroup = useCallback(
+    (id: string) => toggleInSet(setCollapsedGroups, id),
+    [],
+  );
+  const toggleModule = useCallback(
+    (id: string) => toggleInSet(setCollapsedModules, id),
+    [],
+  );
 
-  const visibleRegistry = useMemo(
-    () =>
-      filterPermissionRegistryForRole(
-        filterGrantablePermissionRegistry(registry),
-        role,
-      ),
+  const tree = useMemo(
+    () => buildPermissionTree(registry, role),
     [registry, role],
   );
-  const controlPlanePermissions = useMemo(
-    () => groupPermissions(visibleRegistry, "control_plane"),
-    [visibleRegistry],
+  const grantableModules = useMemo(
+    () => tree.filter((moduleNode) => moduleNode.grantable),
+    [tree],
   );
-  const featurePermissions = useMemo(
-    () => groupPermissions(visibleRegistry, "feature"),
-    [visibleRegistry],
+  const controlPlaneModule = useMemo(
+    () => tree.find((moduleNode) => !moduleNode.grantable) ?? null,
+    [tree],
   );
-  const featureGroups = useMemo(() => {
-    const buckets = new Map<string, PermissionRegistryItem[]>();
-    for (const permission of featurePermissions) {
-      const key = permission.module_key?.trim().toLowerCase() || "other";
-      const bucket = buckets.get(key);
-      if (bucket) {
-        bucket.push(permission);
-      } else {
-        buckets.set(key, [permission]);
-      }
-    }
-    return Array.from(buckets.entries())
-      .map(([moduleKey, items]) => ({
-        moduleKey,
-        label: permissionModuleGroupTitle(moduleKey),
-        items,
-      }))
-      .sort(
-        (a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label),
-      );
-  }, [featurePermissions]);
+  const grantableKeys = useMemo(
+    () =>
+      grantableModules.flatMap((moduleNode) =>
+        moduleNode.permissions.map((permission) => permission.permission_key),
+      ),
+    [grantableModules],
+  );
+  const featurePermissionCount = grantableKeys.length;
+  const controlPlaneCount = controlPlaneModule?.permissions.length ?? 0;
+
   const assignableUsers = useMemo(
     () =>
       users.filter((targetUser) => {
@@ -228,6 +298,15 @@ export function PermissionsProductView() {
       }),
     [role, user?.organization_id, users],
   );
+  const filteredUsers = useMemo(() => {
+    const query = userSearch.trim().toLowerCase();
+    if (!query) {
+      return assignableUsers;
+    }
+    return assignableUsers.filter((targetUser) =>
+      userSearchText(targetUser).includes(query),
+    );
+  }, [assignableUsers, userSearch]);
   const filteredDialogUsers = useMemo(() => {
     const query = dialogSearchQuery.trim().toLowerCase();
     if (!query) {
@@ -237,6 +316,26 @@ export function PermissionsProductView() {
       userSearchText(targetUser).includes(query),
     );
   }, [assignableUsers, dialogSearchQuery]);
+  const selectedUser = useMemo(
+    () =>
+      assignableUsers.find((targetUser) => targetUser.id === selectedUserId) ??
+      null,
+    [assignableUsers, selectedUserId],
+  );
+
+  const currentMap = useMemo(
+    () => assignedPermissionMap(assignments),
+    [assignments],
+  );
+  const diff = useMemo(
+    () => computeAssignmentDiff(currentMap, draft, tree),
+    [currentMap, draft, tree],
+  );
+  const isDirty = diff.grants.length > 0 || diff.revokes.length > 0;
+  const allState = moduleCheckState(grantableKeys, draft);
+  const liveGrantableCount = grantableKeys.filter((key) =>
+    currentMap.has(key),
+  ).length;
 
   const load = useCallback(async () => {
     if (!canView) {
@@ -254,10 +353,7 @@ export function PermissionsProductView() {
       setUsers(userResult.items);
     } catch (loadError) {
       loadErrors.push(
-        formatUsersApiError(
-          loadError,
-          "用户数据暂未同步，请重试。",
-        ),
+        formatUsersApiError(loadError, "用户数据暂未同步，请重试。"),
       );
     }
 
@@ -266,10 +362,7 @@ export function PermissionsProductView() {
       setRegistry(registryResult);
     } catch (loadError) {
       loadErrors.push(
-        formatUsersApiError(
-          loadError,
-          "权限数据暂未同步，请重试。",
-        ),
+        formatUsersApiError(loadError, "权限数据暂未同步，请重试。"),
       );
     }
 
@@ -279,6 +372,200 @@ export function PermissionsProductView() {
     setIsLoading(false);
   }, [canView]);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  /** 拉一次该员工的授权，草稿重置为线上状态。 */
+  const loadUserAssignments = useCallback(
+    async (userId: number) => {
+      setIsAssignmentsLoading(true);
+      setAssignmentsError("");
+      try {
+        const response = await listUserPermissionAssignments(userId);
+        const liveMap = assignedPermissionMap(response.assignments);
+        setAssignments(response.assignments);
+        setDraft(
+          new Set(grantableKeys.filter((key) => liveMap.has(key))),
+        );
+      } catch (loadError) {
+        setAssignments([]);
+        setDraft(new Set());
+        setAssignmentsError(
+          formatPermissionAssignmentsApiError(
+            loadError,
+            "该员工的权限暂未同步，请重试。",
+          ),
+        );
+      } finally {
+        setIsAssignmentsLoading(false);
+      }
+    },
+    [grantableKeys],
+  );
+
+  // 注册表晚于员工到达时，草稿里的 key 集合要按注册表重算一次。
+  useEffect(() => {
+    if (selectedUserId !== null && assignments.length > 0 && !isDirty) {
+      const liveMap = assignedPermissionMap(assignments);
+      setDraft(new Set(grantableKeys.filter((key) => liveMap.has(key))));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grantableKeys]);
+
+  function selectUser(targetUser: ManagedUser) {
+    if (targetUser.id === selectedUserId) {
+      return;
+    }
+    if (isDirty && !window.confirm(UNSAVED_PROMPT)) {
+      return;
+    }
+    setSelectedUserId(targetUser.id);
+    setSaveNotice("");
+    setSaveFailures([]);
+    void loadUserAssignments(targetUser.id);
+  }
+
+  function switchTab(tab: ViewTab) {
+    if (tab === activeTab) {
+      return;
+    }
+    if (activeTab === "user" && isDirty && !window.confirm(UNSAVED_PROMPT)) {
+      return;
+    }
+    setActiveTab(tab);
+    // 从「按权限查看」回来时，那边可能改过这个人的授权，重拉一次。
+    if (tab === "user" && selectedUserId !== null) {
+      setSaveNotice("");
+      setSaveFailures([]);
+      void loadUserAssignments(selectedUserId);
+    }
+  }
+
+  function toggleLeaf(key: string) {
+    setDraft((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  function toggleModuleAll(moduleNode: PermissionTreeModule) {
+    const keys = moduleNode.permissions.map((p) => p.permission_key);
+    const state = moduleCheckState(keys, draft);
+    setDraft((prev) => {
+      const next = new Set(prev);
+      if (state === "all") {
+        for (const key of keys) {
+          next.delete(key);
+        }
+      } else {
+        for (const key of keys) {
+          next.add(key);
+        }
+      }
+      return next;
+    });
+  }
+
+  function toggleEverything() {
+    setDraft(allState === "all" ? new Set() : new Set(grantableKeys));
+  }
+
+  function discardDraft() {
+    setDraft(new Set(grantableKeys.filter((key) => currentMap.has(key))));
+    setSaveNotice("");
+    setSaveFailures([]);
+  }
+
+  async function saveDraft() {
+    if (!selectedUser || !canWriteAssignments || !isDirty || isSaving) {
+      return;
+    }
+    if (diff.highRiskGrants.length > 0) {
+      const names = diff.highRiskGrants
+        .map((permission) => {
+          const name = splitPermissionDisplayName(permission);
+          return `· ${name.label}（${name.key}）`;
+        })
+        .join("\n");
+      if (
+        !window.confirm(
+          `以下 ${diff.highRiskGrants.length} 项为高风险权限，确认授予 ${selectedUser.username}？\n\n${names}`,
+        )
+      ) {
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    setSaveNotice("");
+    setSaveFailures([]);
+    const total = diff.grants.length + diff.revokes.length;
+    setSaveProgress({ done: 0, total });
+    const failures: SaveFailure[] = [];
+    let done = 0;
+    let granted = 0;
+    let revoked = 0;
+
+    for (const permission of diff.grants) {
+      try {
+        await grantUserPermissionAssignment(selectedUser.id, {
+          permission_key: permission.permission_key,
+          reason: ASSIGNMENT_REASON,
+          scope_key: GLOBAL_SCOPE_KEY,
+          scope_type: GLOBAL_SCOPE_TYPE,
+          ...highRiskConfirmation(permission),
+        });
+        granted += 1;
+      } catch (saveError) {
+        const name = splitPermissionDisplayName(permission);
+        failures.push({
+          key: name.key,
+          label: name.label,
+          message: formatPermissionAssignmentsApiError(saveError, "授权失败。"),
+        });
+      }
+      done += 1;
+      setSaveProgress({ done, total });
+    }
+
+    for (const entry of diff.revokes) {
+      try {
+        await revokeUserPermissionAssignment(
+          selectedUser.id,
+          entry.assignment.id,
+          { reason: ASSIGNMENT_REASON },
+        );
+        revoked += 1;
+      } catch (saveError) {
+        const name = splitPermissionDisplayName(entry.permission);
+        failures.push({
+          key: name.key,
+          label: name.label,
+          message: formatPermissionAssignmentsApiError(saveError, "撤销失败。"),
+        });
+      }
+      done += 1;
+      setSaveProgress({ done, total });
+    }
+
+    // 以线上回读为准，不信任本地计数。
+    await loadUserAssignments(selectedUser.id);
+    setSaveFailures(failures);
+    setSaveNotice(
+      failures.length === 0
+        ? `已保存：新增 ${granted} 项，撤销 ${revoked} 项。`
+        : `已保存 ${granted + revoked} 项，${failures.length} 项失败，树已按线上状态刷新。`,
+    );
+    setIsSaving(false);
+  }
+
+  // ---- 按权限查看：沿用原有逻辑 ----
   const loadDialogAssignments = useCallback(
     async (permission: PermissionRegistryItem, targetUsers: ManagedUser[]) => {
       if (!canWriteAssignments) {
@@ -292,7 +579,6 @@ export function PermissionsProductView() {
       setDialogNotice("");
       const rows: Record<number, PermissionAssignment | null> = {};
       let failedCount = 0;
-      let lastError: unknown = null;
       for (const targetUser of targetUsers) {
         try {
           const response = await listUserPermissionAssignments(targetUser.id);
@@ -300,27 +586,18 @@ export function PermissionsProductView() {
             response.assignments,
             permission.permission_key,
           );
-        } catch (assignmentError) {
+        } catch {
           failedCount += 1;
-          lastError = assignmentError;
         }
       }
-      setDialogAssignments((current) => ({
-        ...current,
-        ...rows,
-      }));
+      setDialogAssignments((current) => ({ ...current, ...rows }));
       if (failedCount > 0) {
-        void lastError;
         setDialogError("部分员工权限暂未同步，已显示可用员工。");
       }
       setIsDialogLoading(false);
     },
     [canWriteAssignments],
   );
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   function openPermissionDialog(permission: PermissionRegistryItem) {
     setSelectedPermission(permission);
@@ -357,14 +634,7 @@ export function PermissionsProductView() {
     setPendingUserId(targetUser.id);
     setDialogError("");
     setDialogNotice("");
-
-    const highRisk = detectHighRiskPermission(selectedPermission);
-    const confirmation = highRisk
-      ? {
-          confirm_high_risk: true,
-          confirmation_text: HIGH_RISK_CONFIRMATION_TEXT,
-        }
-      : {};
+    const confirmation = highRiskConfirmation(selectedPermission);
     const assignment = dialogAssignments[targetUser.id] ?? null;
 
     try {
@@ -393,8 +663,9 @@ export function PermissionsProductView() {
       await refreshUserAssignment(targetUser, selectedPermission);
       setDialogNotice("权限已更新。");
     } catch (actionError) {
-      void actionError;
-      setDialogError("操作未完成，请重试。");
+      setDialogError(
+        formatPermissionAssignmentsApiError(actionError, "操作未完成，请重试。"),
+      );
     } finally {
       setPendingUserId(null);
     }
@@ -404,6 +675,10 @@ export function PermissionsProductView() {
     return null;
   }
 
+  const hasData = registry.length > 0 || users.length > 0;
+  const treeDisabled =
+    !canWriteAssignments || isAssignmentsLoading || isSaving || !selectedUser;
+
   return (
     <section className="product-console mm-page pm-page" aria-label="权限管理">
       <DashboardScene />
@@ -411,14 +686,20 @@ export function PermissionsProductView() {
         <div>
           <span className="eyebrow">账号与组织</span>
           <h2>权限管理</h2>
-          <p>
-            管理员工可访问的功能范围。
-          </p>
+          <p>先选员工，再按模块整棵勾选；改动只在点「保存」时写入。</p>
         </div>
         <button
           className="secondary-button"
           disabled={isLoading}
-          onClick={() => void load()}
+          onClick={() => {
+            if (isDirty && !window.confirm(UNSAVED_PROMPT)) {
+              return;
+            }
+            void load();
+            if (selectedUserId !== null) {
+              void loadUserAssignments(selectedUserId);
+            }
+          }}
           type="button"
         >
           <RotateCcw aria-hidden="true" size={17} />
@@ -433,12 +714,12 @@ export function PermissionsProductView() {
         </div>
         <div>
           <span>功能权限</span>
-          <strong>{featurePermissions.length}</strong>
+          <strong>{featurePermissionCount}</strong>
         </div>
         {canViewControlPlanePermissions ? (
           <div>
             <span>系统权限</span>
-            <strong>{controlPlanePermissions.length}</strong>
+            <strong>{controlPlaneCount}</strong>
           </div>
         ) : null}
         <div>
@@ -447,7 +728,30 @@ export function PermissionsProductView() {
         </div>
       </div>
 
-      {isLoading && registry.length === 0 && users.length === 0 ? (
+      <div className="mm-tabs" role="tablist">
+        <button
+          aria-selected={activeTab === "user"}
+          className={`mm-tab ${activeTab === "user" ? "on" : ""}`}
+          onClick={() => switchTab("user")}
+          role="tab"
+          type="button"
+        >
+          <Users aria-hidden="true" size={15} />
+          按员工授权 <span className="mm-n">{assignableUsers.length}</span>
+        </button>
+        <button
+          aria-selected={activeTab === "permission"}
+          className={`mm-tab ${activeTab === "permission" ? "on" : ""}`}
+          onClick={() => switchTab("permission")}
+          role="tab"
+          type="button"
+        >
+          <KeyRound aria-hidden="true" size={15} />
+          按权限查看 <span className="mm-n">{featurePermissionCount}</span>
+        </button>
+      </div>
+
+      {isLoading && !hasData ? (
         <section className="list-state">
           <div className="skeleton-stack" aria-hidden="true">
             <span className="skeleton-line medium" />
@@ -460,15 +764,9 @@ export function PermissionsProductView() {
       {error ? (
         <section className="list-state list-error" role="alert">
           <div>
-            <h2>
-              {registry.length > 0 || users.length > 0
-                ? "部分数据暂未同步"
-                : "权限数据暂未同步"}
-            </h2>
+            <h2>{hasData ? "部分数据暂未同步" : "权限数据暂未同步"}</h2>
             <p>{error}</p>
-            {registry.length > 0 || users.length > 0 ? (
-              <p>正在显示上一次成功加载的数据。</p>
-            ) : null}
+            {hasData ? <p>正在显示上一次成功加载的数据。</p> : null}
           </div>
           <button
             className="primary-button"
@@ -481,11 +779,318 @@ export function PermissionsProductView() {
         </section>
       ) : null}
 
-      {(!error || registry.length > 0 || users.length > 0) &&
-      (!isLoading || registry.length > 0 || users.length > 0) ? (
+      {hasData && activeTab === "user" ? (
+        <div className="pm-split">
+          <aside className="ops-panel pm-users" aria-label="员工">
+            <div className="ops-panel-heading">
+              <div>
+                <h3>员工</h3>
+                <p>选一个人，右侧显示 TA 的权限树。</p>
+              </div>
+            </div>
+            <label className="field-group pm-user-search">
+              <span className="input-shell">
+                <Search aria-hidden="true" size={16} />
+                <input
+                  onChange={(event) => setUserSearch(event.target.value)}
+                  placeholder="搜索用户名 / 职位 / 组织"
+                  type="search"
+                  value={userSearch}
+                />
+              </span>
+            </label>
+            <div className="pm-user-list">
+              {filteredUsers.map((targetUser) => (
+                <button
+                  className={`pm-user-row${
+                    targetUser.id === selectedUserId ? " on" : ""
+                  }`}
+                  key={targetUser.id}
+                  onClick={() => selectUser(targetUser)}
+                  type="button"
+                >
+                  <strong>{targetUser.username}</strong>
+                  <small>
+                    {[targetUser.job_title, targetUser.organization_id]
+                      .filter(Boolean)
+                      .join(" / ") || roleLabel(targetUser.role)}
+                  </small>
+                </button>
+              ))}
+              {filteredUsers.length === 0 ? (
+                <div className="ops-empty-state">
+                  <strong>暂无员工</strong>
+                  <span>请更换搜索条件。</span>
+                </div>
+              ) : null}
+            </div>
+          </aside>
+
+          <section className="ops-panel pm-tree-panel" aria-label="权限树">
+            {!selectedUser ? (
+              <div className="ops-empty-state pm-tree-empty">
+                <strong>还没选员工</strong>
+                <span>在左侧点一个人，这里会显示可勾选的权限树。</span>
+              </div>
+            ) : (
+              <>
+                <div className="ops-panel-heading">
+                  <div>
+                    <h3>{selectedUser.username}</h3>
+                    <p>
+                      {roleLabel(selectedUser.role)}
+                      {selectedUser.job_title ? ` · ${selectedUser.job_title}` : ""}
+                      {selectedUser.organization_id
+                        ? ` · ${selectedUser.organization_id}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="pm-head-tools">
+                    <span className="ops-source">
+                      线上 {liveGrantableCount} / {featurePermissionCount}
+                    </span>
+                  </div>
+                </div>
+
+                {!canWriteAssignments ? (
+                  <div className="users-alert users-alert-error" role="note">
+                    <ShieldAlert aria-hidden="true" size={18} />
+                    <span>仅 owner 可修改授权，当前为只读视图。</span>
+                  </div>
+                ) : null}
+
+                {assignmentsError ? (
+                  <div className="users-alert users-alert-error" role="alert">
+                    <ShieldAlert aria-hidden="true" size={18} />
+                    <span>{assignmentsError}</span>
+                  </div>
+                ) : null}
+
+                {saveNotice ? (
+                  <div
+                    className={`users-alert ${
+                      saveFailures.length > 0
+                        ? "users-alert-error"
+                        : "users-alert-success"
+                    }`}
+                    role="status"
+                  >
+                    {saveFailures.length > 0 ? (
+                      <ShieldAlert aria-hidden="true" size={18} />
+                    ) : (
+                      <CheckCircle2 aria-hidden="true" size={18} />
+                    )}
+                    <span>{saveNotice}</span>
+                  </div>
+                ) : null}
+
+                {saveFailures.length > 0 ? (
+                  <ul className="pm-save-failures">
+                    {saveFailures.map((failure) => (
+                      <li key={failure.key}>
+                        <strong>{failure.label}</strong>
+                        <code className="pm-key">{failure.key}</code>
+                        <span>{failure.message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {isAssignmentsLoading ? (
+                  <div className="list-state permissions-empty">
+                    <LoaderCircle className="spin" aria-hidden="true" size={22} />
+                    正在读取该员工的权限
+                  </div>
+                ) : (
+                  <div className="pm-tree">
+                    <label className="pm-tree-row pm-tree-all">
+                      <TriCheckbox
+                        ariaLabel="全选全部功能权限"
+                        disabled={treeDisabled}
+                        onChange={toggleEverything}
+                        state={allState}
+                      />
+                      <span className="pm-tree-label">
+                        <strong>全选</strong>
+                        <small>
+                          已勾 {draft.size} / {featurePermissionCount}
+                        </small>
+                      </span>
+                    </label>
+
+                    {grantableModules.map((moduleNode) => {
+                      const keys = moduleNode.permissions.map(
+                        (p) => p.permission_key,
+                      );
+                      const state = moduleCheckState(keys, draft);
+                      const checkedCount = keys.filter((key) => draft.has(key))
+                        .length;
+                      const collapsed = collapsedModules.has(moduleNode.moduleKey);
+                      return (
+                        <div
+                          className={`pm-tree-module${collapsed ? " collapsed" : ""}`}
+                          key={moduleNode.moduleKey}
+                        >
+                          <div className="pm-tree-row pm-tree-module-row">
+                            <TriCheckbox
+                              ariaLabel={`全选 ${moduleNode.title}`}
+                              disabled={treeDisabled}
+                              onChange={() => toggleModuleAll(moduleNode)}
+                              state={state}
+                            />
+                            <button
+                              className="pm-tree-label pm-tree-toggle"
+                              onClick={() => toggleModule(moduleNode.moduleKey)}
+                              type="button"
+                            >
+                              <strong>{moduleNode.title}</strong>
+                              <small>
+                                {checkedCount} / {keys.length}
+                              </small>
+                              <ChevronDown aria-hidden="true" size={15} />
+                            </button>
+                          </div>
+                          {!collapsed ? (
+                            <div className="pm-tree-leaves">
+                              {moduleNode.permissions.map((permission) => {
+                                const name = splitPermissionDisplayName(permission);
+                                const key = permission.permission_key;
+                                const live = currentMap.has(key);
+                                const wanted = draft.has(key);
+                                const changed = live !== wanted;
+                                return (
+                                  <label
+                                    className={`pm-tree-row pm-tree-leaf${
+                                      changed ? " changed" : ""
+                                    }`}
+                                    key={key}
+                                  >
+                                    <input
+                                      checked={wanted}
+                                      disabled={treeDisabled}
+                                      onChange={() => toggleLeaf(key)}
+                                      type="checkbox"
+                                    />
+                                    <span className="pm-tree-label">
+                                      <strong>{name.label}</strong>
+                                      <code className="pm-key">{name.key}</code>
+                                    </span>
+                                    {changed ? (
+                                      <span className="pm-change-tag">
+                                        {wanted ? "待新增" : "待撤销"}
+                                      </span>
+                                    ) : null}
+                                    <span
+                                      className={
+                                        detectHighRiskPermission(permission)
+                                          ? "permissions-risk-badge permissions-risk-high"
+                                          : "permissions-risk-badge"
+                                      }
+                                    >
+                                      {riskLabel(permission)}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+
+                    {controlPlaneModule ? (
+                      <div
+                        className={`pm-tree-module pm-tree-readonly${
+                          collapsedModules.has(controlPlaneModule.moduleKey)
+                            ? " collapsed"
+                            : ""
+                        }`}
+                      >
+                        <div className="pm-tree-row pm-tree-module-row">
+                          <input aria-label="系统权限不可授权" disabled type="checkbox" />
+                          <button
+                            className="pm-tree-label pm-tree-toggle"
+                            onClick={() => toggleModule(controlPlaneModule.moduleKey)}
+                            type="button"
+                          >
+                            <strong>{controlPlaneModule.title}</strong>
+                            <small>{controlPlaneModule.permissions.length} 项 · owner 专属</small>
+                            <ChevronDown aria-hidden="true" size={15} />
+                          </button>
+                        </div>
+                        {!collapsedModules.has(controlPlaneModule.moduleKey) ? (
+                          <div className="pm-tree-leaves">
+                            {controlPlaneModule.permissions.map((permission) => {
+                              const name = splitPermissionDisplayName(permission);
+                              return (
+                                <div
+                                  className="pm-tree-row pm-tree-leaf"
+                                  key={permission.permission_key}
+                                >
+                                  <input disabled type="checkbox" />
+                                  <span className="pm-tree-label">
+                                    <strong>{name.label}</strong>
+                                    <code className="pm-key">{name.key}</code>
+                                  </span>
+                                  <span className="permissions-risk-badge permissions-risk-high">
+                                    {riskLabel(permission)}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+
+                {canWriteAssignments ? (
+                  <div className={`pm-savebar${isDirty ? " dirty" : ""}`}>
+                    <span className="pm-savebar-summary">
+                      {isSaving
+                        ? `正在写入 ${saveProgress.done} / ${saveProgress.total}`
+                        : isDirty
+                          ? `待新增 ${diff.grants.length} 项 · 待撤销 ${diff.revokes.length} 项${
+                              diff.highRiskGrants.length > 0
+                                ? ` · 含 ${diff.highRiskGrants.length} 项高风险`
+                                : ""
+                            }`
+                          : "没有未保存的改动"}
+                    </span>
+                    <button
+                      className="secondary-button"
+                      disabled={!isDirty || isSaving}
+                      onClick={discardDraft}
+                      type="button"
+                    >
+                      <Undo2 aria-hidden="true" size={16} />
+                      放弃
+                    </button>
+                    <button
+                      className="primary-button"
+                      disabled={!isDirty || isSaving || isAssignmentsLoading}
+                      onClick={() => void saveDraft()}
+                      type="button"
+                    >
+                      {isSaving ? (
+                        <LoaderCircle aria-hidden="true" className="spin" size={16} />
+                      ) : (
+                        <Save aria-hidden="true" size={16} />
+                      )}
+                      保存
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {hasData && activeTab === "permission" ? (
         <div className="permissions-product-stack module-control-org-list">
-          {canViewControlPlanePermissions &&
-          controlPlanePermissions.length > 0 ? (
+          {canViewControlPlanePermissions && controlPlaneModule ? (
             <section
               aria-label="系统权限"
               className={`ops-panel${
@@ -495,12 +1100,10 @@ export function PermissionsProductView() {
               <div className="ops-panel-heading">
                 <div>
                   <h3>系统权限</h3>
-                  <p>仅 owner 可查看与管理的控制面权限。</p>
+                  <p>仅 owner 可查看的控制面权限，不可分配。</p>
                 </div>
                 <div className="pm-head-tools">
-                  <span className="ops-source">
-                    {controlPlanePermissions.length} 项
-                  </span>
+                  <span className="ops-source">{controlPlaneCount} 项</span>
                   <button
                     aria-label="折叠"
                     className="mm-org-chev"
@@ -512,7 +1115,7 @@ export function PermissionsProductView() {
                 </div>
               </div>
               <div className="permissions-card-grid">
-                {controlPlanePermissions.map((permission) => (
+                {controlPlaneModule.permissions.map((permission) => (
                   <PermissionCard
                     key={permission.permission_key}
                     permission={permission}
@@ -522,22 +1125,24 @@ export function PermissionsProductView() {
             </section>
           ) : null}
 
-          {featureGroups.map((group) => {
-            const groupId = `feat:${group.moduleKey}`;
+          {grantableModules.map((moduleNode) => {
+            const groupId = `feat:${moduleNode.moduleKey}`;
             const collapsed = collapsedGroups.has(groupId);
             return (
               <section
-                aria-label={group.label}
+                aria-label={moduleNode.title}
                 className={`ops-panel${collapsed ? " collapsed" : ""}`}
                 key={groupId}
               >
                 <div className="ops-panel-heading">
                   <div>
-                    <h3>{group.label}</h3>
-                    <p>点击卡片为员工分配该模块权限。</p>
+                    <h3>{moduleNode.title}</h3>
+                    <p>点击卡片查看哪些员工拥有该权限。</p>
                   </div>
                   <div className="pm-head-tools">
-                    <span className="ops-source">{group.items.length} 项</span>
+                    <span className="ops-source">
+                      {moduleNode.permissions.length} 项
+                    </span>
                     <button
                       aria-label="折叠"
                       className="mm-org-chev"
@@ -549,7 +1154,7 @@ export function PermissionsProductView() {
                   </div>
                 </div>
                 <div className="permissions-card-grid">
-                  {group.items.map((permission) => (
+                  {moduleNode.permissions.map((permission) => (
                     <PermissionCard
                       key={permission.permission_key}
                       disabled={isDialogLoading || pendingUserId !== null}
@@ -562,8 +1167,7 @@ export function PermissionsProductView() {
             );
           })}
 
-          {featureGroups.length === 0 &&
-          controlPlanePermissions.length === 0 ? (
+          {grantableModules.length === 0 && !controlPlaneModule ? (
             <div className="ops-empty-state">
               <strong>暂无数据</strong>
               <span>当前没有可显示的权限。</span>
@@ -584,8 +1188,11 @@ export function PermissionsProductView() {
               <div>
                 <span className="eyebrow">功能权限</span>
                 <h3 id="permission-assignment-title">
-                  {getPermissionDisplayName(selectedPermission)}
+                  {splitPermissionDisplayName(selectedPermission).label}
                 </h3>
+                <code className="pm-key">
+                  {splitPermissionDisplayName(selectedPermission).key}
+                </code>
               </div>
               <button
                 aria-label="关闭"
@@ -618,9 +1225,7 @@ export function PermissionsProductView() {
               <span className="input-shell">
                 <Search aria-hidden="true" size={16} />
                 <input
-                  onChange={(event) =>
-                    setDialogSearchQuery(event.target.value)
-                  }
+                  onChange={(event) => setDialogSearchQuery(event.target.value)}
                   placeholder="员工姓名"
                   type="search"
                   value={dialogSearchQuery}
@@ -642,10 +1247,7 @@ export function PermissionsProductView() {
                   const disabled = !canWriteAssignments || pendingUserId !== null;
 
                   return (
-                    <label
-                      className="permissions-user-row"
-                      key={targetUser.id}
-                    >
+                    <label className="permissions-user-row" key={targetUser.id}>
                       <input
                         checked={checked}
                         disabled={disabled}
@@ -666,11 +1268,7 @@ export function PermissionsProductView() {
                         </small>
                       </span>
                       {isPending ? (
-                        <LoaderCircle
-                          aria-hidden="true"
-                          className="spin"
-                          size={17}
-                        />
+                        <LoaderCircle aria-hidden="true" className="spin" size={17} />
                       ) : checked ? (
                         <ShieldCheck aria-hidden="true" size={17} />
                       ) : null}

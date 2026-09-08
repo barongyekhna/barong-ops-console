@@ -975,3 +975,186 @@ export function formatPermissionAssignmentsApiError(
 
   return detail || fallback;
 }
+
+// ---------------------------------------------------------------------------
+// 按员工授权的权限树：纯逻辑，供 permissions-product-view 与测试共用。
+// 没有通配权限键（后端拒绝 "*"），所以「模块全选」= 逐条落，取消其中
+// 一条只撤销那一条。
+// ---------------------------------------------------------------------------
+
+export const PERMISSION_TREE_SCOPE_TYPE = "global";
+export const PERMISSION_TREE_SCOPE_KEY = "*";
+
+export type PermissionTreeModule = {
+  moduleKey: string;
+  title: string;
+  /** 业务权限可勾选；admin/system 控制面只读展示。 */
+  grantable: boolean;
+  permissions: PermissionRegistryItem[];
+};
+
+export type PermissionCheckState = "all" | "some" | "none";
+
+export type PermissionAssignmentDiff = {
+  grants: PermissionRegistryItem[];
+  revokes: { permission: PermissionRegistryItem; assignment: PermissionAssignment }[];
+  highRiskGrants: PermissionRegistryItem[];
+  highRiskRevokes: PermissionRegistryItem[];
+};
+
+/** 卡片/树行显示用：中文名与英文键分开，避免一行塞爆。 */
+export function splitPermissionDisplayName(
+  permission: Parameters<typeof getPermissionDisplayName>[0],
+) {
+  const key = (
+    typeof permission === "string"
+      ? permission
+      : permission?.permission_key ?? ""
+  ).trim();
+  const full = getPermissionDisplayName(permission);
+  const suffix = key ? `（${key}）` : "";
+  const label =
+    suffix && full.endsWith(suffix) ? full.slice(0, -suffix.length) : full;
+  return { label: label || key, key };
+}
+
+/**
+ * 按 module_key 分组成树。业务组按权限数降序、标题升序排在前面，
+ * 控制面组（owner 才看得到）固定排最后且 grantable=false。
+ */
+export function buildPermissionTree(
+  registry: PermissionRegistryItem[],
+  role: string | null | undefined,
+): PermissionTreeModule[] {
+  const visible = filterPermissionRegistryForRole(
+    filterGrantablePermissionRegistry(registry),
+    role,
+  );
+  const buckets = new Map<string, PermissionRegistryItem[]>();
+  for (const permission of visible) {
+    const grantable = getPermissionUiCategory(permission) === "feature";
+    const moduleKey = grantable
+      ? permission.module_key?.trim().toLowerCase() || "other"
+      : "__control_plane__";
+    const bucket = buckets.get(moduleKey);
+    if (bucket) {
+      bucket.push(permission);
+    } else {
+      buckets.set(moduleKey, [permission]);
+    }
+  }
+
+  const modules: PermissionTreeModule[] = [];
+  let controlPlane: PermissionTreeModule | null = null;
+  for (const [moduleKey, permissions] of buckets.entries()) {
+    const sorted = [...permissions].sort((a, b) =>
+      a.permission_key.localeCompare(b.permission_key),
+    );
+    if (moduleKey === "__control_plane__") {
+      controlPlane = {
+        moduleKey,
+        title: "系统权限（控制面，只读）",
+        grantable: false,
+        permissions: sorted,
+      };
+      continue;
+    }
+    modules.push({
+      moduleKey,
+      title: permissionModuleGroupTitle(moduleKey),
+      grantable: true,
+      permissions: sorted,
+    });
+  }
+  modules.sort(
+    (a, b) =>
+      b.permissions.length - a.permissions.length ||
+      a.title.localeCompare(b.title),
+  );
+  if (controlPlane) {
+    modules.push(controlPlane);
+  }
+  return modules;
+}
+
+function assignmentIsLive(assignment: PermissionAssignment) {
+  return assignment.is_enabled !== false && assignment.enabled !== false;
+}
+
+/**
+ * 当前生效授权：key → assignment。优先 global/* 那行；同一 key 只有
+ * 非全局范围的行也算「已有」（撤销时撤那一行）。已 disabled 的旧行不算。
+ */
+export function assignedPermissionMap(
+  assignments: PermissionAssignment[],
+): Map<string, PermissionAssignment> {
+  const result = new Map<string, PermissionAssignment>();
+  for (const assignment of assignments) {
+    if (!assignmentIsLive(assignment)) {
+      continue;
+    }
+    const key = assignment.permission_key.trim();
+    const existing = result.get(key);
+    const isGlobal =
+      assignment.scope_type === PERMISSION_TREE_SCOPE_TYPE &&
+      assignment.scope_key === PERMISSION_TREE_SCOPE_KEY;
+    if (!existing || isGlobal) {
+      result.set(key, assignment);
+    }
+  }
+  return result;
+}
+
+export function moduleCheckState(
+  keys: string[],
+  draft: ReadonlySet<string>,
+): PermissionCheckState {
+  if (keys.length === 0) {
+    return "none";
+  }
+  let checked = 0;
+  for (const key of keys) {
+    if (draft.has(key)) {
+      checked += 1;
+    }
+  }
+  if (checked === 0) {
+    return "none";
+  }
+  return checked === keys.length ? "all" : "some";
+}
+
+/** 草稿 vs 当前生效 → 需要 POST 的 grants 与需要 DELETE 的 revokes。 */
+export function computeAssignmentDiff(
+  current: ReadonlyMap<string, PermissionAssignment>,
+  draft: ReadonlySet<string>,
+  tree: PermissionTreeModule[],
+): PermissionAssignmentDiff {
+  const grants: PermissionRegistryItem[] = [];
+  const revokes: PermissionAssignmentDiff["revokes"] = [];
+  for (const moduleNode of tree) {
+    if (!moduleNode.grantable) {
+      continue;
+    }
+    for (const permission of moduleNode.permissions) {
+      const key = permission.permission_key;
+      const assignment = current.get(key);
+      const wanted = draft.has(key);
+      if (wanted && !assignment) {
+        grants.push(permission);
+      } else if (!wanted && assignment) {
+        revokes.push({ permission, assignment });
+      }
+    }
+  }
+  return {
+    grants,
+    revokes,
+    highRiskGrants: grants.filter((permission) =>
+      detectHighRiskPermission(permission),
+    ),
+    highRiskRevokes: revokes
+      .map((entry) => entry.permission)
+      .filter((permission) => detectHighRiskPermission(permission)),
+  };
+}

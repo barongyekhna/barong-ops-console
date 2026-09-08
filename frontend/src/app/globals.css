@@ -5999,6 +5999,64 @@ h4 {
   .pm-page .permissions-card-grid { grid-template-columns: 1fr; }
 }
 
+/* 卡片：中文名与英文键分两行，长键名不再撑爆卡片 */
+.pm-page .permissions-card strong { padding-right: 60px; overflow-wrap: anywhere; }
+.pm-page .pm-key { color: var(--mm-dim); font: 500 10.5px var(--mm-mono); letter-spacing: 0.02em; overflow-wrap: anywhere; word-break: break-all; }
+.pm-page .permissions-modal-heading .pm-key { display: block; margin-top: 4px; }
+
+/* 按员工授权：左员工列表 + 右权限树 */
+.pm-page .mm-tabs { margin-bottom: 4px; }
+.pm-page .pm-split { display: grid; grid-template-columns: 272px minmax(0, 1fr); gap: 12px; align-items: start; }
+.pm-page .pm-users { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 12px; max-height: calc(100vh - 24px); }
+.pm-page .pm-user-search { margin: 0; }
+.pm-page .pm-user-search .input-shell svg { color: var(--mm-dim); margin-right: 8px; }
+.pm-page .pm-user-list { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; min-height: 0; }
+.pm-page .pm-user-row { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--mm-line); background: color-mix(in srgb, var(--color-panel-base) 55%, transparent); color: var(--mm-ink); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.pm-page .pm-user-row:hover { border-color: color-mix(in srgb, var(--color-primary) 40%, transparent); }
+.pm-page .pm-user-row.on { border-color: color-mix(in srgb, var(--color-primary) 70%, transparent); background: color-mix(in srgb, var(--color-primary) 12%, transparent); box-shadow: inset 3px 0 0 var(--color-primary); }
+.pm-page .pm-user-row strong { color: var(--color-text-strong); font-size: 13px; overflow-wrap: anywhere; }
+.pm-page .pm-user-row small { color: var(--mm-dim); font: 500 10.5px var(--mm-mono); overflow-wrap: anywhere; }
+
+.pm-page .pm-tree-panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pm-page .pm-tree-empty { padding: 48px 20px; }
+.pm-page .pm-tree { display: flex; flex-direction: column; gap: 8px; }
+.pm-page .pm-tree-row { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--mm-line); background: color-mix(in srgb, var(--color-panel-base) 55%, transparent); }
+.pm-page .pm-tree-row input[type="checkbox"] { width: 17px; height: 17px; flex: none; accent-color: var(--color-primary); cursor: pointer; }
+.pm-page .pm-tree-row input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.5; }
+.pm-page .pm-tree-label { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; text-align: left; }
+.pm-page .pm-tree-label strong { color: var(--color-text-strong); font-size: 13px; line-height: 1.3; overflow-wrap: anywhere; }
+.pm-page .pm-tree-label small { color: var(--mm-dim); font: 500 10.5px var(--mm-mono); }
+.pm-page .pm-tree-all { border-color: color-mix(in srgb, var(--color-primary) 45%, transparent); background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
+.pm-page .pm-tree-module { display: flex; flex-direction: column; gap: 6px; }
+.pm-page .pm-tree-module-row { background: color-mix(in srgb, var(--color-panel-base) 72%, transparent); }
+.pm-page .pm-tree-toggle { position: relative; padding: 0 28px 0 0; background: none; border: 0; color: inherit; cursor: pointer; font: inherit; }
+.pm-page .pm-tree-toggle svg { position: absolute; right: 4px; top: 50%; margin-top: -8px; color: var(--mm-dim); transition: transform 0.18s; }
+.pm-page .pm-tree-module.collapsed .pm-tree-toggle svg { transform: rotate(-90deg); }
+.pm-page .pm-tree-leaves { display: flex; flex-direction: column; gap: 4px; padding-left: 30px; }
+.pm-page .pm-tree-leaf { cursor: pointer; padding: 7px 12px; }
+.pm-page .pm-tree-leaf:hover { border-color: color-mix(in srgb, var(--color-primary) 35%, transparent); }
+.pm-page .pm-tree-leaf.changed { border-color: color-mix(in srgb, var(--color-warning) 55%, transparent); background: color-mix(in srgb, var(--color-warning) 7%, transparent); }
+.pm-page .pm-tree-leaf .permissions-risk-badge { position: static; flex: none; }
+.pm-page .pm-tree-readonly { opacity: 0.72; }
+.pm-page .pm-tree-readonly .pm-tree-leaf { cursor: default; }
+.pm-page .pm-change-tag { flex: none; color: var(--mm-amber); font: 700 9px var(--mm-mono); letter-spacing: 0.12em; text-transform: uppercase; padding: 3px 8px; border-radius: 20px; border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent); }
+
+.pm-page .pm-savebar { position: sticky; bottom: 0; z-index: 3; display: flex; align-items: center; gap: 10px; margin-top: 4px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--mm-line); background: color-mix(in srgb, var(--color-panel-base) 96%, transparent); backdrop-filter: blur(6px); }
+.pm-page .pm-savebar.dirty { border-color: color-mix(in srgb, var(--color-primary) 55%, transparent); box-shadow: 0 -10px 30px -18px color-mix(in srgb, var(--color-primary) 60%, transparent); }
+.pm-page .pm-savebar-summary { flex: 1; min-width: 0; color: var(--mm-dim); font: 500 12px var(--mm-mono); }
+.pm-page .pm-savebar.dirty .pm-savebar-summary { color: var(--mm-ink); }
+.pm-page .pm-save-failures { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.pm-page .pm-save-failures li { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--color-error) 30%, transparent); background: color-mix(in srgb, var(--color-error) 6%, transparent); font-size: 12px; }
+.pm-page .pm-save-failures strong { color: var(--color-text-strong); }
+.pm-page .pm-save-failures span { color: var(--mm-red); overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .pm-page .pm-split { grid-template-columns: 1fr; }
+  .pm-page .pm-users { position: static; max-height: 320px; }
+  .pm-page .pm-tree-leaves { padding-left: 14px; }
+  .pm-page .pm-save-failures li { grid-template-columns: 1fr; gap: 2px; }
+}
+
 /* =====================================================================
    控制台小游戏「深空空战」面板
    ===================================================================== */
