@@ -17,6 +17,9 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
+from .asset_schemas import FILE_MEDIA_TYPES as _FILE_MEDIA_TYPES
+from .asset_schemas import IMAGE_MEDIA_TYPES as _IMAGE_MEDIA_TYPES
+
 from .moment_storage import (
     MOMENT_STORE_OPERATIONS,
     MomentCommentCreateDTO,
@@ -300,20 +303,6 @@ _ASSET_REFERENCE_KEYS = frozenset(
         "sha256_hex",
         "version",
         "ordinal",
-    }
-)
-_IMAGE_MEDIA_TYPES = frozenset(
-    {"image/jpeg", "image/png", "image/webp", "image/gif"}
-)
-_FILE_MEDIA_TYPES = frozenset(
-    {
-        "application/pdf",
-        "text/plain",
-        "text/csv",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/zip",
     }
 )
 _RECORD_KEYS = frozenset(

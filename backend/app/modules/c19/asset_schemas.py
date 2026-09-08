@@ -88,6 +88,10 @@ _FILE_MEDIA_BY_EXTENSION: dict[str, str] = {
     ".obj": "model/obj",
 }
 OCTET_STREAM_MEDIA_TYPE = "application/octet-stream"
+# Response-side allowlists for the asset/record HTTP boundaries: the same
+# tables, so a type admitted at intent time is never rejected on the way back.
+IMAGE_MEDIA_TYPES = frozenset(_IMAGE_MEDIA_BY_EXTENSION.values())
+FILE_MEDIA_TYPES = frozenset(_FILE_MEDIA_BY_EXTENSION.values()) | {OCTET_STREAM_MEDIA_TYPE}
 BLOCKED_EXTENSIONS = frozenset(
     {
         ".exe", ".dll", ".scr", ".com", ".bat", ".cmd", ".msi", ".msp",
