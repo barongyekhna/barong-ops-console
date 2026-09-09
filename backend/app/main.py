@@ -200,6 +200,8 @@ _APP_LOGGER_NAMES = (
     "baisuwan.patrol",
     "nijing.brain",
     "nijing.worker",
+    "yinchengyue.brain",
+    "yinchengyue.worker",
     "f-enrichment",
     "geo-content-worker",
     "seo-content-worker",

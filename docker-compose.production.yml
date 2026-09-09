@@ -483,6 +483,40 @@ services:
     networks:
       - barong-ops-console-prod
 
+  yinchengyue-worker:
+    container_name: yinchengyue-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "8000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      AGENT_MEMORY_DIR: "/var/lib/barong/agent-memory"
+      AGENT_CONSOLE_BASE_URL: "http://console_backend:8000"
+      AGENT_CHAT_POLL_SECONDS: "3"
+      # 他一次判类目跑两次 flash,每次 25 秒等不到就回「没接通」。
+      YINCHENGYUE_AI_TIMEOUT_SECONDS: "25"
+    volumes:
+      - console_agent_memory_data:/var/lib/barong/agent-memory
+    command:
+      - python
+      - -m
+      - backend.app.modules.agent_series.yinchengyue.worker_main
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
   key-health-worker:
     container_name: key-health-worker
     build:

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# 重建 9 个 worker。本轮改了 backend/app/main.py（日志配置，公共层）。
+# 重建 10 个 worker。本轮改了 backend/app/main.py（日志配置，公共层）。
 #
 # 必须先 rm 再 up：compose 1.29.2 的 recreate 路径要读旧容器镜像的
 # ContainerConfig 字段，新版 Docker 已不写该字段 → KeyError，且崩在
-# 「旧容器已改名、新容器未建」的中间态，九个 worker 会同时躺下。
+# 「旧容器已改名、新容器未建」的中间态，十个 worker 会同时躺下。
 # 2026-09-02 实际踩过一次。
 set -uo pipefail
 cd /opt/barong-release-20260831
-SERVICES="r-w-worker r-a-worker k-worker k-mcp geo-worker seo-worker baisuwan-worker nijing-worker key-health-worker"
+SERVICES="r-w-worker r-a-worker k-worker k-mcp geo-worker seo-worker baisuwan-worker nijing-worker yinchengyue-worker key-health-worker"
 
 echo "== 1/3 构建 =="
 docker-compose -p barong-ops-console -f docker-compose.production.yml build $SERVICES || exit 1

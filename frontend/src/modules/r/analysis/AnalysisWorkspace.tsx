@@ -32,6 +32,7 @@ import type {
   RaProfitSnapshot,
 } from "@/modules/r/analysis/types";
 
+import { copyText } from "@/lib/clipboard";
 import { RadarScan } from "@/modules/r/analysis/RadarScan";
 import { CruiseSwitch } from "./CruiseSwitch";
 
@@ -1170,42 +1171,6 @@ function MonthlySalesBadge({ item }: { item: RaAutoProfitItem }) {
       月销 {formatMonthlySales(item)}
     </span>
   );
-}
-
-async function copyText(value: string) {
-  try {
-    await navigator.clipboard?.writeText(value);
-    return true;
-  } catch {
-    return fallbackCopyText(value);
-  }
-}
-
-function fallbackCopyText(value: string) {
-  if (typeof document === "undefined") {
-    return false;
-  }
-  const input = document.createElement("input");
-  input.value = value;
-  input.setAttribute("readonly", "true");
-  input.style.position = "fixed";
-  input.style.left = "0";
-  input.style.top = "0";
-  input.style.width = "1px";
-  input.style.height = "1px";
-  input.style.opacity = "0";
-  input.style.pointerEvents = "none";
-  document.body.appendChild(input);
-  input.focus({ preventScroll: true });
-  input.select();
-  input.setSelectionRange(0, input.value.length);
-  try {
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    document.body.removeChild(input);
-  }
 }
 
 function SupplierLinks({ item }: { item: RaAutoProfitItem }) {

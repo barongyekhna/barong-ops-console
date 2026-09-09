@@ -61,6 +61,7 @@ import {
 } from "./C19ChatRecovery";
 import { c19SseReconnectDelay } from "./C19EventStreamRecovery";
 import { C19CardMessage, parseC19Card } from "./C19CardMessage";
+import { C19CategoryCard, parseC19CategoryCard } from "./C19CategoryCard";
 import { C19MessageAsset } from "./C19MessageAsset";
 import { announceC19UnreadChanged } from "./C19UnreadStatus";
 import styles from "./C19Workspace.module.css";
@@ -1980,6 +1981,11 @@ export function C19ChatPanel({
                   </small>
                 ) : null}
                 {(() => {
+                  // 殷承岳的类目卡:带复制按钮,不带动作。
+                  const categoryCard = own ? null : parseC19CategoryCard(record.content);
+                  if (categoryCard) {
+                    return <C19CategoryCard card={categoryCard} />;
+                  }
                   const card = own ? null : parseC19Card(record.content);
                   if (!card) {
                     return record.content ? <p>{record.content}</p> : null;

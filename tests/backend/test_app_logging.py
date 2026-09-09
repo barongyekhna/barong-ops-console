@@ -65,6 +65,8 @@ def test_worker_logger_namespaces_are_covered() -> None:
         "barong.audit_events",
         "nijing.worker",
         "baisuwan-worker",
+        "yinchengyue.worker",
+        "yinchengyue.brain",
         "k-image-render-worker",
         "geo-content-worker",
         "seo-content-worker",
