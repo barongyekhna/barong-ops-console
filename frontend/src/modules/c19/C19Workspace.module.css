@@ -851,10 +851,11 @@
 
 .messageAssetActions button {
   align-items: center;
-  background: color-mix(in srgb, var(--color-text-strong) 82%, transparent);
+  /* 面板底色 + 正文字色；之前用正文字色当底、白天皮肤下是黑底黑字 */
+  background: var(--color-surface-solid);
   border: 1px solid var(--color-line-strong);
   border-radius: 7px;
-  color: var(--color-subtle);
+  color: var(--color-text-strong);
   cursor: pointer;
   display: inline-flex;
   font: inherit;
@@ -863,18 +864,25 @@
   padding: 5px 7px;
 }
 
+.messageAssetActions button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 10%, var(--color-surface-solid));
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
 .messageAssetActions button:disabled { cursor: wait; opacity: 0.55; }
 
 .fileAttachment {
   align-items: center;
-  background: color-mix(in srgb, var(--color-text-strong) 78%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, transparent);
+  /* 面板底色，放在本人（主色调底）和好友（白底）气泡里都读得清 */
+  background: var(--color-surface-solid);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-line));
   border-radius: 10px;
   display: flex;
   gap: 9px;
   padding: 10px;
 }
 
+.fileAttachment > svg { color: var(--color-primary-strong); flex-shrink: 0; }
 .fileAttachment > div { display: grid; gap: 3px; min-width: 0; }
 .fileAttachment strong { color: var(--color-text-strong); font-size: 12px; overflow-wrap: anywhere; }
 .fileAttachment span { color: var(--color-muted); font-size: 10px; }

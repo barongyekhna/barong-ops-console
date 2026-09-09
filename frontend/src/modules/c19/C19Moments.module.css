@@ -505,7 +505,7 @@
 
 .lightboxToolbar button {
   align-items: center;
-  background: color-mix(in srgb, var(--color-text-strong) 94%, transparent);
+  background: color-mix(in srgb, var(--color-surface-solid) 92%, transparent);
   border: 0;
   border-radius: 9px;
   color: var(--color-text-strong);
