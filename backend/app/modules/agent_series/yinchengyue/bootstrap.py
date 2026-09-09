@@ -23,7 +23,7 @@ from ....repositories.operation_logs import create_operation_log
 from ....repositories.users import get_user_by_username
 from ....schemas.org_membership import generate_membership_id
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
-from ...c19.identity_sync_service import sync_profile_for_user
+from ...c19.identity_sync_service import sync_affiliation_from_membership, sync_profile_for_user
 from ...k_series.product_knowledge.constants import TARGET_ORGANIZATION_NAME
 from .agent import ensure_yinchengyue_agent
 from .constants import AGENT_BIO, AGENT_DISPLAY_NAME, AGENT_JOB_TITLE, AGENT_USERNAME
@@ -48,8 +48,9 @@ def resolve_trade_org_id(db: Session) -> str:
     return str(found)
 
 
-def _ensure_single_membership(db: Session, *, user_id: str, org_id: str) -> None:
-    """只留贸易公司这一条 member 关系:_resolve_org 只在成员关系恰好一条时才能无歧义选中。"""
+def _ensure_single_membership(db: Session, *, user, org_id: str) -> None:
+    """只留贸易公司这一条 member 关系(多一条整站 403),并同步到 C19 的组织投影(通讯录显示的是它)。"""
+    user_id = str(user.id)
     rows = list(db.scalars(select(OrgMembershipRecord).where(OrgMembershipRecord.user_id == user_id), execution_options=SKIP_ORG_DATA_ISOLATION))
     kept = None
     for row in rows:
@@ -61,8 +62,10 @@ def _ensure_single_membership(db: Session, *, user_id: str, org_id: str) -> None
         else:
             db.delete(row)
     if kept is None:
-        db.add(OrgMembershipRecord(membership_id=generate_membership_id(), user_id=user_id, org_id=org_id, role="member", status="active"))
+        kept = OrgMembershipRecord(membership_id=generate_membership_id(), user_id=user_id, org_id=org_id, role="member", status="active")
+        db.add(kept)
     db.flush()
+    sync_affiliation_from_membership(db, membership=kept, user=user)
 
 
 def converge_registry(db: Session) -> dict:
@@ -96,7 +99,7 @@ def repair_identity(db: Session) -> dict:
     profile.bio = AGENT_BIO
     db.add(profile)
 
-    _ensure_single_membership(db, user_id=str(user.id), org_id=org_id)
+    _ensure_single_membership(db, user=user, org_id=org_id)
     created = ensure_yinchengyue_agent(db)
     create_operation_log(
         db,

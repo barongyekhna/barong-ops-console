@@ -10,6 +10,7 @@ from ..models.user import User
 from ..modules.c19.identity_sync_service import (
     sync_profile_for_user,
     sync_user_identity,
+    sync_affiliation_from_membership,
 )
 from ..repositories.auth_sessions import invalidate_active_sessions_for_user
 from ..repositories.operation_logs import create_operation_log
@@ -486,15 +487,18 @@ def create_bot_user(
             )
         )
         if existing is None:
-            db.add(
-                OrgMembershipRecord(
-                    membership_id=generate_membership_id(),
-                    user_id=str(user.id),
-                    org_id=payload.organization_id,
-                    role="member",
-                    status="active",
-                )
+            existing = OrgMembershipRecord(
+                membership_id=generate_membership_id(),
+                user_id=str(user.id),
+                org_id=payload.organization_id,
+                role="member",
+                status="active",
             )
+            db.add(existing)
+            db.flush()
+        # 通讯录里的「所属组织」读的是 C19 的投影表,不是 org_memberships 本身。
+        # 2026-09-09 白苏婉/殷承岳都因为这里漏同步而显示「没有加入任何组织」。
+        sync_affiliation_from_membership(db, membership=existing, user=user)
         _log_user_operation(
             db,
             actor=actor,
