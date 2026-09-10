@@ -1,0 +1,180 @@
+/* M 系列 · 出货成本：只放成本表特有的增量，基础表格/按钮/面板复用 Inventory.module.css。 */
+
+.headline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* 缺价必须刺眼。这不是装饰：一行没价格，整张表的合计就不成立，
+   而一个看着完整的假总价会被直接拿去报价。 */
+.missing {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.missingBanner {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ok {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--color-success) 40%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: var(--color-success);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.crossBatch {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 32%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-info);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.breakdown {
+  padding: 10px 16px 14px;
+  border-top: 1px solid color-mix(in srgb, var(--color-info) 12%, transparent);
+  font-size: 12px;
+}
+
+.breakdown ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--color-muted);
+  line-height: 1.9;
+}
+
+/* 表尾合计：像 Excel 一样一眼扫到底 */
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.total,
+.totalStrong {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.total dt,
+.totalStrong dt {
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.total dd {
+  margin: 0;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.totalStrong dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-info);
+}
+
+.priceRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--color-info) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-info) 12%, transparent);
+}
+
+.currentPrice {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.modeChoice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modeOption {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 16%, transparent);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.modeOption span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.modeOption small {
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.peopleList {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 14%, transparent);
+  border-radius: 8px;
+  padding: 6px;
+}
+
+.person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.person:hover {
+  background: color-mix(in srgb, var(--color-info) 8%, transparent);
+}
+
+.processChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* 缺价那一行整行提示。CSS Modules 要求纯选择器（至少带一个本地类名），
+   所以由 TSX 给 <tr> 挂 .missingRow，不能写成 tr[data-missing] 的属性选择器。 */
+.missingRow td {
+  background: color-mix(in srgb, var(--color-error) 7%, transparent);
+}

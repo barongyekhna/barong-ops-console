@@ -62,6 +62,7 @@ import {
 import { c19SseReconnectDelay } from "./C19EventStreamRecovery";
 import { C19CardMessage, parseC19Card } from "./C19CardMessage";
 import { C19CategoryCard, parseC19CategoryCard } from "./C19CategoryCard";
+import { C19CostCard, parseC19CostCard } from "./C19CostCard";
 import { C19MessageAsset } from "./C19MessageAsset";
 import { announceC19UnreadChanged } from "./C19UnreadStatus";
 import styles from "./C19Workspace.module.css";
@@ -1981,6 +1982,13 @@ export function C19ChatPanel({
                   </small>
                 ) : null}
                 {(() => {
+                  // M 系列的出货明细卡。**不看 own**:另外两种卡是机器人发的,自己
+                  // 发的文本被解析成卡只会是误判;这张卡却是人发的——制造公司的人
+                  // 发给贸易公司,自己那一侧也该看见同一张表,否则只能看到一堆竖线。
+                  const costCard = parseC19CostCard(record.content);
+                  if (costCard) {
+                    return <C19CostCard card={costCard} />;
+                  }
                   // 殷承岳的类目卡:带复制按钮,不带动作。
                   const categoryCard = own ? null : parseC19CategoryCard(record.content);
                   if (categoryCard) {

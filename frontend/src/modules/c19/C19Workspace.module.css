@@ -2584,3 +2584,133 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+
+/* ---- M 系列「出货明细卡」（见 c19CostCard.ts / C19CostCard.tsx） ---- */
+
+.costCard {
+  margin: 4px 0 2px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-line));
+  border-radius: 12px;
+  background: var(--color-surface-solid);
+  min-width: min(320px, 74vw);
+  max-width: 620px;
+  overflow: hidden;
+}
+
+/* 过期整张压暗：拿两周前的报价去谈价钱是要吃亏的 */
+.costCard[data-expired="true"] {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+.costCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.costCardKicker {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.costCardNo {
+  font-variant-numeric: tabular-nums;
+}
+
+.costCardTitle {
+  padding: 10px 12px 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.costCardExpired,
+.costCardShortage {
+  margin: 0 12px 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  border: 1px solid color-mix(in srgb, var(--color-error) 38%, transparent);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
+}
+
+.costCardTableWrap {
+  overflow-x: auto;
+  padding: 0 12px 8px;
+}
+
+.costCardTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.costCardTable th {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--color-line);
+  color: var(--color-muted);
+  font-weight: 500;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.costCardTable th:first-child,
+.costCardTable td:first-child {
+  text-align: left;
+}
+
+.costCardTable td {
+  padding: 5px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-line) 55%, transparent);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.costCardCode {
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-info) 12%, transparent);
+  color: var(--color-info);
+  font-size: 11px;
+}
+
+.costCardFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--color-line);
+  font-size: 12px;
+}
+
+.costCardFooter div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.costCardFooter dt {
+  color: var(--color-muted);
+}
+
+.costCardFooter dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.costCardPrice dd {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-info);
+}

@@ -91,7 +91,7 @@ INTL_TRADE_ONLY_MODULE_KEYS = R_SERIES_MODULE_KEYS | frozenset(
 INTL_TRADE_ONLY_MODULE_KEYS |= CS_CUSTOMER_SERVICE_MODULE_KEYS
 # M 系列(制造库存)只属于 factory 类型组织:非 factory 组织成员(owner 除外)
 # 在模块清单里直接看不到。按 org_type 判,不按组织名。
-FACTORY_ONLY_MODULE_KEYS = frozenset({"mfg.inventory"})
+FACTORY_ONLY_MODULE_KEYS = frozenset({"mfg.inventory", "mfg.cost"})
 FACTORY_ORG_TYPE = "factory"
 
 

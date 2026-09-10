@@ -1560,6 +1560,97 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="mfg.cost",
+        display_name="出货成本",
+        description=(
+            "Per-product cost sheets for the factory: BOM materials priced FIFO "
+            "from the batch that inbound receipts recorded, inbound freight, a "
+            "labour block driven by a factory-wide process library, and a "
+            "hand-set factory sale price on top. Cost is frozen at production "
+            "time and never recomputed. Sheets are snapshots, shared over C19 "
+            "either in full or price-only. Factory organizations only."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/mfg-cost",
+        # 刻意与库存共用 /mfg:main.py 的错误消毒只豁免这个前缀,
+        # 前端代理白名单也只需扩 isAllowedMfgPath 一处
+        api_namespace="/mfg",
+        navigation=_navigation(
+            group="Registry",
+            label="出货成本",
+            icon="Receipt",
+            order=20,
+        ),
+        required_permissions=("mfg.cost.read",),
+        permission_manifest=(
+            _permission(
+                module_key="mfg.cost",
+                permission_key="mfg.cost.read",
+                category="business",
+                action="read",
+                label="Read cost sheets",
+                description=(
+                    "View per-product cost sheets: material batch prices, "
+                    "inbound freight, labour, totals and margin."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="mfg.cost",
+                permission_key="mfg.cost.price",
+                category="business",
+                action="manage",
+                label="Set factory prices",
+                description=(
+                    "Set factory sale prices, labour rates and reference "
+                    "prices, and share cost sheets over C19."
+                ),
+                risk_level="high",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.mfg.cost",
+        data_boundary=_data_boundary(
+            reads=(
+                "mfg_items",
+                "mfg_bom_lines",
+                "mfg_documents",
+                "mfg_movements",
+                "mfg_labor_processes",
+                "mfg_labor_rates",
+                "mfg_labor_lines",
+                "mfg_item_prices",
+                "mfg_sale_prices",
+                "mfg_cost_sheets",
+                "mfg_cost_sheet_lines",
+                "mfg_cost_sheet_shares",
+                "organizations",
+            ),
+            writes=(
+                "mfg_labor_processes",
+                "mfg_labor_rates",
+                "mfg_labor_lines",
+                "mfg_item_prices",
+                "mfg_sale_prices",
+                "mfg_cost_sheets",
+                "mfg_cost_sheet_lines",
+                "mfg_cost_sheet_shares",
+                "mfg_doc_counters",
+            ),
+            blocked_objects=("cross_module_writes",),
+        ),
+    ),
+    _manifest(
         module_key="geo.content",
         display_name="GEO 内容引擎",
         description=(

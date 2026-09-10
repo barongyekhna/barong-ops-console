@@ -1,7 +1,14 @@
 """M 系列 · 制造库存的 HTTP 端点。
 
-门禁是角色硬门:owner 或制造公司自己的 super_admin,其他人一律 403——不看权限码,
-管理员误授了 mfg.* 权限码也进不来。工厂组织由 service 显式定位,不依赖请求 org 上下文。
+门禁三段(实现见 ``service.user_may_access``):owner 全通;制造公司自己的
+super_admin 全通;其他人要**同时**满足「在制造公司有 active 成员关系」和「权限页勾
+了 mfg.inventory.read / .manage」。2026-09-10 之前这里是纯角色硬门、不看权限码,
+这段说明一直没跟上,到 09-11 才改。
+
+工厂组织由 service 显式定位,不依赖请求 org 上下文。
+
+成本明细是另一个模块(``../cost/router.py``),认的是 ``mfg.cost.*`` 而不是这里的
+权限码——会数箱子的人不该自动看见每一家供应商的报价和每个产品的毛利。
 """
 
 from __future__ import annotations

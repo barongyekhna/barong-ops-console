@@ -23,6 +23,7 @@ from ....models.organization import OrganizationRecord
 from ....models.user import User
 from ....services.data_isolation import without_org_data_isolation
 from ....services.display_names import user_display_name
+from ..cost import pricing as cost_pricing
 from . import models as M
 from . import schemas as S
 
@@ -262,15 +263,32 @@ def _new_document(
     return doc
 
 
+def _money(value: Decimal | int | float | str) -> Decimal:
+    """金额四位小数。数量用 ``_q``,金额用这个,别混。"""
+    return Decimal(str(value)).quantize(Decimal("0.0001"))
+
+
 def _add_movement(
-    db: Session, ctx: FactoryContext, doc: M.MfgDocument, item_id: UUID, delta: Decimal
+    db: Session,
+    ctx: FactoryContext,
+    doc: M.MfgDocument,
+    item_id: UUID,
+    delta: Decimal,
+    *,
+    unit_price: Decimal | None = None,
+    unit_freight: Decimal | None = None,
+    price_is_estimated: bool = False,
 ) -> None:
+    """只有入库的正行带价格;领料/发货/盘点都留空(见 models.MfgMovement 的说明)。"""
     db.add(
         M.MfgMovement(
             factory_org_id=ctx.factory_org_id,
             document_id=doc.id,
             item_id=item_id,
             qty_delta=_q(delta),
+            unit_price=None if unit_price is None else _money(unit_price),
+            unit_freight=None if unit_freight is None else _money(unit_freight),
+            price_is_estimated=price_is_estimated,
         )
     )
 
@@ -499,6 +517,7 @@ def create_item(
         name=payload.name,
         unit=payload.unit,
         note=payload.note,
+        is_volatile=payload.is_volatile,
     )
     db.add(item)
     _commit(db)
@@ -709,9 +728,26 @@ def receipt(
 ) -> M.MfgDocument:
     item_ids = [line.item_id for line in payload.lines]
     items = _lock_items(db, ctx, item_ids)
-    merged: dict[UUID, Decimal] = {}
+
+    # 一行 = 一个批次,而**批次是按价格分的**。这里过去只按 item_id 合并,同一张单
+    # 上 12.40 和 13.60 的两批电线会被压成一批,先进先出立刻就算不准了——铜价涨了
+    # 多少全丢在这一步。所以合并键必须带上价格:同价的合,不同价的各自成批。
+    merged: dict[tuple[UUID, Decimal | None, Decimal | None, bool], Decimal] = {}
     for line in payload.lines:
-        merged[line.item_id] = merged.get(line.item_id, ZERO) + _q(line.qty)
+        qty = _q(line.qty)
+        if qty <= ZERO:
+            raise MfgError("入库数量必须大于 0")
+        if line.unit_price is None:
+            # 无价批次:照样占队列位置,取到它时成本表判缺价(见 models.MfgMovement)
+            unit_price = None
+            unit_freight = None
+        else:
+            unit_price = _money(line.unit_price)
+            # 运费按整批总额录入,除法在这里做:让人做除法就是让人犯错
+            unit_freight = _money(_money(line.freight_total) / qty)
+        key = (line.item_id, unit_price, unit_freight, line.price_is_estimated)
+        merged[key] = merged.get(key, ZERO) + qty
+
     doc = _new_document(
         db,
         ctx,
@@ -721,18 +757,34 @@ def receipt(
         payload={
             "lines": [
                 {
-                    "item_id": str(i),
-                    "code": items[i].code,
-                    "name": items[i].name,
-                    "unit": items[i].unit,
-                    "qty": str(q),
+                    "item_id": str(item_id),
+                    "code": items[item_id].code,
+                    "name": items[item_id].name,
+                    "unit": items[item_id].unit,
+                    "qty": str(qty),
+                    "unit_price": None if unit_price is None else str(unit_price),
+                    "unit_freight": (
+                        None if unit_freight is None else str(unit_freight)
+                    ),
+                    "price_is_estimated": estimated,
                 }
-                for i, q in merged.items()
+                for (item_id, unit_price, unit_freight, estimated), qty in (
+                    merged.items()
+                )
             ]
         },
     )
-    for item_id, qty in merged.items():
-        _add_movement(db, ctx, doc, item_id, qty)
+    for (item_id, unit_price, unit_freight, estimated), qty in merged.items():
+        _add_movement(
+            db,
+            ctx,
+            doc,
+            item_id,
+            qty,
+            unit_price=unit_price,
+            unit_freight=unit_freight,
+            price_is_estimated=estimated,
+        )
     _commit(db)
     db.refresh(doc)
     return doc
@@ -753,6 +805,18 @@ def production(
         db.rollback()
         names = "、".join(f"{r.name} 缺 {r.short} {r.unit}" for r in shortages)
         raise InsufficientStock(f"物料不足,已拒绝整单:{names}", shortages)
+
+    # **必须在写负向流水之前算**:成本快照要按"这次领料之前"的库存队列取价,一旦
+    # 本次的负流水先落进去(哪怕只是 autoflush),先进先出的队头就被自己推着走了,
+    # 吃到的会是下一批的价。
+    cost_snapshot = cost_pricing.build_cost_snapshot(
+        db,
+        ctx.factory_org_id,
+        product_id=product.id,
+        batch_qty=qty,
+        requirements=rows,
+    )
+
     doc = _new_document(
         db,
         ctx,
@@ -780,6 +844,9 @@ def production(
                 }
                 for r in rows
             ],
+            # 这批成品花了多少钱,当场定死。发货时直接读这一份,不再回头查价——
+            # 三个月后料价早变了,那时算出来的不是这批货的成本。
+            "cost_snapshot": cost_snapshot,
         },
     )
     for r in rows:

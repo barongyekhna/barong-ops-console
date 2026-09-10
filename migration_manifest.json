@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260910_01_mfg_code_groups",
+  "alembic_head": "20260911_02_mfg_cost_permissions",
   "environment": "staging",
-  "expected_alembic_head": "20260910_01_mfg_code_groups",
+  "expected_alembic_head": "20260911_02_mfg_cost_permissions",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 115,
-  "migration_hash": "76df6a483cd6cdc309e0e0dab89dca3fd976f7bac15789f9dc43533687bb6615",
+  "migration_count": 117,
+  "migration_hash": "f0d5c1e60df94544f5e4226857c441d822c1245d39e0518e50a0450d590f3d56",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -122,9 +122,11 @@
     "20260905_01_w_traffic",
     "20260906_01_sm_social_tables",
     "20260906_02_sm_social_permissions",
-    "20260910_01_mfg_code_groups"
+    "20260910_01_mfg_code_groups",
+    "20260911_01_mfg_cost_tables",
+    "20260911_02_mfg_cost_permissions"
   ],
-  "migration_order_checksum": "5bbc52cfefa598188a89e82198a4455ca2361cacd4d2156110cf55a5efe86bd0",
+  "migration_order_checksum": "a30d0aa16e2340c9b778f0a50ade77617f0a6e31b0dc18917e3565ec408c0d43",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -930,6 +932,20 @@
       "down_revision": "20260906_02_sm_social_permissions",
       "path": "backend/alembic/versions/20260910_01_mfg_code_groups.py",
       "version": "20260910_01_mfg_code_groups"
+    },
+    {
+      "applied_at": "2026-09-11T00:00:00Z",
+      "checksum": "0c8c1e790f7a91bf27504086a5391ea38c86cb507832d2e66fbcbb6ac59326b6",
+      "down_revision": "20260910_01_mfg_code_groups",
+      "path": "backend/alembic/versions/20260911_01_mfg_cost_tables.py",
+      "version": "20260911_01_mfg_cost_tables"
+    },
+    {
+      "applied_at": "2026-09-11T00:00:00Z",
+      "checksum": "e5a253995a5247c37041757920e5b0da3b094d03f48aeb8bb133c47298bb8e1d",
+      "down_revision": "20260911_01_mfg_cost_tables",
+      "path": "backend/alembic/versions/20260911_02_mfg_cost_permissions.py",
+      "version": "20260911_02_mfg_cost_permissions"
     }
   ]
 }

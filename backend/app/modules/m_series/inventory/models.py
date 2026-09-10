@@ -54,14 +54,22 @@ ALLOWED_DOC_TYPES = (DOC_RECEIPT, DOC_PRODUCTION, DOC_SHIPMENT, DOC_ADJUSTMENT)
 # 自动编码:成品三位流水、物料四位流水
 CODE_DIGITS = {KIND_PRODUCT: 3, KIND_PART: 4}
 
+# 成本表不是库存单据(不动库存、不进 mfg_documents),但取号要的并发安全跟单据
+# 一模一样,所以借用同一张计数器表和同一个 _next_doc_no();mfg_doc_counters 上
+# 没有 doc_type 的 CHECK 约束,多一个种类不影响既有四种。
+DOC_COST_SHEET = "cost_sheet"
+
 DOC_NO_PREFIX = {
     DOC_RECEIPT: "RC",
     DOC_PRODUCTION: "PR",
     DOC_SHIPMENT: "SH",
     DOC_ADJUSTMENT: "AJ",
+    DOC_COST_SHEET: "CS",
 }
 
 QTY = Numeric(14, 3)
+# 金额四位小数:单价可能是 0.0125 这种(小五金按个算),合计再往上取整
+MONEY = Numeric(14, 4)
 
 
 class MfgItem(Base):
@@ -85,6 +93,10 @@ class MfgItem(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     unit: Mapped[str] = mapped_column(String(20), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 波动料(电线受铜价影响这类):勾上以后,含它的成本表有效期从 30 天缩到 7 天
+    is_volatile: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     # 编码组(成品系列 / 物料大类);老数据与手填编码为空
     group_id: Mapped[UUID | None] = mapped_column(
         Uuid, ForeignKey("mfg_code_groups.id", ondelete="SET NULL"), nullable=True
@@ -210,7 +222,17 @@ class MfgDocument(Base):
 
 
 class MfgMovement(Base):
-    """流水:一张单据下挂 N 行,每行一个 item 的 ±数量。"""
+    """流水:一张单据下挂 N 行,每行一个 item 的 ±数量。
+
+    **一条正向入库流水就是一个批次**,所以采购单价与到厂运费直接落在这里,而不是
+    另开一张价格表——价格表要把数量再存一遍,同一个数字存两份迟早不一致。流水本来
+    就只增不改,价格跟着它天然获得同样的保护:铜价涨了是下一批的事,老批次一个字
+    不动。
+
+    只有 receipt 的正行带价格;领料/发货/盘点的行留空。盘盈(正向 adjustment)也
+    留空,于是它是个"无价批次"——FIFO 队头落到它身上时,成本表那一行判为缺价,
+    绝不当 0 算。
+    """
 
     __tablename__ = "mfg_movements"
     __table_args__ = (
@@ -232,6 +254,13 @@ class MfgMovement(Base):
         Uuid, ForeignKey("mfg_items.id", ondelete="RESTRICT"), nullable=False
     )
     qty_delta: Mapped[Decimal] = mapped_column(QTY, nullable=False)
+    # 批次价:采购单价 + 摊到每单位的到厂运费。录入按整批总运费填,除法由服务层做。
+    unit_price: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    unit_freight: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    # 发票没到时先按暂估价入库;发票到了发一条修正事件,不改这一行
+    price_is_estimated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

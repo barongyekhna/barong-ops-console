@@ -499,6 +499,35 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        # 成本数据和库存数量不是一个密级:它带着每一家供应商的报价,和每个产品的
+        # 毛利。会数箱子的人不该自动看见公司赚多少,所以这两个码单开。
+        "permission_key": "mfg.cost.read",
+        "module_key": "mfg.cost",
+        "category": "business",
+        "action": "read",
+        "label": "查看出货成本明细",
+        "description": (
+            "View per-product cost sheets: material batch prices, inbound "
+            "freight, labour, totals and margin. Separate from inventory "
+            "access on purpose."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "mfg.cost.price",
+        "module_key": "mfg.cost",
+        "category": "business",
+        "action": "manage",
+        "label": "定出厂价与工价",
+        "description": (
+            "Set factory sale prices, labour rates and reference prices, and "
+            "share cost sheets over C19. Implies mfg.cost.read."
+        ),
+        "risk_level": RISK_LEVEL_HIGH,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "content.desk.read",
         "module_key": "content.desk",
         "category": "business",

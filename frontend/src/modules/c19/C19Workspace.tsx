@@ -59,6 +59,7 @@ import {
 } from "./api";
 import { C19Avatar } from "./C19Avatar";
 import { C19ChatPanel } from "./C19ChatPanel";
+import { parseC19CostCard } from "./c19CostCard";
 import { C19MomentsPanel } from "./C19MomentsPanel";
 import { C19ProfileCard } from "./C19ProfileCard";
 import {
@@ -142,6 +143,10 @@ function sessionTimeLabel(value: string | null | undefined) {
 function previewBody(preview: SessionPreview) {
   if (preview.contentType === "image") return "[图片]";
   if (preview.contentType === "file") return "[文件]";
+  // 卡片是一条 text 消息(C19 只认四种 content_type),不认出来的话,会话列表会把
+  // 整张表的原始文本连竖线一起吐出来。
+  const cost = parseC19CostCard(preview.content);
+  if (cost) return `[出货明细] ${cost.title}`;
   return preview.content;
 }
 

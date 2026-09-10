@@ -124,6 +124,16 @@ from ..modules.m_series.inventory.models import (
     MfgItem,
     MfgMovement,
 )
+from ..modules.m_series.cost.models import (
+    MfgCostSheet,
+    MfgCostSheetLine,
+    MfgCostSheetShare,
+    MfgItemPrice,
+    MfgLaborLine,
+    MfgLaborProcess,
+    MfgLaborRate,
+    MfgSalePrice,
+)
 from ..modules.geo_series.content.models import GeoMinedQuestion
 from ..modules.geo_series.monitor.models import (
     GeoMonitorQuestion,
@@ -193,10 +203,18 @@ __all__ = [
     "SeoRadarRun",
     "SeoTopic",
     "MfgBomLine",
+    "MfgCostSheet",
+    "MfgCostSheetLine",
+    "MfgCostSheetShare",
     "MfgDocCounter",
     "MfgDocument",
     "MfgItem",
+    "MfgItemPrice",
+    "MfgLaborLine",
+    "MfgLaborProcess",
+    "MfgLaborRate",
     "MfgMovement",
+    "MfgSalePrice",
     "SeoWpCategoryMap",
     "CraftFactRevision",
     "GeoBacklinkJob",

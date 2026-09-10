@@ -1575,6 +1575,76 @@ function isAllowedMfgPath(method: string, path: string[]) {
   if (path.length === 3 && path[1] === "production" && path[2] === "preview") {
     return method === "GET";
   }
+  // 出货成本明细 /mfg/cost/*(刻意挂在 mfg 前缀下,见后端 cost/router.py 的说明)
+  if (path[1] === "cost") {
+    // GET /mfg/cost/processes ; POST /mfg/cost/processes
+    if (path.length === 3 && path[2] === "processes") {
+      return method === "GET" || method === "POST";
+    }
+    // PATCH /mfg/cost/processes/{id}
+    if (path.length === 4 && path[2] === "processes" && isId(path[3])) {
+      return method === "PATCH";
+    }
+    // GET/POST /mfg/cost/processes/{id}/rates
+    if (
+      path.length === 5 &&
+      path[2] === "processes" &&
+      isId(path[3]) &&
+      path[4] === "rates"
+    ) {
+      return method === "GET" || method === "POST";
+    }
+    // GET /mfg/cost/products
+    if (path.length === 3 && path[2] === "products") {
+      return method === "GET";
+    }
+    if (path.length === 5 && path[2] === "products" && isId(path[3])) {
+      // GET/PUT /mfg/cost/products/{id}/labor
+      if (path[4] === "labor") {
+        return method === "GET" || method === "PUT";
+      }
+      // GET /mfg/cost/products/{id}/sheet
+      if (path[4] === "sheet") {
+        return method === "GET";
+      }
+      // POST /mfg/cost/products/{id}/sale-price
+      if (path[4] === "sale-price") {
+        return method === "POST";
+      }
+      // GET /mfg/cost/products/{id}/sale-prices
+      if (path[4] === "sale-prices") {
+        return method === "GET";
+      }
+      return false;
+    }
+    // POST /mfg/cost/items/{id}/reference-price
+    if (
+      path.length === 5 &&
+      path[2] === "items" &&
+      isId(path[3]) &&
+      path[4] === "reference-price"
+    ) {
+      return method === "POST";
+    }
+    // GET/POST /mfg/cost/sheets
+    if (path.length === 3 && path[2] === "sheets") {
+      return method === "GET" || method === "POST";
+    }
+    // GET /mfg/cost/sheets/{id}
+    if (path.length === 4 && path[2] === "sheets" && isId(path[3])) {
+      return method === "GET";
+    }
+    // POST /mfg/cost/sheets/{id}/share
+    if (
+      path.length === 5 &&
+      path[2] === "sheets" &&
+      isId(path[3]) &&
+      path[4] === "share"
+    ) {
+      return method === "POST";
+    }
+    return false;
+  }
   if (path[1] === "code-groups") {
     // GET/POST /mfg/code-groups
     if (path.length === 2) {

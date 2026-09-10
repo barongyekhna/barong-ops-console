@@ -77,6 +77,8 @@ class ItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     unit: str = Field(min_length=1, max_length=20)
     note: str | None = Field(default=None, max_length=2000)
+    # 波动料(电线这种跟着铜价走的):含它的成本表有效期 7 天而不是 30 天
+    is_volatile: bool = False
 
     _strip_fields = field_validator("name", "unit")(_strip)
 
@@ -104,6 +106,7 @@ class ItemPatch(BaseModel):
     unit: str | None = Field(default=None, min_length=1, max_length=20)
     note: str | None = Field(default=None, max_length=2000)
     is_archived: bool | None = None
+    is_volatile: bool | None = None
     # 只有还没有任何流水的主档可以改编码
     code: str | None = Field(default=None, min_length=1, max_length=64, pattern=MANUAL_CODE_PATTERN)
 
@@ -125,6 +128,7 @@ class ItemRead(BaseModel):
     group_code: str | None = None
     group_name: str | None = None
     is_archived: bool
+    is_volatile: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -181,8 +185,31 @@ class BomRead(BaseModel):
 
 
 class ReceiptLine(BaseModel):
+    """一行 = 一个批次。
+
+    单价**可以留空**,但留空是有代价的:这一批成了"无价批次",以后先进先出取到它
+    时,成本表那一行会标缺价、合计直接拒绝出数。这正是想要的行为——不知道就说不
+    知道,好过让人瞎填一个数,把假成本一路带进报价单。
+
+    留空的正当场合只有一处:霓旌在聊天里速记入库("入库 100 个电线")。让机器人追问
+    单价太烦人,而且当场也未必知道。人在录入界面上填单据时,前端把它做成必填。
+
+    发票没到就填暂估价并勾 ``price_is_estimated``;发票到了发一条修正事件,不改这
+    一行。
+
+    运费按**整批总额**填(这批电线的运费一共 200 元),摊到每单位由服务层做除法——
+    让人做除法就是让人犯错。
+    """
+
     item_id: UUID
     qty: Decimal = Field(gt=0, max_digits=14, decimal_places=3)
+    unit_price: Decimal | None = Field(
+        default=None, ge=0, max_digits=14, decimal_places=4
+    )
+    freight_total: Decimal = Field(
+        default=Decimal("0"), ge=0, max_digits=14, decimal_places=4
+    )
+    price_is_estimated: bool = False
 
 
 class ReceiptCreate(BaseModel):
