@@ -66,11 +66,19 @@ def fmt(value: Decimal | str | int) -> str:
     return f"{n.normalize():,f}"
 
 
-def authorize(db: Session, speaker: User) -> FactoryContext:
+def authorize(db: Session, speaker: User, action: str = "read") -> FactoryContext:
+    """查=read;开卡/落单=manage。与库存接口是同一道门。"""
     ctx = service.resolve_factory_context(db)
-    if not getattr(speaker, "is_active", True) or not service.user_may_access(speaker, ctx):
+    if not getattr(speaker, "is_active", True) or not service.user_may_access(
+        speaker, ctx, db=db, action=action
+    ):
         raise NotAuthorized()
     return ctx
+
+
+def _require_manage(db: Session, ctx: FactoryContext, speaker: User) -> None:
+    if not service.user_may_access(speaker, ctx, db=db, action="manage"):
+        raise NotAuthorized()
 
 
 # ---------------------------------------------------------------- 查
@@ -174,6 +182,7 @@ def build_card(
     conversation_id: str,
     now: float,
 ) -> Card:
+    _require_manage(db, ctx, speaker)
     card_id = uuid.uuid4().hex[:4]
     if intent.qty is None:
         raise NeedsClarification("没听清数量,请用阿拉伯数字再说一遍。")
@@ -268,6 +277,7 @@ def build_undo_card(
     conversation_id: str,
     now: float,
 ) -> Card:
+    _require_manage(db, ctx, speaker)
     """撤销 = 反向盘点调整。只撤说话人自己最近的一张(或他点名的单号)。"""
     docs, _ = service.list_documents(db, ctx, doc_type=None, item_id=None, limit=50, offset=0)
     target = None
@@ -323,6 +333,7 @@ def execute_card(
     record_id: str,
 ) -> tuple[str, list[str]]:
     """落单。返回 (回复文本, 单号列表)。InsufficientStock/MfgError 往上抛,调用方转述。"""
+    _require_manage(db, ctx, speaker)
     note = _note(card, speaker, original_text, record_id)
     if card.kind == "receipt":
         doc = service.receipt(db, ctx, user=speaker, payload=S.ReceiptCreate(lines=[S.ReceiptLine(item_id=card.item_id, qty=Decimal(card.qty))], note=note))

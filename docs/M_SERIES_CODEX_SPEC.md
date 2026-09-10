@@ -5,7 +5,7 @@
 
 ## 0. 归属与门禁(三层)
 - **工厂定位**:服务层 `resolve_factory_context()` 查「唯一的 active `org_type='factory'` 组织」,0 个 → 503「未配置制造组织」,>1 个 → 503「多工厂尚未支持」。**不依赖请求 org 上下文**——owner 在两家组织都有成员关系,中间件把 owner 的请求算死在最早建的贸易公司,所以 M 系列的表**没有 `org_id` 列**(叫 `factory_org_id`),避开 C18G 自动盖章;查 `organizations` 时用 `without_org_data_isolation()`(该表自身也受隔离)。
-- **角色硬门** `user_may_access()`:owner 放行;super_admin 仅当 `user.organization_id == factory_org_id`;其他一律 403。**不看权限码**,`mfg.inventory.read/manage` 只为满足注册表/侧边栏契约。
+- **门禁** `user_may_access(user, ctx, db, action)`(2026-09-10 用户拍板放开):owner 放行;super_admin 仅当 `user.organization_id == factory_org_id`;**其他人 = 制造公司 active 成员关系 + 权限页勾了 `mfg.inventory.read`(查)/`mfg.inventory.manage`(写,蕴含 read)**。路由分 `Access`(读)与 `Manage`(写)两道依赖;主页 M 卡与霓旌(查=read,开卡/落单=manage)走同一函数。不传 db 只走前两条角色硬门。
 - **隐藏**:`module_control_center._module_allowed_for_organization` 按 `org_type=="factory"`;`module_registry.FACTORY_ONLY_MODULE_KEYS` + `_user_has_factory_org_access` 过滤 `/modules/me`;前端 `ORGANIZATION_MODULE_PREFIXES` 加 `"mfg."`。
 - 吉林制造公司 `org_type` 原为死字段 `store`,迁移 `20260821_03_factory_org_type` 按 org_id 改为 `factory`。
 

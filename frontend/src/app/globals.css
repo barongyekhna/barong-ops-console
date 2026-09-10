@@ -8640,6 +8640,17 @@ textarea::placeholder { color: var(--color-subtle); opacity: 1; }
 }
 
 
+/* ---- 用户管理 · 多组织成员关系(2026-09-10) ---- */
+.users-membership-block { display: grid; gap: 8px; margin-top: 12px; }
+.users-membership-list { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.users-membership-item {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border: 1px solid var(--border-subtle, currentColor);
+  border-radius: 8px; font-size: 0.92rem; cursor: pointer;
+}
+.users-membership-item input[type="checkbox"] { accent-color: var(--accent, currentColor); }
+.users-membership-item:has(input:disabled) { opacity: .7; cursor: default; }
+
 /* =====================================================================
    STORE HOME · 贸易公司主页八卡 + 浮窗 (.home-store) —— 追加于 2026-09-05
    ---------------------------------------------------------------------
@@ -8785,3 +8796,4 @@ textarea::placeholder { color: var(--color-subtle); opacity: 1; }
 .home-store .hs-capacity-row .hs-cap { font: 500 14px var(--cc-mono); font-variant-numeric: tabular-nums; color: var(--color-success); white-space: nowrap; }
 .home-store .hs-capacity-row .hs-cap.hs-cap-zero { color: var(--color-error); }
 .home-store .hs-capacity-row small { display: block; font-size: 11px; color: var(--cc-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+

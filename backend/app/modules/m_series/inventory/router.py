@@ -26,25 +26,41 @@ PERMISSION_READ = "mfg.inventory.read"
 PERMISSION_MANAGE = "mfg.inventory.manage"
 
 
-def _require_mfg_access(
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> tuple[FactoryContext, User]:
+def _mfg_access(db: Session, user: User, action: str) -> tuple[FactoryContext, User]:
     try:
         ctx = service.resolve_factory_context(db)
     except service.FactoryNotConfigured as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
-    if not service.user_may_access(user, ctx):
+    if not service.user_may_access(user, ctx, db=db, action=action):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="库存模块仅限 owner 与制造公司超级管理员",
+            detail=(
+                "库存模块仅限 owner、制造公司超级管理员,或在权限页拿到库存权限的制造公司成员"
+                if action == "read"
+                else "这个账号只能查看库存,没有「管理制造库存」权限"
+            ),
         )
     return ctx, user
 
 
+def _require_mfg_access(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> tuple[FactoryContext, User]:
+    return _mfg_access(db, user, "read")
+
+
+def _require_mfg_manage(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> tuple[FactoryContext, User]:
+    return _mfg_access(db, user, "manage")
+
+
 Access = Annotated[tuple[FactoryContext, User], Depends(_require_mfg_access)]
+Manage = Annotated[tuple[FactoryContext, User], Depends(_require_mfg_manage)]
 
 
 def _run(fn, *args, **kwargs):
@@ -98,7 +114,7 @@ def list_code_groups(
     "/code-groups", response_model=S.CodeGroupRead, status_code=status.HTTP_201_CREATED
 )
 def create_code_group(
-    payload: S.CodeGroupCreate, access: Access, db: Session = Depends(get_db)
+    payload: S.CodeGroupCreate, access: Manage, db: Session = Depends(get_db)
 ) -> S.CodeGroupRead:
     ctx, _ = access
     return S.CodeGroupRead.model_validate(_run(service.create_code_group, db, ctx, payload))
@@ -142,7 +158,7 @@ def list_items(
 
 @router.post("/items", response_model=S.ItemRead, status_code=status.HTTP_201_CREATED)
 def create_item(
-    payload: S.ItemCreate, access: Access, db: Session = Depends(get_db)
+    payload: S.ItemCreate, access: Manage, db: Session = Depends(get_db)
 ) -> S.ItemRead:
     ctx, _ = access
     return S.ItemRead.model_validate(_run(service.create_item, db, ctx, payload))
@@ -150,7 +166,7 @@ def create_item(
 
 @router.patch("/items/{item_id}", response_model=S.ItemRead)
 def patch_item(
-    item_id: UUID, payload: S.ItemPatch, access: Access, db: Session = Depends(get_db)
+    item_id: UUID, payload: S.ItemPatch, access: Manage, db: Session = Depends(get_db)
 ) -> S.ItemRead:
     ctx, _ = access
     return S.ItemRead.model_validate(_run(service.patch_item, db, ctx, item_id, payload))
@@ -192,7 +208,7 @@ def get_bom(item_id: UUID, access: Access, db: Session = Depends(get_db)) -> S.B
 
 @router.put("/items/{item_id}/bom", response_model=S.BomRead)
 def put_bom(
-    item_id: UUID, payload: S.BomReplace, access: Access, db: Session = Depends(get_db)
+    item_id: UUID, payload: S.BomReplace, access: Manage, db: Session = Depends(get_db)
 ) -> S.BomRead:
     ctx, _ = access
     return _run(service.replace_bom, db, ctx, item_id, payload)
@@ -219,7 +235,7 @@ def production_preview(
     "/documents/receipt", response_model=S.DocumentRead, status_code=status.HTTP_201_CREATED
 )
 def create_receipt(
-    payload: S.ReceiptCreate, access: Access, db: Session = Depends(get_db)
+    payload: S.ReceiptCreate, access: Manage, db: Session = Depends(get_db)
 ) -> S.DocumentRead:
     ctx, user = access
     return S.DocumentRead.model_validate(
@@ -231,7 +247,7 @@ def create_receipt(
     "/documents/production", response_model=S.DocumentRead, status_code=status.HTTP_201_CREATED
 )
 def create_production(
-    payload: S.ProductionCreate, access: Access, db: Session = Depends(get_db)
+    payload: S.ProductionCreate, access: Manage, db: Session = Depends(get_db)
 ) -> S.DocumentRead:
     ctx, user = access
     return S.DocumentRead.model_validate(
@@ -243,7 +259,7 @@ def create_production(
     "/documents/shipment", response_model=S.DocumentRead, status_code=status.HTTP_201_CREATED
 )
 def create_shipment(
-    payload: S.ShipmentCreate, access: Access, db: Session = Depends(get_db)
+    payload: S.ShipmentCreate, access: Manage, db: Session = Depends(get_db)
 ) -> S.DocumentRead:
     ctx, user = access
     return S.DocumentRead.model_validate(
@@ -255,7 +271,7 @@ def create_shipment(
     "/documents/adjustment", response_model=S.DocumentRead, status_code=status.HTTP_201_CREATED
 )
 def create_adjustment(
-    payload: S.AdjustmentCreate, access: Access, db: Session = Depends(get_db)
+    payload: S.AdjustmentCreate, access: Manage, db: Session = Depends(get_db)
 ) -> S.DocumentRead:
     ctx, user = access
     return S.DocumentRead.model_validate(

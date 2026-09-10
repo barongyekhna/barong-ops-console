@@ -105,10 +105,13 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     for name in ("sm_channels", "sm_calendar_slots", "sm_posts", "sm_media_usage", "sm_image_requests", "sm_rejections", "sm_generation_jobs"):
         assert name in tables
     manifest = json.loads((REPO / "migration_manifest.json").read_text(encoding="utf-8"))
-    assert manifest["migration_order"][-2:] == ["20260906_01_sm_social_tables", "20260906_02_sm_social_permissions"]
+    order = manifest["migration_order"]
+    i = order.index("20260906_01_sm_social_tables")
+    assert order[i : i + 2] == ["20260906_01_sm_social_tables", "20260906_02_sm_social_permissions"]
     from scripts import staging_stabilization
 
-    assert staging_stabilization.EXPECTED_ALEMBIC_HEAD == "20260906_02_sm_social_permissions"
+    # 后来的迁移会接在后面(2026-09-10 起 M 编码组),只要求 SM 两条在链上且头被锁住
+    assert staging_stabilization.EXPECTED_ALEMBIC_HEAD == order[-1]
 
 
 # ---------------------------------------------------------------- 档案

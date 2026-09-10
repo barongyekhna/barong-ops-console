@@ -41,6 +41,7 @@ import {
 import {
   MANAGED_USER_ROLES,
   USERS_PAGE_LIMIT,
+  addUserToOrganization,
   createUser,
   disableUser,
   disableUserMcpToken,
@@ -56,6 +57,7 @@ import {
   type McpTokenIssued,
   purgeUser,
   registerBot,
+  removeUserFromOrganization,
   resetUserPassword,
   updateUser,
   type ManagedUser,
@@ -201,6 +203,9 @@ export function UserManagementPanel() {
   const [expandedUser, setExpandedUser] = useState<ManagedUser | null>(null);
   const [detailRole, setDetailRole] =
     useState<ManagedUserRole>("viewer");
+  // 岗位 / 主组织的编辑草稿(2026-09-10 起可改)
+  const [detailJobTitle, setDetailJobTitle] = useState("");
+  const [detailOrgId, setDetailOrgId] = useState("");
   const [resetTarget, setResetTarget] = useState<ManagedUser | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [createUsername, setCreateUsername] = useState("");
@@ -471,6 +476,67 @@ export function UserManagementPanel() {
     setExpandedUser(detail);
     if (isManagedUserRole(detail.role)) {
       setDetailRole(detail.role);
+    }
+    setDetailJobTitle(detail.job_title ?? "");
+    setDetailOrgId(detail.organization_id ?? "");
+  }
+
+  async function handleProfileUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    clearActionMessages();
+    if (!expandedUser || !canManageTarget(expandedUser)) {
+      setActionError("当前账号不能管理该用户。");
+      return;
+    }
+    const jobTitle = detailJobTitle.trim();
+    const payload: { job_title?: string; organization_id?: string } = {};
+    if (jobTitle !== (expandedUser.job_title ?? "")) {
+      payload.job_title = jobTitle;
+    }
+    if (detailOrgId && detailOrgId !== (expandedUser.organization_id ?? "")) {
+      payload.organization_id = detailOrgId;
+    }
+    if (Object.keys(payload).length === 0) {
+      return;
+    }
+    setPendingAction(`profile-${expandedUser.id}`);
+    try {
+      const updated = await updateUser(expandedUser.id, payload);
+      setActionNotice(`已更新 ${managedUserDisplayName(updated)} 的岗位/主组织。`);
+      await refreshAfterMutation(expandedUser.id);
+    } catch (error) {
+      setActionError(formatUsersApiError(error, "岗位/主组织更新未完成，请重试。"));
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleMembershipToggle(org: OrganizationOption, joined: boolean) {
+    clearActionMessages();
+    if (!expandedUser || !canManageTarget(expandedUser)) {
+      setActionError("当前账号不能管理该用户。");
+      return;
+    }
+    if (joined && org.org_id === expandedUser.organization_id) {
+      setActionError("主组织不能退出；先把主组织换成别的公司。");
+      return;
+    }
+    setPendingAction(`membership-${expandedUser.id}-${org.org_id}`);
+    try {
+      if (joined) {
+        await removeUserFromOrganization(expandedUser.id, org.org_id);
+        setActionNotice(`${managedUserDisplayName(expandedUser)} 已退出 ${org.org_name}。`);
+      } else {
+        await addUserToOrganization(expandedUser.id, org.org_id);
+        setActionNotice(
+          `${managedUserDisplayName(expandedUser)} 已加入 ${org.org_name}。他登录后可在顶栏切换公司。`,
+        );
+      }
+      await refreshAfterMutation(expandedUser.id);
+    } catch (error) {
+      setActionError(formatUsersApiError(error, "组织成员关系未更新，请重试。"));
+    } finally {
+      setPendingAction(null);
     }
   }
 
@@ -1663,6 +1729,82 @@ export function UserManagementPanel() {
               当前账号仅可查看该用户详情。
             </p>
           )}
+
+          {isManagedUserRole(expandedUser.role) && canManageTarget(expandedUser) ? (
+            <>
+              <form className="users-role-form" onSubmit={handleProfileUpdate}>
+                <label className="field-group">
+                  <span>岗位</span>
+                  <span className="input-shell">
+                    <input
+                      autoComplete="off"
+                      disabled={isBusy}
+                      maxLength={255}
+                      onChange={(event) => setDetailJobTitle(event.target.value)}
+                      placeholder="如 owner助理"
+                      type="text"
+                      value={detailJobTitle}
+                    />
+                  </span>
+                </label>
+                <label className="field-group">
+                  <span>主组织（登录后默认落在这家公司）</span>
+                  <select
+                    className="select-shell"
+                    disabled={isBusy || organizations.length === 0}
+                    onChange={(event) => setDetailOrgId(event.target.value)}
+                    value={detailOrgId}
+                  >
+                    {organizations.map((org) => (
+                      <option key={org.org_id} value={org.org_id}>
+                        {org.org_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="secondary-button"
+                  disabled={
+                    isBusy ||
+                    (detailJobTitle.trim() === (expandedUser.job_title ?? "") &&
+                      (!detailOrgId || detailOrgId === (expandedUser.organization_id ?? "")))
+                  }
+                  type="submit"
+                >
+                  <Save aria-hidden="true" size={17} />
+                  保存岗位/主组织
+                </button>
+              </form>
+
+              <div className="users-membership-block" data-testid="users-membership-block">
+                <p className="users-muted-note">
+                  所属公司（勾几家就能在顶栏切换几家；具体能干什么仍由权限页决定）
+                </p>
+                <div className="users-membership-list">
+                  {organizations.map((org) => {
+                    const joined = (expandedUser.memberships ?? []).some(
+                      (m) => m.org_id === org.org_id,
+                    );
+                    const isHome = org.org_id === expandedUser.organization_id;
+                    return (
+                      <label className="users-membership-item" key={org.org_id}>
+                        <input
+                          checked={joined}
+                          disabled={isBusy || isHome}
+                          onChange={() => handleMembershipToggle(org, joined)}
+                          type="checkbox"
+                        />
+                        <span>
+                          {org.org_name}
+                          {isHome ? "（主组织）" : ""}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          ) : null}
         </section>
         </>
       ) : null}

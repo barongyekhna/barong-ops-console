@@ -303,6 +303,19 @@ def _resolve_org(
             source="c18c_active_membership",
         )
 
+    # 多组织成员、会话还没选过组织(比如刚被加进第二家公司、或换了设备登录):
+    # 落在主组织(users.organization_id)上,前提是他在主组织确实有 active 成员关系。
+    # 没有这条,这种人第一次登录整站 403,连切换器都来不及点(2026-08-31 体检坑)。
+    if len(memberships) > 1:
+        home_org_id = _string_value(user.organization_id)
+        home_membership = memberships_by_org.get(home_org_id) if home_org_id else None
+        if home_membership is not None:
+            return OrgResolution(
+                org_id=home_org_id,
+                role=_role_for_membership(home_membership),
+                source="fallback_home_org_membership",
+            )
+
     if is_org_admin_like_role(user_role):
         user_org_id = _string_value(user.organization_id)
         if user_org_id is not None:

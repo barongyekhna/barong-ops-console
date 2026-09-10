@@ -1,7 +1,7 @@
 """M 系列给制造公司主页的三张卡：库存总览、生产能力/缺料、今日单据。
 
 规矩与 M 模块一致：
-- 门禁是**角色硬门**（`service.user_may_access`），不看权限码；不过门就返回 None，卡不出现。
+- 门禁与库存接口同一道（`service.user_may_access`：owner / 制造超管 / 带权限码的制造公司成员）；不过门就返回 None，卡不出现。
   否则会出现「卡看得见、接口 403」。
 - 只 select。库存 = 流水求和（`service.stock_of`），一次算完全部物料，再在内存里推能力。
 - 「缺料」不问人：对每个有 BOM 的成品，按 BOM 和现有库存算「最多还能产多少」，
@@ -49,7 +49,7 @@ def _factory(db: Session, workspace_key: str, user: User) -> service.FactoryCont
         return None
     if ctx.factory_org_id != workspace_key:
         return None
-    if not service.user_may_access(user, ctx):
+    if not service.user_may_access(user, ctx, db=db):
         return None
     return ctx
 

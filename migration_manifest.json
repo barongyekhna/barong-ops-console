@@ -1,9 +1,9 @@
 {
   "alembic_head": "20260910_01_mfg_code_groups",
   "environment": "staging",
-  "expected_alembic_head": "20260906_02_sm_social_permissions",
+  "expected_alembic_head": "20260910_01_mfg_code_groups",
   "generated_at": "2026-06-17T00:00:00Z",
-  "head_locked": false,
+  "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
   "migration_count": 115,
   "migration_hash": "76df6a483cd6cdc309e0e0dab89dca3fd976f7bac15789f9dc43533687bb6615",

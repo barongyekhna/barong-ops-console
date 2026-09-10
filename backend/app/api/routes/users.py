@@ -16,6 +16,7 @@ from ...schemas.user import (
     McpTokenLogResponse,
     McpTokenSummary,
     UserCreateResponse,
+    UserMembershipRead,
     BotCreate,
     PasswordResetRequest,
     UserCreate,
@@ -201,12 +202,46 @@ def _display_name_map(
     }
 
 
+def _membership_map(db: Session, users: list[User]) -> dict[int, list[UserMembershipRead]]:
+    """每个用户全部 active 成员关系(含主组织)。跨组织可见是设计,所以摘掉隔离查。"""
+    from ...models.org_membership import OrgMembershipRecord
+
+    ids = [str(user.id) for user in users]
+    if not ids:
+        return {}
+    with without_org_data_isolation():
+        rows = db.execute(
+            select(
+                OrgMembershipRecord.user_id,
+                OrgMembershipRecord.org_id,
+                OrgMembershipRecord.role,
+                OrganizationRecord.org_name,
+            )
+            .join(OrganizationRecord, OrganizationRecord.org_id == OrgMembershipRecord.org_id)
+            .where(
+                OrgMembershipRecord.user_id.in_(ids),
+                OrgMembershipRecord.status == "active",
+                OrganizationRecord.status == "active",
+            )
+            .order_by(OrganizationRecord.org_name)
+        ).all()
+    result: dict[int, list[UserMembershipRead]] = {}
+    for user_id, org_id, role, org_name in rows:
+        result.setdefault(int(user_id), []).append(
+            UserMembershipRead(org_id=org_id, org_name=org_name, role=role)
+        )
+    return result
+
+
 def _user_response(
     user: User,
     organization_names: dict[str, str],
     display_names: dict[int, tuple[str | None, str | None, str | None]] | None = None,
+    memberships: list[UserMembershipRead] | None = None,
 ) -> UserResponse:
     response = UserResponse.model_validate(user)
+    if memberships is not None:
+        response.memberships = memberships
     if response.organization_id:
         response.organization = organization_names.get(
             response.organization_id,
@@ -293,13 +328,16 @@ def users(
             )
         organization_names = _organization_name_map(db, result.items)
         display_names = _display_name_map(db, result.items)
+        membership_map = _membership_map(db, result.items)
         token_summaries = mcp_token_service.summaries_for_users(
             db, [item.id for item in result.items]
         )
         response = ListResponse(
             items=[
                 _with_mcp_token(
-                    _user_response(item, organization_names, display_names),
+                    _user_response(
+                        item, organization_names, display_names, membership_map.get(item.id, [])
+                    ),
                     token_summaries.get(item.id),
                 )
                 for item in result.items
@@ -509,7 +547,12 @@ def user_detail(
         _raise_user_management_error(exc)
     _ensure_user_visible(actor, user)
     return _with_mcp_token(
-        _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user])),
+        _user_response(
+            user,
+            _organization_name_map(db, [user]),
+            _display_name_map(db, [user]),
+            _membership_map(db, [user]).get(user.id, []),
+        ),
         mcp_token_service.token_summary(mcp_token_service.get_token_row(db, user.id)),
     )
 
@@ -532,7 +575,12 @@ def user_update(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return _user_response(user, _organization_name_map(db, [user]), _display_name_map(db, [user]))
+    return _user_response(
+        user,
+        _organization_name_map(db, [user]),
+        _display_name_map(db, [user]),
+        _membership_map(db, [user]).get(user.id, []),
+    )
 
 
 @router.post("/{user_id}/reset-password", response_model=UserResponse)

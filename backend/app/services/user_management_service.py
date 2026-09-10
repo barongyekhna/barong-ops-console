@@ -261,6 +261,37 @@ def create_managed_user(
     return user, initial_password
 
 
+def _ensure_membership(db: Session, *, user: User, org_id: str) -> None:
+    """给用户补一条该组织的 active 成员关系(已有就不动),并同步 C19 组织投影。"""
+    from sqlalchemy import select
+
+    from ..models.org_membership import OrgMembershipRecord
+    from ..modules.c19.identity_sync_service import sync_affiliation_from_membership
+    from ..schemas.org_membership import generate_membership_id
+    from .data_isolation import without_org_data_isolation
+
+    with without_org_data_isolation():
+        existing = db.scalar(
+            select(OrgMembershipRecord).where(
+                OrgMembershipRecord.user_id == str(user.id),
+                OrgMembershipRecord.org_id == org_id,
+            )
+        )
+        if existing is None:
+            existing = OrgMembershipRecord(
+                membership_id=generate_membership_id(),
+                user_id=str(user.id),
+                org_id=org_id,
+                role="admin" if normalize_role(user.role) == "super_admin" else "member",
+                status="active",
+            )
+        elif existing.status != "active":
+            existing.status = "active"
+        db.add(existing)
+        db.flush()
+        sync_affiliation_from_membership(db, membership=existing)
+
+
 def update_managed_user(
     db: Session,
     *,
@@ -283,6 +314,25 @@ def update_managed_user(
             )
     if user.id == actor.id and payload.is_active is False:
         raise SelfDisableNotAllowedError("Current owner cannot be disabled.")
+    if (payload.job_title is not None or payload.organization_id is not None) and is_owner_role(
+        user.role
+    ):
+        raise UserManagementPermissionDeniedError(
+            "Owner accounts do not carry a job title or an organization."
+        )
+    new_org_id: str | None = None
+    if payload.organization_id is not None:
+        if not payload.organization_id:
+            raise UserOrganizationNotFoundError("Organization not found.")
+        if get_organization(db, payload.organization_id) is None:
+            raise UserOrganizationNotFoundError("Organization not found.")
+        if not is_owner_role(actor.role) and (
+            payload.organization_id != (actor.organization_id or "")
+        ):
+            raise UserManagementPermissionDeniedError(
+                "Super admin can only move users within their own organization."
+            )
+        new_org_id = payload.organization_id
 
     must_change_password = (
         initial_must_change_password_for_role(role)
@@ -293,6 +343,8 @@ def update_managed_user(
         "role": user.role,
         "must_change_password": user.must_change_password,
         "is_active": user.is_active,
+        "job_title": user.job_title,
+        "organization_id": user.organization_id,
     }
     user = update_user_record(
         db,
@@ -301,12 +353,24 @@ def update_managed_user(
         must_change_password=must_change_password,
         is_active=payload.is_active,
     )
-    if payload.is_active is not None:
+    if payload.job_title is not None:
+        user.job_title = payload.job_title or None
+    if new_org_id is not None:
+        user.organization_id = new_org_id
+    if payload.job_title is not None or new_org_id is not None:
+        db.add(user)
+        db.flush()
+    if new_org_id is not None:
+        # 主组织换了就得在新组织有成员关系,否则组织上下文进不去(C18H)。
+        _ensure_membership(db, user=user, org_id=new_org_id)
+    if payload.is_active is not None or new_org_id is not None:
         sync_user_identity(db, user=user)
     after = {
         "role": user.role,
         "must_change_password": user.must_change_password,
         "is_active": user.is_active,
+        "job_title": user.job_title,
+        "organization_id": user.organization_id,
     }
     _log_user_operation(
         db,

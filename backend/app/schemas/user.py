@@ -81,6 +81,12 @@ def user_management_role_metadata() -> list[dict[str, object]]:
     return metadata
 
 
+class UserMembershipRead(BaseModel):
+    org_id: str
+    org_name: str
+    role: str
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,6 +97,8 @@ class UserResponse(BaseModel):
     job_title: str | None = None
     organization: str | None = None
     organization_id: str | None = None
+    # 全部 active 成员关系(含主组织)。owner 不挂组织,这里为空。
+    memberships: list[UserMembershipRead] = []
     must_change_password: bool
     is_active: bool
     is_bot: bool = False
@@ -197,6 +205,10 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     role: ManagedUserRole | None = None
     is_active: bool | None = None
+    # 岗位与主组织(2026-09-10 起可改)。主组织换了会自动补上该组织的成员关系,
+    # 旧组织的成员关系不动——多组织成员在「组织」区单独勾选。
+    job_title: str | None = Field(default=None, max_length=255)
+    organization_id: str | None = Field(default=None, max_length=40)
 
     @field_validator("role")
     @classmethod
@@ -205,9 +217,21 @@ class UserUpdate(BaseModel):
             return None
         return validate_user_management_role(value)
 
+    @field_validator("job_title", "organization_id")
+    @classmethod
+    def strip_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip()
+
     @model_validator(mode="after")
     def require_change(self) -> "UserUpdate":
-        if self.role is None and self.is_active is None:
+        if (
+            self.role is None
+            and self.is_active is None
+            and self.job_title is None
+            and self.organization_id is None
+        ):
             raise ValueError("At least one user field must be supplied.")
         return self
 

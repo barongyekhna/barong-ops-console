@@ -43,6 +43,8 @@ export type ManagedUser = {
   job_title: string | null;
   organization: string | null;
   organization_id: string | null;
+  /** 全部 active 成员关系(含主组织)。多组织的人在顶栏能切换公司。 */
+  memberships?: UserMembership[];
   must_change_password: boolean;
   is_active: boolean;
   /** 数字员工账号(如白苏婉)。只是标签,不参与任何鉴权。 */
@@ -148,6 +150,15 @@ export type CreateUserPayload = {
 export type UpdateUserPayload = {
   role?: ManagedUserRole;
   is_active?: boolean;
+  job_title?: string | null;
+  /** 主组织。换了会自动补该组织的成员关系,旧组织不动。 */
+  organization_id?: string | null;
+};
+
+export type UserMembership = {
+  org_id: string;
+  org_name: string;
+  role: string;
 };
 
 export const USERS_PAGE_LIMIT = 10;
@@ -267,6 +278,21 @@ export function updateUser(
   return apiRequest<ManagedUser>(`/users/${userId}`, {
     body: payload,
     method: "PATCH",
+  });
+}
+
+/** 给用户加/去一个组织的成员关系(后端 /org/{org_id}/members/add|remove)。 */
+export function addUserToOrganization(userId: number, orgId: string) {
+  return apiRequest<unknown>(`/org/${orgId}/members/add`, {
+    body: { user_id: String(userId), role: "member" },
+    method: "POST",
+  });
+}
+
+export function removeUserFromOrganization(userId: number, orgId: string) {
+  return apiRequest<unknown>(`/org/${orgId}/members/remove`, {
+    body: { user_id: String(userId) },
+    method: "POST",
   });
 }
 

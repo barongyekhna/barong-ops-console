@@ -97,13 +97,46 @@ def resolve_factory_context(db: Session) -> FactoryContext:
     return FactoryContext(factory_org_id=org.org_id, org_name=org.org_name)
 
 
-def user_may_access(user: User, ctx: FactoryContext) -> bool:
-    """只有 owner 和制造公司自己的 super_admin。不看权限码。"""
+PERMISSION_READ = "mfg.inventory.read"
+PERMISSION_MANAGE = "mfg.inventory.manage"
+
+
+def user_may_access(
+    user: User,
+    ctx: FactoryContext,
+    db: Session | None = None,
+    action: str = "read",
+) -> bool:
+    """库存的门(2026-09-10 用户拍板放开):
+
+    - owner 全通;制造公司自己的 super_admin 全通(不看权限码,与原规矩一致);
+    - 其他人必须**同时**满足:在制造公司有 active 成员关系 + 权限页勾了
+      ``mfg.inventory.read``(查)或 ``mfg.inventory.manage``(入库/生产/发货/调整/建档)。
+      manage 蕴含 read。
+    - 不传 ``db`` 就只能走前两条(没法查成员关系与权限)。
+    """
     if is_owner_role(user.role):
         return True
     if is_super_admin_role(user.role):
         return (user.organization_id or "") == ctx.factory_org_id
-    return False
+    if db is None:
+        return False
+    from ....models.org_membership import OrgMembershipRecord
+    from ....services.permission_service import user_has_permission
+
+    with without_org_data_isolation():
+        member = db.scalar(
+            select(OrgMembershipRecord.membership_id).where(
+                OrgMembershipRecord.user_id == str(user.id),
+                OrgMembershipRecord.org_id == ctx.factory_org_id,
+                OrgMembershipRecord.status == "active",
+            )
+        )
+    if member is None:
+        return False
+    if user_has_permission(db, user, PERMISSION_MANAGE):
+        return True
+    return action != "manage" and user_has_permission(db, user, PERMISSION_READ)
 
 
 # ---------------------------------------------------------------- 小工具

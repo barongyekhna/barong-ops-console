@@ -66,3 +66,16 @@ class TestBothPathsShareTheSamePrecedence:
             "HTTP 路径改成了先读 user.organization_id —— "
             "那就轮到 worker 那侧与它不一致了。两边要一起改。"
         )
+
+
+class TestMultiOrgHomeFallback:
+    def test_multi_membership_without_session_choice_lands_on_home_org(self) -> None:
+        """多组织成员、会话没选过组织 → 落在主组织,而不是整站 403。"""
+        from backend.app.middleware.org_context import _resolve_org
+
+        src = inspect.getsource(_resolve_org)
+        assert "fallback_home_org_membership" in src
+        single_at = src.index("len(memberships) == 1")
+        home_at = src.index("fallback_home_org_membership")
+        admin_at = src.index("is_org_admin_like_role(user_role)")
+        assert single_at < home_at < admin_at, "主组织兜底要排在唯一成员关系之后、org-admin 回退之前"

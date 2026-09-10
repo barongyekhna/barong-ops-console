@@ -45,7 +45,8 @@ _RUNNING = True
 MAX_LOGIN_BACKOFF = 60.0
 MAX_EXECUTED_KEEP = 2000
 
-REPLY_NOT_AUTHORIZED = "库存操作仅限 owner 与制造公司超级管理员,我帮不了你。"
+REPLY_NOT_AUTHORIZED = "库存仅限 owner、制造公司超级管理员,或在权限页拿到库存权限的制造公司成员,我帮不了你。"
+REPLY_READ_ONLY = "你的账号只能查库存,没有「管理制造库存」权限,入库/生产/发货/调整我办不了。"
 REPLY_MULTI = "一次只说一件事吧——把入库、生产、发货分开发给我,我一件一件开单。"
 REPLY_OFFLINE = "没接通脑子,这句我没处理,什么都没做。稍后再说一遍。"
 REPLY_RED = "这个要在控制台做:「库存」→ 物料/成品 → 新建 / 配件清单 / 归档。主档我不碰。"
@@ -313,6 +314,8 @@ class NijingWorker:
                 return REPLY_UNSUPPORTED
         except NeedsClarification as exc:
             return str(exc)
+        except NotAuthorized:
+            return REPLY_READ_ONLY
         except executor.MfgError as exc:
             return str(exc)
         card.request_text = text
@@ -328,6 +331,8 @@ class NijingWorker:
         self._drop_pending(conversation_id)
         try:
             reply, doc_nos = executor.execute_card(db, ctx, card=card, speaker=speaker, original_text=text, record_id=record_id)
+        except NotAuthorized:
+            return REPLY_READ_ONLY
         except executor.InsufficientStock as exc:
             _log_operation(action=f"agent.mfg.{card.kind}", target_type="mfg_card", target_id=card.card_id, result="rejected", details={"speaker_user_id": str(speaker.id), "reason": str(exc)[:300]})
             return f"落单时被拦住了(这段时间库存变了):{exc}\n没有登记。"

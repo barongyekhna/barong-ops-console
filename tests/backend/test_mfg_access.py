@@ -1,4 +1,4 @@
-"""M 系列门禁:只有 owner 与制造公司 super_admin;非 factory 组织看不到。"""
+"""M 系列门禁:owner / 制造公司 super_admin / 带权限码的制造公司成员;非 factory 组织看不到。"""
 
 from __future__ import annotations
 
@@ -82,8 +82,92 @@ def test_role_gate(db) -> None:
     assert service.user_may_access(_user("super_admin", FACTORY_ORG_ID), ctx)
     assert not service.user_may_access(_user("super_admin", STORE_ORG_ID), ctx)
     assert not service.user_may_access(_user("super_admin", None), ctx)
+    # 不带 db 只能走角色硬门:普通角色一律不过
     assert not service.user_may_access(_user("admin", FACTORY_ORG_ID), ctx)
     assert not service.user_may_access(_user("viewer", FACTORY_ORG_ID), ctx)
+
+
+def test_member_with_permission_code_passes_gate(db) -> None:
+    """2026-09-10 拍板:制造公司成员 + 权限页勾了库存权限 → 过门;缺任一条都不过。"""
+    from uuid import uuid4
+
+    from backend.app.core.security import hash_password
+    from backend.app.models.org_membership import OrgMembershipRecord
+    from backend.app.models.permission import UserPermissionAssignment
+    from backend.app.services.permission_resolution_cache import clear_permission_ttl_cache
+    from backend.app.services.permission_service import upsert_permission_registry
+
+    db.add_all([_org(FACTORY_ORG_ID, "factory"), _org(STORE_ORG_ID, "store")])
+    upsert_permission_registry(db)
+    helper = User(
+        username=f"mfg_helper_{uuid4().hex[:8]}",
+        password_hash=hash_password("Mfg-Helper-Test-Only-2026"),
+        role="operator",
+        is_active=True,
+        organization_id=STORE_ORG_ID,
+    )
+    db.add(helper)
+    db.flush()
+    db.add(
+        OrgMembershipRecord(
+            membership_id=f"mem_{uuid4().hex}",
+            user_id=str(helper.id),
+            org_id=STORE_ORG_ID,
+            role="member",
+            status="active",
+        )
+    )
+    db.commit()
+    ctx = service.resolve_factory_context(db)
+    try:
+        # 只在贸易公司 → 不过
+        assert not service.user_may_access(helper, ctx, db=db)
+        # 加进制造公司但没权限码 → 不过
+        db.add(
+            OrgMembershipRecord(
+                membership_id=f"mem_{uuid4().hex}",
+                user_id=str(helper.id),
+                org_id=FACTORY_ORG_ID,
+                role="member",
+                status="active",
+            )
+        )
+        db.commit()
+        assert not service.user_may_access(helper, ctx, db=db)
+        # 只给 read → 能查不能改
+        db.add(
+            UserPermissionAssignment(
+                user_id=helper.id,
+                permission_key=service.PERMISSION_READ,
+                scope_type="global",
+                scope_key="*",
+                granted_by_user_id=helper.id,
+                is_enabled=True,
+            )
+        )
+        db.commit()
+        clear_permission_ttl_cache()
+        assert service.user_may_access(helper, ctx, db=db)
+        assert not service.user_may_access(helper, ctx, db=db, action="manage")
+        # 给 manage → 都行(manage 蕴含 read)
+        db.add(
+            UserPermissionAssignment(
+                user_id=helper.id,
+                permission_key=service.PERMISSION_MANAGE,
+                scope_type="global",
+                scope_key="*",
+                granted_by_user_id=helper.id,
+                is_enabled=True,
+            )
+        )
+        db.commit()
+        clear_permission_ttl_cache()
+        assert service.user_may_access(helper, ctx, db=db, action="manage")
+    finally:
+        db.execute(delete(UserPermissionAssignment).where(UserPermissionAssignment.user_id == helper.id))
+        db.execute(delete(OrgMembershipRecord).where(OrgMembershipRecord.user_id == str(helper.id)))
+        db.execute(delete(User).where(User.id == helper.id))
+        db.commit()
 
 
 def test_module_only_allowed_for_factory_org() -> None:
