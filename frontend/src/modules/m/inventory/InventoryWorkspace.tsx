@@ -179,6 +179,7 @@ export function InventoryWorkspace() {
                 <thead>
                   <tr>
                     <th>编码</th>
+                    <th>{tab === "products" ? "系列" : "大类"}</th>
                     <th>名称</th>
                     <th className={styles.num}>当前库存</th>
                     <th>单位</th>
@@ -191,6 +192,7 @@ export function InventoryWorkspace() {
                   {visible.map((row) => (
                     <tr key={row.id} data-clickable="true" onClick={() => setModal({ kind: "movements", item: row })}>
                       <td><span className={styles.code}>{row.code}</span>{row.is_archived ? <> <span className={styles.tagWarn}>已归档</span></> : null}</td>
+                      <td className={styles.muted}>{row.group_name ?? "—"}</td>
                       <td>{row.name}</td>
                       <td className={`${styles.num} ${QtyClass(row.stock)}`}>{fmtQty(row.stock)}</td>
                       <td className={styles.muted}>{row.unit}</td>

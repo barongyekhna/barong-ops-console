@@ -22,6 +22,9 @@ export type Item = {
   name: string;
   unit: string;
   note: string | null;
+  group_id: string | null;
+  group_code: string | null;
+  group_name: string | null;
   is_archived: boolean;
   created_at: string;
   updated_at: string;
@@ -86,6 +89,19 @@ export type Document = {
 };
 
 export type DocumentDetail = Document & { movements: Movement[] };
+
+/** 编码组:成品的「系列」/ 物料的「大类」。成品 TBL-001（三位）、物料 PK-0001（四位）。 */
+export type CodeGroup = {
+  id: string;
+  kind: Kind;
+  code: string;
+  name: string;
+  next_no: number;
+  is_archived: boolean;
+  item_count: number;
+};
+
+export const GROUP_LABEL: Record<Kind, string> = { product: "系列", part: "大类" };
 
 export type FactoryContext = {
   factory_org_id: string;
@@ -154,9 +170,11 @@ export const getStock = (kind?: Kind, includeArchived = false) =>
     include_archived: includeArchived ? "true" : undefined,
   });
 
+/** 自动编码给 group_id；手填给 code。二选一，后端校验。 */
 export const createItem = (body: {
   kind: Kind;
-  code: string;
+  group_id?: string;
+  code?: string;
   name: string;
   unit: string;
   note?: string;
@@ -164,8 +182,20 @@ export const createItem = (body: {
 
 export const patchItem = (
   id: string,
-  body: Partial<Pick<Item, "name" | "unit" | "note" | "is_archived">>,
+  body: Partial<Pick<Item, "name" | "unit" | "note" | "is_archived" | "code">>,
 ) => send<Item>("PATCH", `/items/${id}`, body);
+
+export const listCodeGroups = (kind?: Kind) =>
+  get<{ items: CodeGroup[]; total: number }>("/code-groups", { kind });
+
+export const createCodeGroup = (body: { kind: Kind; code: string; name: string }) =>
+  send<CodeGroup>("POST", "/code-groups", body);
+
+export const suggestGroupCode = (name: string) =>
+  get<{ code: string; taken: boolean }>("/code-groups/suggest", { name });
+
+export const previewNextCode = (groupId: string) =>
+  get<{ group_id: string; code: string }>(`/code-groups/${groupId}/next-code`);
 
 export const getBom = (productId: string) => get<Bom>(`/items/${productId}/bom`);
 

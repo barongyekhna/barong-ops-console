@@ -31,7 +31,7 @@ from sqlalchemy import (
     false,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.schema import conv
 from sqlalchemy.types import Uuid
 
@@ -51,6 +51,9 @@ DOC_PRODUCTION = "production"
 DOC_SHIPMENT = "shipment"
 DOC_ADJUSTMENT = "adjustment"
 ALLOWED_DOC_TYPES = (DOC_RECEIPT, DOC_PRODUCTION, DOC_SHIPMENT, DOC_ADJUSTMENT)
+# 自动编码:成品三位流水、物料四位流水
+CODE_DIGITS = {KIND_PRODUCT: 3, KIND_PART: 4}
+
 DOC_NO_PREFIX = {
     DOC_RECEIPT: "RC",
     DOC_PRODUCTION: "PR",
@@ -82,6 +85,10 @@ class MfgItem(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     unit: Mapped[str] = mapped_column(String(20), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 编码组(成品系列 / 物料大类);老数据与手填编码为空
+    group_id: Mapped[UUID | None] = mapped_column(
+        Uuid, ForeignKey("mfg_code_groups.id", ondelete="SET NULL"), nullable=True
+    )
     is_archived: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
@@ -93,6 +100,48 @@ class MfgItem(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    group: Mapped["MfgCodeGroup | None"] = relationship(lazy="selectin")
+
+    @property
+    def group_code(self) -> str | None:
+        return self.group.code if self.group is not None else None
+
+    @property
+    def group_name(self) -> str | None:
+        return self.group.name if self.group is not None else None
+
+
+class MfgCodeGroup(Base):
+    """编码组:成品的「系列」/ 物料的「大类」。每组自己发流水号。
+
+    成品 ``TBL-001``(三位),物料 ``PK-0001``(四位),位数本身就把两种东西分开。
+    组码在工厂内唯一(不分 kind),避免 PK-001 与 PK-0001 并存。
+    """
+
+    __tablename__ = "mfg_code_groups"
+    __table_args__ = (
+        UniqueConstraint(
+            "factory_org_id", "code", name="uq_mfg_code_groups_factory_org_id"
+        ),
+        CheckConstraint(
+            "kind IN ('part', 'product')", name=conv("ck_mfg_code_groups_kind")
+        ),
+        Index("ix_mfg_code_groups_factory_kind", "factory_org_id", "kind"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    factory_org_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    code: Mapped[str] = mapped_column(String(8), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    next_no: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    is_archived: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

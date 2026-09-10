@@ -1575,6 +1575,21 @@ function isAllowedMfgPath(method: string, path: string[]) {
   if (path.length === 3 && path[1] === "production" && path[2] === "preview") {
     return method === "GET";
   }
+  if (path[1] === "code-groups") {
+    // GET/POST /mfg/code-groups
+    if (path.length === 2) {
+      return method === "GET" || method === "POST";
+    }
+    // GET /mfg/code-groups/suggest
+    if (path.length === 3 && path[2] === "suggest") {
+      return method === "GET";
+    }
+    // GET /mfg/code-groups/{id}/next-code
+    if (path.length === 4 && isId(path[2]) && path[3] === "next-code") {
+      return method === "GET";
+    }
+    return false;
+  }
   if (path[1] === "items") {
     // GET/POST /mfg/items
     if (path.length === 2) {

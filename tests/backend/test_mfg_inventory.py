@@ -18,6 +18,7 @@ from backend.app.modules.m_series.inventory import schemas as S
 from backend.app.modules.m_series.inventory import service
 from backend.app.modules.m_series.inventory.models import (
     MfgBomLine,
+    MfgCodeGroup,
     MfgDocCounter,
     MfgDocument,
     MfgItem,
@@ -31,7 +32,7 @@ D = Decimal
 
 
 def _clear(session) -> None:
-    for model in (MfgMovement, MfgDocument, MfgBomLine, MfgItem, MfgDocCounter):
+    for model in (MfgMovement, MfgDocument, MfgBomLine, MfgItem, MfgCodeGroup, MfgDocCounter):
         session.execute(delete(model))
     session.execute(
         delete(OrganizationRecord).where(
@@ -308,3 +309,101 @@ def test_shared_part_is_deducted_by_every_product_using_it(db, ctx) -> None:
     # 发货只扣成品,不再碰桌腿
     service.shipment(db, ctx, user=_owner(), payload=S.ShipmentCreate(product_id=table_a.id, qty=D("10")))
     assert _stock(db, ctx, leg, table_a) == [D("20"), D("0")]
+
+
+# ---------------------------------------------------------------- 自动编码
+
+
+def _group(db, ctx, kind, code, name):
+    return service.create_code_group(db, ctx, S.CodeGroupCreate(kind=kind, code=code, name=name))
+
+
+def _auto(db, ctx, kind, group, name, unit="个"):
+    return service.create_item(
+        db, ctx, S.ItemCreate(kind=kind, group_id=group.id, name=name, unit=unit)
+    )
+
+
+def test_default_part_groups_are_seeded_once(db, ctx) -> None:
+    groups = service.list_code_groups(db, ctx, kind="part")
+    codes = [g.code for g in groups]
+    assert "PK" in codes and "HW" in codes and len(codes) == len(service.DEFAULT_PART_GROUPS)
+    assert service.list_code_groups(db, ctx, kind="product") == []
+    # 再列一次不重复预置
+    assert len(service.list_code_groups(db, ctx, kind="part")) == len(codes)
+
+
+def test_product_and_part_codes_follow_separate_rules(db, ctx) -> None:
+    """成品 = 系列码-三位;物料 = 大类码-四位;各组各自发号。"""
+    tbl = _group(db, ctx, "product", "tbl", "折叠桌")
+    assert tbl.code == "TBL"
+    pk = next(g for g in service.list_code_groups(db, ctx, kind="part") if g.code == "PK")
+    p1 = _auto(db, ctx, "product", tbl, "折叠桌 60cm", "套")
+    p2 = _auto(db, ctx, "product", tbl, "折叠桌 80cm", "套")
+    m1 = _auto(db, ctx, "part", pk, "五层纸箱")
+    m2 = _auto(db, ctx, "part", pk, "彩盒")
+    assert (p1.code, p2.code) == ("TBL-001", "TBL-002")
+    assert (m1.code, m2.code) == ("PK-0001", "PK-0002")
+    assert p1.group_id == tbl.id and p1.group_code == "TBL" and p1.group_name == "折叠桌"
+    rows = {r.code: r for r in service.stock_rows(db, ctx)}
+    assert rows["TBL-001"].group_name == "折叠桌" and rows["PK-0001"].group_name == "包装材料"
+    counts = {g.code: g.item_count for g in service.list_code_groups(db, ctx)}
+    assert counts["TBL"] == 2 and counts["PK"] == 2
+
+
+def test_allocator_skips_numbers_taken_by_manual_codes(db, ctx) -> None:
+    tbl = _group(db, ctx, "product", "TBL", "折叠桌")
+    _item(db, ctx, "product", "TBL-001", "套")  # 手填占了 001
+    assert service.preview_next_code(db, ctx, tbl.id).code == "TBL-002"
+    auto = _auto(db, ctx, "product", tbl, "自动的", "套")
+    assert auto.code == "TBL-002"
+    # 预览不占号
+    assert service.preview_next_code(db, ctx, tbl.id).code == "TBL-003"
+    assert service.preview_next_code(db, ctx, tbl.id).code == "TBL-003"
+
+
+def test_group_code_is_unique_across_kinds_and_kind_must_match(db, ctx) -> None:
+    _group(db, ctx, "product", "PK", "包装机")  # 与预置大类 PK 撞
+    with pytest.raises(service.MfgError):
+        service.list_code_groups(db, ctx, kind="part")
+        _group(db, ctx, "part", "PK", "包材")
+    with pytest.raises(service.MfgError):
+        _group(db, ctx, "product", "PR", "撞单据号前缀")
+    hw = next(g for g in service.list_code_groups(db, ctx, kind="part") if g.code == "HW")
+    with pytest.raises(service.MfgError):
+        _auto(db, ctx, "product", hw, "拿物料大类建成品")
+
+
+def test_manual_code_is_uppercased_and_one_of_code_or_group(db, ctx) -> None:
+    item = _item(db, ctx, "part", "tbl-leg")
+    assert item.code == "TBL-LEG" and item.group_id is None
+    with pytest.raises(ValueError):
+        S.ItemCreate(kind="part", name="x", unit="个")
+    with pytest.raises(ValueError):
+        S.ItemCreate(kind="part", code="X", group_id=uuid4(), name="x", unit="个")
+
+
+def test_code_can_change_only_before_first_movement(db, ctx) -> None:
+    tbl = _group(db, ctx, "product", "TBL", "折叠桌")
+    item = _auto(db, ctx, "product", tbl, "桌", "套")
+    other = _item(db, ctx, "product", "HTR-001", "套")
+    with pytest.raises(service.MfgError):
+        service.patch_item(db, ctx, item.id, S.ItemPatch(code="HTR-001"))
+    changed = service.patch_item(db, ctx, item.id, S.ItemPatch(code="tbl-x"))
+    assert changed.code == "TBL-X" and changed.group_id is None
+    service.receipt(
+        db, ctx, user=_owner(),
+        payload=S.ReceiptCreate(lines=[S.ReceiptLine(item_id=other.id, qty=D("1"))]),
+    )
+    with pytest.raises(service.MfgError):
+        service.patch_item(db, ctx, other.id, S.ItemPatch(code="HTR-002"))
+
+
+def test_group_code_suggestion(db, ctx) -> None:
+    assert service.suggest_group_code(db, ctx, "折叠桌").code == "ZDZ"
+    assert service.suggest_group_code(db, ctx, "温控加热棒").code == "WKJ"
+    assert service.suggest_group_code(db, ctx, "Camping Shower").code == "CS"
+    assert service.suggest_group_code(db, ctx, "Heater").code == "HEA"
+    service.list_code_groups(db, ctx, kind="part")
+    hint = service.suggest_group_code(db, ctx, "Product Kit")
+    assert hint.code == "PK" and hint.taken is True

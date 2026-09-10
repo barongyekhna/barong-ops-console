@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Kind = Literal["part", "product"]
 BomMode = Literal["per_unit", "per_carton"]
@@ -20,14 +21,82 @@ def _strip(value: str) -> str:
     return value.strip()
 
 
-class ItemCreate(BaseModel):
+# 组码:2~4 个大写字母(TBL / PK);手填编码:大写字母数字与连字符
+GROUP_CODE_PATTERN = r"^[A-Z]{2,4}$"
+MANUAL_CODE_PATTERN = r"^[A-Z0-9][A-Z0-9-]{0,63}$"
+
+
+def _upper(value: str) -> str:
+    return value.strip().upper()
+
+
+class CodeGroupCreate(BaseModel):
     kind: Kind
-    code: str = Field(min_length=1, max_length=64)
+    code: str = Field(min_length=2, max_length=4, pattern=GROUP_CODE_PATTERN)
+    name: str = Field(min_length=1, max_length=255)
+
+    _upper_code = field_validator("code", mode="before")(
+        lambda v: _upper(v) if isinstance(v, str) else v
+    )
+    _strip_name = field_validator("name")(_strip)
+
+
+class CodeGroupRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    kind: Kind
+    code: str
+    name: str
+    next_no: int
+    is_archived: bool
+    item_count: int = 0
+
+
+class CodeGroupListResponse(BaseModel):
+    items: list[CodeGroupRead]
+    total: int
+
+
+class CodeSuggestion(BaseModel):
+    code: str
+    taken: bool
+
+
+class NextCodePreview(BaseModel):
+    group_id: UUID
+    code: str
+
+
+class ItemCreate(BaseModel):
+    """自动编码:给 ``group_id``,编码由系统按组发号;手填:给 ``code``。二选一。"""
+
+    kind: Kind
+    group_id: UUID | None = None
+    code: str | None = Field(default=None, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     unit: str = Field(min_length=1, max_length=20)
     note: str | None = Field(default=None, max_length=2000)
 
-    _strip_code = field_validator("code", "name", "unit")(_strip)
+    _strip_fields = field_validator("name", "unit")(_strip)
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def _normalize_code(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = _upper(value)
+            return value or None
+        return value
+
+    @model_validator(mode="after")
+    def _one_of_code_or_group(self) -> "ItemCreate":
+        if (self.code is None) == (self.group_id is None):
+            raise ValueError("编码要么选系列/大类自动生成,要么手填,二选一")
+        if self.code is not None and not re.fullmatch(
+            MANUAL_CODE_PATTERN, self.code
+        ):
+            raise ValueError("手填编码只能用大写字母、数字和连字符")
+        return self
 
 
 class ItemPatch(BaseModel):
@@ -35,6 +104,12 @@ class ItemPatch(BaseModel):
     unit: str | None = Field(default=None, min_length=1, max_length=20)
     note: str | None = Field(default=None, max_length=2000)
     is_archived: bool | None = None
+    # 只有还没有任何流水的主档可以改编码
+    code: str | None = Field(default=None, min_length=1, max_length=64, pattern=MANUAL_CODE_PATTERN)
+
+    _upper_code = field_validator("code", mode="before")(
+        lambda v: _upper(v) if isinstance(v, str) else v
+    )
 
 
 class ItemRead(BaseModel):
@@ -46,6 +121,9 @@ class ItemRead(BaseModel):
     name: str
     unit: str
     note: str | None
+    group_id: UUID | None = None
+    group_code: str | None = None
+    group_name: str | None = None
     is_archived: bool
     created_at: datetime
     updated_at: datetime

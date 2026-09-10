@@ -12,11 +12,22 @@
 ## 1. 数据模型(`backend/app/modules/m_series/inventory/models.py`)
 | 表 | 要点 |
 |---|---|
-| `mfg_items` | `kind` part/product 共用主档;`code` 工厂内唯一;`unit` 自由文本(不换算);`is_archived`(有流水只能归档不能删) |
+| `mfg_items` | `kind` part/product 共用主档;`code` 工厂内唯一;`group_id` 挂编码组(手填/老数据为空);`unit` 自由文本(不换算);`is_archived`(有流水只能归档不能删) |
+| `mfg_code_groups` | 编码组:成品的「系列」/ 物料的「大类」;(factory, code) 唯一(不分 kind);`next_no` 取号 FOR UPDATE |
 | `mfg_bom_lines` | `mode` `per_unit`(每件消耗 qty)/ `per_carton`(每 qty 件装一箱,**向上取整**);UNIQUE(product, part);part 必须 kind=part(一期不做成品套成品) |
 | `mfg_documents` | `doc_type` receipt/production/shipment/adjustment;`doc_no` 如 `PR-000012`;`payload_json` 生产单冻结 BOM 快照;**永不改/删** |
 | `mfg_movements` | 一张单据挂 N 行 ±`qty_delta` Numeric(14,3);**库存 = SUM(qty_delta)**,没有可手改的库存字段 |
 | `mfg_doc_counters` | (factory, doc_type) → next_no,取号 FOR UPDATE |
+
+### 1.1 自动编码(2026-09-10)
+- **成品** = 系列码-三位流水:`TBL-001`、`TBL-002`;系列(折叠桌 TBL / 加热棒 HTR…)由工厂随第一个成品建立,不预置。
+- **物料** = 大类码-四位流水:`PK-0001`;大类预置十个(HW 五金件 / PL 塑料件 / EL 电子元件 / WD 木制件 / FB 布料织物 / CB 线材 / BT 电池 / PK 包装材料 / LB 标签印刷 / AX 辅料耗材),首次打开大类列表时按工厂落库,可增。
+- 位数本身把成品与物料分开;组码 2~4 个大写字母,工厂内唯一,不许撞单据号前缀(RC/PR/SH/AJ)。
+- 发号:`_allocate_code` 锁组行,从 `next_no` 起找第一个未被占用的号(手填编码可能已占了 TBL-002);预览接口只算不占号。
+- 建档 `ItemCreate` 二选一:`group_id`(自动)或 `code`(手填,大写归一)。手填是逃生口,老编码照旧有效。
+- 改码 `PATCH /items/{id}` 带 `code`:只有**没有任何流水**的主档能改(单据快照里印着旧码),改完脱离原组。
+- 组码建议 `GET /code-groups/suggest?name=`:英文取词首字母,中文取拼音首字母(pypinyin),截 3 位;只是建议,`taken` 标记是否已被占用。
+- 端点:`GET/POST /code-groups`,`GET /code-groups/suggest`,`GET /code-groups/{id}/next-code`。
 
 ## 2. 四个动作(`service.py`)
 - 入库 receipt:多行 +qty。

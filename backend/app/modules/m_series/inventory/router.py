@@ -79,6 +79,49 @@ def read_context(access: Access) -> S.FactoryContextRead:
     )
 
 
+# ---------------------------------------------------------------- 编码组 / 自动编码
+
+
+@router.get("/code-groups", response_model=S.CodeGroupListResponse)
+def list_code_groups(
+    access: Access,
+    db: Session = Depends(get_db),
+    kind: S.Kind | None = Query(default=None),
+    include_archived: bool = Query(default=False),
+) -> S.CodeGroupListResponse:
+    ctx, _ = access
+    rows = service.list_code_groups(db, ctx, kind=kind, include_archived=include_archived)
+    return S.CodeGroupListResponse(items=rows, total=len(rows))
+
+
+@router.post(
+    "/code-groups", response_model=S.CodeGroupRead, status_code=status.HTTP_201_CREATED
+)
+def create_code_group(
+    payload: S.CodeGroupCreate, access: Access, db: Session = Depends(get_db)
+) -> S.CodeGroupRead:
+    ctx, _ = access
+    return S.CodeGroupRead.model_validate(_run(service.create_code_group, db, ctx, payload))
+
+
+@router.get("/code-groups/suggest", response_model=S.CodeSuggestion)
+def suggest_group_code(
+    access: Access,
+    db: Session = Depends(get_db),
+    name: str = Query(min_length=1, max_length=255),
+) -> S.CodeSuggestion:
+    ctx, _ = access
+    return service.suggest_group_code(db, ctx, name)
+
+
+@router.get("/code-groups/{group_id}/next-code", response_model=S.NextCodePreview)
+def preview_next_code(
+    group_id: UUID, access: Access, db: Session = Depends(get_db)
+) -> S.NextCodePreview:
+    ctx, _ = access
+    return _run(service.preview_next_code, db, ctx, group_id)
+
+
 # ---------------------------------------------------------------- 主档/库存
 
 

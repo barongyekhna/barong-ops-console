@@ -6,15 +6,21 @@ import { Dialog } from "./Dialog";
 import styles from "./Inventory.module.css";
 import {
   type BomMode,
+  type CodeGroup,
   type Kind,
   type ProductionPreview,
   type RequirementRow,
   type StockRow,
+  GROUP_LABEL,
   MODE_LABEL,
   ShortageError,
+  createCodeGroup,
   createItem,
   fmtQty,
   getBom,
+  listCodeGroups,
+  previewNextCode,
+  suggestGroupCode,
   postAdjustment,
   postProduction,
   postReceipt,
@@ -87,6 +93,13 @@ function ShortageTable({ rows }: { rows: RequirementRow[] }) {
 
 // ---------------------------------------------------------------- 新建物料/成品
 
+const GROUP_CODE_RE = /^[A-Z]{2,4}$/;
+
+/**
+ * 编码由系统按组发号：成品 = 系列码-三位（TBL-001），物料 = 大类码-四位（PK-0001）。
+ * 选组后实时预览下一个号；真正的号在保存那一刻锁行取，预览不占号。
+ * 「手填」是逃生口，留给要沿用旧编码的场景。
+ */
 export function ItemDialog({
   kind,
   units,
@@ -98,34 +111,203 @@ export function ItemDialog({
   onClose: () => void;
   onDone: Done;
 }) {
+  const groupLabel = GROUP_LABEL[kind];
+  const [groups, setGroups] = useState<CodeGroup[] | null>(null);
+  const [groupId, setGroupId] = useState("");
+  const [manual, setManual] = useState(false);
   const [code, setCode] = useState("");
+  const [preview, setPreview] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [unit, setUnit] = useState(kind === "product" ? "套" : "个");
   const [note, setNote] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // 新建系列/大类的小面板
+  const [adding, setAdding] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupCode, setNewGroupCode] = useState("");
+  const [codeTouched, setCodeTouched] = useState(false);
+  const [suggestTaken, setSuggestTaken] = useState(false);
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
+
+  const reloadGroups = useCallback(
+    async (selectId?: string) => {
+      try {
+        const res = await listCodeGroups(kind);
+        setGroups(res.items);
+        setLoadError(null);
+        if (selectId) {
+          setGroupId(selectId);
+        } else if (res.items.length === 0) {
+          setAdding(true);
+        }
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : String(err));
+        setGroups([]);
+      }
+    },
+    [kind],
+  );
+
+  useEffect(() => {
+    void reloadGroups();
+  }, [reloadGroups]);
+
+  // 选了组 → 预览下一个号
+  useEffect(() => {
+    if (manual || !groupId) {
+      setPreview(null);
+      return;
+    }
+    let cancelled = false;
+    previewNextCode(groupId)
+      .then((res) => {
+        if (!cancelled) setPreview(res.code);
+      })
+      .catch(() => {
+        if (!cancelled) setPreview(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId, manual]);
+
+  // 新建组：按名字给组码建议（英文取首字母，中文取拼音首字母），人可以改
+  useEffect(() => {
+    if (!adding || codeTouched) return;
+    const trimmed = newGroupName.trim();
+    if (!trimmed) {
+      setNewGroupCode("");
+      setSuggestTaken(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      suggestGroupCode(trimmed)
+        .then((res) => {
+          if (cancelled) return;
+          setNewGroupCode(res.code);
+          setSuggestTaken(res.taken);
+        })
+        .catch(() => undefined);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [adding, codeTouched, newGroupName]);
+
+  const addGroup = useCallback(async () => {
+    setGroupBusy(true);
+    setGroupError(null);
+    try {
+      const created = await createCodeGroup({ kind, code: newGroupCode.trim().toUpperCase(), name: newGroupName.trim() });
+      setAdding(false);
+      setNewGroupName("");
+      setNewGroupCode("");
+      setCodeTouched(false);
+      await reloadGroups(created.id);
+    } catch (err) {
+      setGroupError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setGroupBusy(false);
+    }
+  }, [kind, newGroupCode, newGroupName, reloadGroups]);
+
   const { busy, error, submit } = useSubmit(
     useCallback(
-      () => createItem({ kind, code, name, unit, note: note || undefined }).then(() => undefined),
-      [kind, code, name, unit, note],
+      () =>
+        createItem({
+          kind,
+          ...(manual ? { code: code.trim() } : { group_id: groupId }),
+          name,
+          unit,
+          note: note || undefined,
+        }).then(() => undefined),
+      [kind, manual, code, groupId, name, unit, note],
     ),
     onDone,
   );
   const title = kind === "product" ? "新建成品" : "新建物料";
   const kindHint =
     kind === "product"
-      ? "正在新建「成品」（可配 BOM、能被生产）。要建原料/配件请到「物料」页新建。"
-      : "正在新建「物料」（原料/配件，用于成品的 BOM）。要建成品请到「成品」页新建。";
+      ? "正在新建「成品」（可配 BOM、能被生产）。编码 = 系列码-三位流水，如 TBL-001。"
+      : "正在新建「物料」（原料/配件，用于成品的 BOM）。编码 = 大类码-四位流水，如 PK-0001。";
+  const codeReady = manual ? code.trim().length > 0 : groupId.length > 0;
+  const newGroupCodeOk = GROUP_CODE_RE.test(newGroupCode.trim().toUpperCase());
   return (
     <Dialog title={title} onClose={onClose}>
       <div className={styles.form}>
         <p className={styles.label} style={{ opacity: 0.75 }}>{kindHint}</p>
         <div className={styles.row}>
+          {manual ? (
+            <label className={styles.field}>
+              <span className={styles.label}>编码（手填，唯一）</span>
+              <input className={styles.input} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder={kind === "product" ? "如 TBL-001" : "如 PK-0001"} />
+            </label>
+          ) : (
+            <label className={styles.field}>
+              <span className={styles.label}>{groupLabel}（决定编码前缀）</span>
+              <select className={styles.select} value={groupId} onChange={(e) => setGroupId(e.target.value)} disabled={groups === null}>
+                <option value="">{groups === null ? "载入中…" : `选择${groupLabel}`}</option>
+                {(groups ?? []).map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.code} · {g.name}
+                    {g.item_count > 0 ? `（已有 ${g.item_count}）` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className={styles.field}>
-            <span className={styles.label}>编码（唯一）</span>
-            <input className={styles.input} value={code} onChange={(e) => setCode(e.target.value)} placeholder="如 TOP-001" />
+            <span className={styles.label}>编码预览</span>
+            <input className={styles.input} value={manual ? code : preview ?? ""} readOnly placeholder={manual ? "" : `选${groupLabel}后自动生成`} data-testid="mfg-code-preview" />
           </label>
+        </div>
+        <div className={styles.actions}>
+          {!manual ? (
+            <button type="button" className={styles.btnGhost} onClick={() => setAdding((v) => !v)}>
+              {adding ? "收起" : `+ 新建${groupLabel}`}
+            </button>
+          ) : null}
+          <button type="button" className={styles.btnGhost} onClick={() => { setManual((v) => !v); setAdding(false); }}>
+            {manual ? `改回按${groupLabel}自动编码` : "手填编码"}
+          </button>
+        </div>
+        {loadError ? <div className={styles.error}>{loadError}</div> : null}
+        {adding && !manual ? (
+          <div className={styles.notice}>
+            <div className={styles.row}>
+              <label className={styles.field}>
+                <span className={styles.label}>{groupLabel}名称</span>
+                <input className={styles.input} value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder={kind === "product" ? "如 折叠桌" : "如 硅胶件"} />
+              </label>
+              <label className={styles.field}>
+                <span className={styles.label}>组码（2~4 个字母，自动建议可改）</span>
+                <input
+                  className={styles.input}
+                  value={newGroupCode}
+                  onChange={(e) => { setCodeTouched(true); setSuggestTaken(false); setNewGroupCode(e.target.value.toUpperCase()); }}
+                  placeholder={kind === "product" ? "如 TBL" : "如 SI"}
+                  maxLength={4}
+                />
+              </label>
+              <div className={styles.field}>
+                <span className={styles.label}>&nbsp;</span>
+                <button type="button" className={styles.btnPrimary} disabled={groupBusy || !newGroupName.trim() || !newGroupCodeOk} onClick={addGroup}>
+                  {groupBusy ? "建立中…" : `建立${groupLabel}`}
+                </button>
+              </div>
+            </div>
+            {suggestTaken ? <div className={styles.hint}>建议的组码已被占用，换一个。</div> : null}
+            {newGroupCode && !newGroupCodeOk ? <div className={styles.hint}>组码只能是 2~4 个英文字母。</div> : null}
+            {groupError ? <div className={styles.error}>{groupError}</div> : null}
+          </div>
+        ) : null}
+        <div className={styles.row}>
           <label className={styles.field}>
             <span className={styles.label}>名称</span>
-            <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="如 桌面" />
+            <input className={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder={kind === "product" ? "如 折叠桌 60cm" : "如 桌面"} />
           </label>
           <label className={styles.field}>
             <span className={styles.label}>单位（自选，不换算）</span>
@@ -147,10 +329,10 @@ export function ItemDialog({
           <button
             type="button"
             className={styles.btnPrimary}
-            disabled={busy || !code.trim() || !name.trim() || !unit.trim()}
+            disabled={busy || !codeReady || !name.trim() || !unit.trim()}
             onClick={submit}
           >
-            {busy ? "保存中…" : "保存"}
+            {busy ? "保存中…" : preview && !manual ? `保存为 ${preview}` : "保存"}
           </button>
         </div>
       </div>

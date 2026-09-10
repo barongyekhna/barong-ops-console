@@ -14,6 +14,7 @@ from decimal import ROUND_CEILING, Decimal
 from typing import Any
 from uuid import UUID
 
+from pypinyin import Style, lazy_pinyin
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, aliased
 
@@ -27,6 +28,21 @@ from . import schemas as S
 
 ORG_TYPE_FACTORY = "factory"
 ZERO = Decimal("0")
+
+# 物料大类预置(首次打开大类列表时按工厂落库;之后可增)。成品系列不预置——工厂无固定品类,
+# 系列随第一个成品建立。
+DEFAULT_PART_GROUPS: tuple[tuple[str, str], ...] = (
+    ("HW", "五金件"),
+    ("PL", "塑料件"),
+    ("EL", "电子元件"),
+    ("WD", "木制件"),
+    ("FB", "布料织物"),
+    ("CB", "线材"),
+    ("BT", "电池"),
+    ("PK", "包装材料"),
+    ("LB", "标签印刷"),
+    ("AX", "辅料耗材"),
+)
 
 
 class MfgError(ValueError):
@@ -248,21 +264,205 @@ def list_items(
     return list(db.scalars(stmt.order_by(M.MfgItem.kind, M.MfgItem.code)))
 
 
-def create_item(
-    db: Session, ctx: FactoryContext, payload: S.ItemCreate
-) -> M.MfgItem:
+# ---------------------------------------------------------------- 编码组 / 自动编码
+
+
+def _format_code(kind: str, group_code: str, number: int) -> str:
+    return f"{group_code}-{number:0{M.CODE_DIGITS[kind]}d}"
+
+
+def _code_exists(db: Session, ctx: FactoryContext, code: str) -> bool:
+    return (
+        db.scalar(
+            select(M.MfgItem.id).where(
+                M.MfgItem.factory_org_id == ctx.factory_org_id,
+                M.MfgItem.code == code,
+            )
+        )
+        is not None
+    )
+
+
+def ensure_default_groups(db: Session, ctx: FactoryContext) -> None:
+    """物料大类一次性预置;已有任何物料大类就不动。"""
+    existing = db.scalar(
+        select(func.count())
+        .select_from(M.MfgCodeGroup)
+        .where(
+            M.MfgCodeGroup.factory_org_id == ctx.factory_org_id,
+            M.MfgCodeGroup.kind == M.KIND_PART,
+        )
+    )
+    if existing:
+        return
+    taken = set(
+        db.scalars(
+            select(M.MfgCodeGroup.code).where(
+                M.MfgCodeGroup.factory_org_id == ctx.factory_org_id
+            )
+        )
+    )
+    for code, name in DEFAULT_PART_GROUPS:
+        if code in taken:
+            continue
+        db.add(
+            M.MfgCodeGroup(
+                factory_org_id=ctx.factory_org_id, kind=M.KIND_PART, code=code, name=name
+            )
+        )
+    _commit(db)
+
+
+def list_code_groups(
+    db: Session, ctx: FactoryContext, *, kind: str | None = None, include_archived: bool = False
+) -> list[S.CodeGroupRead]:
+    if kind in (None, M.KIND_PART):
+        ensure_default_groups(db, ctx)
+    stmt = select(M.MfgCodeGroup).where(M.MfgCodeGroup.factory_org_id == ctx.factory_org_id)
+    if kind:
+        stmt = stmt.where(M.MfgCodeGroup.kind == kind)
+    if not include_archived:
+        stmt = stmt.where(M.MfgCodeGroup.is_archived.is_(False))
+    groups = list(db.scalars(stmt.order_by(M.MfgCodeGroup.kind, M.MfgCodeGroup.code)))
+    counts = dict(
+        db.execute(
+            select(M.MfgItem.group_id, func.count())
+            .where(
+                M.MfgItem.factory_org_id == ctx.factory_org_id,
+                M.MfgItem.group_id.is_not(None),
+            )
+            .group_by(M.MfgItem.group_id)
+        ).all()
+    )
+    return [
+        S.CodeGroupRead(
+            id=g.id,
+            kind=g.kind,
+            code=g.code,
+            name=g.name,
+            next_no=g.next_no,
+            is_archived=g.is_archived,
+            item_count=int(counts.get(g.id, 0)),
+        )
+        for g in groups
+    ]
+
+
+def _get_group(db: Session, ctx: FactoryContext, group_id: UUID, *, lock: bool = False) -> M.MfgCodeGroup:
+    stmt = select(M.MfgCodeGroup).where(
+        M.MfgCodeGroup.id == group_id,
+        M.MfgCodeGroup.factory_org_id == ctx.factory_org_id,
+    )
+    if lock:
+        stmt = stmt.with_for_update()
+    group = db.scalar(stmt)
+    if group is None:
+        raise MfgNotFound("系列/大类不存在")
+    return group
+
+
+def create_code_group(
+    db: Session, ctx: FactoryContext, payload: S.CodeGroupCreate
+) -> M.MfgCodeGroup:
     dup = db.scalar(
-        select(M.MfgItem.id).where(
-            M.MfgItem.factory_org_id == ctx.factory_org_id,
-            M.MfgItem.code == payload.code,
+        select(M.MfgCodeGroup).where(
+            M.MfgCodeGroup.factory_org_id == ctx.factory_org_id,
+            M.MfgCodeGroup.code == payload.code,
         )
     )
     if dup is not None:
-        raise MfgError(f"编码 {payload.code} 已存在")
-    item = M.MfgItem(
+        label = "系列" if dup.kind == M.KIND_PRODUCT else "大类"
+        raise MfgError(f"组码 {payload.code} 已被{label}「{dup.name}」占用")
+    if payload.code in M.DOC_NO_PREFIX.values():
+        raise MfgError(f"组码 {payload.code} 是单据号前缀,换一个")
+    group = M.MfgCodeGroup(
         factory_org_id=ctx.factory_org_id,
         kind=payload.kind,
         code=payload.code,
+        name=payload.name,
+    )
+    db.add(group)
+    _commit(db)
+    db.refresh(group)
+    return group
+
+
+def suggest_group_code(db: Session, ctx: FactoryContext, name: str, *, length: int = 3) -> S.CodeSuggestion:
+    """按名字给组码建议:英文取词首字母,中文取拼音首字母,截到 ``length`` 位。
+
+    只是建议,人可以改;``taken`` 告诉前端这个建议是否已被占用。
+    """
+    letters: list[str] = []
+    ascii_words = [w for w in "".join(ch if ch.isalnum() else " " for ch in name).split() if w.isascii()]
+    if ascii_words:
+        letters = [w[0] for w in ascii_words if w[0].isalpha()]
+        if len(letters) < 2 and ascii_words:
+            letters = [ch for ch in ascii_words[0] if ch.isalpha()]
+    else:
+        for syllable in lazy_pinyin(name, style=Style.FIRST_LETTER, errors="ignore"):
+            if syllable and syllable[0].isalpha():
+                letters.append(syllable[0])
+    code = "".join(letters).upper()[:length]
+    if len(code) < 2:
+        code = (code + "XX")[:2]
+    taken = (
+        db.scalar(
+            select(M.MfgCodeGroup.id).where(
+                M.MfgCodeGroup.factory_org_id == ctx.factory_org_id,
+                M.MfgCodeGroup.code == code,
+            )
+        )
+        is not None
+    ) or code in M.DOC_NO_PREFIX.values()
+    return S.CodeSuggestion(code=code, taken=taken)
+
+
+def _first_free_number(db: Session, ctx: FactoryContext, group: M.MfgCodeGroup) -> tuple[int, str]:
+    """从 next_no 起找第一个没被占用的号(手填编码可能已经占了 TBL-002)。"""
+    number = group.next_no
+    while True:
+        code = _format_code(group.kind, group.code, number)
+        if not _code_exists(db, ctx, code):
+            return number, code
+        number += 1
+
+
+def preview_next_code(db: Session, ctx: FactoryContext, group_id: UUID) -> S.NextCodePreview:
+    """只算不占号;真正的号在建档事务里 FOR UPDATE 取。"""
+    group = _get_group(db, ctx, group_id)
+    _, code = _first_free_number(db, ctx, group)
+    return S.NextCodePreview(group_id=group.id, code=code)
+
+
+def _allocate_code(db: Session, ctx: FactoryContext, group_id: UUID, kind: str) -> tuple[M.MfgCodeGroup, str]:
+    group = _get_group(db, ctx, group_id, lock=True)
+    if group.kind != kind:
+        label = "系列" if group.kind == M.KIND_PRODUCT else "大类"
+        raise MfgError(f"「{group.name}」是{'成品' if group.kind == M.KIND_PRODUCT else '物料'}{label},和要建的类型对不上")
+    if group.is_archived:
+        raise MfgError(f"「{group.name}」已归档,不能再发号")
+    number, code = _first_free_number(db, ctx, group)
+    group.next_no = number + 1
+    return group, code
+
+
+def create_item(
+    db: Session, ctx: FactoryContext, payload: S.ItemCreate
+) -> M.MfgItem:
+    group_id: UUID | None = None
+    if payload.group_id is not None:
+        group, code = _allocate_code(db, ctx, payload.group_id, payload.kind)
+        group_id = group.id
+    else:
+        assert payload.code is not None
+        code = payload.code
+        if _code_exists(db, ctx, code):
+            raise MfgError(f"编码 {code} 已存在")
+    item = M.MfgItem(
+        factory_org_id=ctx.factory_org_id,
+        kind=payload.kind,
+        code=code,
+        group_id=group_id,
         name=payload.name,
         unit=payload.unit,
         note=payload.note,
@@ -278,6 +478,17 @@ def patch_item(
 ) -> M.MfgItem:
     item = _get_item(db, ctx, item_id)
     data = patch.model_dump(exclude_unset=True)
+    new_code = data.pop("code", None)
+    if new_code is not None and new_code != item.code:
+        has_movement = db.scalar(
+            select(M.MfgMovement.id).where(M.MfgMovement.item_id == item.id).limit(1)
+        )
+        if has_movement is not None:
+            raise MfgError(f"{item.code} 已有流水,编码不能再改(单据上都印着它)")
+        if _code_exists(db, ctx, new_code):
+            raise MfgError(f"编码 {new_code} 已存在")
+        item.code = new_code
+        item.group_id = None  # 手改过的编码不再属于自动发号的组
     for key, value in data.items():
         if isinstance(value, str) and key != "note":
             value = value.strip()
