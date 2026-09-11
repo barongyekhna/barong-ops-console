@@ -511,7 +511,7 @@ def _deepseek_layer(
 
     return _layer_decision(
         layer="deepseek",
-        model_name="mock-deepseek-v4-pro",
+        model_name="mock-deepseek-flash",
         score=score,
         advantages=advantages,
         risks=risks,

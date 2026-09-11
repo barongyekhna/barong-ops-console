@@ -403,7 +403,7 @@ def _deepseek_transport(*, balance: str, available: bool = True, models_status: 
                 return httpx.Response(
                     models_status, json={"error": {"message": "Insufficient Balance"}}
                 )
-            return httpx.Response(200, json={"data": [{"id": "deepseek-v4-flash"}]})
+            return httpx.Response(200, json={"data": [{"id": "deepseek-flash"}]})
         if request.url.path == "/user/balance":
             return httpx.Response(
                 200,
@@ -577,9 +577,9 @@ def test_deepseek_thinking_disabled_by_default(monkeypatch: pytest.MonkeyPatch) 
     from r_system_v2.rw.ai.model_config import deepseek_thinking_extras
 
     monkeypatch.delenv("DEEPSEEK_THINKING", raising=False)
-    assert deepseek_thinking_extras("deepseek-v4-flash") == {"thinking": {"type": "disabled"}}
+    assert deepseek_thinking_extras("deepseek-flash") == {"thinking": {"type": "disabled"}}
     monkeypatch.setenv("DEEPSEEK_THINKING", "enabled")
-    assert deepseek_thinking_extras("deepseek-v4-flash") == {}
+    assert deepseek_thinking_extras("deepseek-flash") == {}
 
 
 def test_backend_deepseek_adapter_sends_thinking_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -591,14 +591,14 @@ def test_backend_deepseek_adapter_sends_thinking_disabled(monkeypatch: pytest.Mo
         adapter,
         task_type="chat",
         payload={"messages": [{"role": "user", "content": "hi"}], "temperature": 0},
-        model="deepseek-v4-flash",
+        model="deepseek-flash",
     )
     assert body["thinking"] == {"type": "disabled"}
     explicit = DeepSeekAdapter.request_builder(
         adapter,
         task_type="chat",
         payload={"messages": [{"role": "user", "content": "hi"}], "thinking": {"type": "enabled"}},
-        model="deepseek-v4-flash",
+        model="deepseek-flash",
     )
     assert explicit["thinking"] == {"type": "enabled"}
 

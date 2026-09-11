@@ -48,24 +48,32 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "default": None,
         "search": None,
     },
+    # 2026-09-11:DeepSeek 把 V4 系列收成了一个型号。官方口现在只认
+    # deepseek-flash(= V4.1 Flash)和 deepseek-v4-pro,后者 2026-09-14 12:00
+    # (北京)起也全部路由到 V4.1 Flash 并按 Flash 价计费 —— pro 这档事实上没了。
+    # deepseek-v4-flash / deepseek-chat 官方只是"临时"保留的别名(实探都已转发到
+    # deepseek-flash),别名哪天撤掉就是全线 400,所以这里一律写正名。
+    # 坑:deepseek-v4.1-flash 是中转商(OpenRouter)的叫法,官方口实探返 400
+    # "supported API model names are deepseek-flash, deepseek-v4-pro"。
+    # 只剩一个型号,原先 pro/flash 的快慢分层(pro 中位 19.5s / flash 6.3s,
+    # 2026-08-03 实测)暂时失去意义;task_type 条目一条不删,等官方放出
+    # V4.1 Pro 再按需要往回填,免得将来又有人悄悄落到 default。
     "deepseek": {
-        "default": "deepseek-v4-pro",
-        "chat": "deepseek-v4-pro",
-        "generate": "deepseek-v4-pro",
-        "selling_points": "deepseek-v4-pro",
-        # 卖点三阶段里的后两刀都是"照着已有卖点改写",不需要顶配推理:
-        # 中位数实测 pro 要 19.5s,同通道 flash 只要 6.3s(2026-08-03)。
-        # 此前这两个 task_type 在注册表里没条目,悄悄落到 default=pro。
-        "selling_points_translation": "deepseek-v4-flash",
-        "selling_points_copy": "deepseek-v4-flash",
+        "default": "deepseek-flash",
+        "chat": "deepseek-flash",
+        "generate": "deepseek-flash",
+        "selling_points": "deepseek-flash",
+        # 卖点三阶段里的后两刀都是"照着已有卖点改写",不需要顶配推理。
+        # 此前这两个 task_type 在注册表里没条目,悄悄落到 default。
+        "selling_points_translation": "deepseek-flash",
+        "selling_points_copy": "deepseek-flash",
         # GEO 审稿助读:逐篇解读(翻译/GEO 作用/为什么这么写),量大且不需要
-        # 顶配推理,用户拍板走便宜的 flash(2026-07-28 实探供应商在售模型:
-        # deepseek-v4-flash / deepseek-v4-pro)。
-        "content_analysis": "deepseek-v4-flash",
+        # 顶配推理,用户拍板走便宜的一档(2026-07-28)。
+        "content_analysis": "deepseek-flash",
         # 数字员工(白苏婉)在 C19 通讯里的对话。刻意不复用 "chat" —— 那条
         # 落 default=pro,中位数 19.5s,聊天窗里等 20 秒等于死机。护栏在代码里
-        # (动作白名单 + 权限位)而不在模型脑子里,所以这里可以放心用便宜的 flash。
-        "agent_chat": "deepseek-v4-flash",
+        # (动作白名单 + 权限位)而不在模型脑子里,所以这里可以放心用便宜的一档。
+        "agent_chat": "deepseek-flash",
     },
     "chatgpt": {
         "default": "gpt-5.6-luna",

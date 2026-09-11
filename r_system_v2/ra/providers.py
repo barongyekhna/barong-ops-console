@@ -17,7 +17,9 @@ from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 # R-A 全部 DeepSeek 调用（抽词/供应商比对/初筛/终选/深挖/类目扩展）统一从这里取
 # 模型名。2026-09-07 用户拍板切 flash：同通道 pro 中位数 19.5s、flash 6.3s，
 # 选品链路每个产品打好几次，便宜快才是对的。R-W 的形态初筛不走这里。
-DEFAULT_RA_DEEPSEEK_MODEL = "deepseek-v4-flash"
+# 2026-09-11：官方退役 V4 Flash，deepseek-v4-flash 只是临时别名（实探已转发到
+# deepseek-flash），改写正名。别写 deepseek-v4.1-flash —— 官方口返 400。
+DEFAULT_RA_DEEPSEEK_MODEL = "deepseek-flash"
 
 
 def ra_deepseek_model() -> str:

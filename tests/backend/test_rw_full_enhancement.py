@@ -165,14 +165,15 @@ def test_keepa_discovery_cursor_persists_in_runtime_settings():
     assert load_discovery_cursor(db, "553844") == 0
 
 
-def test_rw_deepseek_model_defaults_to_pro_and_prefers_rw_override(monkeypatch):
+def test_rw_deepseek_model_defaults_to_flash_and_prefers_rw_override(monkeypatch):
     monkeypatch.delenv("RW_DEEPSEEK_MODEL", raising=False)
     monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
-    assert rw_deepseek_model() == "deepseek-v4-pro"
+    assert rw_deepseek_model() == "deepseek-flash"
 
-    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
-    monkeypatch.setenv("RW_DEEPSEEK_MODEL", "deepseek-v4-pro")
-    assert rw_deepseek_model() == "deepseek-v4-pro"
+    # 两个 env 故意给不同的值：一样的话就测不出 RW_ 压过通用的那条。
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
+    monkeypatch.setenv("RW_DEEPSEEK_MODEL", "deepseek-flash")
+    assert rw_deepseek_model() == "deepseek-flash"
 
 
 def test_deepseek_rejects_edible_products_before_ra_review():

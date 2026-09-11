@@ -110,7 +110,7 @@ def _call_deepseek_profile(
         ),
     }
     body = {
-        "model": os.getenv("F_DEEPSEEK_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+        "model": os.getenv("F_DEEPSEEK_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-flash")),
         "temperature": 0.2,
         "messages": [
             {

@@ -1,7 +1,7 @@
 """霓旌的脑子:一次 flash 调用,只做意图抽取,输出 JSON。
 
 她不需要聪明,需要听话:找物料、算数、开单全在代码里。所以用最便宜的
-deepseek-v4-flash,短超时,JSON 模式。
+deepseek-flash,短超时,JSON 模式。
 """
 
 from __future__ import annotations

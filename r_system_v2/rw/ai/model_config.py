@@ -5,7 +5,10 @@ from __future__ import annotations
 import os
 
 
-DEFAULT_RW_DEEPSEEK_MODEL = "deepseek-v4-pro"
+# 2026-09-11:官方口只剩 deepseek-flash(V4.1 Flash)和 deepseek-v4-pro,
+# 后者 09-14 起也路由到 V4.1 Flash。别写 deepseek-v4.1-flash —— 那是中转商
+# 的叫法,官方口返 400。
+DEFAULT_RW_DEEPSEEK_MODEL = "deepseek-flash"
 
 
 def rw_deepseek_model() -> str:

@@ -84,7 +84,7 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
     assert AIModelRouter.resolve_model(provider="serp", task_type="search") is None
     assert (
         AIModelRouter.resolve_model(provider="deepseek", task_type="generate")
-        == "deepseek-v4-pro"
+        == "deepseek-flash"
     )
     assert (
         AIModelRouter.resolve_model(provider="chatgpt", task_type="chat")
@@ -121,7 +121,7 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
             DeepSeekAdapter,
             "https://deepseek.example",
             "chat",
-            "deepseek-v4-pro",
+            "deepseek-flash",
             "https://deepseek.example/v1/chat/completions",
         ),
     ]

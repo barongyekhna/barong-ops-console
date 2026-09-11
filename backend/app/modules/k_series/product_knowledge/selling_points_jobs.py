@@ -206,7 +206,7 @@ def _run_bullets_stage(
         product_id=product.id,
         event_type="selling_points_generation",
         provider=source_name,
-        # 不再硬编码 "deepseek-v4-pro":跟着模型注册表走。
+        # 不再硬编码模型名:跟着模型注册表走。
         # (注册表是"预期"型号;provider 内部降级时真实型号以 event_streams
         # 的 ai_provider.execute 事件为准,那里记的是 attempt 级实况。)
         provider_model=_resolved_model("selling_points"),

@@ -2,7 +2,7 @@
 
 The operator reviews English, AI-written guide content. To judge it they need to
 know what it actually says, what job it does in a GEO answer, and why it is
-phrased that way. This asks DeepSeek (the cheap ``deepseek-v4-flash`` tier, by
+phrased that way. This asks DeepSeek (the cheap ``deepseek-flash`` tier, by
 the owner's ruling) to read THAT specific piece and report in Chinese.
 
 Fail-open by design: the analysis is a reading aid, never a gate. If DeepSeek is
@@ -157,7 +157,7 @@ def analyze_content(
         "why_written_this_way": str(parsed.get("why_written_this_way") or "").strip(),
         "strengths": _as_str_list(parsed.get("strengths")),
         "risks": _as_str_list(parsed.get("risks")),
-        "model": "deepseek-v4-flash",
+        "model": "deepseek-flash",
         "skill_version": ANALYSIS_SKILL_VERSION,
     }
 

@@ -78,7 +78,7 @@ META_ADLIB_TOKEN=            # Meta Ad Library API(Graph token)
 ADLIBRARY_API_KEY=           # 可选,AdLibrary.com
 
 # AI
-DEEPSEEK_API_KEY= DEEPSEEK_MODEL=deepseek-chat DEEPSEEK_BASE_URL=
+DEEPSEEK_API_KEY= DEEPSEEK_MODEL=deepseek-flash DEEPSEEK_BASE_URL=
 OPENAI_API_KEY=  OPENAI_MODEL=gpt-5.5
 ANTHROPIC_API_KEY= ANTHROPIC_MODEL=          # ⚠️CONFIRM 当前 Opus 模型串
 

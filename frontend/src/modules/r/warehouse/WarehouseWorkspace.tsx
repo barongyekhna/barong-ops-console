@@ -988,7 +988,7 @@ function BatchStatusView({
         </div>
         <div>
           <dt>DeepSeek 模型</dt>
-          <dd>{status.deepseek_batch.model ?? "deepseek-v4-pro"}</dd>
+          <dd>{status.deepseek_batch.model ?? "deepseek-flash"}</dd>
         </div>
         <div>
           <dt>DeepSeek 已处理</dt>

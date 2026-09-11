@@ -391,18 +391,42 @@ def test_regenerate_preserves_approved_content_and_spotlights() -> None:
     assert 'GeoContentItem.item_type != "product_spotlight"' in src
 
 
+# 2026-09-11：官方把 V4 系列收成一个型号（deepseek-flash = V4.1 Flash），
+# deepseek-v4-pro 于 09-14 12:00（北京）起也路由到它。原来这条测的是
+# 「解读走便宜档、生成走顶配档」的分层，分层没了再断言两边不同就是假绿。
+# 换成真正有用的守卫：注册表里不许再出现退役名、临时别名或中转商的叫法——
+# 别名被官方撤掉那天，就是全线 400 的那天。
+RETIRED_OR_ALIASED_DEEPSEEK_MODELS = {
+    "deepseek-v4-flash",          # 2026-09-10 退役，仅「临时」转发
+    "deepseek-v4-flash-vision-exp",  # 同上
+    "deepseek-chat",              # 早已弃用的别名
+    "deepseek-reasoner",          # 早已弃用的别名
+    "deepseek-v4.1-flash",        # 中转商（OpenRouter）叫法，官方口返 400
+}
+
+
 def test_analysis_uses_the_cheap_flash_tier() -> None:
     from backend.app.services.ai_provider_router import AIModelRouter
 
     assert (
         AIModelRouter.resolve_model(provider="deepseek", task_type="content_analysis")
-        == "deepseek-v4-flash"
+        == "deepseek-flash"
     )
-    # generation stays on the pro tier
-    assert (
-        AIModelRouter.resolve_model(provider="deepseek", task_type="generate")
-        == "deepseek-v4-pro"
-    )
+
+
+def test_no_deepseek_task_type_points_at_a_retired_or_aliased_model() -> None:
+    from backend.app.services.ai_provider_router import MODEL_REGISTRY
+
+    registry = MODEL_REGISTRY["deepseek"]
+    assert registry, "deepseek 注册表不该是空的"
+    offenders = {
+        task_type: model
+        for task_type, model in registry.items()
+        if model in RETIRED_OR_ALIASED_DEEPSEEK_MODELS
+    }
+    assert offenders == {}, f"这些 task_type 还指着退役名/别名：{offenders}"
+    # 官方口当前只认这两个（2026-09-11 用生产 key 实探）。
+    assert set(registry.values()) <= {"deepseek-flash", "deepseek-v4-pro"}
 
 
 def test_analysis_demands_specific_reading_not_boilerplate() -> None:

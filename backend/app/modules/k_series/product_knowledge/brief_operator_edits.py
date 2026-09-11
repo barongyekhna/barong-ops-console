@@ -110,7 +110,7 @@ def operator_image_prompt_and_seo(
                 "Content-Type": "application/json",
             },
             json={
-                "model": "deepseek-chat",
+                "model": "deepseek-flash",
                 "response_format": {"type": "json_object"},
                 "messages": [
                     {

@@ -792,7 +792,7 @@ class IImagePromptEngine:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=(
-                        "DeepSeek V4 Pro 提示词优化失败或未正确配置。"
+                        "DeepSeek 提示词优化失败或未正确配置。"
                     ),
                 ) from exc
             fallback = (local_enhanced_prompt(payload), "local_fallback")
@@ -808,7 +808,7 @@ class IImagePromptEngine:
             fallback = (local_enhanced_prompt(payload), "local_fallback")
             _prompt_cache_put(cache_key, fallback)
             return fallback
-        result = (enhanced.strip(), "deepseek-v4-pro")
+        result = (enhanced.strip(), "deepseek-flash")
         _prompt_cache_put(cache_key, result)
         return result
 
@@ -1399,7 +1399,7 @@ class IImageSystemService:
                 "details": {
                     **details,
                     "original_message": message,
-                    "translated_by": "deepseek-v4-pro_or_local_fallback",
+                    "translated_by": "deepseek-flash_or_local_fallback",
                 },
             },
         )

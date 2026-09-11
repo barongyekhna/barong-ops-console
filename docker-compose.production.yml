@@ -85,7 +85,7 @@ services:
       RA_GOOGLE_ADS_BASIC_REVIEW_STATUS: "approved"
       RA_GOOGLE_ADS_ENABLE_REAL_CALLS: "true"
       RA_GOOGLE_ADS_PLANNER_DAILY_BUDGET: "13500"
-      # deepseek-v4-pro 响应常超默认 12s；F 找货的中文采购词提取给足 60s
+      # DeepSeek 响应常超默认 12s；F 找货的中文采购词提取给足 60s
       RA_DEEPSEEK_KEYWORD_TIMEOUT_SECONDS: "60"
       # F 系列 1688 独立总闸：全量 10 万/天里 R-A 占 9 万，剩 1 万归 F 批量找货
       F_1688_APP_CALLS_DAILY_BUDGET: "10000"
@@ -103,8 +103,8 @@ services:
       DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
       I_IMAGE_MEDIA_STORAGE_DIR: "/var/lib/barong/i-media"
       K_PRODUCT_MEDIA_STORAGE_DIR: "/var/lib/barong/k-media"
-      RW_DEEPSEEK_MODEL: "deepseek-v4-pro"
-      DEEPSEEK_MODEL: "deepseek-v4-pro"
+      RW_DEEPSEEK_MODEL: "deepseek-flash"
+      DEEPSEEK_MODEL: "deepseek-flash"
     volumes:
       - console_i_media_data:/var/lib/barong/i-media
       - console_k_media_data:/var/lib/barong/k-media
@@ -143,8 +143,8 @@ services:
       C19_ASSET_STORE_TOKEN: ""
       C19_ASSET_STORE_TIMEOUT_SECONDS: ""
       RA_AUTO_PROFIT_JOB_ASIN_LIMIT: "20"
-      RW_DEEPSEEK_MODEL: "deepseek-v4-pro"
-      DEEPSEEK_MODEL: "deepseek-v4-pro"
+      RW_DEEPSEEK_MODEL: "deepseek-flash"
+      DEEPSEEK_MODEL: "deepseek-flash"
       RW_KEEPA_MAX_DISCOVERY_REQUESTS_PER_CYCLE: "3"
       RW_KEEPA_DISCOVERY_REQUEST_INTERVAL_SECONDS: "3"
     command:
@@ -197,7 +197,7 @@ services:
       # AI 看图模型（走 4sapi「I 系列企业分组备用key」）；节日品只认 same_product。
       RA_VISION_MODEL: "gpt-4o-mini"
       # R-A 全部 DeepSeek 调用切 flash（2026-09-07 用户拍板：同通道 pro 19.5s / flash 6.3s）。
-      RA_DEEPSEEK_MODEL: "deepseek-v4-flash"
+      RA_DEEPSEEK_MODEL: "deepseek-flash"
       # 抽词是「整份 skill 文档当 system prompt + 严格 JSON」，2026-09-07 北京时间中午
       # 实测 flash 也要 30-45s；代码默认 12s 把三个产品全判成超时顺延。抽词放到 60s
       # （与 F 找货一致），供应商比对 30s（代码上限）。
