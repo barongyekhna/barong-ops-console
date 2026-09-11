@@ -281,6 +281,7 @@ const dashboard = readFileSync(
   "utf8",
 );
 const viewer = readFileSync("frontend/src/modules/rd/RemoteViewer.tsx", "utf8");
+const nginxRd = readFileSync("deploy/nginx/rd-locations.conf", "utf8");
 const nginxTemplate = readFileSync(
   "deploy/nginx/ops.barongyekhna.com.conf.template",
   "utf8",
@@ -311,13 +312,13 @@ test("Esc always releases the keyboard locally", () => {
 });
 
 test("nginx does not buffer the remote-desktop signalling stream", () => {
-  const block = nginxTemplate.slice(
-    nginxTemplate.indexOf("location = /api/backend/rd/stream"),
-  );
-  assert.ok(block.length > 0, "缺少 RD SSE 的 location 块");
-  const body = block.slice(0, block.indexOf("}") + 1);
-  assert.match(body, /proxy_buffering off;/);
-  assert.match(body, /proxy_cache off;/);
+  // 断言真正被线上 include 的那份文件,不是仅供参考的模板
+  assert.match(nginxRd, /location = \/api\/backend\/rd\/stream/);
+  assert.match(nginxRd, /proxy_buffering off;/);
+  assert.match(nginxRd, /proxy_cache off;/);
+  // 模板只该引用它,不该再抄一份(两处维护必然漂移)
+  assert.match(nginxTemplate, /include .*rd-locations\.conf;/);
+  assert.doesNotMatch(nginxTemplate, /location = \/api\/backend\/rd\/stream/);
 });
 
 const agentSource = readFileSync("frontend/src/modules/rd/agent.ts", "utf8");
@@ -336,4 +337,19 @@ test("the controlled side never asks for a screen source id itself", () => {
   // 屏幕给不给由主进程的 display-media 处理器决定,网页只是调用方
   assert.match(agentSource, /navigator\.mediaDevices\.getDisplayMedia/);
   assert.doesNotMatch(agentSource, /chromeMediaSourceId|desktopCapturer/);
+});
+
+test("CSP lets WebRTC reach the ICE servers at all", () => {
+  // connect-src 同时管 RTCPeerConnection 的 ICE 服务器地址。少了这几条,远程桌面
+  // 会在同一局域网内能连、一出网就失败,而且浏览器不报明显错误。这条断言防止有人
+  // 收紧 CSP 时顺手把它们删掉。
+  const config = readFileSync("frontend/next.config.ts", "utf8");
+  const block = config.slice(
+    config.indexOf("connect-src 'self'"),
+    config.indexOf("frame-src"),
+  );
+  assert.match(block, /stun:/, "CSP 里没有 stun: 地址");
+  assert.match(block, /turn:/, "CSP 里没有 turn: 地址");
+  // 换节点时必须两处一起改,注释里要留着这条提醒
+  assert.match(config, /RD_TURN_URLS/);
 });
