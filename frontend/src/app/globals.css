@@ -56,6 +56,7 @@
    - THEME ENGINE · 专属层覆盖 · 第四批：CS 客服中心(.cs-command)；
      K 作图工作台(.k-studio/.k-maskbrush)原地机械改写,不额外追加层
      (2026-09-03)
+   - RD · 远程桌面 (.cc-rd，复用 .cc-dash 骨架)
    - STORE HOME · 贸易公司主页八卡 + 浮窗 (.home-store，复用 .cc-dash 骨架)
      (2026-09-05，文件末尾)
    - FACTORY HOME · 制造公司主页皮肤差异 (.home-store.home-factory，眉题琥珀色 + 库存条)
@@ -7362,6 +7363,108 @@ h4 {
    是删掉 bug 本体——替代实现见文件末尾的 THEME ENGINE 层（三皮肤 ×
    白天黑夜，data-skin + data-mode 两根轴，一套开关机制）。
    ============================================================ */
+/* ==========================================================================
+   RD 系列 · 远程桌面。命名空间化成 .cc-rd-* ,不往别的驾驶舱里漏。
+   颜色一律走令牌:verify-theme-literals.mjs 禁止这里出现任何颜色字面量。
+   ========================================================================== */
+.cc-rd .cc-head { align-items: flex-start; }
+.cc-rd-sub {
+  margin: 6px 0 0; font-size: 13px; line-height: 1.6; color: var(--color-muted);
+}
+.cc-rd-notice {
+  position: relative; z-index: 1;
+  margin: 0 0 16px; padding: 12px 16px; border-radius: 10px;
+  border: 1px solid var(--color-line-strong);
+  background: color-mix(in srgb, var(--color-info-soft) 60%, transparent);
+  color: var(--color-info); font-size: 13px;
+}
+.cc-rd-empty { margin: 8px 0 0; color: var(--color-muted); font-size: 13px; }
+
+.cc-rd-incoming { border-color: var(--cc-amber); }
+
+.cc-rd-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.cc-rd-list > li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--cc-line);
+  background: color-mix(in srgb, var(--color-panel-base) 55%, transparent);
+}
+.cc-rd-name { font-weight: 600; color: var(--cc-ink); }
+.cc-rd-meta { font-size: 12px; color: var(--color-muted); }
+.cc-rd-online { font-size: 12px; color: var(--cc-green); }
+.cc-rd-offline { font-size: 12px; color: var(--cc-dim); }
+.cc-rd-tag {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--cc-amber); color: var(--cc-amber);
+}
+.cc-rd-list > li > button { margin-left: auto; }
+
+.cc-rd-primary,
+.cc-rd-ghost,
+.cc-rd-danger {
+  font: inherit; font-size: 13px; padding: 7px 16px; border-radius: 8px;
+  cursor: pointer; transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+.cc-rd-primary {
+  border: 1px solid var(--color-primary-strong);
+  background: var(--color-primary); color: var(--color-on-primary);
+}
+.cc-rd-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+.cc-rd-ghost {
+  border: 1px solid var(--cc-line); background: transparent; color: var(--cc-ink);
+}
+.cc-rd-danger {
+  border: 1px solid var(--color-error); background: transparent; color: var(--color-error);
+}
+
+.cc-rd-viewer {
+  position: relative; z-index: 1;
+  margin: 0 0 18px; border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--cc-line);
+  background: var(--color-canvas-soft);
+  box-shadow: var(--cc-panel-shadow, none);
+}
+.cc-rd-viewer-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--cc-line);
+  background: color-mix(in srgb, var(--color-panel-base) 70%, transparent);
+}
+.cc-rd-viewer-name { font-weight: 600; color: var(--cc-ink); }
+.cc-rd-viewer-hint { font-size: 12px; color: var(--color-muted); }
+.cc-rd-viewer-bar > button { margin-left: auto; }
+.cc-rd-video {
+  display: block; width: 100%; max-height: 72vh; background: var(--color-canvas);
+  cursor: crosshair; touch-action: none;
+}
+
+.cc-rd-ledger { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.cc-rd-ledger > li {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  font-size: 13px; color: var(--cc-ink);
+  padding: 8px 12px; border-radius: 8px;
+  border: 1px solid var(--cc-line);
+}
+.cc-rd-time { margin-left: auto; font-family: var(--cc-mono); font-size: 12px; color: var(--color-muted); }
+.cc-rd-state {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--cc-line); color: var(--color-muted);
+}
+.cc-rd-state-active { border-color: var(--cc-green); color: var(--cc-green); }
+.cc-rd-state-denied,
+.cc-rd-state-expired { border-color: var(--color-error); color: var(--color-error); }
+.cc-rd-state-requested { border-color: var(--cc-amber); color: var(--cc-amber); }
+
+.cc-rd-foot {
+  position: relative; z-index: 1;
+  margin: 18px 0 0; font-size: 12px; color: var(--cc-dim); font-family: var(--cc-mono);
+}
+
+@media (max-width: 720px) {
+  .cc-rd-list > li { flex-direction: column; align-items: flex-start; }
+  .cc-rd-list > li > button { margin-left: 0; width: 100%; }
+  .cc-rd-time { margin-left: 0; }
+}
+
 /* ==========================================================================
    VPN connection center (core.vpn) — appended layer, never edits the layers
    above. Namespaced .cc-vpn-* so nothing leaks into other cockpits.

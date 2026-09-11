@@ -53,6 +53,7 @@ from .modules.m_series.router import router as mfg_inventory_router
 from .modules.seo_series.machine_router import router as seo_machine_router
 from .modules.content_desk.router import router as content_desk_router
 from .modules.sm_series.router import router as sm_social_router
+from .modules.rd_series.router import router as rd_remote_desktop_router
 from .modules.content_links.machine_router import router as content_links_machine_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
 from .modules.w_series.router import public_router as w_siteops_public_router
@@ -1228,6 +1229,7 @@ app.include_router(seo_machine_router)
 app.include_router(content_desk_router, prefix=APPLICATION_API_PREFIX)
 # SM 社媒运营全是人用的端点,只挂 /api/app 一次;mock 期没有任何机器端点。
 app.include_router(sm_social_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(rd_remote_desktop_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(content_links_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(content_links_machine_router)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)

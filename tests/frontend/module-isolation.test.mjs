@@ -385,6 +385,13 @@ const registryItems = [
     status: "sealed",
   }),
   manifest({
+    category: "core",
+    denied_behavior: "hide_when_denied",
+    module_key: "core.rd",
+    route_namespace: "/rd",
+    status: "active",
+  }),
+  manifest({
     category: "admin",
     denied_behavior: "hide_when_denied",
     module_key: "admin.modules",
@@ -1393,6 +1400,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "business.reviews",
     "core.dashboard",
     "core.vpn",
+    "core.rd",
     "admin.modules",
     "admin.key_health",
     "system.errors",

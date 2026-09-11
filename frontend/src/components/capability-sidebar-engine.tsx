@@ -55,6 +55,10 @@ const C_SYSTEM_MODULE_ORDER = [
     label: "VPN",
     module_key: "core.vpn",
   },
+  {
+    label: "远程桌面",
+    module_key: "core.rd",
+  },
 ] as const;
 
 const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(

@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260911_02_mfg_cost_permissions",
+  "alembic_head": "20260911_03_rd_remote_desktop",
   "environment": "staging",
-  "expected_alembic_head": "20260911_02_mfg_cost_permissions",
+  "expected_alembic_head": "20260911_03_rd_remote_desktop",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 117,
-  "migration_hash": "f0d5c1e60df94544f5e4226857c441d822c1245d39e0518e50a0450d590f3d56",
+  "migration_count": 118,
+  "migration_hash": "be59199ed60f2d8f4bfb18ed9396300cf1e666473706126999feb921c7d068de",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -124,9 +124,10 @@
     "20260906_02_sm_social_permissions",
     "20260910_01_mfg_code_groups",
     "20260911_01_mfg_cost_tables",
-    "20260911_02_mfg_cost_permissions"
+    "20260911_02_mfg_cost_permissions",
+    "20260911_03_rd_remote_desktop"
   ],
-  "migration_order_checksum": "a30d0aa16e2340c9b778f0a50ade77617f0a6e31b0dc18917e3565ec408c0d43",
+  "migration_order_checksum": "e6d89d29dece4bc4e6fd05fe3ab632354abc59ac8375558c592cc01d8fcb7f20",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -946,6 +947,13 @@
       "down_revision": "20260911_01_mfg_cost_tables",
       "path": "backend/alembic/versions/20260911_02_mfg_cost_permissions.py",
       "version": "20260911_02_mfg_cost_permissions"
+    },
+    {
+      "applied_at": "2026-09-11T00:00:00Z",
+      "checksum": "6b1615670adc7d139fe5211f5d43890928d9c24a69a0792fafd0dc03710bfabd",
+      "down_revision": "20260911_02_mfg_cost_permissions",
+      "path": "backend/alembic/versions/20260911_03_rd_remote_desktop.py",
+      "version": "20260911_03_rd_remote_desktop"
     }
   ]
 }

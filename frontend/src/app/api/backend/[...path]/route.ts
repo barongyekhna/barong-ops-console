@@ -1513,6 +1513,72 @@ function isAllowedHPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedRdPath(method: string, path: string[]) {
+  // RD 系列远程桌面（/api/app/rd/*）。这个模块不挂任何组织和权限——门在被控机
+  // 本地那个原生同意框，不在这一层，所以这里只管路径形状对不对。
+  if (path[0] !== "rd") {
+    return false;
+  }
+  if (path.length === 2) {
+    // GET /rd/devices ; GET /rd/sessions ; GET /rd/stream（SSE） ; POST /rd/sessions
+    if (path[1] === "devices" || path[1] === "stream") {
+      return method === "GET";
+    }
+    if (path[1] === "sessions") {
+      return method === "GET" || method === "POST";
+    }
+    return false;
+  }
+  if (path.length === 3) {
+    // POST /rd/devices/register
+    if (path[1] === "devices" && path[2] === "register") {
+      return method === "POST";
+    }
+    // GET /rd/devices/{id}
+    if (path[1] === "devices" && isUuidPathSegment(path[2])) {
+      return method === "GET";
+    }
+    // GET /rd/sessions/{id}
+    if (path[1] === "sessions" && isUuidPathSegment(path[2])) {
+      return method === "GET";
+    }
+    return false;
+  }
+  if (path.length === 4) {
+    if (path[1] === "devices" && isUuidPathSegment(path[2])) {
+      // POST /rd/devices/{id}/heartbeat|unattended|grants
+      if (["heartbeat", "unattended", "grants"].includes(path[3])) {
+        return method === "POST";
+      }
+      return false;
+    }
+    if (path[1] === "sessions" && isUuidPathSegment(path[2])) {
+      // POST /rd/sessions/{id}/respond|activate|end|signals ; GET /rd/sessions/{id}/ice
+      if (["respond", "activate", "end", "signals"].includes(path[3])) {
+        return method === "POST";
+      }
+      if (path[3] === "ice") {
+        return method === "GET";
+      }
+      return false;
+    }
+    return false;
+  }
+  if (path.length === 5) {
+    // DELETE /rd/devices/{id}/grants/{userId}
+    if (
+      path[1] === "devices" &&
+      isUuidPathSegment(path[2]) &&
+      path[3] === "grants" &&
+      /^\d{1,19}$/.test(path[4])
+    ) {
+      return method === "DELETE";
+    }
+    return false;
+  }
+  return false;
+}
+
 function isAllowedSmPath(method: string, path: string[]) {
   // SM 系列社媒运营（/api/app/sm/*）。全是人用端点；mock 期没有机器端点。
   if (path[0] !== "sm") {
@@ -2796,6 +2862,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedB2bPath(method, path) ||
     isAllowedMfgPath(method, path) ||
     isAllowedSmPath(method, path) ||
+    isAllowedRdPath(method, path) ||
     isAllowedCsPath(method, path) ||
     isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||

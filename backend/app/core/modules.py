@@ -209,6 +209,44 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         allowed_scope_types=("global",),
     ),
     _manifest(
+        module_key="core.rd",
+        display_name="远程桌面",
+        description=(
+            "Global remote desktop available to every active authenticated user "
+            "without organization or role-based permission requirements. Entry "
+            "into any machine is gated by a native consent prompt on that "
+            "machine, never by console-side permissions."
+        ),
+        category="core",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/rd",
+        api_namespace="/rd",
+        no_api=False,
+        navigation=_navigation(
+            group="Overview",
+            label="远程桌面",
+            icon="MonitorSmartphone",
+            order=16,
+            default_visible=True,
+        ),
+        # 刻意为空:门不在控制台这一层,在被控机本地的原生同意框。
+        required_permissions=(),
+        permission_manifest=(),
+        denied_behavior="hide_when_denied",
+        unavailable_behavior="hide",
+        audit_log_actions=(
+            "rd.session.requested",
+            "rd.session.consented",
+            "rd.session.denied",
+            "rd.session.ended",
+            "rd.device.unattended_marked",
+            "rd.device.grant_managed",
+        ),
+        allowed_scope_types=("global",),
+        operation_log_policy=_operation_log_policy(write="none"),
+    ),
+    _manifest(
         module_key="communication.im",
         display_name="通讯",
         description=(

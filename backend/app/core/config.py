@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     wp_request_max_attempts: int = Field(default=3, ge=1, le=5)
     webhook_gateway_signing_secret: SecretStr | None = None
     api_key_encryption_secret: SecretStr | None = None
+    # RD 系列 · 远程桌面的 TURN 中转。逗号分隔多个 turn: 地址;密钥与 coturn 的
+    # static-auth-secret 一致,用来签 RFC 5766 短时凭据(绝不下发静态口令)。
+    rd_turn_urls: str | None = Field(default=None, max_length=2048)
+    rd_turn_secret: SecretStr | None = None
     c19_record_store_url: str | None = Field(default=None, max_length=2048)
     c19_record_store_token: SecretStr | None = Field(
         default=None,
@@ -188,6 +192,8 @@ class Settings(BaseSettings):
         "cs_inbound_key",
         "track_public_key",
         "cs_wp_send_url",
+        "rd_turn_urls",
+        "rd_turn_secret",
         mode="before",
     )
     @classmethod

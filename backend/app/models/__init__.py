@@ -158,6 +158,12 @@ from ..modules.sm_series.models import (
     SmPost,
     SmRejection,
 )
+from ..modules.rd_series.models import (
+    RdDevice,
+    RdSession,
+    RdSignal,
+    RdUnattendedGrant,
+)
 
 __all__ = [
     "AgentMemoryAccessLog",
@@ -291,4 +297,8 @@ __all__ = [
     "SmMediaUsage",
     "SmPost",
     "SmRejection",
+    "RdDevice",
+    "RdSession",
+    "RdSignal",
+    "RdUnattendedGrant",
 ]
