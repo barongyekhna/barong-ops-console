@@ -85,10 +85,13 @@ def test_c18a_org_type_constraints_match_business_domains() -> None:
         OrganizationType.STORE,
         OrganizationType.FACTORY,
         OrganizationType.WAREHOUSE,
+        OrganizationType.AMAZON,
     }
     assert "SEO" in rules[OrganizationType.STORE].allowed_scope
     assert "production" in rules[OrganizationType.FACTORY].allowed_scope
     assert "logistics" in rules[OrganizationType.WAREHOUSE].allowed_scope
+    # A 系列(2026-09-15):亚马逊公司只挂 amz 系列,与贸易/制造零交集。
+    assert "amz" in rules[OrganizationType.AMAZON].allowed_scope
 
 
 def test_c18a_create_schema_generates_org_id_internally_only() -> None:
@@ -194,6 +197,7 @@ def test_c18a_sql_schema_matches_organization_table_contract() -> None:
     assert "'store'" in compact_sql
     assert "'factory'" in compact_sql
     assert "'warehouse'" in compact_sql
+    assert "'amazon'" in compact_sql
     assert "owner_user_id TEXT NOT NULL" in compact_sql
     assert "status TEXT DEFAULT 'active'" in compact_sql
     assert "metadata JSONB DEFAULT '{}'::jsonb" in compact_sql

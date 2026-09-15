@@ -7,6 +7,7 @@ import { ConsoleArcade } from "@/components/console-arcade";
 import { DashboardScene } from "@/components/dashboard-scene";
 import { getHomeBootstrap, type HomeBootstrapRead } from "@/components/home/home-api";
 import { FactoryHome } from "@/components/home/FactoryHome";
+import { AmazonHome } from "@/components/home/AmazonHome";
 import { StoreHome } from "@/components/home/StoreHome";
 import {
   ActivityFeed,
@@ -305,6 +306,9 @@ export function OperationsDashboard() {
   }
   if (bootstrap && bootstrap.org_type === "factory" && bootstrap.cards.length > 0) {
     return <FactoryHome bootstrap={bootstrap} />;
+  }
+  if (bootstrap && bootstrap.org_type === "amazon" && bootstrap.cards.length > 0) {
+    return <AmazonHome bootstrap={bootstrap} />;
   }
   return <LegacyOperationsDashboard />;
 }

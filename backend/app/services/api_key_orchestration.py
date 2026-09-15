@@ -75,6 +75,39 @@ K_SERIES_MODULE_ID = "k.product_knowledge"
 K_SERIES_PROVIDER_ALIASES = ("serp", "chatgpt", "claude_opus", "deepseek")
 R_WAREHOUSE_MODULE_ID = "r.warehouse"
 KEEPA_KEY_TYPE = "keepa"
+# A 系列 JSON 凭据:secret 是一行 JSON,注入时原样给(不套 Bearer),调用方自己 json.loads。
+AMAZON_JSON_KEY_TYPES = frozenset({"amazon_sp_api", "amazon_ads_api"})
+AMAZON_JSON_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "amazon_sp_api": ("client_id", "client_secret", "refresh_token", "region"),
+    "amazon_ads_api": ("client_id", "client_secret", "refresh_token", "region", "profile_ids"),
+}
+AMAZON_REGIONS = frozenset({"na", "eu", "fe"})
+AMAZON_CREDENTIAL_HEADER = "X-Amz-Credentials-Json"
+
+
+def validate_amazon_credential_payload(key_type: str, key_value: str) -> dict[str, object]:
+    """JSON 形状校验;不出网。"""
+    import json as _json
+
+    adapter = key_type_definition(key_type).get("adapter")
+    try:
+        payload = _json.loads(key_value)
+    except (TypeError, ValueError):
+        return {"valid": False, "adapter": adapter, "reason": "json_invalid"}
+    if not isinstance(payload, dict):
+        return {"valid": False, "adapter": adapter, "reason": "json_not_object"}
+    missing = [
+        field
+        for field in AMAZON_JSON_REQUIRED_FIELDS[key_type]
+        if field == "profile_ids" and not isinstance(payload.get(field), list) or field != "profile_ids" and not str(payload.get(field) or "").strip()
+    ]
+    if missing:
+        return {"valid": False, "adapter": adapter, "reason": "json_missing_fields", "missing": missing}
+    if str(payload.get("region") or "").strip().lower() not in AMAZON_REGIONS:
+        return {"valid": False, "adapter": adapter, "reason": "region_invalid"}
+    if key_type == "amazon_ads_api" and not [p for p in payload.get("profile_ids", []) if str(p).strip()]:
+        return {"valid": False, "adapter": adapter, "reason": "profile_ids_empty"}
+    return {"valid": True, "adapter": adapter, "reason": "json_shape"}
 KEEPA_KEY_ALIAS = "keepa"
 KEEPA_VALIDATION_TIMEOUT_SECONDS = 5.0
 K_SERIES_PROVIDER_MARKERS = {
@@ -533,6 +566,11 @@ def create_api_key(
     _get_active_organization(db, org_id)
     key_type = _normalize_payload_key_type(payload.key_type)
     key_value = payload.key_value.get_secret_value()
+    if key_type in AMAZON_JSON_KEY_TYPES:
+        # 亚马逊凭据是 JSON 包:形状不对就别存,存进去也只会在 worker 里炸。
+        shape = validate_amazon_credential_payload(key_type, key_value)
+        if not shape.get("valid"):
+            raise ApiKeyOrchestrationError("amazon_credential_payload_incomplete")
     fingerprint = _fingerprint(key_value)
     record = ApiKeyRecord(
         key_id=_new_key_id(),
@@ -582,6 +620,10 @@ def update_api_key(
         record.metadata_json = _metadata_with_key_type(record.metadata_json, key_type)
     if payload.key_value is not None:
         key_value = payload.key_value.get_secret_value()
+        if _key_type_for_record(record) in AMAZON_JSON_KEY_TYPES:
+            shape = validate_amazon_credential_payload(_key_type_for_record(record), key_value)
+            if not shape.get("valid"):
+                raise ApiKeyOrchestrationError("amazon_credential_payload_incomplete")
         fingerprint = _fingerprint(key_value)
         record.encrypted_key_value = _encrypt_key_value(key_value)
         record.key_fingerprint = fingerprint
@@ -804,6 +846,11 @@ def _injection_context_from_binding(
         header_value = secret_value
         query_param_name = "key"
         query_param_value = secret_value
+    elif key_type in AMAZON_JSON_KEY_TYPES:
+        header_name = AMAZON_CREDENTIAL_HEADER
+        header_value = secret_value
+        query_param_name = None
+        query_param_value = None
     else:
         header_name = "Authorization"
         header_value = f"Bearer {secret_value}"
@@ -901,6 +948,8 @@ def validate_api_key_value(
     normalized_key_type = normalize_key_type(key_type)
     if normalized_key_type == KEEPA_KEY_TYPE:
         return KeepaAdapter.validate_key(key_value)
+    if normalized_key_type in AMAZON_JSON_KEY_TYPES:
+        return validate_amazon_credential_payload(normalized_key_type, key_value)
     return {
         "valid": bool(key_value.strip()),
         "adapter": key_type_definition(normalized_key_type).get("adapter"),

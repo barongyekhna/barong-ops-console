@@ -1579,6 +1579,27 @@ function isAllowedRdPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedAmzPath(method: string, path: string[]) {
+  // A 系列亚马逊运营(/api/app/amz/*)。A0:店铺、店铺授权、种子导入台账、员工名片。
+  if (path[0] !== "amz") {
+    return false;
+  }
+  if (path.length === 2) {
+    return ["stores", "seed-imports", "employees"].includes(path[1]) && method === "GET";
+  }
+  const store = path[1] === "stores" && /^0\d(?:us|de)$/.test(path[2] ?? "");
+  if (path.length === 3) {
+    return store && method === "GET";
+  }
+  if (path.length === 4 && store && path[3] === "grants") {
+    return method === "GET" || method === "POST";
+  }
+  if (path.length === 5 && store && path[3] === "grants" && /^\d+$/.test(path[4] ?? "")) {
+    return method === "DELETE";
+  }
+  return false;
+}
+
 function isAllowedSmPath(method: string, path: string[]) {
   // SM 系列社媒运营（/api/app/sm/*）。全是人用端点；mock 期没有机器端点。
   if (path[0] !== "sm") {
@@ -2862,6 +2883,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedB2bPath(method, path) ||
     isAllowedMfgPath(method, path) ||
     isAllowedSmPath(method, path) ||
+    isAllowedAmzPath(method, path) ||
     isAllowedRdPath(method, path) ||
     isAllowedCsPath(method, path) ||
     isAllowedWPath(method, path) ||

@@ -32,6 +32,8 @@ class ModuleControlError(ValueError):
 
 
 from .module_registry import (
+    AMAZON_ONLY_MODULE_KEYS,
+    AMAZON_ORG_TYPE,
     FACTORY_ONLY_MODULE_KEYS,
     INTL_TRADE_ONLY_MODULE_KEYS,
 )
@@ -71,8 +73,12 @@ def _module_allowed_for_organization(
     org_type = (organization.org_type or "").strip()
     if manifest.module_key in FACTORY_ONLY_MODULE_KEYS:
         return org_type == FACTORY_ORG_TYPE
+    if manifest.module_key in AMAZON_ONLY_MODULE_KEYS:
+        return org_type == AMAZON_ORG_TYPE
     if manifest.module_key in TRADE_ONLY_MODULE_IDS:
-        return org_type != FACTORY_ORG_TYPE
+        # 原来写的是 != factory:新加一种组织类型就会静默继承全部贸易模块
+        # (2026-09-15 A 系列差点这样破了零交集)。按类型显式列。
+        return org_type not in (FACTORY_ORG_TYPE, AMAZON_ORG_TYPE)
     return True
 
 

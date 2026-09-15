@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from ..agent_series.nijing import home_card as nijing_home_card
+from ..amz_series import home_card as amz_home_card
+from ..amz_series.constants import AMAZON_ORG_TYPE
 from ..m_series import home_card as mfg_home_card
 from . import approvals_card
 from .context import FACTORY_ORG_TYPE, STORE_ORG_TYPE, HomeAccess
@@ -25,9 +27,17 @@ FACTORY_CARDS: tuple[HomeCardSpec, ...] = (
     HomeCardSpec("approvals", None, frozenset(), False, 15.0, approvals_card.load_home_card),
 )
 
+# 亚马逊组织(A 系列):本法人的店铺 → 数字员工 → 审批。加载器按调用者的店铺授权过滤,只 select。
+AMAZON_CARDS: tuple[HomeCardSpec, ...] = (
+    HomeCardSpec("amz-stores", "amz.ops", frozenset({"amz.ops.read", "amz.ops.execute", "amz.ops.manage"}), False, 15.0, amz_home_card.load_stores_card),
+    HomeCardSpec("amz-agents", None, frozenset(), False, 15.0, amz_home_card.load_agents_card),
+    HomeCardSpec("approvals", None, frozenset(), False, 15.0, approvals_card.load_home_card),
+)
+
 _BY_ORG_TYPE: dict[str, tuple[HomeCardSpec, ...]] = {
     STORE_ORG_TYPE: STORE_CARDS,
     FACTORY_ORG_TYPE: FACTORY_CARDS,
+    AMAZON_ORG_TYPE: AMAZON_CARDS,
 }
 
 

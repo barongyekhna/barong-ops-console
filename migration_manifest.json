@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260911_03_rd_remote_desktop",
+  "alembic_head": "20260915_02_amz_permissions",
   "environment": "staging",
-  "expected_alembic_head": "20260911_03_rd_remote_desktop",
+  "expected_alembic_head": "20260915_02_amz_permissions",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 118,
-  "migration_hash": "be59199ed60f2d8f4bfb18ed9396300cf1e666473706126999feb921c7d068de",
+  "migration_count": 120,
+  "migration_hash": "36f4d062da2398725b74c6ad33b4d98005b3458660cd5bec280caec2f5856160",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -125,9 +125,11 @@
     "20260910_01_mfg_code_groups",
     "20260911_01_mfg_cost_tables",
     "20260911_02_mfg_cost_permissions",
-    "20260911_03_rd_remote_desktop"
+    "20260911_03_rd_remote_desktop",
+    "20260915_01_amz_tables",
+    "20260915_02_amz_permissions"
   ],
-  "migration_order_checksum": "e6d89d29dece4bc4e6fd05fe3ab632354abc59ac8375558c592cc01d8fcb7f20",
+  "migration_order_checksum": "b59af0f7e92c1694064b7d31dfb243061883cbc2ab31afe89921c60f6f9ce0c2",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -954,6 +956,20 @@
       "down_revision": "20260911_02_mfg_cost_permissions",
       "path": "backend/alembic/versions/20260911_03_rd_remote_desktop.py",
       "version": "20260911_03_rd_remote_desktop"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "776a471c61c17e45d745e6ed4823c4f31f8695c7b3d91321d48987a9036cf409",
+      "down_revision": "20260911_03_rd_remote_desktop",
+      "path": "backend/alembic/versions/20260915_01_amz_tables.py",
+      "version": "20260915_01_amz_tables"
+    },
+    {
+      "applied_at": "2026-09-15T00:00:00Z",
+      "checksum": "b42abbcd5f5fd5d22fb011d7116e8a8146e3f6bb4ed940761cab146769f45b02",
+      "down_revision": "20260915_01_amz_tables",
+      "path": "backend/alembic/versions/20260915_02_amz_permissions.py",
+      "version": "20260915_02_amz_permissions"
     }
   ]
 }

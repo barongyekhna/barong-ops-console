@@ -2042,6 +2042,85 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="amz.ops",
+        display_name="亚马逊运营",
+        description=(
+            "A series — Amazon store operations for the four Guangzhou companies "
+            "(five stores: 01us/01de/03us/04us/05us). Store-keyed data with its own "
+            "grant table; zero coupling with K/I/M. Shadow mode first: suggestions "
+            "only, nothing written to Amazon until the ladder says so. "
+            "Amazon (org_type=amazon) organizations only."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/amz",
+        api_namespace="/amz",
+        navigation=_navigation(group="Registry", label="亚马逊运营", icon="ShoppingCart", order=21),
+        required_permissions=("amz.ops.read",),
+        permission_manifest=(
+            _permission(
+                module_key="amz.ops",
+                permission_key="amz.ops.read",
+                category="business",
+                action="read",
+                label="Read Amazon operations",
+                description="View stores, employees, suggestions and imported reports.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="amz.ops",
+                permission_key="amz.ops.execute",
+                category="business",
+                action="execute",
+                label="Run Amazon operations",
+                description="Approve or reject suggestions, run imports, operate a store.",
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="amz.ops",
+                permission_key="amz.ops.manage",
+                category="business",
+                action="manage",
+                label="Manage Amazon operations",
+                description="Grant store access, edit guardrails and ladder levels.",
+                risk_level="high",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.amz.ops",
+        data_boundary=_data_boundary(
+            reads=(
+                "amz_stores",
+                "amz_store_grants",
+                "amz_jobs",
+                "amz_seed_imports",
+                "amz_fx_rates",
+                "amz_ad_search_terms",
+                "amz_transactions",
+            ),
+            writes=(
+                "amz_stores",
+                "amz_store_grants",
+                "amz_jobs",
+                "amz_seed_imports",
+                "amz_fx_rates",
+                "amz_ad_search_terms",
+                "amz_transactions",
+            ),
+        ),
+    ),
+    _manifest(
         module_key="cs.customer_service",
         display_name="客服中心",
         description=(

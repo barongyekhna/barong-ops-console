@@ -93,6 +93,10 @@ INTL_TRADE_ONLY_MODULE_KEYS |= CS_CUSTOMER_SERVICE_MODULE_KEYS
 # 在模块清单里直接看不到。按 org_type 判,不按组织名。
 FACTORY_ONLY_MODULE_KEYS = frozenset({"mfg.inventory", "mfg.cost"})
 FACTORY_ORG_TYPE = "factory"
+# A 系列(亚马逊运营)只属于 amazon 类型组织(2026-09-15 拍板,与 K/I/M 零交集):
+# 非 amazon 组织成员(owner 除外)在模块清单里直接看不到;amazon 组织也拿不到任何贸易/制造模块。
+AMAZON_ONLY_MODULE_KEYS = frozenset({"amz.ops"})
+AMAZON_ORG_TYPE = "amazon"
 
 
 def _manifest_from_raw(
@@ -414,7 +418,8 @@ def _user_has_r_series_org_access(db: Session, user: User) -> bool:
     )
 
 
-def _user_has_factory_org_access(db: Session, user: User) -> bool:
+def _user_has_org_type_access(db: Session, user: User, org_type: str) -> bool:
+    """用户名下(主组织或任一活跃成员关系)是否有一个该类型的组织。owner 恒真。"""
     if is_owner_role(user.role):
         return True
 
@@ -436,13 +441,35 @@ def _user_has_factory_org_access(db: Session, user: User) -> bool:
             select(OrganizationRecord.org_id)
             .where(
                 OrganizationRecord.org_id.in_(org_ids),
-                OrganizationRecord.org_type == FACTORY_ORG_TYPE,
+                OrganizationRecord.org_type == org_type,
                 OrganizationRecord.status != "deleted",
             )
             .limit(1)
         )
         is not None
     )
+
+
+def _user_has_factory_org_access(db: Session, user: User) -> bool:
+    return _user_has_org_type_access(db, user, FACTORY_ORG_TYPE)
+
+
+def _user_has_amazon_org_access(db: Session, user: User) -> bool:
+    return _user_has_org_type_access(db, user, AMAZON_ORG_TYPE)
+
+
+def _filter_amazon_only_manifests_for_user(
+    db: Session,
+    user: User,
+    manifests: list[ModuleManifestV1],
+) -> list[ModuleManifestV1]:
+    if _user_has_amazon_org_access(db, user):
+        return manifests
+    return [
+        manifest
+        for manifest in manifests
+        if manifest.module_key not in AMAZON_ONLY_MODULE_KEYS
+    ]
 
 
 def _filter_factory_only_manifests_for_user(
@@ -609,13 +636,17 @@ def list_modules_for_user(
         user,
         request=request,
     )
-    manifests = _filter_factory_only_manifests_for_user(
+    manifests = _filter_amazon_only_manifests_for_user(
         db,
         user,
-        _filter_r_series_manifests_for_user(
+        _filter_factory_only_manifests_for_user(
             db,
             user,
-            list_module_manifests_with_dynamic(db),
+            _filter_r_series_manifests_for_user(
+                db,
+                user,
+                list_module_manifests_with_dynamic(db),
+            ),
         ),
     )
     items = [

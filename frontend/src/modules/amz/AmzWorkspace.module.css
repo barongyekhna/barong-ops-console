@@ -1,0 +1,278 @@
+/* A 系列 · 亚马逊运营:沿用驾驶舱皮肤,只用主题令牌,不覆盖全局样式。 */
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-phoenix);
+  background: color-mix(in srgb, var(--color-phoenix) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-phoenix) 35%, transparent);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-phoenix);
+}
+
+.button {
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--color-line-strong);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--color-primary);
+}
+
+.linkButton {
+  border: 0;
+  background: transparent;
+  color: var(--color-error);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.error {
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--color-error);
+  background: var(--color-error-soft);
+  border: 1px solid color-mix(in srgb, var(--color-error) 35%, transparent);
+  font-size: 13px;
+}
+
+.panel {
+  padding: 16px 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--color-info) 16%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--color-panel-base) 50%, transparent);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.panelHead h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.muted {
+  color: var(--color-muted);
+  font-size: 12.5px;
+}
+
+.good {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.warn {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+.bad {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.total {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+.total b {
+  font-size: 26px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.totalLabel {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 720px;
+}
+
+.table th {
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+  font-weight: 600;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--color-line);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--color-line);
+  font-variant-numeric: tabular-nums;
+  vertical-align: top;
+}
+
+.table code {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--color-muted);
+}
+
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.crew {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.emp {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-muted);
+}
+
+.empRole {
+  font-weight: 700;
+  color: var(--color-text-strong);
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--color-on-primary);
+  flex: none;
+}
+
+/* 四名员工四个色相:信息 / 凤凰 / 紫 / 成功,都来自令牌。 */
+.toneA {
+  background: var(--color-info);
+}
+
+.toneB {
+  background: var(--color-phoenix);
+}
+
+.toneC {
+  background: var(--accent-violet);
+}
+
+.toneD {
+  background: var(--color-success);
+}
+
+.grantRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.grantRow label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.grantRow input,
+.grantRow select {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface-solid);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+@media (max-width: 720px) {
+  .table {
+    min-width: 640px;
+  }
+
+  .grantRow input,
+  .grantRow select {
+    min-width: 0;
+    width: 100%;
+  }
+}

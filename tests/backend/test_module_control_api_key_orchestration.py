@@ -82,7 +82,10 @@ def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
     # 默认组织是贸易公司(store),所以工厂限定的那几个模块在这里本来就看不见。
     # 从 FACTORY_ONLY_MODULE_KEYS 算,而不是写一个「-1」的魔数——2026-09-11 加
     # mfg.cost 时这个魔数就不够用了,而它失败的样子看着像是模块没注册上。
-    visible = len(MODULE_MANIFESTS_V1) - len(FACTORY_ONLY_MODULE_KEYS)
+    # 2026-09-15 起 amazon 限定的 amz.ops 同理,只在 amazon 组织下出现。
+    from backend.app.services.module_registry import AMAZON_ONLY_MODULE_KEYS
+
+    visible = len(MODULE_MANIFESTS_V1) - len(FACTORY_ONLY_MODULE_KEYS) - len(AMAZON_ONLY_MODULE_KEYS)
     assert payload["module_count"] >= visible
     assert payload["auto_registered_count"] >= visible
     default_group = next(

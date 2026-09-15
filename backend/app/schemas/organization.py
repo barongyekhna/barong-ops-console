@@ -17,6 +17,8 @@ class OrganizationType(StrEnum):
     STORE = "store"
     FACTORY = "factory"
     WAREHOUSE = "warehouse"
+    # 2026-09-15 A 系列:四家广州公司的法人组织。只挂 amz.ops,与贸易/制造模块零交集。
+    AMAZON = "amazon"
 
 
 class OrganizationStatus(StrEnum):
@@ -205,6 +207,11 @@ class OrganizationTypeConstraintSystem(BaseModel):
             org_type=OrganizationType.WAREHOUSE,
             domain="warehouse logistics system",
             allowed_scope="warehouse inventory, fulfillment, and logistics operations",
+        ),
+        OrganizationTypeRule(
+            org_type=OrganizationType.AMAZON,
+            domain="amazon seller operations",
+            allowed_scope="Amazon SP-API / Ads API store operations (amz series only)",
         ),
     )
 
@@ -646,7 +653,7 @@ CREATE TABLE organizations (
     org_id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     org_name TEXT NOT NULL,
-    org_type TEXT CHECK (org_type IN ('store', 'factory', 'warehouse')),
+    org_type TEXT CHECK (org_type IN ('store', 'factory', 'warehouse', 'amazon')),
     owner_user_id TEXT NOT NULL,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'deleted')),
     metadata JSONB DEFAULT '{}'::jsonb,

@@ -31,6 +31,19 @@ TRACK17_HOSTS = frozenset(("api.17track.net",))
 RAINFOREST_HOSTS = frozenset(("api.rainforestapi.com",))
 ALIBABA_HOSTS = frozenset(("gw.open.1688.com",))
 GOOGLE_OAUTH_URL = "https://oauth2.googleapis.com/token"
+# A 系列:LWA 刷新 + 一次最便宜的读。SigV4 早已不需要,四个值就够。
+AMAZON_LWA_URL = "https://api.amazon.com/auth/o2/token"
+AMAZON_LWA_HOSTS = frozenset(("api.amazon.com",))
+AMAZON_SP_API_HOSTS_BY_REGION = {
+    "na": "sellingpartnerapi-na.amazon.com",
+    "eu": "sellingpartnerapi-eu.amazon.com",
+    "fe": "sellingpartnerapi-fe.amazon.com",
+}
+AMAZON_ADS_HOSTS_BY_REGION = {
+    "na": "advertising-api.amazon.com",
+    "eu": "advertising-api-eu.amazon.com",
+    "fe": "advertising-api-fe.amazon.com",
+}
 GOOGLE_ADS_API_ROOT = "https://googleads.googleapis.com"
 GOOGLE_ADS_HEALTH_VERSION = "v24"
 
@@ -83,6 +96,8 @@ def adapter_for_target(target: ProbeTarget) -> str:
 
     if key_type == "google_ads":
         return "google_ads"
+    if key_type in {"amazon_sp_api", "amazon_ads_api"}:
+        return key_type
     if key_type == "alibaba1688":
         return "alibaba1688"
     if key_type == "keepa" or hostname in KEEPA_HOSTS or "keepa" in aliases:
@@ -623,6 +638,148 @@ def _probe_google_ads(
     )
 
 
+def _amazon_lwa_access_token(
+    payload: dict[str, Any],
+    *,
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> tuple[str, httpx.Response]:
+    response = _request(
+        "POST",
+        AMAZON_LWA_URL,
+        allowed_hosts=AMAZON_LWA_HOSTS,
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        data={
+            "grant_type": "refresh_token",
+            "client_id": str(payload["client_id"]),
+            "client_secret": str(payload["client_secret"]),
+            "refresh_token": str(payload["refresh_token"]),
+        },
+    )
+    body = _json_dict(response) or {}
+    return str(body.get("access_token") or "").strip(), response
+
+
+def _amazon_payload(target: ProbeTarget, *, required: tuple[str, ...]) -> tuple[dict[str, Any] | None, str]:
+    payload = _parse_secret_json(target)
+    if payload is None:
+        return None, "oauth_payload_incomplete"
+    for key in required:
+        value = payload.get(key)
+        if key == "profile_ids":
+            if not isinstance(value, list) or not [item for item in value if str(item).strip()]:
+                return None, "profile_ids_empty"
+        elif not str(value or "").strip():
+            return None, "oauth_payload_incomplete"
+    region = str(payload.get("region") or "").strip().lower()
+    if region not in AMAZON_SP_API_HOSTS_BY_REGION:
+        return None, "region_invalid"
+    payload["region"] = region
+    return payload, ""
+
+
+def _probe_amazon_sp_api(
+    target: ProbeTarget,
+    *,
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> ProbeResult:
+    adapter = "amazon_sp_api"
+    started = perf_counter()
+    payload, reason = _amazon_payload(target, required=("client_id", "client_secret", "refresh_token", "region"))
+    if payload is None:
+        return _finish(adapter=adapter, started=started, status="malformed", reason_code=reason)
+    access_token, oauth_response = _amazon_lwa_access_token(
+        payload, enforce_public_network=enforce_public_network, transport=transport
+    )
+    if oauth_response.status_code != 200 or not access_token:
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="invalid" if oauth_response.status_code < 500 else "provider_error",
+            reason_code="oauth_refresh_rejected",
+            http_status=oauth_response.status_code,
+        )
+    host = AMAZON_SP_API_HOSTS_BY_REGION[payload["region"]]
+    probe_response = _request(
+        "GET",
+        f"https://{host}/sellers/v1/marketplaceParticipations",
+        allowed_hosts=frozenset((host,)),
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        headers={"x-amz-access-token": access_token, "user-agent": "BarongOpsConsole-KeyHealth/1.0 (Language=Python)"},
+    )
+    return _status_from_http(
+        adapter=adapter,
+        started=started,
+        response=probe_response,
+        success_reason="marketplace_participations_ok",
+        details={"oauth_valid": True, "region": payload["region"]},
+    )
+
+
+def _probe_amazon_ads_api(
+    target: ProbeTarget,
+    *,
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> ProbeResult:
+    adapter = "amazon_ads_api"
+    started = perf_counter()
+    payload, reason = _amazon_payload(
+        target, required=("client_id", "client_secret", "refresh_token", "region", "profile_ids")
+    )
+    if payload is None:
+        return _finish(adapter=adapter, started=started, status="malformed", reason_code=reason)
+    access_token, oauth_response = _amazon_lwa_access_token(
+        payload, enforce_public_network=enforce_public_network, transport=transport
+    )
+    if oauth_response.status_code != 200 or not access_token:
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="invalid" if oauth_response.status_code < 500 else "provider_error",
+            reason_code="oauth_refresh_rejected",
+            http_status=oauth_response.status_code,
+        )
+    host = AMAZON_ADS_HOSTS_BY_REGION[payload["region"]]
+    probe_response = _request(
+        "GET",
+        f"https://{host}/v2/profiles",
+        allowed_hosts=frozenset((host,)),
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Amazon-Advertising-API-ClientId": str(payload["client_id"]),
+        },
+    )
+    if probe_response.status_code == 200:
+        try:
+            listed = {str(item.get("profileId")) for item in (probe_response.json() or []) if isinstance(item, dict)}
+        except ValueError:
+            listed = set()
+        wanted = {str(item).strip() for item in payload["profile_ids"] if str(item).strip()}
+        missing = sorted(wanted - listed)
+        if missing:
+            return _finish(
+                adapter=adapter,
+                started=started,
+                status="invalid",
+                reason_code="profile_not_in_account",
+                http_status=200,
+                details={"missing_profile_ids": missing, "region": payload["region"]},
+            )
+    return _status_from_http(
+        adapter=adapter,
+        started=started,
+        response=probe_response,
+        success_reason="profiles_ok",
+        details={"oauth_valid": True, "region": payload["region"]},
+    )
+
+
 def _expiry_timestamp(value: Any) -> datetime | None:
     if value is None:
         return None
@@ -922,6 +1079,18 @@ def probe_target(
         )
     if adapter == "keepa":
         return _probe_keepa(
+            target,
+            enforce_public_network=enforce_public_network,
+            transport=transport,
+        )
+    if adapter == "amazon_sp_api":
+        return _probe_amazon_sp_api(
+            target,
+            enforce_public_network=enforce_public_network,
+            transport=transport,
+        )
+    if adapter == "amazon_ads_api":
+        return _probe_amazon_ads_api(
             target,
             enforce_public_network=enforce_public_network,
             transport=transport,

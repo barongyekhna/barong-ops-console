@@ -24,6 +24,8 @@ class KeyType(str, Enum):
     ALIBABA1688 = "alibaba1688"
     RAINFOREST = "rainforest"
     GOOGLE_ADS = "google_ads"
+    AMAZON_SP_API = "amazon_sp_api"
+    AMAZON_ADS_API = "amazon_ads_api"
     TRACK17 = "track17"
 
 

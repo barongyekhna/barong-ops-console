@@ -37,6 +37,7 @@ type AvailableOrgsResponse = {
 const ORG_TYPE_LABEL: Record<string, string> = {
   store: "贸易",
   factory: "制造",
+  amazon: "亚马逊",
 };
 
 export function OrgSwitcher() {

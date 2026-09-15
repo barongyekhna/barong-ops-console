@@ -129,7 +129,38 @@ KEY_TYPE_REGISTRY: dict[str, dict[str, Any]] = {
         "default_url": "https://api.keepa.com",
         "default_alias": "keepa",
         "adapter": "KeepaAdapter",
-        "module_ids": ["r.warehouse"],
+        "module_ids": ["r.warehouse", "amz.ops"],
+    },
+    # A 系列(2026-09-15):两种 JSON 凭据类型,与 google_ads 同一套 oauth_json 路子。
+    # secret 是一行 JSON:sp_api {client_id, client_secret, refresh_token, region(na|eu|fe)},
+    # ads_api 再加 profile_ids: [..]。一家公司一把 sp_api(alias sp_api),一店一把 ads(alias ads:<store>)。
+    "amazon_sp_api": {
+        "type": "amazon_sp_api",
+        "name": "Amazon SP-API (private app)",
+        "description": "Selling Partner API LWA credential payload for one company's private application",
+        "provider": "amazon",
+        "auth_type": "oauth_json",
+        "enabled": True,
+        "scope": ["A"],
+        "validation_endpoint": None,
+        "default_url": "https://sellingpartnerapi-na.amazon.com",
+        "default_alias": "sp_api",
+        "adapter": "AmazonSpApiAdapter",
+        "module_ids": ["amz.ops"],
+    },
+    "amazon_ads_api": {
+        "type": "amazon_ads_api",
+        "name": "Amazon Ads API",
+        "description": "Amazon Advertising API LWA credential payload plus the store's profile ids",
+        "provider": "amazon",
+        "auth_type": "oauth_json",
+        "enabled": True,
+        "scope": ["A"],
+        "validation_endpoint": None,
+        "default_url": "https://advertising-api.amazon.com",
+        "default_alias": "ads",
+        "adapter": "AmazonAdsAdapter",
+        "module_ids": ["amz.ops"],
     },
     "rainforest": {
         "type": "rainforest",
@@ -189,6 +220,8 @@ KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
     "rainforest": ("rainforest", "rainforestapi", "api.rainforestapi.com"),
     "google_ads": ("google_ads", "google ads", "googleads", "keyword planner"),
     "track17": ("track17", "17track", "api.17track.net"),
+    "amazon_sp_api": ("amazon_sp_api", "sp_api", "spapi", "sellingpartnerapi"),
+    "amazon_ads_api": ("amazon_ads_api", "amazon_ads", "advertising-api.amazon.com"),
 }
 
 
@@ -204,6 +237,10 @@ def normalize_key_type(value: str | None) -> str:
         normalized = "google_ads"
     if normalized in {"17track", "17_track"}:
         normalized = "track17"
+    if normalized in {"sp_api", "spapi", "selling_partner_api"}:
+        normalized = "amazon_sp_api"
+    if normalized in {"amazon_ads", "ads_api", "amazon_advertising"}:
+        normalized = "amazon_ads_api"
     if normalized not in KEY_TYPE_REGISTRY:
         raise ValueError("unknown_key_type")
     return normalized
@@ -224,6 +261,8 @@ def list_key_type_definitions() -> list[dict[str, Any]]:
         "serp",
         "rainforest",
         "google_ads",
+        "amazon_sp_api",
+        "amazon_ads_api",
         "track17",
         "n8n",
         "custom",

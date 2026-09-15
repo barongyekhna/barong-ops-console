@@ -158,6 +158,15 @@ from ..modules.sm_series.models import (
     SmPost,
     SmRejection,
 )
+from ..modules.amz_series.models import (
+    AmzAdSearchTerm,
+    AmzFxRate,
+    AmzJob,
+    AmzSeedImport,
+    AmzStore,
+    AmzStoreGrant,
+    AmzTransaction,
+)
 from ..modules.rd_series.models import (
     RdDevice,
     RdSession,
@@ -297,6 +306,13 @@ __all__ = [
     "SmMediaUsage",
     "SmPost",
     "SmRejection",
+    "AmzAdSearchTerm",
+    "AmzFxRate",
+    "AmzJob",
+    "AmzSeedImport",
+    "AmzStore",
+    "AmzStoreGrant",
+    "AmzTransaction",
     "RdDevice",
     "RdSession",
     "RdSignal",

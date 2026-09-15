@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { apiRequest } from "@/lib/api";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import type {
   ProductCapabilityBadge,
@@ -83,6 +84,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "content.",
   "mfg.",
   "sm.",
+  "amz.",
 ] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const R_WAREHOUSE_MODULE_KEY = "r.warehouse";
@@ -290,6 +292,7 @@ function scopedOrganizationGroups({
   organizations,
   role,
   userOrgId,
+  memberOrgIds,
 }: {
   byModuleKey: Map<string, ProductCapabilityItem>;
   isOwner: boolean;
@@ -298,6 +301,9 @@ function scopedOrganizationGroups({
   organizations: ModuleControlOrgGroup[];
   role: string;
   userOrgId: string | null | undefined;
+  // 多组织成员(2026-09-15 A 系列):王创鑫主组织是深圳,但他是四家亚马逊公司的成员;
+  // 只按 users.organization_id 过滤会把 amz 分组整个藏掉。成员集合来自 /auth/organizations。
+  memberOrgIds?: Set<string>;
 }) {
   if (!moduleControlReady) {
     return [];
@@ -308,7 +314,12 @@ function scopedOrganizationGroups({
 
   return sortOrganizations(
     organizations
-      .filter((organization) => owner || organization.org_id === userOrgId)
+      .filter(
+        (organization) =>
+          owner ||
+          organization.org_id === userOrgId ||
+          Boolean(memberOrgIds?.has(organization.org_id)),
+      )
       .map((organization) => ({
         ...organization,
         modules: sortModules(
@@ -471,6 +482,22 @@ export function CapabilitySidebarEngine({
   const role = normalizeRole(user?.role);
   const c19UnreadCount = useC19UnreadCount(status === "authenticated");
   const csNewCount = useCsNewCount(status === "authenticated");
+  const [memberOrgIds, setMemberOrgIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    // 与 org-switcher 同一个接口;失败静默(侧边栏不为「拉不到成员组织」挂红字)。
+    apiRequest<{ organizations?: { org_id: string }[] }>("/auth/organizations")
+      .then((payload) => {
+        if (cancelled) return;
+        setMemberOrgIds(new Set((payload.organizations ?? []).map((item) => item.org_id)));
+      })
+      .catch(() => {
+        if (!cancelled) setMemberOrgIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [expandedOrgIds, setExpandedOrgIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -495,6 +522,7 @@ export function CapabilitySidebarEngine({
         organizations: moduleControlResult?.data.organizations ?? [],
         role,
         userOrgId: user?.organization_id,
+        memberOrgIds,
       }),
     [
       byModuleKey,

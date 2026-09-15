@@ -12,6 +12,8 @@ export type ApiKeyType =
   | "alibaba1688"
   | "rainforest"
   | "google_ads"
+  | "amazon_sp_api"
+  | "amazon_ads_api"
   | "track17";
 
 export type ApiKeyTypeOption = {
@@ -73,6 +75,20 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     defaultUrl: "https://googleads.googleapis.com",
     defaultAlias: "google_ads",
     runtimeStatus: "pending_basic_review",
+  },
+  {
+    type: "amazon_sp_api",
+    label: "Amazon SP-API(私有应用)",
+    description: "一家公司一把。粘贴一行 JSON:{client_id, client_secret, refresh_token, region(na|eu|fe)};别名 sp_api,绑到该公司 × 亚马逊运营",
+    defaultUrl: "https://sellingpartnerapi-na.amazon.com",
+    defaultAlias: "sp_api",
+  },
+  {
+    type: "amazon_ads_api",
+    label: "Amazon Ads API",
+    description: "一店一把。粘贴一行 JSON:{client_id, client_secret, refresh_token, region, profile_ids:[…]};别名 ads:<店铺码>,如 ads:01us",
+    defaultUrl: "https://advertising-api.amazon.com",
+    defaultAlias: "ads",
   },
   {
     type: "track17",
