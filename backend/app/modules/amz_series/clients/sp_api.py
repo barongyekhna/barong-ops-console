@@ -6,7 +6,7 @@
 - 只走官方 API;这里只有读端点,写端点等 A3 的执行器和梯子。
 
 限速(官方):createReport 0.0167/s(突发 15)、getReport 2/s、getReportDocument 0.0167/s(突发 15)。
-429 退避 2/4/8/16/32 秒,最多五次;401 重取一次令牌。
+429 退避 5/15/30/65/65 秒(createReport 每分钟只补一个额度,短退避等于白等),最多五次;401 重取一次令牌。
 """
 
 from __future__ import annotations
@@ -47,6 +47,7 @@ HOSTS_BY_REGION = {
 REPORTS_PREFIX = "/reports/2021-06-30"
 TOKEN_SAFETY_SECONDS = 60
 MAX_RETRIES = 5
+RETRY_BACKOFF_SECONDS: tuple[float, ...] = (5.0, 15.0, 30.0, 65.0, 65.0)
 TERMINAL_STATUSES = ("DONE", "CANCELLED", "FATAL")
 
 
@@ -202,7 +203,6 @@ class SpApiClient:
 
     def request(self, method: str, path: str, *, params: dict[str, Any] | None = None, json_body: dict[str, Any] | None = None) -> dict[str, Any]:
         url = path if path.startswith("http") else f"{self.base_url}{path}"
-        backoff = 2.0
         refreshed = False
         for attempt in range(MAX_RETRIES + 1):
             headers = {"x-amz-access-token": self.token(), "User-Agent": self.user_agent, "Accept": "application/json"}
@@ -215,8 +215,7 @@ class SpApiClient:
             if response.status_code == 429 or response.status_code >= 500:
                 if attempt >= MAX_RETRIES:
                     raise SpApiError(f"{method} {path} HTTP {response.status_code} after retries", status=response.status_code, code="rate_limited" if response.status_code == 429 else "server_error")
-                self._sleep(backoff)
-                backoff = min(backoff * 2, 60.0)
+                self._sleep(RETRY_BACKOFF_SECONDS[min(attempt, len(RETRY_BACKOFF_SECONDS) - 1)])
                 continue
             if response.status_code >= 400:
                 code, message = _error_of(response)

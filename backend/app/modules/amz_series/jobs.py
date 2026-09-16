@@ -33,6 +33,8 @@ JOB_SQP_WEEKLY = "sqp_weekly"
 JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600}
 # 要出网的作业:只在店铺有 SP-API 凭据时才排。
 API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY})
+# 失败后的重试间隔:失败不等于「该再排一条」,否则一个坏凭据会每 15 秒失败一次刷满作业表。
+FAILED_RETRY_SECONDS = 3600
 _TABLE = "amz_jobs"
 
 
@@ -55,17 +57,19 @@ def schedule_due_jobs(db: Session, *, now: datetime | None = None) -> int:
     now = now or datetime.now(UTC)
     created = 0
     stores = list(db.scalars(select(AmzStore).where(AmzStore.status == "active")))
+    db.commit()
+    # 凭据检查要解密(CPU 几秒),不能挂在排队事务里——worker 连接 8 秒 idle-in-transaction 就被掐。
+    from .clients.sp_api import has_credentials  # noqa: PLC0415
+
+    connected: dict[str, bool] = {}
+    for store in stores:
+        connected[store.store_code] = has_credentials(db, store)
+        db.commit()
     for store in stores:
         store_code = store.store_code
-        connected: bool | None = None
         for job_type, interval in JOB_INTERVALS.items():
-            if job_type in API_JOBS:
-                if connected is None:
-                    from .clients.sp_api import has_credentials  # noqa: PLC0415
-
-                    connected = has_credentials(db, store)
-                if not connected:
-                    continue
+            if job_type in API_JOBS and not connected.get(store_code):
+                continue
             active = db.scalar(
                 select(AmzJob.id).where(
                     AmzJob.store_code == store_code,
@@ -75,14 +79,17 @@ def schedule_due_jobs(db: Session, *, now: datetime | None = None) -> int:
             )
             if active is not None:
                 continue
-            last_done = db.scalar(
-                select(AmzJob.finished_at)
-                .where(AmzJob.store_code == store_code, AmzJob.job_type == job_type, AmzJob.status == "done")
+            last = db.execute(
+                select(AmzJob.status, AmzJob.finished_at)
+                .where(AmzJob.store_code == store_code, AmzJob.job_type == job_type, AmzJob.status.in_(("done", "failed")), AmzJob.finished_at.is_not(None))
                 .order_by(AmzJob.finished_at.desc())
                 .limit(1)
-            )
-            if last_done is not None and (now - last_done) < timedelta(seconds=interval):
-                continue
+            ).first()
+            if last is not None:
+                last_status, last_finished = last
+                wait = interval if last_status == "done" else min(FAILED_RETRY_SECONDS, interval)
+                if (now - last_finished) < timedelta(seconds=wait):
+                    continue
             db.add(AmzJob(store_code=store_code, job_type=job_type, status="pending", run_after=now))
             created += 1
     db.commit()

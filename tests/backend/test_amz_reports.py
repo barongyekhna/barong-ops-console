@@ -90,7 +90,7 @@ def test_client_backs_off_on_429_and_surfaces_fatal_error_details() -> None:
     amazon = FakeAmazon(doc, rate_limit_first=2)
     client = _client(amazon)
     client.run_report(rs.REPORT_SALES_TRAFFIC, start=date(2026, 9, 13), end=date(2026, 9, 13))
-    assert client.slept[:2] == [2.0, 4.0]
+    assert client.slept[:2] == [5.0, 15.0]
     fatal = FakeAmazon(doc, fatal="dataStartTime must be a Sunday when reportPeriod=WEEK")
     with pytest.raises(sp_api.SpApiReportFailed) as exc:
         _client(fatal).run_report(rs.REPORT_SQP, start=date(2026, 9, 13), end=date(2026, 9, 13))
