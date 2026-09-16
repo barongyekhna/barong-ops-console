@@ -48,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"store {args.store} missing")
         done = existing_days(db, store.store_code) if args.skip_existing else set()
         client = SpApiClient.for_store(db, store)
+        db.commit()
         ok = failed = skipped = 0
         try:
             for day in days:
@@ -57,7 +58,6 @@ def main(argv: list[str] | None = None) -> int:
                 started = time.monotonic()
                 try:
                     result = sync_sales_traffic_day(db, client, store, day)
-                    db.commit()
                     ok += 1
                     _LOGGER.info("%s %s rows=%s", store.store_code, day, result["rows"])
                 except SpApiError as exc:

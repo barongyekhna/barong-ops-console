@@ -177,6 +177,7 @@ def _with_client(store_code: str, fn: Callable[[Session, Any, AmzStore], dict[st
         if store is None:
             raise RuntimeError(f"store {store_code} missing")
         client = SpApiClient.for_store(db, store)
+        db.commit()  # 取凭据也是一次读,收掉
         try:
             result = fn(db, client, store)
             db.commit()
@@ -193,9 +194,24 @@ def run_sales_traffic(store_code: str) -> dict[str, Any]:
 
 
 def run_sqp_weekly(store_code: str) -> dict[str, Any]:
+    """SQP 按 ASIN 要;还没有销售数据就先拉一次销售与流量,免得第一周空跑、下一次要等七天。"""
     from . import reports_sync  # noqa: PLC0415
+    from datetime import date as _date  # noqa: PLC0415
 
-    return _with_client(store_code, lambda db, client, store: reports_sync.sync_sqp(db, client, store))
+    def _run(db: Session, client: Any, store: AmzStore) -> dict[str, Any]:
+        primed = None
+        has_asins = bool(reports_sync.active_asins(db, store.store_code, since=_date.today() - timedelta(days=reports_sync.SQP_LOOKBACK_DAYS)))
+        db.commit()  # 读完收事务,出网前不能挂着
+        if not has_asins:
+            primed = reports_sync.sync_sales_traffic(db, client, store)
+        result = reports_sync.sync_sqp(db, client, store)
+        if primed is not None:
+            result["primed_sales_traffic"] = primed
+        if not result.get("asins"):
+            raise RuntimeError("sqp: no asins with sales in the lookback window, nothing fetched")
+        return result
+
+    return _with_client(store_code, _run)
 
 
 HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {

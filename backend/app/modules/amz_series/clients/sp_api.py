@@ -23,7 +23,15 @@ from typing import Any, Callable
 import httpx
 from sqlalchemy.orm import Session
 
-from ....services.api_key_orchestration import ApiKeyIsolationError, resolve_module_api_key_for_injection
+from sqlalchemy import select
+
+from ....models.api_keys import ApiKeyModuleBindingRecord
+from ....services.api_key_orchestration import (
+    ApiKeyIsolationError,
+    _injection_context_from_binding,
+    get_api_key_record,
+    resolve_module_api_key_for_injection,
+)
 from ....services.data_isolation import without_org_data_isolation
 from ..constants import KEY_ALIAS_SP_API, MODULE_KEY
 from ..models import AmzStore
@@ -76,16 +84,41 @@ class SpApiCredentials:
         return cls(str(data["client_id"]).strip(), str(data["client_secret"]).strip(), str(data["refresh_token"]).strip(), region)
 
 
-def load_credentials(db: Session, store: AmzStore) -> SpApiCredentials:
-    """密钥管理 → 凭据。api_keys 表带 org_id,worker 里没有会话组织,要显式关掉隔离。"""
+def _credentials_from_store(db: Session, store: AmzStore, *, record_usage: bool) -> SpApiCredentials:
+    """密钥管理 → 凭据。api_keys 表带 org_id,worker 里没有会话组织,要显式关掉隔离。
+    龙杰一家公司两个区域(美国 / 德国),各自一个刷新令牌:凭据的 region 必须等于店铺的 region,否则视同没凭据。"""
     with without_org_data_isolation():
-        ctx = resolve_module_api_key_for_injection(db, org_id=store.company_org_id, module_id=MODULE_KEY, key_alias=KEY_ALIAS_SP_API)
-    return SpApiCredentials.from_json(ctx.header_value)
+        if record_usage:
+            ctx = resolve_module_api_key_for_injection(db, org_id=store.company_org_id, module_id=MODULE_KEY, key_alias=KEY_ALIAS_SP_API)
+        else:
+            binding = db.scalar(
+                select(ApiKeyModuleBindingRecord).where(
+                    ApiKeyModuleBindingRecord.org_id == store.company_org_id,
+                    ApiKeyModuleBindingRecord.module_id == MODULE_KEY,
+                    ApiKeyModuleBindingRecord.key_alias == KEY_ALIAS_SP_API,
+                    ApiKeyModuleBindingRecord.status == "active",
+                )
+            )
+            if binding is None:
+                raise ApiKeyIsolationError("api_key_not_bound_to_module")
+            key = get_api_key_record(db, binding.key_id)
+            if key is None or key.status != "active":
+                raise ApiKeyIsolationError("api_key_not_active")
+            ctx = _injection_context_from_binding(binding=binding, key=key, record_usage=False)
+    creds = SpApiCredentials.from_json(ctx.header_value)
+    if creds.region != (store.region or "").lower():
+        raise SpApiError(f"credential region {creds.region} != store region {store.region} ({store.store_code})", code="region_mismatch")
+    return creds
+
+
+def load_credentials(db: Session, store: AmzStore) -> SpApiCredentials:
+    return _credentials_from_store(db, store, record_usage=True)
 
 
 def has_credentials(db: Session, store: AmzStore) -> bool:
+    """排队前的轻量检查:不记用量、不出网;没绑 / 不活跃 / 区域不对 → False。"""
     try:
-        load_credentials(db, store)
+        _credentials_from_store(db, store, record_usage=False)
     except (ApiKeyIsolationError, SpApiError, ValueError):
         return False
     return True

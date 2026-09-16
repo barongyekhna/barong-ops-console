@@ -4,7 +4,11 @@
 - 销售与流量 = 自然+广告的总盘子、每个 ASIN 的 sessions / 转化率 / 购物车赢率(TACOS 的分母,笑笑诊断的依据);
 - SQP = 每个搜索词上我们的曝光份额 / 点击份额 / 购买份额(长辰"点击份额 > 转化份额 = 详情页在漏"的判据)。
 
-每次要报表都记 amz_report_runs;失败原因原样落库。不 commit。
+每次要报表都记 amz_report_runs;失败原因原样落库。
+
+**事务纪律**:要报表要等好几分钟,worker 的连接有 8 秒 idle-in-transaction 上限。所以出网之前必须把
+事务收掉(commit),网络等待期间不能挂着任何 SELECT/INSERT 未提交——否则连接被服务端掐断,
+拿回来的报表落不了库。这里的函数自己 commit,调用方不要再包事务。
 """
 
 from __future__ import annotations
@@ -191,7 +195,7 @@ def upsert_sqp(db: Session, rows: list[dict[str, Any]]) -> int:
 def _run(db: Session, *, store_code: str, report_type: str, params: dict[str, Any]) -> AmzReportRun:
     run = AmzReportRun(store_code=store_code, report_type=report_type, params_json=params, status="requested")
     db.add(run)
-    db.flush()
+    db.commit()  # 出网前收事务:接下来要等几分钟
     return run
 
 
@@ -202,7 +206,7 @@ def _finish(db: Session, run: AmzReportRun, *, status: str, rows: int = 0, repor
     run.error = (error or "")[:2000] or None
     run.finished_at = datetime.now(UTC)
     db.add(run)
-    db.flush()
+    db.commit()
 
 
 # ---------------------------------------------------------------- 同步
@@ -218,9 +222,11 @@ def sync_sales_traffic_day(db: Session, client: SpApiClient, store: AmzStore, da
         _finish(db, run, status="done", rows=n, report_id=report_id)
         return {"day": day.isoformat(), "rows": n, "report_id": report_id}
     except SpApiReportFailed as exc:
+        db.rollback()
         _finish(db, run, status="failed", error=f"{exc.report_status}: {exc.details}")
         raise
     except Exception as exc:  # noqa: BLE001
+        db.rollback()
         _finish(db, run, status="failed", error=repr(exc))
         raise
 
@@ -233,7 +239,6 @@ def sync_sales_traffic(db: Session, client: SpApiClient, store: AmzStore, *, tod
         day = today - timedelta(days=lag)
         try:
             out["days"].append(sync_sales_traffic_day(db, client, store, day))
-            db.commit()
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             out["errors"].append({"day": day.isoformat(), "error": str(exc)[:300]})
@@ -264,9 +269,11 @@ def sync_sqp_week(db: Session, client: SpApiClient, store: AmzStore, *, asin: st
         _finish(db, run, status="done", rows=n, report_id=report_id)
         return {"asin": asin, "rows": n, "report_id": report_id}
     except SpApiReportFailed as exc:
+        db.rollback()
         _finish(db, run, status="failed", error=f"{exc.report_status}: {exc.details}")
         raise
     except Exception as exc:  # noqa: BLE001
+        db.rollback()
         _finish(db, run, status="failed", error=repr(exc))
         raise
 
@@ -275,6 +282,7 @@ def sync_sqp(db: Session, client: SpApiClient, store: AmzStore, *, today: date |
     today = today or datetime.now(UTC).date()
     start, end = last_complete_week(today)
     asins = active_asins(db, store.store_code, since=today - timedelta(days=SQP_LOOKBACK_DAYS))
+    db.commit()  # 读完就收事务,下面要出网等
     out: dict[str, Any] = {"week": [start.isoformat(), end.isoformat()], "asins": [], "errors": []}
     if not asins:
         out["note"] = "no asins with sales yet (run sales_traffic first)"
@@ -282,7 +290,6 @@ def sync_sqp(db: Session, client: SpApiClient, store: AmzStore, *, today: date |
     for asin in asins:
         try:
             out["asins"].append(sync_sqp_week(db, client, store, asin=asin, start=start, end=end))
-            db.commit()
         except Exception as exc:  # noqa: BLE001
             db.rollback()
             out["errors"].append({"asin": asin, "error": str(exc)[:300]})
