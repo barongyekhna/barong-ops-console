@@ -400,6 +400,46 @@ services:
     networks:
       - barong-ops-console-prod
 
+  # A 系列四名数字员工(殷笑笑/殷熊/殷长辰/殷素素):一个进程四个 C19 身份,人设焊死在 persona.py。
+  # 心跳按身份分开 amz-agents-worker:{amz_a..d}。启动只许 `rm -f -s` + `up -d --no-deps`,绝不对 console_postgres 跑 up。
+  amz-agents-worker:
+    container_name: amz-agents-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "8000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      AGENT_MEMORY_DIR: "/var/lib/barong/agent-memory"
+      AGENT_CONSOLE_BASE_URL: "http://console_backend:8000"
+      AMZ_AGENTS_POLL_SECONDS: "3"
+      AMZ_AGENTS_PATROL_SECONDS: "600"
+      AMZ_AGENTS_PATROL_ENABLED: "1"
+      # 主动消息只发给 owner 和王创鑫(A 系列只对这两个人开放)。
+      AMZ_AGENTS_REPORT_TO_USER_IDS: "1,2"
+      # 聊天窗里等 240 秒(路由器默认)等于死机。
+      AGENT_DEEPSEEK_TIMEOUT_SECONDS: "60"
+    volumes:
+      - console_agent_memory_data:/var/lib/barong/agent-memory
+    command:
+      - python
+      - -m
+      - backend.app.modules.amz_series.agents.worker_main
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
   # mock 期一条都不外发;心跳记在 worker_heartbeats(sm-worker),验收只认那个时间戳。
   sm-worker:
     container_name: sm-worker

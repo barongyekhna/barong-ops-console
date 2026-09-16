@@ -61,6 +61,9 @@ PROVIDER_AGENT_CHAT = "agent_chat_deepseek"
 PROVIDER_AGENT_CHAT_NIJING = "agent_chat_nijing_deepseek"
 # 殷承岳(贸易公司产品助理)的聊天调用:一次判类目 = 两次 flash,同上单独一桶,先只记数。
 PROVIDER_AGENT_CHAT_YINCHENGYUE = "agent_chat_yinchengyue_deepseek"
+# A 系列四名员工(殷笑笑/殷熊/殷长辰/殷素素)在 C19 里的每次 DeepSeek 调用:一个进程四个身份共一桶,
+# 先只记数(预算 0 = 不限量),看两周真实用量再决定要不要封顶。铁律:新出网付费调用当天接台账。
+PROVIDER_AGENT_CHAT_AMZ = "agent_chat_amz_deepseek"
 # SM 社媒写手(DeepSeek 生成一条帖子 = 1 次)。新出网付费调用当天接台账(铁律)。
 # 默认 200/天:mock 期四周日历满打满算约 150 格,够一次性写完还留余量。
 PROVIDER_SM_WRITER = "sm_writer_deepseek"
@@ -84,6 +87,7 @@ DEFAULT_DAILY_BUDGETS = {
     PROVIDER_AGENT_CHAT: 0,
     PROVIDER_AGENT_CHAT_NIJING: 0,
     PROVIDER_AGENT_CHAT_YINCHENGYUE: 0,
+    PROVIDER_AGENT_CHAT_AMZ: 0,
     PROVIDER_SM_WRITER: 200,
 }
 
@@ -103,6 +107,7 @@ BUDGET_ENV_NAMES = {
     PROVIDER_AGENT_CHAT: "AGENT_CHAT_DAILY_BUDGET",
     PROVIDER_AGENT_CHAT_NIJING: "NIJING_CHAT_DAILY_BUDGET",
     PROVIDER_AGENT_CHAT_YINCHENGYUE: "YINCHENGYUE_CHAT_DAILY_BUDGET",
+    PROVIDER_AGENT_CHAT_AMZ: "AMZ_AGENT_CHAT_DAILY_BUDGET",
     PROVIDER_SM_WRITER: "SM_WRITER_DAILY_BUDGET",
 }
 
@@ -137,6 +142,7 @@ def provider_label(provider: str) -> str:
         PROVIDER_AGENT_CHAT: "白苏婉对话",
         PROVIDER_AGENT_CHAT_NIJING: "霓旌对话",
         PROVIDER_AGENT_CHAT_YINCHENGYUE: "殷承岳对话",
+        PROVIDER_AGENT_CHAT_AMZ: "亚马逊四员工对话",
         PROVIDER_SM_WRITER: "SM 社媒写手",
     }.get(provider, provider)
 
