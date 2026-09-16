@@ -91,7 +91,11 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     manifest = json.loads((REPO / "migration_manifest.json").read_text(encoding="utf-8"))
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
-    assert order[i : i + 4] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log"]
+    assert order[i : i + 5] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports"]
+    reports_mig = (versions / "20260916_03_amz_reports.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260916_02_amz_work_log"' in reports_mig and 'sa.Column("org_id"' not in reports_mig
+    for name in ("amz_sales_daily", "amz_sqp", "amz_report_runs"):
+        assert name in reports_mig
     work_log_mig = (versions / "20260916_02_amz_work_log.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260916_01_amz_suggestions"' in work_log_mig and "amz_work_log" in work_log_mig
     assert 'sa.Column("org_id"' not in work_log_mig
@@ -328,9 +332,9 @@ def test_amazon_probes_refresh_lwa_then_read_cheapest_endpoint() -> None:
         seen.append(f"{request.method} {request.url.host}{request.url.path}")
         if request.url.host == "api.amazon.com":
             return httpx.Response(200, json={"access_token": "tok"})
-        if request.url.path.endswith("marketplaceParticipations"):
+        if request.url.path == "/reports/2021-06-30/reports":
             assert request.headers["x-amz-access-token"] == "tok"
-            return httpx.Response(200, json={"payload": []})
+            return httpx.Response(200, json={"reports": []})
         if request.url.path == "/v2/profiles":
             assert request.headers["Authorization"] == "Bearer tok"
             return httpx.Response(200, json=[{"profileId": 222}])
@@ -338,8 +342,8 @@ def test_amazon_probes_refresh_lwa_then_read_cheapest_endpoint() -> None:
 
     transport = httpx.MockTransport(handler)
     result = probe_target(sp, enforce_public_network=False, transport=transport)
-    assert result.status == "healthy" and result.reason_code == "marketplace_participations_ok"
-    assert seen[:2] == ["POST api.amazon.com/auth/o2/token", "GET sellingpartnerapi-na.amazon.com/sellers/v1/marketplaceParticipations"]
+    assert result.status == "healthy" and result.reason_code == "reports_list_ok"
+    assert seen[:2] == ["POST api.amazon.com/auth/o2/token", "GET sellingpartnerapi-na.amazon.com/reports/2021-06-30/reports"]
 
     result = probe_target(ads, enforce_public_network=False, transport=transport)
     assert result.status == "invalid" and result.reason_code == "profile_not_in_account"
@@ -388,7 +392,8 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_cross
 
     assert [r.__name__ for r in rules_cross.CROSS_RULES] == ["rule_listing_cvr_gap", "rule_screen_ctr_gap"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400}
+    assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
     assert "backend.app.modules.amz_series.worker_main" in compose and "container_name: amz-worker" in compose

@@ -1,0 +1,142 @@
+{
+ "reportSpecification": {
+  "reportType": "GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT",
+  "reportOptions": {
+   "reportPeriod": "WEEK",
+   "asin": "B0TESTA0001"
+  },
+  "dataStartTime": "2026-08-30",
+  "dataEndTime": "2026-09-05",
+  "marketplaceIds": [
+   "ATVPDKIKX0DER"
+  ]
+ },
+ "dataByAsin": [
+  {
+   "startDate": "2026-08-30",
+   "endDate": "2026-09-05",
+   "asin": "B0TESTA0001",
+   "searchQueryData": {
+    "searchQuery": "camping shower",
+    "searchQueryScore": 10,
+    "searchQueryVolume": 1000
+   },
+   "impressionData": {
+    "totalQueryImpressionCount": 5000,
+    "asinImpressionCount": 250,
+    "asinImpressionShare": 5.0
+   },
+   "clickData": {
+    "totalClickCount": 400,
+    "totalClickRate": 34.38,
+    "asinClickCount": 40,
+    "asinClickShare": 10.0,
+    "totalMedianClickPrice": {
+     "amount": 32.99,
+     "currencyCode": "USD"
+    },
+    "asinMedianClickPrice": {
+     "amount": 26.99,
+     "currencyCode": "USD"
+    },
+    "totalSameDayShippingClickCount": 0,
+    "totalOneDayShippingClickCount": 9,
+    "totalTwoDayShippingClickCount": 1
+   },
+   "cartAddData": {
+    "totalCartAddCount": 100,
+    "totalCartAddRate": 6.25,
+    "asinCartAddCount": 5,
+    "asinCartAddShare": 5.0,
+    "totalMedianCartAddPrice": {
+     "amount": 27.99,
+     "currencyCode": "USD"
+    },
+    "asinMedianCartAddPrice": null,
+    "totalSameDayShippingCartAddCount": 0,
+    "totalOneDayShippingCartAddCount": 2,
+    "totalTwoDayShippingCartAddCount": 0
+   },
+   "purchaseData": {
+    "totalPurchaseCount": 50,
+    "totalPurchaseRate": 3.13,
+    "asinPurchaseCount": 1,
+    "asinPurchaseShare": 2.0,
+    "totalMedianPurchasePrice": {
+     "amount": 59.99,
+     "currencyCode": "USD"
+    },
+    "asinMedianPurchasePrice": null,
+    "totalSameDayShippingPurchaseCount": 0,
+    "totalOneDayShippingPurchaseCount": 1,
+    "totalTwoDayShippingPurchaseCount": 0
+   }
+  },
+  {
+   "startDate": "2026-08-30",
+   "endDate": "2026-09-05",
+   "asin": "B0TESTA0001",
+   "searchQueryData": {
+    "searchQuery": "portable shower",
+    "searchQueryScore": 10,
+    "searchQueryVolume": 1000
+   },
+   "impressionData": {
+    "totalQueryImpressionCount": 5000,
+    "asinImpressionCount": 250,
+    "asinImpressionShare": 5.0
+   },
+   "clickData": {
+    "totalClickCount": 400,
+    "totalClickRate": 41.6,
+    "asinClickCount": 40,
+    "asinClickShare": 10.0,
+    "totalMedianClickPrice": {
+     "amount": 35.99,
+     "currencyCode": "USD"
+    },
+    "asinMedianClickPrice": {
+     "amount": 26.99,
+     "currencyCode": "USD"
+    },
+    "totalSameDayShippingClickCount": 168,
+    "totalOneDayShippingClickCount": 1007,
+    "totalTwoDayShippingClickCount": 679
+   },
+   "cartAddData": {
+    "totalCartAddCount": 100,
+    "totalCartAddRate": 8.32,
+    "asinCartAddCount": 5,
+    "asinCartAddShare": 5.0,
+    "totalMedianCartAddPrice": {
+     "amount": 32.96,
+     "currencyCode": "USD"
+    },
+    "asinMedianCartAddPrice": {
+     "amount": 26.99,
+     "currencyCode": "USD"
+    },
+    "totalSameDayShippingCartAddCount": 42,
+    "totalOneDayShippingCartAddCount": 285,
+    "totalTwoDayShippingCartAddCount": 108
+   },
+   "purchaseData": {
+    "totalPurchaseCount": 50,
+    "totalPurchaseRate": 2.43,
+    "asinPurchaseCount": 1,
+    "asinPurchaseShare": 2.0,
+    "totalMedianPurchasePrice": {
+     "amount": 29.99,
+     "currencyCode": "USD"
+    },
+    "asinMedianPurchasePrice": {
+     "amount": 28.99,
+     "currencyCode": "USD"
+    },
+    "totalSameDayShippingPurchaseCount": 15,
+    "totalOneDayShippingPurchaseCount": 94,
+    "totalTwoDayShippingPurchaseCount": 37
+   }
+  }
+ ]
+}

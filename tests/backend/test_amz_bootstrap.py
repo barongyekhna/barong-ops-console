@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import textwrap
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -20,8 +21,8 @@ from backend.app.modules.amz_series import bootstrap as bs
 from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
-from backend.app.modules.amz_series import products, work_log
-from backend.app.modules.amz_series.models import AmzJob, AmzProduct, AmzSuggestion, AmzWorkLog
+from backend.app.modules.amz_series import products, reports_sync, work_log
+from backend.app.modules.amz_series.models import AmzJob, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -41,6 +42,9 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzSqp))
+    session.execute(delete(AmzSalesDaily))
+    session.execute(delete(AmzReportRun))
     session.execute(delete(AmzWorkLog))
     session.execute(delete(AmzProduct))
     session.execute(delete(AmzSuggestion))
@@ -234,9 +238,24 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     series = sug.daily_series(db, store_codes=["03us"], days=14)
     assert series["as_of"] == "2026-08-10" and len(series["days"]) == 14 and series["days"][-1]["spend_usd"] > 0
 
-    # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)
+    # A1 报表落库:夹具 → upsert 两遍幂等 → active_asins 按销量排
+    import json as _json
+
+    fixture_dir = Path(__file__).resolve().parents[1] / "fixtures/amz"
+    st = _json.loads((fixture_dir / "sales_traffic_day.json").read_text(encoding="utf-8"))
+    rows = reports_sync.parse_sales_traffic(st, store_code="01us", currency_default="USD")
+    assert reports_sync.upsert_sales_daily(db, rows) == 3 and reports_sync.upsert_sales_daily(db, rows) == 3
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(AmzSalesDaily)) == 3
+    assert reports_sync.active_asins(db, "01us", since=date(2026, 9, 1)) == ["B0TESTA0001", "B0TESTA0002"]
+    sq = _json.loads((fixture_dir / "sqp_week.json").read_text(encoding="utf-8"))
+    assert reports_sync.upsert_sqp(db, reports_sync.parse_sqp(sq, store_code="01us")) == 2
+    db.commit()
+    assert db.scalar(select(func.count()).select_from(AmzSqp)) == 2
+
+    # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
-    assert created == 5  # 五店各一条 rules_daily
+    assert created == 5  # 五店各一条 rules_daily;sales_traffic / sqp_weekly 因无凭据一条不排
     jobs = claim(db, 5)
     assert len(jobs) == 5
     for job in jobs:

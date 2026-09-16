@@ -314,6 +314,84 @@ class AmzWorkLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class AmzSalesDaily(AmzTimestampMixin, Base):
+    """销售与流量业务报表,按天;child_asin='' 的那行是店铺当天合计。来源 SP-API GET_SALES_AND_TRAFFIC_REPORT。"""
+
+    __tablename__ = "amz_sales_daily"
+    __table_args__ = (
+        UniqueConstraint("store_code", "report_date", "child_asin", name="uq_amz_sales_daily_store_date_asin"),
+        Index("ix_amz_sales_daily_store_date", "store_code", "report_date"),
+        Index("ix_amz_sales_daily_asin", "child_asin"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    report_date: Mapped[date] = mapped_column(Date, nullable=False)
+    parent_asin: Mapped[str] = mapped_column(String(16), nullable=False, server_default="", default="")
+    child_asin: Mapped[str] = mapped_column(String(16), nullable=False, server_default="", default="")
+    units_ordered: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    ordered_product_sales: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, server_default="0", default=0)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    total_order_items: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    units_refunded: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    sessions: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    page_views: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    buy_box_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    unit_session_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    raw_json: Mapped[dict[str, Any]] = mapped_column("raw", json_type(), nullable=False, default=dict)
+
+
+class AmzSqp(AmzTimestampMixin, Base):
+    """Brand Analytics 搜索词表现(SQP),按周 × ASIN × 搜索词。份额 = 我们 / 全市场。"""
+
+    __tablename__ = "amz_sqp"
+    __table_args__ = (
+        UniqueConstraint("store_code", "period_start", "asin", "search_query", name="uq_amz_sqp_store_period_asin_query"),
+        Index("ix_amz_sqp_store_period", "store_code", "period_start"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    period_type: Mapped[str] = mapped_column(String(8), nullable=False, server_default="WEEK", default="WEEK")
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    asin: Mapped[str] = mapped_column(String(16), nullable=False)
+    search_query: Mapped[str] = mapped_column(Text, nullable=False)
+    query_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    query_volume: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    impressions_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    impressions_asin: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    impressions_share_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    clicks_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    clicks_asin: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    clicks_share_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    cart_adds_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    cart_adds_asin: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    cart_adds_share_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    purchases_total: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    purchases_asin: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    purchases_share_pct: Mapped[Decimal | None] = mapped_column(Numeric(6, 2), nullable=True)
+    raw_json: Mapped[dict[str, Any]] = mapped_column("raw", json_type(), nullable=False, default=dict)
+
+
+class AmzReportRun(Base):
+    """每次向亚马逊要报表的台账:要了什么、多久、拿回多少行、失败原因。"""
+
+    __tablename__ = "amz_report_runs"
+    __table_args__ = (Index("ix_amz_report_runs_store_type_time", "store_code", "report_type", "requested_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    report_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    report_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    params_json: Mapped[dict[str, Any]] = mapped_column("params", json_type(), nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="requested", default="requested")
+    rows: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
@@ -367,4 +445,7 @@ __all__ = [
     "AmzSuggestion",
     "AmzTransaction",
     "AmzWorkLog",
+    "AmzSalesDaily",
+    "AmzSqp",
+    "AmzReportRun",
 ]

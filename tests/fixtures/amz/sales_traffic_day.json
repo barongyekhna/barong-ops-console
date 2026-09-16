@@ -1,0 +1,235 @@
+{
+ "reportSpecification": {
+  "reportType": "GET_SALES_AND_TRAFFIC_REPORT",
+  "reportOptions": {
+   "dateGranularity": "DAY",
+   "asinGranularity": "CHILD"
+  },
+  "dataStartTime": "2026-09-13",
+  "dataEndTime": "2026-09-13",
+  "marketplaceIds": [
+   "ATVPDKIKX0DER"
+  ]
+ },
+ "salesAndTrafficByDate": [
+  {
+   "date": "2026-09-13",
+   "salesByDate": {
+    "orderedProductSales": {
+     "amount": 246.75,
+     "currencyCode": "USD"
+    },
+    "orderedProductSalesB2B": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "unitsOrdered": 10,
+    "unitsOrderedB2B": 0,
+    "totalOrderItems": 10,
+    "totalOrderItemsB2B": 0,
+    "averageSalesPerOrderItem": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "averageSalesPerOrderItemB2B": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "averageUnitsPerOrderItem": 0,
+    "averageUnitsPerOrderItemB2B": 0,
+    "averageSellingPrice": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "averageSellingPriceB2B": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "unitsRefunded": 2,
+    "refundRate": 0,
+    "claimsGranted": 0,
+    "claimsAmount": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "shippedProductSales": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "shippedProductSalesB2B": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    },
+    "unitsShipped": 0,
+    "unitsShippedB2B": 0,
+    "ordersShipped": 0,
+    "ordersShippedB2B": 0,
+    "unitsRefundedB2B": 0,
+    "refundRateB2B": 0,
+    "claimsGrantedB2B": 0,
+    "claimsAmountB2B": {
+     "amount": 1.0,
+     "currencyCode": "USD"
+    }
+   },
+   "trafficByDate": {
+    "browserPageViews": 0,
+    "browserPageViewsB2B": 0,
+    "mobileAppPageViews": 0,
+    "mobileAppPageViewsB2B": 0,
+    "pageViews": 234,
+    "pageViewsB2B": 0,
+    "browserSessions": 0,
+    "browserSessionsB2B": 0,
+    "mobileAppSessions": 0,
+    "mobileAppSessionsB2B": 0,
+    "sessions": 158,
+    "sessionsB2B": 0,
+    "buyBoxPercentage": 99.5,
+    "buyBoxPercentageB2B": 0,
+    "orderItemSessionPercentage": 0,
+    "orderItemSessionPercentageB2B": 0,
+    "unitSessionPercentage": 6.33,
+    "unitSessionPercentageB2B": 0,
+    "averageOfferCount": 0,
+    "averageParentItems": 0,
+    "feedbackReceived": 0,
+    "negativeFeedbackReceived": 0,
+    "receivedNegativeFeedbackRate": 0,
+    "feedbackReceivedB2B": 0,
+    "negativeFeedbackReceivedB2B": 0,
+    "receivedNegativeFeedbackRateB2B": 0
+   }
+  }
+ ],
+ "salesAndTrafficByAsin": [
+  {
+   "parentAsin": "B0TESTP0001",
+   "childAsin": "B0TESTA0001",
+   "salesByAsin": {
+    "unitsOrdered": 7,
+    "unitsOrderedB2B": 0,
+    "orderedProductSales": {
+     "amount": 171.5,
+     "currencyCode": "USD"
+    },
+    "orderedProductSalesB2B": {
+     "amount": 0.0,
+     "currencyCode": "USD"
+    },
+    "totalOrderItems": 7,
+    "totalOrderItemsB2B": 0,
+    "shippedProductSales": {
+     "amount": 0.0,
+     "currencyCode": "USD"
+    },
+    "shippedProductSalesB2B": {
+     "amount": 0.0,
+     "currencyCode": "USD"
+    },
+    "unitsShipped": 0,
+    "unitsShippedB2B": 0,
+    "ordersShipped": 0,
+    "ordersShippedB2B": 0,
+    "unitsRefunded": 0,
+    "unitsRefundedB2B": 0,
+    "refundRate": 0,
+    "refundRateB2B": 0
+   },
+   "trafficByAsin": {
+    "browserSessions": 0,
+    "browserSessionsB2B": 0,
+    "mobileAppSessions": 0,
+    "mobileAppSessionsB2B": 0,
+    "sessions": 117,
+    "sessionsB2B": 0,
+    "browserSessionPercentage": 0,
+    "browserSessionPercentageB2B": 0,
+    "mobileAppSessionPercentage": 0,
+    "mobileAppSessionPercentageB2B": 0,
+    "sessionPercentage": 0,
+    "sessionPercentageB2B": 0,
+    "browserPageViews": 0,
+    "browserPageViewsB2B": 0,
+    "mobileAppPageViews": 0,
+    "mobileAppPageViewsB2B": 0,
+    "pageViews": 234,
+    "pageViewsB2B": 0,
+    "browserPageViewsPercentage": 0,
+    "browserPageViewsPercentageB2B": 0,
+    "mobileAppPageViewsPercentage": 0,
+    "mobileAppPageViewsPercentageB2B": 0,
+    "pageViewsPercentage": 0,
+    "pageViewsPercentageB2B": 0,
+    "buyBoxPercentage": 100.0,
+    "buyBoxPercentageB2B": 0,
+    "unitSessionPercentage": 5.98,
+    "unitSessionPercentageB2B": 0
+   }
+  },
+  {
+   "parentAsin": "B0TESTP0001",
+   "childAsin": "B0TESTA0002",
+   "salesByAsin": {
+    "unitsOrdered": 2,
+    "unitsOrderedB2B": 0,
+    "orderedProductSales": {
+     "amount": 49.0,
+     "currencyCode": "USD"
+    },
+    "orderedProductSalesB2B": {
+     "amount": 0.0,
+     "currencyCode": "USD"
+    },
+    "totalOrderItems": 2,
+    "totalOrderItemsB2B": 0,
+    "shippedProductSales": {
+     "amount": 0.0,
+     "currencyCode": "USD"
+    },
+    "shippedProductSalesB2B": {
+     "amount": 0.0,
+     "currencyCode": "USD"
+    },
+    "unitsShipped": 0,
+    "unitsShippedB2B": 0,
+    "ordersShipped": 0,
+    "ordersShippedB2B": 0,
+    "unitsRefunded": 0,
+    "unitsRefundedB2B": 0,
+    "refundRate": 0,
+    "refundRateB2B": 0
+   },
+   "trafficByAsin": {
+    "browserSessions": 0,
+    "browserSessionsB2B": 0,
+    "mobileAppSessions": 0,
+    "mobileAppSessionsB2B": 0,
+    "sessions": 35,
+    "sessionsB2B": 0,
+    "browserSessionPercentage": 0,
+    "browserSessionPercentageB2B": 0,
+    "mobileAppSessionPercentage": 0,
+    "mobileAppSessionPercentageB2B": 0,
+    "sessionPercentage": 0,
+    "sessionPercentageB2B": 0,
+    "browserPageViews": 0,
+    "browserPageViewsB2B": 0,
+    "mobileAppPageViews": 0,
+    "mobileAppPageViewsB2B": 0,
+    "pageViews": 70,
+    "pageViewsB2B": 0,
+    "browserPageViewsPercentage": 0,
+    "browserPageViewsPercentageB2B": 0,
+    "mobileAppPageViewsPercentage": 0,
+    "mobileAppPageViewsPercentageB2B": 0,
+    "pageViewsPercentage": 0,
+    "pageViewsPercentageB2B": 0,
+    "buyBoxPercentage": 100.0,
+    "buyBoxPercentageB2B": 0,
+    "unitSessionPercentage": 5.71,
+    "unitSessionPercentageB2B": 0
+   }
+  }
+ ]
+}

@@ -171,6 +171,9 @@ from ..modules.amz_series.models import (
     AmzSuggestion,
     AmzTransaction,
     AmzWorkLog,
+    AmzSalesDaily,
+    AmzSqp,
+    AmzReportRun,
 )
 from ..modules.rd_series.models import (
     RdDevice,

@@ -1,6 +1,7 @@
 """amz-worker:按 (店铺 × 作业类型) 排队,FOR UPDATE SKIP LOCKED 领活,只在真干成活时写心跳。
 
-A2 期只有一种作业 ``rules_daily``(D 员工规则引擎跑种子数据);A1 接上 API 后往 ``JOB_INTERVALS`` 加同步作业即可。
+作业:``rules_daily``(规则引擎 + 名册)、``sales_traffic``(销售与流量报表,每天回看三天)、``sqp_weekly``(搜索词表现,每周)。
+出网作业只给**有 SP-API 凭据**的店排队——没凭据的店不排、不失败、不亮红,心跳缺席就是「未接入」。
 心跳名 ``amz-worker:{store}:{job}``(String(64)),每店每种作业一条,验收只认它。
 """
 
@@ -26,8 +27,12 @@ from .models import AmzJob, AmzStore
 logger = logging.getLogger("amz-worker")
 
 JOB_RULES_DAILY = "rules_daily"
+JOB_SALES_TRAFFIC = "sales_traffic"
+JOB_SQP_WEEKLY = "sqp_weekly"
 # 作业 → 期望间隔(秒)。心跳的 expected_interval 也用它;超过 3 倍没干成活 = stale。
-JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600}
+JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600}
+# 要出网的作业:只在店铺有 SP-API 凭据时才排。
+API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY})
 _TABLE = "amz_jobs"
 
 
@@ -49,9 +54,18 @@ def schedule_due_jobs(db: Session, *, now: datetime | None = None) -> int:
     """每个活跃店 × 每种作业:没有 pending/running 且距上次完成超过间隔 → 补一条 pending。"""
     now = now or datetime.now(UTC)
     created = 0
-    stores = list(db.scalars(select(AmzStore.store_code).where(AmzStore.status == "active")))
-    for store_code in stores:
+    stores = list(db.scalars(select(AmzStore).where(AmzStore.status == "active")))
+    for store in stores:
+        store_code = store.store_code
+        connected: bool | None = None
         for job_type, interval in JOB_INTERVALS.items():
+            if job_type in API_JOBS:
+                if connected is None:
+                    from .clients.sp_api import has_credentials  # noqa: PLC0415
+
+                    connected = has_credentials(db, store)
+                if not connected:
+                    continue
             active = db.scalar(
                 select(AmzJob.id).where(
                     AmzJob.store_code == store_code,
@@ -155,7 +169,40 @@ def run_rules_daily(store_code: str) -> dict[str, Any]:
         return counts
 
 
-HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {JOB_RULES_DAILY: run_rules_daily}
+def _with_client(store_code: str, fn: Callable[[Session, Any, AmzStore], dict[str, Any]]) -> dict[str, Any]:
+    from .clients.sp_api import SpApiClient  # noqa: PLC0415
+
+    with SessionLocal() as db:
+        store = db.get(AmzStore, store_code)
+        if store is None:
+            raise RuntimeError(f"store {store_code} missing")
+        client = SpApiClient.for_store(db, store)
+        try:
+            result = fn(db, client, store)
+            db.commit()
+            result["api_calls"] = client.calls
+            return result
+        finally:
+            client.close()
+
+
+def run_sales_traffic(store_code: str) -> dict[str, Any]:
+    from . import reports_sync  # noqa: PLC0415
+
+    return _with_client(store_code, lambda db, client, store: reports_sync.sync_sales_traffic(db, client, store))
+
+
+def run_sqp_weekly(store_code: str) -> dict[str, Any]:
+    from . import reports_sync  # noqa: PLC0415
+
+    return _with_client(store_code, lambda db, client, store: reports_sync.sync_sqp(db, client, store))
+
+
+HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {
+    JOB_RULES_DAILY: run_rules_daily,
+    JOB_SALES_TRAFFIC: run_sales_traffic,
+    JOB_SQP_WEEKLY: run_sqp_weekly,
+}
 
 
 def process_job(job: dict[str, Any]) -> bool:

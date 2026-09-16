@@ -702,9 +702,11 @@ def _probe_amazon_sp_api(
             http_status=oauth_response.status_code,
         )
     host = AMAZON_SP_API_HOSTS_BY_REGION[payload["region"]]
+    # 报表列表比 sellers 端点更宽容:只要有任一报表类角色(品牌分析 / 库存订单…)就 200;
+    # sellers/marketplaceParticipations 需要「洞察销售伙伴」,私有应用常常没批,会把好凭据判成坏的。
     probe_response = _request(
         "GET",
-        f"https://{host}/sellers/v1/marketplaceParticipations",
+        f"https://{host}/reports/2021-06-30/reports?pageSize=1",
         allowed_hosts=frozenset((host,)),
         enforce_public_network=enforce_public_network,
         transport=transport,
@@ -714,7 +716,7 @@ def _probe_amazon_sp_api(
         adapter=adapter,
         started=started,
         response=probe_response,
-        success_reason="marketplace_participations_ok",
+        success_reason="reports_list_ok",
         details={"oauth_valid": True, "region": payload["region"]},
     )
 
