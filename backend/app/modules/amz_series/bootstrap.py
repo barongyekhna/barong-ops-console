@@ -35,6 +35,7 @@ from ...services.module_control_cache_service import refresh_module_control_cent
 from ...services.permission_resolution_cache import clear_permission_ttl_cache
 from ..c19.identity_sync_service import sync_affiliation_from_membership, sync_profile_for_user
 from .agent import ensure_amz_agents
+from .persona import display_name, persona_for
 from .catalog import AGENT_HOME_COMPANY, COMPANIES, MANAGER_USER_ID, OWNER_USER_ID, STORES
 from .constants import (
     AMAZON_ORG_TYPE,
@@ -187,8 +188,8 @@ def _ensure_bot(db: Session, *, employee: str, password: str) -> dict:
     profile = db.get(C19ProfileRecord, user.id)
     if profile is None:
         raise BootstrapError("C19 profile 同步后不存在。")
-    profile.display_name = f"{employee} · {job_title}"
-    profile.bio = f"亚马逊运营 · {job_title} · 影子期只建议不落笔"
+    profile.display_name = display_name(employee)
+    profile.bio = persona_for(employee).bio
     db.add(profile)
 
     for company in COMPANIES:

@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...models.registry import AgentRegistry
-from .constants import EMPLOYEE_AGENT_ID_PREFIX, EMPLOYEE_ROLE_LABELS, EMPLOYEE_USERNAMES, EMPLOYEES, MODULE_KEY
+from .constants import EMPLOYEE_AGENT_ID_PREFIX, EMPLOYEE_USERNAMES, EMPLOYEES, MODULE_KEY
+from .persona import display_name
 
 _RESPONSIBILITIES: dict[str, list[str]] = {
     "A": [
@@ -45,7 +46,7 @@ def agent_id_for(employee: str) -> str:
 def agent_spec(employee: str) -> dict:
     return {
         "agent_id": agent_id_for(employee),
-        "name": f"{employee} · {EMPLOYEE_ROLE_LABELS[employee]}",
+        "name": display_name(employee),
         "responsibilities": _RESPONSIBILITIES[employee],
         "non_responsibilities": _NON_RESPONSIBILITIES,
         "input_schema": {"message": "string", "conversation_id": "string", "speaker_user_id": "string"},
@@ -71,6 +72,9 @@ def ensure_amz_agents(db: Session) -> list[str]:
         agent_id = agent_id_for(employee)
         existing = db.scalar(select(AgentRegistry).where(AgentRegistry.agent_id == agent_id))
         if existing is not None:
+            if existing.name != display_name(employee):
+                existing.name = display_name(employee)
+                db.add(existing)
             continue
         db.add(AgentRegistry(**agent_spec(employee)))
         created.append(agent_id)

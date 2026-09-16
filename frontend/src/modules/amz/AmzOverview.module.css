@@ -414,7 +414,7 @@
   grid-area: duty;
   font-size: 11.5px;
   color: var(--color-subtle);
-  font-family: var(--font-mono), ui-monospace, monospace;
+  line-height: 1.35;
 }
 
 .mline {

@@ -183,8 +183,8 @@ export function AmzWorkspace() {
             <div className={styles.emp} key={item.employee}>
               <span className={`${styles.avatar} ${styles[EMPLOYEE_TONE[item.employee] ?? "toneA"]}`}>{item.employee}</span>
               <div>
-                <div className={styles.empRole}>{item.role_label}</div>
-                <div className={styles.muted}>{item.username} · 未上岗</div>
+                <div className={styles.empRole}>{item.name ?? item.employee} · {item.role_label}</div>
+                <div className={styles.muted}>{item.character ?? item.username}</div>
               </div>
             </div>
           ))}

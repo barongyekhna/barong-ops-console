@@ -35,6 +35,14 @@ EMPLOYEE_ROLE_LABELS: dict[str, str] = {
     EMPLOYEE_C: "竞品",
     EMPLOYEE_D: "广告",
 }
+# 2026-09-16 用户定名(性格档案在 persona.py,焊死在代码里)。
+EMPLOYEE_NAMES: dict[str, str] = {
+    EMPLOYEE_A: "殷笑笑",
+    EMPLOYEE_B: "殷熊",
+    EMPLOYEE_C: "殷长辰",
+    EMPLOYEE_D: "殷素素",
+}
+EMPLOYEE_GENDERS: dict[str, str] = {EMPLOYEE_A: "女", EMPLOYEE_B: "男", EMPLOYEE_C: "男", EMPLOYEE_D: "女"}
 EMPLOYEE_USERNAMES: dict[str, str] = {
     EMPLOYEE_A: "amz_a",
     EMPLOYEE_B: "amz_b",

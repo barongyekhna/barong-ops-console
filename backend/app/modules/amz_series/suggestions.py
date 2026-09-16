@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
 from .constants import EMPLOYEE_ROLE_LABELS, EMPLOYEE_USERNAMES, EMPLOYEES
+from .persona import persona_for
 from .models import AmzAdSearchTerm, AmzSuggestion, AmzTransaction
 from .service import AmzServiceError
 
@@ -26,6 +27,7 @@ def suggestion_view(row: AmzSuggestion) -> dict[str, Any]:
         "id": str(row.id),
         "employee": row.employee,
         "employee_label": EMPLOYEE_ROLE_LABELS.get(row.employee, row.employee),
+        "employee_name": persona_for(row.employee).name if row.employee in EMPLOYEES else row.employee,
         "store_code": row.store_code,
         "action_type": row.action_type,
         "severity": row.severity,
@@ -127,11 +129,15 @@ def employee_panel(db: Session, *, store_codes: list[str] | None) -> dict[str, A
         urgent = [r for r in mine if r.severity == "bad"]
         urgent_total += len(urgent)
         latest = mine[0] if mine else None
+        persona = persona_for(employee)
         items.append(
             {
                 "employee": employee,
                 "username": EMPLOYEE_USERNAMES[employee],
                 "role_label": EMPLOYEE_ROLE_LABELS[employee],
+                "name": persona.name,
+                "gender": persona.gender,
+                "character": persona.character,
                 "open": len(mine),
                 "urgent": len(urgent),
                 "latest": suggestion_view(latest) if latest else None,

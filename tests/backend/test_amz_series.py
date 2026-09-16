@@ -390,3 +390,31 @@ def test_rules_and_jobs_are_registered() -> None:
     migration = (REPO / "backend/alembic/versions/20260916_01_amz_suggestions.py").read_text(encoding="utf-8")
     assert 'sa.Column("org_id"' not in migration
     assert 'down_revision = "20260915_02_amz_permissions"' in migration
+
+
+# ---------------------------------------------------------------- 人物档案(焊死)
+
+
+def test_personas_are_named_and_hard_gated() -> None:
+    from backend.app.modules.amz_series.constants import EMPLOYEE_GENDERS, EMPLOYEE_NAMES
+    from backend.app.modules.amz_series.persona import PERSONAS, display_name, enforce_style, system_prompt
+
+    assert EMPLOYEE_NAMES == {"A": "殷笑笑", "B": "殷熊", "C": "殷长辰", "D": "殷素素"}
+    assert EMPLOYEE_GENDERS == {"A": "女", "B": "男", "C": "男", "D": "女"}
+    for key, persona in PERSONAS.items():
+        assert persona.name == EMPLOYEE_NAMES[key] and persona.gender == EMPLOYEE_GENDERS[key]
+        prompt = system_prompt(key, extra_context="店铺:03us · 数据截至 2026-09-14")
+        assert persona.name in prompt and persona.character in prompt and "刷单" in prompt and "K / I / M" in prompt
+        assert "数据截至 2026-09-14" in prompt
+    assert display_name("A") == "殷笑笑 · Listing 文案"
+    # 殷熊:不用表情、不用「~」「呀」
+    out = enforce_style("B", "老板~这张图不对呀 😊😊,几何错了。")
+    assert "~" not in out and "呀" not in out and "😊" not in out and "几何错了" in out
+    # 殷笑笑:最多两个允许的表情,称呼带 ~
+    out = enforce_style("A", "老板 我看了标题 ✨✨✨ 💡 🍔")
+    assert out.count("✨") == 2 and "💡" not in out and "🍔" not in out and "老板~" in out
+    # 殷素素:禁语被拿掉,最多一个温柔表情
+    out = enforce_style("D", "老板,必须马上改,完蛋了 🌷🌷")
+    assert "必须" not in out and "马上" not in out and "完蛋" not in out and out.count("🌷") == 1
+    # 长度硬顶
+    assert len(enforce_style("C", "长" * 5000)) <= 900

@@ -69,6 +69,9 @@ export type AmzEmployee = {
   employee: string;
   username: string;
   role_label: string;
+  name?: string;
+  gender?: string;
+  character?: string;
 };
 
 export function getStores() {
@@ -106,6 +109,7 @@ export type AmzSuggestion = {
   id: string;
   employee: string;
   employee_label: string;
+  employee_name?: string;
   store_code: string;
   action_type: string;
   severity: "bad" | "warn" | "info" | "good" | string;
@@ -127,6 +131,9 @@ export type AmzEmployeePanelItem = {
   employee: string;
   username: string;
   role_label: string;
+  name: string;
+  gender: string;
+  character: string;
   open: number;
   urgent: number;
   latest: AmzSuggestion | null;

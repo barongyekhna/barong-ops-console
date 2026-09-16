@@ -13,7 +13,8 @@ from ...models.user import User
 from ...services.worker_heartbeat import list_heartbeats
 from ..home.schemas import HomeCardItem, HomeCardRead
 from . import service
-from .constants import AGENTS_WORKER_NAME, EMPLOYEE_ROLE_LABELS, EMPLOYEE_USERNAMES, EMPLOYEES, MODULE_KEY
+from .constants import AGENTS_WORKER_NAME, EMPLOYEE_USERNAMES, EMPLOYEES, MODULE_KEY
+from .persona import display_name
 from .models import AmzStoreGrant
 
 CARD_STORES = "amz-stores"
@@ -74,7 +75,7 @@ def load_agents_card(db: Session, *, workspace_key: str, user: User, **_: Any) -
         items.append(
             HomeCardItem(
                 id=username,
-                title=f"{employee} · {EMPLOYEE_ROLE_LABELS[employee]}",
+                title=display_name(employee),
                 subtitle="在岗" if alive else "未上岗(A2 开工后上线)",
                 at=beat.get("last_success_at") if beat else None,
                 href=C19_HREF,

@@ -224,8 +224,8 @@ export function AmzOverview() {
               >
                 <span className={`${styles.avatar} ${TONE[item.employee] ?? styles.toneA}`}>{item.employee}</span>
                 {item.open > 0 ? <span className={styles.badge}>{item.open}</span> : null}
-                <span className={styles.role}>{item.role_label}</span>
-                <span className={styles.duty}>{item.username}</span>
+                <span className={styles.role}>{item.name} · {item.role_label}</span>
+                <span className={styles.duty}>{item.character}</span>
                 <span className={styles.mline}>
                   <i className={`${styles.pip} ${item.urgent > 0 ? styles.pipBad : item.open > 0 ? styles.pipWarn : styles.pipGood}`} />
                   {item.latest ? item.latest.title : item.employee === "D" ? "今天没有新消息" : "A2 后半段上岗,现在还没有消息"}
@@ -277,7 +277,7 @@ export function AmzOverview() {
       </div>
 
       {openItem ? (
-        <OverlayModal label={`${openItem.employee} · ${openItem.role_label}`} onClose={closeDrawer} placement="drawer" width="min(760px, 100%)">
+        <OverlayModal label={`${openItem.name} · ${openItem.role_label}`} onClose={closeDrawer} placement="drawer" width="min(760px, 100%)">
           <EmployeeDrawer item={openItem} onChanged={load} storeFilter={storeFilter} />
         </OverlayModal>
       ) : null}
@@ -382,7 +382,10 @@ function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePan
       <div className={styles.drawerHead}>
         <span className={`${styles.avatar} ${TONE[item.employee] ?? styles.toneA}`}>{item.employee}</span>
         <div>
-          <b>{item.employee} · {item.role_label}员工</b>
+          <b>{item.name} · {item.role_label}</b>
+          <div className={styles.muted}>
+            {item.character}
+          </div>
           <div className={styles.muted}>
             {item.open} 条待看 · {item.urgent} 条紧急 · 影子模式:点「放行」只记录你的判断
           </div>
