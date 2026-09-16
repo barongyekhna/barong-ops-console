@@ -392,6 +392,27 @@ class AmzReportRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AmzFactSheet(Base):
+    """产品事实表:按 (产品线, 店, SKU) 一份,手填;sufficiency 是最近一次「够不够」判定。无 org_id 列。"""
+
+    __tablename__ = "amz_fact_sheets"
+    __table_args__ = (UniqueConstraint("scope_key", name="uq_amz_fact_sheets_scope"), Index("ix_amz_fact_sheets_line", "product_line"))
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    scope_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    product_line: Mapped[str] = mapped_column(String(32), nullable=False)
+    store_code: Mapped[str | None] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="SET NULL"), nullable=True)
+    sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    facts_json: Mapped[dict[str, Any]] = mapped_column("facts", json_type(), nullable=False, default=dict)
+    sufficiency_json: Mapped[dict[str, Any]] = mapped_column("sufficiency", json_type(), nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1", default=1)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="draft", default="draft")
+    updated_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
@@ -448,4 +469,5 @@ __all__ = [
     "AmzSalesDaily",
     "AmzSqp",
     "AmzReportRun",
+    "AmzFactSheet",
 ]

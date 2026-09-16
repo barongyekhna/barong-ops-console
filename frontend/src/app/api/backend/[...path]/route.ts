@@ -1585,7 +1585,11 @@ function isAllowedAmzPath(method: string, path: string[]) {
     return false;
   }
   if (path.length === 2) {
+    if (path[1] === "fact-sheets") return method === "GET" || method === "POST";
     return ["stores", "seed-imports", "employees", "suggestions"].includes(path[1]) && method === "GET";
+  }
+  if (path.length === 4 && path[1] === "fact-sheets" && isUuidPathSegment(path[2]) && path[3] === "judge") {
+    return method === "POST";
   }
   const store = path[1] === "stores" && /^0\d(?:us|de)$/.test(path[2] ?? "");
   if (path.length === 3) {

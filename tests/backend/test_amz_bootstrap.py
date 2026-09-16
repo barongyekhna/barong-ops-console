@@ -21,8 +21,8 @@ from backend.app.modules.amz_series import bootstrap as bs
 from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
-from backend.app.modules.amz_series import products, reports_sync, work_log
-from backend.app.modules.amz_series.models import AmzJob, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
+from backend.app.modules.amz_series import fact_sheets, products, reports_sync, work_log
+from backend.app.modules.amz_series.models import AmzFactSheet, AmzJob, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -42,6 +42,7 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzFactSheet))
     session.execute(delete(AmzSqp))
     session.execute(delete(AmzSalesDaily))
     session.execute(delete(AmzReportRun))
@@ -273,6 +274,22 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     assert drop.evidence_json["before_pct"] == 2.0 and drop.evidence_json["after_pct"] == 0.5 and "点击还在、购买掉了" in drop.why
     brief = next(r for r in c_rows if r.action_type == "sqp_weekly_brief")
     assert "camping shower(-1.5 点)" in brief.why and len([r for r in c_rows if r.action_type == "sqp_weekly_brief"]) == 1
+
+    # 事实表:保存即代码判;同 scope 再存是 v2;判一下(模型桩)只加追问不改判定;够用的用途才给员工
+    sheet = fact_sheets.upsert_sheet(db, product_line="pump", store_code=None, sku=None, title="沐浴泵 7800mAh", facts={"is": "便携淋浴泵", "cost": {"factory_cny": 60, "freight_cny": 7, "price_usd": 32.99}, "specs": {"weight_g": "650", "dimensions_cm": "10x10x20", "battery_mah": "7800"}}, actor=owner)
+    db.commit()
+    assert sheet.version == 1 and sheet.status == "draft" and sheet.sufficiency_json["ready"]["pnl"] is True and sheet.sufficiency_json["ready"]["copy"] is False
+    assert fact_sheets.ready_for(db, product_line="pump", use="pnl") is not None and fact_sheets.ready_for(db, product_line="pump", use="copy") is None
+    again = fact_sheets.upsert_sheet(db, product_line="pump", store_code=None, sku=None, title="沐浴泵 7800mAh", facts={"is": "便携淋浴泵,不加热"}, actor=owner)
+    db.commit()
+    assert again.id == sheet.id and again.version == 2 and again.sufficiency_json["ready"]["pnl"] is False
+    judged = fact_sheets.judge_sheet(db, sheet_id=sheet.id, with_model=True, call=lambda messages, *, org_id: {"content": '{"contradictions": [], "questions": ["软管多长?"], "missing_hints": {"copy": [], "image": [], "faq": [], "pnl": []}}'})
+    db.commit()
+    assert judged.sufficiency_json["model"]["questions"] == ["软管多长?"] and judged.sufficiency_json["ready"]["copy"] is False
+    assert [r.kind for r in work_log.recent(db, employee="A", store_codes=None, limit=2)] == ["observation", "observation"]
+    assert len(fact_sheets.list_sheets(db, store_codes=["03us"])) == 1  # 跨店共用的表谁都看得到
+    with pytest.raises(Exception):
+        fact_sheets.upsert_sheet(db, product_line="rocket", store_code=None, sku=None, title="x", facts={}, actor=owner)
 
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)

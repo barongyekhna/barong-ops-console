@@ -174,6 +174,7 @@ from ..modules.amz_series.models import (
     AmzSalesDaily,
     AmzSqp,
     AmzReportRun,
+    AmzFactSheet,
 )
 from ..modules.rd_series.models import (
     RdDevice,

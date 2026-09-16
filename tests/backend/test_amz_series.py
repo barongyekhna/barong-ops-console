@@ -91,7 +91,9 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     manifest = json.loads((REPO / "migration_manifest.json").read_text(encoding="utf-8"))
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
-    assert order[i : i + 5] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports"]
+    assert order[i : i + 6] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets"]
+    sheets_mig = (versions / "20260916_04_amz_fact_sheets.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260916_03_amz_reports"' in sheets_mig and 'sa.Column("org_id"' not in sheets_mig and "amz_fact_sheets" in sheets_mig
     reports_mig = (versions / "20260916_03_amz_reports.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260916_02_amz_work_log"' in reports_mig and 'sa.Column("org_id"' not in reports_mig
     for name in ("amz_sales_daily", "amz_sqp", "amz_report_runs"):
@@ -432,3 +434,48 @@ def test_personas_are_named_and_hard_gated() -> None:
     assert "必须" not in out and "马上" not in out and "完蛋" not in out and out.count("🌷") == 1
     # 长度硬顶
     assert len(enforce_style("C", "长" * 5000)) <= 900
+
+
+# ---------------------------------------------------------------- A2:事实表「够不够」(纯函数)
+
+
+def test_sufficiency_checklists_fail_closed_and_flag_contradictions_and_questions() -> None:
+    from backend.app.modules.amz_series import sufficiency
+    from backend.app.modules.amz_series.fact_sheets import normalize_facts
+
+    empty = sufficiency.judge_code({}, product_line="pump")
+    assert all(not u["ok"] for u in empty["uses"].values())
+    assert "它是什么" in empty["uses"]["copy"]["missing"] and "成本:出厂价(元)" in empty["uses"]["pnl"]["missing"]
+    assert len(empty["questions"]) == 5  # 泵类五个常见预期一个都没答
+
+    facts = normalize_facts(
+        {
+            "is": "便携淋浴泵,7800mAh,IPX8 防水,不加热,自带水温显示",
+            "how_it_works": "整机入水才抽水,三档水压,一次充电洗 60 分钟",
+            "is_not": "不是热水器,不加热;别入水,泵头露出",
+            "specs": {"battery_mah": "7800", "ip_rating": "IPX8", "dimensions_cm": "10x10x20", "weight_g": "650"},
+            "indicators": "红灯充电,绿灯充满,屏幕显示水温 °F",
+            "package": "泵、软管、花洒、挂钩、USB-C 线",
+            "audience": "露营、宠物洗澡、冲沙",
+            "misreadings": "买家以为能加热",
+            "cost": {"factory_cny": "60", "freight_cny": "7", "price_usd": "32.99"},
+            "competitor_asins": "B0AAAAAAA1, b0bbbbbbb2",
+            "notes": "",
+        }
+    )
+    assert facts["competitor_asins"] == ["B0AAAAAAA1", "B0BBBBBBB2"] and facts["cost"]["price_usd"] == 32.99
+    full = sufficiency.judge_code(facts, product_line="pump")
+    assert all(u["ok"] for u in full["uses"].values())
+    assert full["questions"] == []
+    assert any("IPX7/IPX8" in c for c in full["contradictions"])  # 写了 IPX8 又说别入水
+
+    merged = sufficiency.judge(facts, product_line="pump", title="泵", org_id="org_x", with_model=True, call=lambda messages, *, org_id: {"content": '{"contradictions": ["整机入水 vs 别入水"], "questions": ["软管多长?"], "missing_hints": {"copy": ["缺关键词"], "image": [], "faq": [], "pnl": []}}'})
+    assert merged["ready"] == {"copy": True, "image": True, "faq": True, "pnl": True}
+    assert merged["model"]["questions"] == ["软管多长?"] and merged["model"]["missing_hints"]["copy"] == ["缺关键词"]
+    broken = sufficiency.judge(facts, product_line="pump", title="泵", org_id="org_x", with_model=True, call=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("down")))
+    assert broken["model"] is None and "down" in broken["model_error"] and broken["ready"]["copy"] is True  # 模型挂了判定不变
+    assert sufficiency.is_ready(broken, "pnl") and not sufficiency.is_ready({}, "pnl")
+
+    from r_system_v2.ra import quota_ledger as ql
+
+    assert ql.PROVIDER_AMZ_SUFFICIENCY in ql.DEFAULT_DAILY_BUDGETS and ql.PROVIDER_AMZ_SUFFICIENCY in ql.BUDGET_ENV_NAMES

@@ -19,7 +19,7 @@ from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
-from . import service, suggestions
+from . import fact_sheets, service, suggestions
 from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_VIEW, STORE_ROLES
 from .deps import StoreAccess, granted_store_codes, require_amz_access, require_store
 
@@ -235,6 +235,73 @@ def suggestions_decide(
         _raise(exc)
     db.commit()
     return suggestions.suggestion_view(row)
+
+
+class FactSheetPayload(BaseModel):
+    product_line: str = Field(min_length=1, max_length=32)
+    store_code: str | None = Field(default=None, max_length=16)
+    sku: str | None = Field(default=None, max_length=128)
+    title: str = Field(min_length=1, max_length=255)
+    facts: dict[str, Any] = Field(default_factory=dict)
+
+
+def _can_write_sheets(db: Session, user: User, store_code: str | None) -> None:
+    """跨店共用的表:owner 或任一店有「操作」;店级的表:那家店的「操作」。"""
+    if is_owner_role(user.role):
+        return
+    from .models import AmzStoreGrant  # noqa: PLC0415
+    from sqlalchemy import select  # noqa: PLC0415
+    from .constants import STORE_ROLE_RANK, STORE_ROLE_OPERATE  # noqa: PLC0415
+
+    rows = list(db.execute(select(AmzStoreGrant.store_code, AmzStoreGrant.role).where(AmzStoreGrant.user_id == int(user.id))).all())
+    ok = any((store_code is None or code == store_code) and STORE_ROLE_RANK.get(role, 0) >= STORE_ROLE_RANK[STORE_ROLE_OPERATE] for code, role in rows)
+    if not ok:
+        raise HTTPException(status_code=403, detail="需要店铺「操作」角色才能改事实表。")
+
+
+@router.get("/fact-sheets")
+def fact_sheets_list(
+    product_line: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    codes = granted_store_codes(db, user)
+    rows = fact_sheets.list_sheets(db, store_codes=codes, product_line=product_line)
+    return {"items": [fact_sheets.view(r) for r in rows], "product_lines": list(fact_sheets.PRODUCT_LINES), "uses": fact_sheets.sufficiency.USE_LABELS}
+
+
+@router.post("/fact-sheets")
+def fact_sheets_upsert(
+    payload: FactSheetPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """保存即代码判「够不够」(不出网);模型核对另点「判一下」。"""
+    _can_write_sheets(db, user, (payload.store_code or "").strip().lower() or None)
+    try:
+        row = fact_sheets.upsert_sheet(db, product_line=payload.product_line, store_code=payload.store_code, sku=payload.sku, title=payload.title, facts=payload.facts, actor=user)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.fact_sheet.save", target_type="amz_fact_sheet", target_id=str(row.id), result="success", request_id=_request_id(request), details={"product_line": row.product_line, "store_code": row.store_code, "version": row.version, "ready": row.sufficiency_json.get("ready")})
+    db.commit()
+    return fact_sheets.view(row)
+
+
+@router.post("/fact-sheets/{sheet_id}/judge")
+def fact_sheets_judge(
+    sheet_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """代码清单 + DeepSeek 再读一遍(矛盾 / 追问)。模型挂了判定不变,只附一条错。"""
+    try:
+        row = fact_sheets.judge_sheet(db, sheet_id=sheet_id, with_model=True)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    _can_write_sheets(db, user, row.store_code)
+    db.commit()
+    return fact_sheets.view(row)
 
 
 @router.get("/overview/series")

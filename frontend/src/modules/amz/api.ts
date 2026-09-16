@@ -182,3 +182,58 @@ export function getOverviewSeries(params: { store?: string; days?: number } = {}
   query.set("days", String(params.days ?? 30));
   return amzRequest<AmzSeries>(`${BASE}/overview/series?${query.toString()}`, "曲线加载失败");
 }
+
+// ---- 事实表(A2):按产品线手填,AI 判「够不够」。
+export type AmzFactSheetUse = "copy" | "image" | "faq" | "pnl";
+
+export type AmzFactSheetFacts = {
+  is?: string;
+  how_it_works?: string;
+  is_not?: string;
+  specs?: Record<string, string>;
+  indicators?: string;
+  package?: string;
+  audience?: string;
+  misreadings?: string;
+  cost?: { factory_cny?: number; freight_cny?: number; price_usd?: number };
+  competitor_asins?: string[];
+  notes?: string;
+};
+
+export type AmzSufficiency = {
+  judged_at?: string;
+  code?: { uses: Record<string, { label: string; ok: boolean; missing: string[] }>; contradictions: string[]; questions: string[] };
+  model?: { contradictions: string[]; questions: string[]; missing_hints: Record<string, string[]> } | null;
+  model_error?: string | null;
+  ready?: Record<string, boolean>;
+};
+
+export type AmzFactSheet = {
+  id: string;
+  product_line: string;
+  product_line_label: string;
+  store_code: string | null;
+  sku: string | null;
+  title: string;
+  facts: AmzFactSheetFacts;
+  sufficiency: AmzSufficiency;
+  version: number;
+  status: string;
+  updated_by_user_id: number | null;
+  updated_at: string | null;
+};
+
+export type AmzFactSheetsResponse = { items: AmzFactSheet[]; product_lines: string[]; uses: Record<string, string> };
+
+export function getFactSheets(productLine?: string) {
+  const query = productLine ? `?product_line=${encodeURIComponent(productLine)}` : "";
+  return amzRequest<AmzFactSheetsResponse>(`${BASE}/fact-sheets${query}`, "事实表加载失败");
+}
+
+export function saveFactSheet(payload: { product_line: string; store_code?: string | null; sku?: string | null; title: string; facts: AmzFactSheetFacts }) {
+  return amzRequest<AmzFactSheet>(`${BASE}/fact-sheets`, "事实表保存失败", { body: payload, method: "POST" });
+}
+
+export function judgeFactSheet(id: string) {
+  return amzRequest<AmzFactSheet>(`${BASE}/fact-sheets/${id}/judge`, "事实表核对失败", { method: "POST" });
+}

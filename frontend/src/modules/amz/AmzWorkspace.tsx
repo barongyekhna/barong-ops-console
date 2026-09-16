@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import styles from "./AmzWorkspace.module.css";
+import { FactSheetPanel } from "./FactSheetPanel";
 import {
   deleteGrant,
   getEmployees,
@@ -190,6 +191,8 @@ export function AmzWorkspace() {
           ))}
         </div>
       </section>
+
+      <FactSheetPanel stores={stores} canWrite={isOwner || stores.some((store) => store.role !== "view")} />
 
       {stores.some((store) => store.role === "grant") ? (
         <GrantsPanel stores={stores.filter((store) => store.role === "grant")} />
