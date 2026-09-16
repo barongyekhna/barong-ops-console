@@ -33,6 +33,7 @@ from ..catalog import AGENT_HOME_COMPANY, store_spec
 from ..constants import AGENTS_WORKER_NAME, EMPLOYEE_PASSWORD_ENVS, EMPLOYEE_USERNAMES, EMPLOYEES, MODULE_KEY
 from ..persona import enforce_style, persona_for
 from ..suggestions import list_suggestions, suggestion_view
+from .. import work_log
 from . import brain, speech
 from .config import (
     ACTOR_TYPE,
@@ -233,7 +234,7 @@ class AmzAgentsWorker:
             if store_codes is not None and not store_codes:
                 # 没授权:一个数字都不给,连快照都不取。
                 return {"reply": _styled(rt.employee, REPLY_NOT_GRANTED), "note": "", "mute_days": None, "gated": True}
-            snapshot = self.snapshot(db, employee=rt.employee, store_codes=store_codes)
+            snapshot = self.snapshot(db, employee=rt.employee, store_codes=store_codes, question=text)
         finally:
             db.close()
         speaker_name = getattr(speaker, "username", None) or f"用户{speaker_id}"
@@ -267,6 +268,46 @@ class AmzAgentsWorker:
                 rt.store.append_conversation_note(speaker_id, note)
             except Exception:  # noqa: BLE001
                 _LOGGER.exception("写对话笔记失败")
+        log = reply.get("log")
+        if isinstance(log, dict) and log.get("title"):
+            self.record_spoken_fact(rt, speaker_id=speaker_id, log=log)
+
+    def record_spoken_fact(self, rt: EmployeeRuntime, *, speaker_id: str, log: dict[str, Any]) -> bool:
+        """老板口述的事实落进硬记忆。店铺码只认说话人有权的店;不认识的店铺码 → 记成不限店。"""
+        db = self.session_factory()
+        try:
+            speaker = db.get(User, int(speaker_id)) if speaker_id.isdigit() else None
+            store_codes = speaker_store_codes(db, speaker)
+            if store_codes is not None and not store_codes:
+                return False
+            store_code = log.get("store_code")
+            if store_code and store_codes is not None and store_code not in store_codes:
+                store_code = None
+            if store_code and store_spec(store_code) is None:
+                store_code = None
+            work_log.record(
+                db,
+                employee=rt.employee,
+                kind="note",
+                title=str(log.get("title") or ""),
+                why=str(log.get("why") or ""),
+                store_code=store_code,
+                subject=str(log.get("subject") or ""),
+                source="chat",
+                actor_user_id=int(speaker_id) if speaker_id.isdigit() else None,
+            )
+            db.commit()
+            _LOGGER.info("%s 记下老板口述: %s", rt.username, str(log.get("title"))[:80])
+            return True
+        except Exception:  # noqa: BLE001
+            _LOGGER.exception("%s 写工作日志失败", rt.username)
+            try:
+                db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            return False
+        finally:
+            db.close()
 
     # ---------- 主动开口 ----------
 

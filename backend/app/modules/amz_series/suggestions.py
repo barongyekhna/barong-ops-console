@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
+from . import work_log
 from .constants import EMPLOYEE_ROLE_LABELS, EMPLOYEE_USERNAMES, EMPLOYEES
 from .persona import persona_for
 from .models import AmzAdSearchTerm, AmzSuggestion, AmzTransaction
@@ -94,6 +95,8 @@ def decide_suggestion(
     row.decided_at = datetime.now(UTC)
     db.add(row)
     db.flush()
+    # 硬记忆:谁、什么时候、为什么放行 / 驳回 / 稍后——员工聊天时随时能读到。
+    work_log.record_decision(db, row=row, decision=decision, actor_user_id=int(actor.id))
     create_operation_log(
         db,
         actor_type="user",

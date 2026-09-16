@@ -285,6 +285,35 @@ class AmzSuggestion(AmzTimestampMixin, Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AmzWorkLog(Base):
+    """员工工作日志 = 硬记忆(建议 / 决定 / 执行 / 老板口述),聊天时按问题检索。无 org_id 列。"""
+
+    __tablename__ = "amz_work_log"
+    __table_args__ = (
+        Index("ix_amz_work_log_employee_time", "employee", "occurred_at"),
+        Index("ix_amz_work_log_store_subject", "store_code", "subject"),
+        Index("ix_amz_work_log_suggestion", "suggestion_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    employee: Mapped[str] = mapped_column(String(4), nullable=False)
+    store_code: Mapped[str | None] = mapped_column(
+        String(16), ForeignKey("amz_stores.store_code", ondelete="SET NULL"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False, server_default="", default="")
+    asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    why: Mapped[str] = mapped_column(Text, nullable=False, server_default="", default="")
+    detail_json: Mapped[dict[str, Any]] = mapped_column("detail", json_type(), nullable=False, default=dict)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, server_default="rule", default="rule")
+    suggestion_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    actor_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
@@ -337,4 +366,5 @@ __all__ = [
     "AmzStoreGrant",
     "AmzSuggestion",
     "AmzTransaction",
+    "AmzWorkLog",
 ]

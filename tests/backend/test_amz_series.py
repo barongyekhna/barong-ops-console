@@ -91,7 +91,10 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     manifest = json.loads((REPO / "migration_manifest.json").read_text(encoding="utf-8"))
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
-    assert order[i : i + 2] == ["20260915_01_amz_tables", "20260915_02_amz_permissions"]
+    assert order[i : i + 4] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log"]
+    work_log_mig = (versions / "20260916_02_amz_work_log.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260916_01_amz_suggestions"' in work_log_mig and "amz_work_log" in work_log_mig
+    assert 'sa.Column("org_id"' not in work_log_mig
     from scripts import staging_stabilization
 
     assert staging_stabilization.EXPECTED_ALEMBIC_HEAD == order[-1]

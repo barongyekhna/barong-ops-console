@@ -170,6 +170,7 @@ from ..modules.amz_series.models import (
     AmzStoreGrant,
     AmzSuggestion,
     AmzTransaction,
+    AmzWorkLog,
 )
 from ..modules.rd_series.models import (
     RdDevice,

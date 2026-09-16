@@ -20,7 +20,8 @@ from backend.app.modules.amz_series import bootstrap as bs
 from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
-from backend.app.modules.amz_series.models import AmzJob, AmzSuggestion
+from backend.app.modules.amz_series import work_log
+from backend.app.modules.amz_series.models import AmzJob, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -40,6 +41,7 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzWorkLog))
     session.execute(delete(AmzSuggestion))
     session.execute(delete(AmzJob))
     session.execute(delete(AmzSeedImport))
@@ -181,6 +183,19 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     decided = sug.decide_suggestion(db, suggestion_id=harvest.id, decision="reject", reason="先不收", actor=manager, allowed_store_codes=None)
     db.commit()
     assert decided.status == "rejected" and decided.reject_reason == "先不收"
+
+    # 硬记忆:每条建议一条 suggested;驳回一条带原因;按问题能检索出来;没授权的店看不到
+    assert work_log.counts(db, employee="D", store_codes=None)["suggested"] == counts["created"]
+    hits = work_log.relevant(db, employee="D", store_codes=["03us"], question="03us 的 camping shower 最近怎么了")
+    assert [h.kind for h in hits[:2]] == ["rejected", "suggested"] and hits[0].why == "先不收" and hits[0].actor_user_id == manager.id
+    assert work_log.relevant(db, employee="D", store_codes=["01us"], question="camping shower") == []
+    spoken = work_log.record(db, employee="A", kind="note", title="01us 的泵标题加了 heater", why="冬季", store_code="01us", subject="B0ABCDEFGH", source="chat", actor_user_id=owner.id)
+    db.commit()
+    assert spoken.asin == "B0ABCDEFGH"
+    assert work_log.relevant(db, employee="A", store_codes=None, question="B0ABCDEFGH 标题为什么改")[0].why == "冬季"
+    assert work_log.backfill_from_suggestions(db) == 0  # 都已经记过
+    section = __import__("backend.app.modules.amz_series.agents.context", fromlist=["work_log_section"]).work_log_section(db, employee="D", store_codes=None, question="camping shower")
+    assert section["总条数"] >= counts["created"] + 1 and section["跟这句话有关的"][0]["为什么"] == "先不收"
     third = rules.run_rules_for_store(db, store_code="03us", currency="USD")
     db.commit()
     assert third["skipped_decided"] >= 1

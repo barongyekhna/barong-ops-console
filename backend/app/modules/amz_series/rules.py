@@ -20,6 +20,7 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.orm import Session
 
 from .constants import EMPLOYEE_D
+from . import work_log
 from .models import AmzAdSearchTerm, AmzSuggestion, AmzTransaction
 
 WINDOW_DAYS = 60
@@ -406,8 +407,7 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
     for draft in drafts:
         row = existing.get(draft.dedupe_key)
         if row is None:
-            db.add(
-                AmzSuggestion(
+            row = AmzSuggestion(
                     employee=draft.employee,
                     store_code=draft.store_code,
                     action_type=draft.action_type,
@@ -421,6 +421,20 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
                     dedupe_key=draft.dedupe_key,
                     as_of=as_of,
                 )
+            db.add(row)
+            db.flush()
+            # 硬记忆:她提过什么、为什么,从提出的那一刻就在日志里。
+            work_log.record(
+                db,
+                employee=draft.employee,
+                kind="suggested",
+                title=draft.title[:512],
+                why=draft.why,
+                store_code=draft.store_code,
+                subject=draft.subject,
+                detail={"action_type": draft.action_type, "severity": draft.severity, "prediction": draft.prediction, "as_of": as_of.isoformat()},
+                source="rule",
+                suggestion_id=row.id,
             )
             created += 1
         elif row.status == "open":

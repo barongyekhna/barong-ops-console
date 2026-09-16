@@ -70,6 +70,24 @@ def test_think_enforces_persona_style_on_the_way_out() -> None:
         brain.think("Z", [], org_id="org_x", call=lambda m, *, org_id: {"content": "x"})
 
 
+def test_parse_reply_keeps_log_only_when_it_has_a_title() -> None:
+    out = brain.parse_reply({"content": json.dumps({"reply": "记下了", "log": {"store_code": "01US", "subject": "B0ABCDEFGH", "title": "标题改成了带 heater 的版本", "why": "冬季"}})})
+    assert out["log"] == {"store_code": "01us", "subject": "B0ABCDEFGH", "title": "标题改成了带 heater 的版本", "why": "冬季"}
+    assert brain.parse_reply({"content": json.dumps({"reply": "好", "log": {"subject": "x"}})})["log"] is None
+    assert brain.parse_reply({"content": "plain"})["log"] is None
+
+
+def test_work_log_token_extraction_and_chinese_pieces() -> None:
+    from backend.app.modules.amz_series import work_log
+
+    tokens = work_log.extract_tokens("01us 的 B0ABCDEFGH 和 PSPE-001 的 camping shower 标题最近改了什么?")
+    assert tokens == {"stores": ["01us"], "asins": ["B0ABCDEFGH"], "skus": ["PSPE-001"], "words": ["camping", "shower"]}
+    assert work_log.extract_tokens("你好") == {"stores": [], "asins": [], "skus": [], "words": []}
+    pieces = work_log._chinese_pieces("热水棒的标题为什么改了")
+    assert pieces == ["热水棒", "标题"]
+    assert work_log.KIND_LABELS["note"] == "口述记录" and "chat" in work_log.SOURCES
+
+
 # ---------------------------------------------------------------- 开口规矩
 
 
@@ -103,6 +121,12 @@ class FakeDb:
 
     def get(self, model, key):
         return self.users.get(key)
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
 
     def close(self):
         pass
@@ -157,7 +181,7 @@ def worker(monkeypatch, tmp_path):
         runtimes=runtimes,
         session_factory=lambda: FakeDb({1: OWNER, 2: MANAGER, 168: STRANGER}),
         think=think,
-        snapshot=lambda db, *, employee, store_codes: {"employee": employee, "stores": store_codes},
+        snapshot=lambda db, *, employee, store_codes, question="": {"employee": employee, "stores": store_codes, "q": question},
         clock=lambda: clock["t"],
         today=lambda: clock["day"],
         hour=lambda: clock["hour"],
@@ -224,6 +248,28 @@ def test_worker_speaks_once_a_day_per_employee_only_for_bad(worker, monkeypatch)
     assert rt.store.load_state(speech.STATE_NAME, {}).get("mute_until") is None
     worker._persist(rt, speaker_id="1", reply={"reply": "", "note": "", "mute_days": 3})
     assert rt.store.load_state(speech.STATE_NAME, {})["mute_until"] == "2026-09-20"
+
+
+def test_worker_records_spoken_facts_into_hard_memory(worker, monkeypatch) -> None:
+    from backend.app.modules.amz_series import work_log
+
+    written = []
+    monkeypatch.setattr(work_log, "record", lambda db, **kw: written.append(kw))
+    rt = worker.runtimes[0]  # 殷笑笑
+    fact = {"store_code": "01us", "subject": "B0ABCDEFGH", "title": "标题加了 heater", "why": "冬季"}
+    assert worker.record_spoken_fact(rt, speaker_id="1", log=fact) is True
+    assert written[-1]["kind"] == "note" and written[-1]["source"] == "chat" and written[-1]["store_code"] == "01us" and written[-1]["actor_user_id"] == 1
+    # 王创鑫只授权了 01us/03us:说 04us 的事记成不限店,不丢
+    assert worker.record_spoken_fact(rt, speaker_id="2", log={**fact, "store_code": "04us"}) is True
+    assert written[-1]["store_code"] is None
+    # 没授权的人说什么都不记
+    assert worker.record_spoken_fact(rt, speaker_id="168", log=fact) is False
+    # 经 _persist 走一遍:reply 里带 log 就落库
+    worker._persist(rt, speaker_id="1", reply={"reply": "记下了", "note": "", "mute_days": None, "log": fact})
+    assert len(written) == 3
+    # 聊天快照带着问题去检索
+    worker.reply_for(rt, speaker_id="1", text="B0ABCDEFGH 最近改了什么")
+    assert '"q": "B0ABCDEFGH 最近改了什么"' in worker.thoughts[-1][1][2]["content"]
 
 
 def test_login_failure_of_one_identity_does_not_block_others(worker) -> None:

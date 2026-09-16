@@ -30,6 +30,12 @@ CHAT_FORMAT_PROMPT = """## 你现在能做什么
 照实说你现在还不能动手,并说清楚「这件事在控制台的哪里、他自己点哪里」:
 控制台 → 亚马逊 → 总览 → 点你的员工卡 → 浮窗里「放行 / 驳回 / 稍后」。不要假装做了。
 
+## 你的记忆是怎么来的
+快照里「我的工作日志」是数据库里的硬记录:你提过的建议、老板放行 / 驳回的决定和原因、老板口述让你记的事。
+问到「哪个店 / 哪个 ASIN 最近做了什么、为什么」,就照日志答,带日期;日志里没有的就说「我这里没有记录」,不要猜。
+老板告诉你一件你业务范围内已经发生的事(比如「01us 的 B0XXXXXXXX 标题上周改成了…,因为…」),
+或者明确说「记下来」,就把它填进 log 字段,并在回复里说「记下了」。不是你业务范围的事不记,转给对的人。
+
 ## 铁律
 - 不许编数字。快照里没有的数据就说「这个我看不到」;引用数字要带店铺和数据截至日。
 - 不贴 JSON、不贴报错、不用「根据系统数据显示」这种腔调,说人话。
@@ -40,9 +46,11 @@ CHAT_FORMAT_PROMPT = """## 你现在能做什么
 {
   "reply": "你要说的话(中文,直接就是发到聊天窗里的内容)",
   "note": "这轮对话值得记进这个人的笔记的一句话,没有就空字符串",
-  "mute_days": null 或 数字
+  "mute_days": null 或 数字,
+  "log": null 或 {"store_code": "01us 这样的店铺码,不确定就 null", "subject": "ASIN / SKU / 关键词 / 活动名", "title": "发生了什么(一句)", "why": "为什么(一句,没说就空)"}
 }
-mute_days 只在对方明确说「这几天别主动找我 / 别烦我」时才填(没说几天就填 2);他没这个意思就填 null。"""
+mute_days 只在对方明确说「这几天别主动找我 / 别烦我」时才填(没说几天就填 2);他没这个意思就填 null。
+log 只在对方陈述了一件你业务范围内**已经发生**的事、或明确要你记住时才填;绝大多数轮次是 null。"""
 
 SPEAK_PROMPT = """你现在是**主动开口**,不是回答提问。对方没有问你,是你自己发现了一件要他拍板的事。
 
@@ -170,16 +178,26 @@ def parse_reply(result: Any) -> dict[str, Any]:
         try:
             payload = json.loads(raw) if isinstance(raw, str) else raw
         except (TypeError, ValueError):
-            return {"reply": str(raw).strip(), "note": "", "mute_days": None}
+            return {"reply": str(raw).strip(), "note": "", "mute_days": None, "log": None}
     if not isinstance(payload, dict):
-        return {"reply": str(payload).strip(), "note": "", "mute_days": None}
+        return {"reply": str(payload).strip(), "note": "", "mute_days": None, "log": None}
     reply = payload.get("reply")
     if not isinstance(reply, str) or not reply.strip():
-        return {"reply": json.dumps(payload, ensure_ascii=False)[:1500], "note": "", "mute_days": None}
+        return {"reply": json.dumps(payload, ensure_ascii=False)[:1500], "note": "", "mute_days": None, "log": None}
     note = payload.get("note")
     raw_mute = payload.get("mute_days")
     mute_days = int(raw_mute) if isinstance(raw_mute, (int, float)) and not isinstance(raw_mute, bool) and raw_mute > 0 else None
-    return {"reply": reply.strip(), "note": note.strip() if isinstance(note, str) else "", "mute_days": mute_days}
+    log = payload.get("log")
+    if not isinstance(log, dict) or not str(log.get("title") or "").strip():
+        log = None
+    else:
+        log = {
+            "store_code": (str(log.get("store_code") or "").strip().lower() or None),
+            "subject": str(log.get("subject") or "").strip()[:255],
+            "title": str(log.get("title") or "").strip()[:512],
+            "why": str(log.get("why") or "").strip(),
+        }
+    return {"reply": reply.strip(), "note": note.strip() if isinstance(note, str) else "", "mute_days": mute_days, "log": log}
 
 
 def think(employee: str, messages: list[dict[str, str]], *, org_id: str, call=None) -> dict[str, Any]:
