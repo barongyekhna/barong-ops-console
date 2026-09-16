@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -17,16 +19,8 @@ from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
-from . import service
-from .constants import (
-    EMPLOYEE_ROLE_LABELS,
-    EMPLOYEE_USERNAMES,
-    EMPLOYEES,
-    MODULE_KEY,
-    STORE_ROLE_GRANT,
-    STORE_ROLE_VIEW,
-    STORE_ROLES,
-)
+from . import service, suggestions
+from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_VIEW, STORE_ROLES
 from .deps import StoreAccess, granted_store_codes, require_amz_access, require_store
 
 router = APIRouter(prefix="/amz", tags=["amz-ops"], dependencies=[Depends(require_amz_access)])
@@ -183,14 +177,79 @@ def seed_imports_list(
 
 
 @router.get("/employees")
-def employees_list() -> dict[str, Any]:
-    """四名数字员工的静态名片(A0 只有名片;消息与浮窗内容随 A2 来)。"""
-    return {
-        "items": [
-            {"employee": key, "username": EMPLOYEE_USERNAMES[key], "role_label": EMPLOYEE_ROLE_LABELS[key]}
-            for key in EMPLOYEES
-        ]
-    }
+def employees_list(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """员工面板:每人未读数、紧急数、最新一条消息(按调用者能看的店铺)。"""
+    codes = granted_store_codes(db, user)
+    return suggestions.employee_panel(db, store_codes=codes)
+
+
+# ---------------------------------------------------------------- 建议(员工消息)
+
+
+@router.get("/suggestions")
+def suggestions_list(
+    employee: str | None = Query(default=None, pattern="^[A-Da-d]$"),
+    store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),
+    status: str = Query(default="open", pattern="^(open|approved|rejected|later|expired|executed|all)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    codes = granted_store_codes(db, user)
+    if store:
+        if codes is not None and store not in codes:
+            raise HTTPException(status_code=403, detail=f"no access to store {store}")
+        codes = [store]
+    rows = suggestions.list_suggestions(db, store_codes=codes, employee=employee, status=status)
+    return {"items": [suggestions.suggestion_view(row) for row in rows], "shadow": True}
+
+
+class DecidePayload(BaseModel):
+    decision: str = Field(pattern="^(approve|reject|later)$")
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/suggestions/{suggestion_id}/decide")
+def suggestions_decide(
+    suggestion_id: UUID,
+    payload: DecidePayload,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """影子期:只记录你的判断(和驳回原因),不碰亚马逊。"""
+    codes = granted_store_codes(db, user)
+    try:
+        row = suggestions.decide_suggestion(
+            db,
+            suggestion_id=suggestion_id,
+            decision=payload.decision,
+            reason=payload.reason,
+            actor=user,
+            allowed_store_codes=codes,
+            request_id=_request_id(request),
+        )
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    db.commit()
+    return suggestions.suggestion_view(row)
+
+
+@router.get("/overview/series")
+def overview_series(
+    store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),
+    days: int = Query(default=30, ge=7, le=120),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    codes = granted_store_codes(db, user)
+    if store:
+        if codes is not None and store not in codes:
+            raise HTTPException(status_code=403, detail=f"no access to store {store}")
+        codes = [store]
+    return suggestions.daily_series(db, store_codes=codes, days=days)
 
 
 __all__ = ["router"]

@@ -371,6 +371,35 @@ services:
       - barong-ops-console-prod
 
   # SM 系列 · 社媒运营 worker:排 28 天日历 / 写帖子 / 扫缺口单。
+  # A 系列 amz-worker:每店每种作业一条心跳 amz-worker:{store}:{job};A2 期只跑规则引擎(影子建议),不出网。
+  amz-worker:
+    container_name: amz-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "20000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      AMZ_WORKER_POLL_SECONDS: "15"
+    command:
+      - python
+      - -m
+      - backend.app.modules.amz_series.worker_main
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
   # mock 期一条都不外发;心跳记在 worker_heartbeats(sm-worker),验收只认那个时间戳。
   sm-worker:
     container_name: sm-worker

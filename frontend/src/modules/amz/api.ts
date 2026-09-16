@@ -99,3 +99,79 @@ export function deleteGrant(storeCode: string, userId: number) {
     method: "DELETE",
   });
 }
+
+// ---------------------------------------------------------------- A2:员工消息 / 曲线
+
+export type AmzSuggestion = {
+  id: string;
+  employee: string;
+  employee_label: string;
+  store_code: string;
+  action_type: string;
+  severity: "bad" | "warn" | "info" | "good" | string;
+  title: string;
+  why: string;
+  prediction: string;
+  evidence: Record<string, unknown>;
+  level: string;
+  status: string;
+  reject_reason: string | null;
+  decided_by_user_id: number | null;
+  decided_at: string | null;
+  as_of: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type AmzEmployeePanelItem = {
+  employee: string;
+  username: string;
+  role_label: string;
+  open: number;
+  urgent: number;
+  latest: AmzSuggestion | null;
+};
+
+export type AmzEmployeePanel = {
+  items: AmzEmployeePanelItem[];
+  open_total: number;
+  urgent_total: number;
+};
+
+export type AmzSeriesDay = {
+  date: string;
+  spend_usd: number;
+  ad_sales_usd: number;
+  ad_orders: number;
+  sales_usd: number;
+  orders: number;
+  tacos_pct: number | null;
+};
+
+export type AmzSeries = { days: AmzSeriesDay[]; as_of: string | null; note?: string };
+
+export function getEmployeePanel() {
+  return amzRequest<AmzEmployeePanel>(`${BASE}/employees`, "员工面板加载失败");
+}
+
+export function getSuggestions(params: { employee?: string; store?: string; status?: string } = {}) {
+  const query = new URLSearchParams();
+  if (params.employee) query.set("employee", params.employee);
+  if (params.store) query.set("store", params.store);
+  query.set("status", params.status ?? "open");
+  return amzRequest<{ items: AmzSuggestion[]; shadow: boolean }>(`${BASE}/suggestions?${query.toString()}`, "员工消息加载失败");
+}
+
+export function decideSuggestion(id: string, decision: "approve" | "reject" | "later", reason?: string) {
+  return amzRequest<AmzSuggestion>(`${BASE}/suggestions/${id}/decide`, "记录决定失败", {
+    body: { decision, reason: reason ?? null },
+    method: "POST",
+  });
+}
+
+export function getOverviewSeries(params: { store?: string; days?: number } = {}) {
+  const query = new URLSearchParams();
+  if (params.store) query.set("store", params.store);
+  query.set("days", String(params.days ?? 30));
+  return amzRequest<AmzSeries>(`${BASE}/overview/series?${query.toString()}`, "曲线加载失败");
+}

@@ -352,3 +352,41 @@ def test_amazon_probes_refresh_lwa_then_read_cheapest_endpoint() -> None:
     bad = _probe_target("amazon_sp_api", {"client_id": "c"})
     result = probe_target(bad, enforce_public_network=False, transport=transport)
     assert result.status == "malformed" and result.reason_code == "oauth_payload_incomplete"
+
+
+# ---------------------------------------------------------------- A2:规则引擎(纯函数部分)
+
+
+def test_product_line_and_season_calendar() -> None:
+    from backend.app.modules.amz_series.rules import PRODUCT_LINE_LABELS, SEASON_CALENDAR, product_line_of
+
+    assert product_line_of("蓝色泵 广泛 0804") == "pump"
+    assert product_line_of("热水棒 自动0615") == "heater"
+    assert product_line_of("175 太阳能关键词 广泛 0822") == "flash"
+    assert product_line_of("磨甲器 多关键词 0514") == "nail"
+    assert product_line_of("DE-LYQ-01-900自动") == "pump"
+    assert product_line_of("随便什么") == "other"
+    assert set(SEASON_CALENDAR) == {"pump", "heater", "bundle"} and set(PRODUCT_LINE_LABELS) >= {"pump", "heater"}
+
+
+def test_suggestion_draft_dedupe_key_is_stable_per_store_action_subject() -> None:
+    from backend.app.modules.amz_series.rules import SuggestionDraft
+
+    a = SuggestionDraft("D", "03us", "harvest", "warn", "t", "w", "p", "camping shower")
+    b = SuggestionDraft("D", "03us", "harvest", "warn", "t2", "w2", "p2", "camping shower")
+    c = SuggestionDraft("D", "04us", "harvest", "warn", "t", "w", "p", "camping shower")
+    assert a.dedupe_key == b.dedupe_key and a.dedupe_key != c.dedupe_key and len(a.dedupe_key) == 64
+
+
+def test_rules_and_jobs_are_registered() -> None:
+    from backend.app.modules.amz_series import jobs, rules
+
+    assert len(rules.RULES) == 7
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400}
+    assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
+    compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
+    assert "backend.app.modules.amz_series.worker_main" in compose and "container_name: amz-worker" in compose
+    # A2 表也不能带 org_id 列(家规 14)
+    migration = (REPO / "backend/alembic/versions/20260916_01_amz_suggestions.py").read_text(encoding="utf-8")
+    assert 'sa.Column("org_id"' not in migration
+    assert 'down_revision = "20260915_02_amz_permissions"' in migration

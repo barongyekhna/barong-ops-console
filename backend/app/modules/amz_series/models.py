@@ -16,6 +16,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -230,12 +231,110 @@ class AmzTransaction(Base):
     row_key: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
+class AmzProduct(AmzTimestampMixin, Base):
+    """A 自己的 SKU 档案(与 K 零交集)。product_line 决定成本、季节相位、员工规则的分组。"""
+
+    __tablename__ = "amz_products"
+
+    store_code: Mapped[str] = mapped_column(
+        String(16), ForeignKey("amz_stores.store_code", name="fk_amz_products_store", ondelete="CASCADE"), primary_key=True
+    )
+    sku: Mapped[str] = mapped_column(String(128), primary_key=True)
+    asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    parent_asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    product_line: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other")
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    cost_factory: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    cost_freight: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    cost_currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="CNY")
+    lifecycle_phase: Mapped[str] = mapped_column(String(16), nullable=False, server_default="unknown")
+    season_phase: Mapped[str] = mapped_column(String(16), nullable=False, server_default="unknown")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="active")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", json_type(), nullable=False, default=dict)
+
+
+class AmzSuggestion(AmzTimestampMixin, Base):
+    """员工发来的一条消息 = 一条建议。影子期只记录决定,不碰亚马逊。dedupe_key 让每日重跑不重复发。"""
+
+    __tablename__ = "amz_suggestions"
+    __table_args__ = (
+        UniqueConstraint("dedupe_key", name="uq_amz_suggestions_dedupe_key"),
+        Index("ix_amz_suggestions_store_status", "store_code", "status"),
+        Index("ix_amz_suggestions_employee_status", "employee", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    employee: Mapped[str] = mapped_column(String(4), nullable=False)
+    store_code: Mapped[str] = mapped_column(
+        String(16), ForeignKey("amz_stores.store_code", name="fk_amz_suggestions_store", ondelete="CASCADE"), nullable=False
+    )
+    action_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    severity: Mapped[str] = mapped_column(String(8), nullable=False, server_default="info")
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    why: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    prediction: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    evidence_json: Mapped[dict[str, Any]] = mapped_column("evidence", json_type(), nullable=False, default=dict)
+    level: Mapped[str] = mapped_column(String(4), nullable=False, server_default="L0")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="open")
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    as_of: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AmzLadder(Base):
+    """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
+
+    __tablename__ = "amz_ladder"
+
+    store_code: Mapped[str] = mapped_column(
+        String(16), ForeignKey("amz_stores.store_code", name="fk_amz_ladder_store", ondelete="CASCADE"), primary_key=True
+    )
+    action_type: Mapped[str] = mapped_column(String(48), primary_key=True)
+    level: Mapped[str] = mapped_column(String(4), nullable=False, server_default="L0")
+    max_level: Mapped[str] = mapped_column(String(4), nullable=False, server_default="L1")
+    history_json: Mapped[list[Any]] = mapped_column("history", json_type(), nullable=False, default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
+class AmzGuardrail(Base):
+    """每店五道护栏 + 总闸。任何级别都不动;数值在影子期结束按真实水位定。"""
+
+    __tablename__ = "amz_guardrails"
+
+    store_code: Mapped[str] = mapped_column(
+        String(16), ForeignKey("amz_stores.store_code", name="fk_amz_guardrails_store", ondelete="CASCADE"), primary_key=True
+    )
+    daily_budget_cap: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    bid_max_change_pct: Mapped[int] = mapped_column(Integer, nullable=False, server_default="25")
+    budget_max_change_pct: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
+    actions_per_day: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
+    cpc_max: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
+    price_floor: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    breaker_ratio: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False, server_default="1.3")
+    kill_switch: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    kill_switch_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    kill_switch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+
 __all__ = [
     "AmzAdSearchTerm",
     "AmzFxRate",
+    "AmzGuardrail",
     "AmzJob",
+    "AmzLadder",
+    "AmzProduct",
     "AmzSeedImport",
     "AmzStore",
     "AmzStoreGrant",
+    "AmzSuggestion",
     "AmzTransaction",
 ]

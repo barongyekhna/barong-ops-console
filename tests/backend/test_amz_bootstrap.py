@@ -17,7 +17,10 @@ from backend.app.models.organization import OrganizationRecord
 from backend.app.models.registry import AgentRegistry
 from backend.app.models.user import User
 from backend.app.modules.amz_series import bootstrap as bs
-from backend.app.modules.amz_series import seed_import as si
+from backend.app.modules.amz_series import rules, seed_import as si
+from backend.app.modules.amz_series import suggestions as sug
+from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
+from backend.app.modules.amz_series.models import AmzJob, AmzSuggestion
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -37,6 +40,8 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzSuggestion))
+    session.execute(delete(AmzJob))
     session.execute(delete(AmzSeedImport))
     session.execute(delete(AmzAdSearchTerm))
     session.execute(delete(AmzTransaction))
@@ -135,3 +140,67 @@ def test_seed_import_is_file_idempotent_and_row_idempotent(db, tmp_path: Path) -
     ads_result = next(r for r in third if r["file"] == "ads__03us.csv")
     assert ads_result["parsed"] == 2 and ads_result["inserted"] == 0
     assert db.scalar(select(func.count()).select_from(AmzAdSearchTerm)) == 2
+
+
+def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: Path) -> None:
+    from backend.app.services.worker_heartbeat import list_heartbeats
+
+    owner = _mk_user(db, "amz_t_owner", "owner")
+    manager = _mk_user(db, "amz_t_manager", "super_admin")
+    bs.bootstrap(db, passwords={}, owner_user_id=owner.id, manager_user_id=manager.id)
+    csv_dir = tmp_path / "csv"
+    csv_dir.mkdir()
+    header = "日期,广告组合名称,货币,广告活动名称,广告组名称,国家/地区,投放,匹配类型,客户搜索词,展示量,点击量,点击率 (CTR),单次点击成本 (CPC),花费,7天总销售额,广告投入产出比 (ACOS) 总计,总广告投资回报率 (ROAS),7天总订单数(#),7天总销售量(#),7天的转化率,7天内广告SKU销售量(#),7天内其他SKU销售量(#),7天内广告SKU销售额,7天内其他SKU销售额\n"
+    lines = [header]
+    # 一个赢家词(4 单 ACOS 低,在自动组)、一个 0 单大词、一个加热词、一个精准倒挂词
+    for day in range(1, 11):
+        lines.append(f"2026-08-{day:02d},No Portfolio,USD,黑色泵 自动0712,黑色泵 自动0712,美国,loose-match,-,camping shower,200,10,0.05,0.70,7.00,60.00,0.11,8.5,1,1,0.1,1,0,60.00,0\n")
+        lines.append(f"2026-08-{day:02d},No Portfolio,USD,黑色泵 自动0712,黑色泵 自动0712,美国,loose-match,-,camping gear,50,3,0.06,0.70,2.10,0,,0,0,0,0,0,0,0,0\n")
+        lines.append(f"2026-08-{day:02d},No Portfolio,USD,黑色泵 自动0712,黑色泵 自动0712,美国,loose-match,-,portable shower with heater,50,3,0.06,0.70,2.10,0,,0,0,0,0,0,0,0,0\n")
+        lines.append(f"2026-08-{day:02d},No Portfolio,USD,蓝色 精准0711,蓝色 精准0711,美国,outdoor shower,EXACT,outdoor shower,100,5,0.05,1.00,5.00,4.00,1.25,0.8,0,0,0,0,0,0,0\n")
+    (csv_dir / "ads__03us.csv").write_text("".join(lines), encoding="utf-8")
+    si.import_directory(db, tmp_path)
+    db.commit()
+
+    counts = rules.run_rules_for_store(db, store_code="03us", currency="USD")
+    db.commit()
+    assert counts["created"] >= 3
+    rows = sug.list_suggestions(db, store_codes=["03us"], status="open")
+    kinds = {row.action_type for row in rows}
+    assert {"harvest", "negative", "demand_reserve", "bid_down"} <= kinds
+    harvest = next(row for row in rows if row.action_type == "harvest")
+    assert "camping shower" in harvest.title and harvest.level == "L0" and harvest.evidence_json["orders"] == 10
+    reserve = next(row for row in rows if row.action_type == "demand_reserve")
+    assert "portable shower with heater" in reserve.evidence_json["terms"]
+    assert not any(row.action_type == "negative" and "heater" in row.title for row in rows)
+
+    # 第二次跑:同样的建议只更新不新增;决定过的不再重发。
+    again = rules.run_rules_for_store(db, store_code="03us", currency="USD")
+    db.commit()
+    assert again["created"] == 0 and again["updated"] >= 3
+    decided = sug.decide_suggestion(db, suggestion_id=harvest.id, decision="reject", reason="先不收", actor=manager, allowed_store_codes=None)
+    db.commit()
+    assert decided.status == "rejected" and decided.reject_reason == "先不收"
+    third = rules.run_rules_for_store(db, store_code="03us", currency="USD")
+    db.commit()
+    assert third["skipped_decided"] >= 1
+    with pytest.raises(Exception):
+        sug.decide_suggestion(db, suggestion_id=harvest.id, decision="reject", reason="", actor=manager, allowed_store_codes=None)
+
+    # 员工面板与曲线
+    panel = sug.employee_panel(db, store_codes=["03us"])
+    d_panel = next(item for item in panel["items"] if item["employee"] == "D")
+    assert d_panel["open"] >= 3 and d_panel["latest"] is not None
+    series = sug.daily_series(db, store_codes=["03us"], days=14)
+    assert series["as_of"] == "2026-08-10" and len(series["days"]) == 14 and series["days"][-1]["spend_usd"] > 0
+
+    # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)
+    created = schedule_due_jobs(db)
+    assert created == 5  # 五店各一条 rules_daily
+    jobs = claim(db, 5)
+    assert len(jobs) == 5
+    for job in jobs:
+        assert process_job(job) is True
+    beats = {beat["worker_name"]: beat for beat in list_heartbeats(db)}
+    assert "amz-worker:03us:rules_daily" in beats and beats["amz-worker:03us:rules_daily"]["stale"] is False
+    assert schedule_due_jobs(db) == 0  # 刚跑完,间隔内不再补
