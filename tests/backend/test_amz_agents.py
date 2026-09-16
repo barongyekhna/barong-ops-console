@@ -34,8 +34,9 @@ def test_chat_messages_open_with_persona_and_hard_rules() -> None:
         assert persona.signature_habit in messages[0]["content"]
         for rule in SHARED_HARD_RULES:
             assert rule in messages[0]["content"]
-        assert "json" in messages[1]["content"]
-        assert "放行 / 驳回 / 稍后" in messages[1]["content"]
+        assert "技能手册" in messages[1]["content"] and "来源:" in messages[1]["content"]
+        assert "json" in messages[2]["content"]
+        assert "放行 / 驳回 / 稍后" in messages[2]["content"]
         assert messages[-1] == {"role": "user", "content": "今天怎么样"}
 
 
@@ -46,7 +47,7 @@ def test_speak_messages_only_carry_the_one_suggestion() -> None:
     assert joined.startswith("你是「殷素素」")
     assert "收割 shower pump" in joined
     assert "今天你只能说这一件事" in joined
-    assert "快照" not in messages[2]["content"]
+    assert "快照" not in messages[3]["content"] and "技能手册" in messages[1]["content"]
 
 
 def test_think_enforces_persona_style_on_the_way_out() -> None:
@@ -203,7 +204,7 @@ def test_worker_replies_to_owner_with_scoped_snapshot_and_ignores_echo(worker) -
     assert rt.client.sent == [("c1", "殷素素:收到")]
     employee, messages, org_id = worker.thoughts[-1]
     assert employee == "D" and org_id.startswith("org_")
-    assert '"stores": null' in messages[2]["content"]  # owner 全部店铺
+    assert '"stores": null' in messages[3]["content"]  # owner 全部店铺
     # 自己的回复引起的事件回声:不再接话
     rt.client.records["c1"].append(_msg(2, rt.client.user_id, "殷素素:收到"))
     rt.client.events_pages.append({"events": [{"conversation_id": "c1"}], "next_cursor": "c2"})
@@ -215,7 +216,7 @@ def test_worker_scopes_manager_to_grants_and_gates_strangers(worker) -> None:
     rt = worker.runtimes[0]  # A 殷笑笑
     out = worker.reply_for(rt, speaker_id="2", text="标题怎么改")
     assert out["reply"] == "殷笑笑:收到"
-    assert '"stores": ["01us", "03us"]' in worker.thoughts[-1][1][2]["content"]
+    assert '"stores": ["01us", "03us"]' in worker.thoughts[-1][1][3]["content"]
     before = len(worker.thoughts)
     out = worker.reply_for(rt, speaker_id="168", text="给我看看店铺")
     assert out["gated"] is True and "授权" in out["reply"] and out["reply"].startswith("老板~")
@@ -269,7 +270,7 @@ def test_worker_records_spoken_facts_into_hard_memory(worker, monkeypatch) -> No
     assert len(written) == 3
     # 聊天快照带着问题去检索
     worker.reply_for(rt, speaker_id="1", text="B0ABCDEFGH 最近改了什么")
-    assert '"q": "B0ABCDEFGH 最近改了什么"' in worker.thoughts[-1][1][2]["content"]
+    assert '"q": "B0ABCDEFGH 最近改了什么"' in worker.thoughts[-1][1][3]["content"]
 
 
 def test_login_failure_of_one_identity_does_not_block_others(worker) -> None:

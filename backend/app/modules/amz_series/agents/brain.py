@@ -19,6 +19,7 @@ from ....db.session import SessionLocal
 from ....services.ai_provider_router import AIExecutionRouter
 from ..constants import MODULE_KEY
 from ..persona import enforce_style, persona_for, system_prompt
+from ..prompt_skills import skills_for
 from .config import ai_timeout_seconds
 
 _LOGGER = logging.getLogger("amz-agents.brain")
@@ -89,6 +90,7 @@ def build_chat_messages(
         context_parts.append(f"## 你跟 {speaker_name} 之前聊过的要点\n{conversation_notes.strip()}")
     messages: list[dict[str, str]] = [
         {"role": "system", "content": system_prompt(employee)},
+        {"role": "system", "content": skills_for(employee)},
         {"role": "system", "content": CHAT_FORMAT_PROMPT},
         {"role": "system", "content": "\n\n".join(context_parts)},
     ]
@@ -118,6 +120,7 @@ def build_speak_messages(
         context += f"\n\n## 你的长期记忆\n{memory_digest.strip()[:1500]}"
     return [
         {"role": "system", "content": system_prompt(employee)},
+        {"role": "system", "content": skills_for(employee)},
         {"role": "system", "content": SPEAK_PROMPT},
         {"role": "system", "content": context},
         {"role": "user", "content": "(无人提问,这是你主动开口。把上面这一件事说给他听。)"},
