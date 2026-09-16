@@ -135,6 +135,7 @@ def test_parse_sqp_rows_and_week_alignment() -> None:
     assert rs.last_complete_week(date(2026, 9, 16)) == (date(2026, 9, 6), date(2026, 9, 12))
     assert rs.last_complete_week(date(2026, 9, 12)) == (date(2026, 8, 30), date(2026, 9, 5))  # 周六当天算未结束
     assert rs.last_complete_week(date(2026, 9, 13)) == (date(2026, 9, 6), date(2026, 9, 12))  # 周日:上一周刚结束
+    assert rs.complete_weeks(date(2026, 9, 16), 3) == [(date(2026, 9, 6), date(2026, 9, 12)), (date(2026, 8, 30), date(2026, 9, 5)), (date(2026, 8, 23), date(2026, 8, 29))]
 
 
 def test_backfill_cli_and_fixtures_are_anonymized() -> None:

@@ -214,7 +214,7 @@ def run_sqp_weekly(store_code: str) -> dict[str, Any]:
         result = reports_sync.sync_sqp(db, client, store)
         if primed is not None:
             result["primed_sales_traffic"] = primed
-        if not result.get("asins"):
+        if not result.get("asins") and not result.get("skipped"):
             raise RuntimeError("sqp: no asins with sales in the lookback window, nothing fetched")
         return result
 

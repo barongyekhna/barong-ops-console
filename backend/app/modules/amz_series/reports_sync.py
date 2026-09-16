@@ -32,6 +32,7 @@ REPORT_SQP = "GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT"
 SALES_TRAFFIC_LAG_DAYS = (1, 2, 3)  # 报表有一两天延迟,每天回看三天,幂等 upsert
 SQP_LOOKBACK_DAYS = 60
 SQP_MAX_ASINS = 12
+SQP_WEEKS = 4  # 保留最近几个整周:长辰要比「上周 vs 上上周」,一周孤零零比不了
 STORE_TOTAL_ASIN = ""
 
 
@@ -278,23 +279,43 @@ def sync_sqp_week(db: Session, client: SpApiClient, store: AmzStore, *, asin: st
         raise
 
 
-def sync_sqp(db: Session, client: SpApiClient, store: AmzStore, *, today: date | None = None) -> dict[str, Any]:
-    today = today or datetime.now(UTC).date()
+def complete_weeks(today: date, count: int = SQP_WEEKS) -> list[tuple[date, date]]:
+    """最近 count 个整周(周日–周六),新的在前。"""
     start, end = last_complete_week(today)
+    weeks = []
+    for _ in range(count):
+        weeks.append((start, end))
+        start, end = start - timedelta(days=7), end - timedelta(days=7)
+    return weeks
+
+
+def have_sqp_weeks(db: Session, store_code: str) -> set[tuple[str, date]]:
+    return set(db.execute(select(AmzSqp.asin, AmzSqp.period_start).where(AmzSqp.store_code == store_code).distinct()).all())
+
+
+def sync_sqp(db: Session, client: SpApiClient, store: AmzStore, *, today: date | None = None, weeks: int = SQP_WEEKS) -> dict[str, Any]:
+    """每个活跃 ASIN × 最近几个整周,库里没有的才要(一份报表约十分钟,限速 1/分钟)。"""
+    today = today or datetime.now(UTC).date()
+    wanted = complete_weeks(today, weeks)
     asins = active_asins(db, store.store_code, since=today - timedelta(days=SQP_LOOKBACK_DAYS))
+    have = have_sqp_weeks(db, store.store_code)
     db.commit()  # 读完就收事务,下面要出网等
-    out: dict[str, Any] = {"week": [start.isoformat(), end.isoformat()], "asins": [], "errors": []}
+    out: dict[str, Any] = {"weeks": [[s.isoformat(), e.isoformat()] for s, e in wanted], "asins": [], "skipped": 0, "errors": []}
     if not asins:
         out["note"] = "no asins with sales yet (run sales_traffic first)"
         return out
     for asin in asins:
-        try:
-            out["asins"].append(sync_sqp_week(db, client, store, asin=asin, start=start, end=end))
-        except Exception as exc:  # noqa: BLE001
-            db.rollback()
-            out["errors"].append({"asin": asin, "error": str(exc)[:300]})
+        for start, end in wanted:
+            if (asin, start) in have:
+                out["skipped"] += 1
+                continue
+            try:
+                out["asins"].append(sync_sqp_week(db, client, store, asin=asin, start=start, end=end))
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                out["errors"].append({"asin": asin, "week": start.isoformat(), "error": str(exc)[:300]})
     if out["errors"] and not out["asins"]:
-        raise RuntimeError(f"sqp all asins failed: {out['errors'][0]['error']}")
+        raise RuntimeError(f"sqp all requests failed: {out['errors'][0]['error']}")
     return out
 
 
@@ -302,6 +323,8 @@ __all__ = [
     "REPORT_SALES_TRAFFIC",
     "REPORT_SQP",
     "active_asins",
+    "complete_weeks",
+    "have_sqp_weeks",
     "last_complete_week",
     "parse_sales_traffic",
     "parse_sqp",

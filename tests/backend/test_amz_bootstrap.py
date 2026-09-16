@@ -252,6 +252,27 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     assert reports_sync.upsert_sqp(db, reports_sync.parse_sqp(sq, store_code="01us")) == 2
     db.commit()
     assert db.scalar(select(func.count()).select_from(AmzSqp)) == 2
+    assert reports_sync.have_sqp_weeks(db, "01us") == {("B0TESTA0001", date(2026, 8, 30))}
+
+    # 长辰:再造一周(09-06 起),camping shower 购买份额从 2% 掉到 0.5%、点击份额 10% → 详情页在漏 + 份额掉了 + 周简报
+    week2 = _json.loads(_json.dumps(sq))
+    for item in week2["dataByAsin"]:
+        item["startDate"], item["endDate"] = "2026-09-06", "2026-09-12"
+    week2["dataByAsin"][0]["purchaseData"]["asinPurchaseShare"] = 0.5
+    week2["dataByAsin"][0]["purchaseData"]["asinPurchaseCount"] = 0
+    assert reports_sync.upsert_sqp(db, reports_sync.parse_sqp(week2, store_code="01us")) == 2
+    db.commit()
+    rules.run_rules_for_store(db, store_code="01us", currency="USD")
+    db.commit()
+    c_rows = [r for r in sug.list_suggestions(db, store_codes=["01us"], status="open") if r.employee == "C"]
+    kinds = {r.action_type for r in c_rows}
+    assert {"sqp_detail_page_leak", "sqp_share_drop", "sqp_weekly_brief"} <= kinds
+    leak = next(r for r in c_rows if r.action_type == "sqp_detail_page_leak")
+    assert "camping shower" in leak.title and leak.why.startswith("事实:") and leak.evidence_json["handoff"] == ["A", "B"]
+    drop = next(r for r in c_rows if r.action_type == "sqp_share_drop")
+    assert drop.evidence_json["before_pct"] == 2.0 and drop.evidence_json["after_pct"] == 0.5 and "点击还在、购买掉了" in drop.why
+    brief = next(r for r in c_rows if r.action_type == "sqp_weekly_brief")
+    assert "camping shower(-1.5 点)" in brief.why and len([r for r in c_rows if r.action_type == "sqp_weekly_brief"]) == 1
 
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)

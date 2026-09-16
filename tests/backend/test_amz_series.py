@@ -392,6 +392,9 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_cross
 
     assert [r.__name__ for r in rules_cross.CROSS_RULES] == ["rule_listing_cvr_gap", "rule_screen_ctr_gap"]
+    from backend.app.modules.amz_series import rules_c
+
+    assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
     assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
