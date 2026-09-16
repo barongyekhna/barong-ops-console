@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ....models.user import User
@@ -119,10 +119,11 @@ def sqp_section(db: Session, *, store_codes: list[str] | None, limit: int = 10) 
     q = select(AmzSqp).where(AmzSqp.period_start == latest)
     if store_codes is not None:
         q = q.where(AmzSqp.store_code.in_(store_codes))
-    rows = sorted(db.scalars(q), key=lambda r: -(r.impressions_total or 0))[:limit]
+    # 先按我们拿到的点击排(跟我们有关的词),再按全市场曝光——否则 "camping" 这种大词永远占满,而我们份额是 0。
+    rows = sorted(db.scalars(q), key=lambda r: (-(r.clicks_asin or 0), -(r.impressions_total or 0)))[:limit]
     return {
         "周": f"{latest.isoformat()} 起的一周",
-        "按全市场曝光量排前几名": [
+        "按我们拿到的点击排前几名": [
             {
                 "店铺": r.store_code,
                 "ASIN": r.asin,

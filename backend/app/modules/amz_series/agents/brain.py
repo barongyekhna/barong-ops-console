@@ -65,7 +65,7 @@ SPEAK_PROMPT = """你现在是**主动开口**,不是回答提问。对方没有
 只输出一个 json 对象:{"reply": "你要说的话(中文)", "note": "", "mute_days": null}"""
 
 
-def _compact(value: Any, limit: int = 9000) -> str:
+def _compact(value: Any, limit: int = 20000) -> str:
     try:
         return json.dumps(value, ensure_ascii=False, default=str)[:limit]
     except (TypeError, ValueError):
