@@ -143,6 +143,7 @@ class AmzAgentsWorker:
         snapshot=None,
         clock: Callable[[], float] | None = None,
         today: Callable[[], str] | None = None,
+        hour: Callable[[], int] | None = None,
     ) -> None:
         self.runtimes = runtimes or default_runtimes()
         self.session_factory = session_factory or SessionLocal
@@ -150,6 +151,7 @@ class AmzAgentsWorker:
         self.snapshot = snapshot or employee_snapshot
         self.clock = clock or time.monotonic
         self.today = today or speech.local_today
+        self.hour = hour or speech.local_hour
 
     # ---------- 上线(各自退避,不互相拖累) ----------
 
@@ -279,8 +281,8 @@ class AmzAgentsWorker:
     def patrol_once(self, rt: EmployeeRuntime) -> bool:
         state = speech.normalize_state(rt.store.load_state(speech.STATE_NAME, None))
         today = self.today()
-        if not speech.may_speak(state, today=today):
-            return False
+        if not speech.may_speak(state, today=today, hour=self.hour()):
+            return False  # 说过了 / 静默期 / 深夜
         finding = speech.pick_one(self.urgent_suggestions(rt), state)
         if finding is None:
             return False

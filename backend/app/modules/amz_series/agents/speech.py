@@ -4,7 +4,7 @@
 
 在 A 系列里「要人拍板的事」= 自己名下 severity=bad 的 open 建议。warn/info 留在浮窗里等人来看,
 不打断人。门槛写在代码里不写在提示词里:不在名单里的事根本走不到发消息那一步。
-「一天」按老板的日历(洛杉矶)算。
+「一天」按老板的日历(洛杉矶)算;深夜不开口(默认 08:00–22:00 之外一律等到早上)。
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from .config import REPORT_TIMEZONE
+from .config import REPORT_TIMEZONE, speak_hours
 
 STATE_NAME = "speech"
 MAX_REMEMBERED_KEYS = 500
@@ -39,7 +39,19 @@ def local_today(now: datetime | None = None) -> str:
     return moment.astimezone(ZoneInfo(REPORT_TIMEZONE)).date().isoformat()
 
 
-def may_speak(state: dict[str, Any], *, today: str | None = None) -> bool:
+def local_hour(now: datetime | None = None) -> int:
+    moment = now or datetime.now(ZoneInfo(REPORT_TIMEZONE))
+    return moment.astimezone(ZoneInfo(REPORT_TIMEZONE)).hour
+
+
+def is_awake_hour(hour: int | None = None) -> bool:
+    start, end = speak_hours()
+    return start <= (local_hour() if hour is None else hour) < end
+
+
+def may_speak(state: dict[str, Any], *, today: str | None = None, hour: int | None = None) -> bool:
+    if not is_awake_hour(hour):
+        return False
     today = today or local_today()
     mute_until = state.get("mute_until")
     if isinstance(mute_until, str) and mute_until >= today:
@@ -77,6 +89,8 @@ __all__ = [
     "SPEAK_SEVERITIES",
     "STATE_NAME",
     "empty_state",
+    "is_awake_hour",
+    "local_hour",
     "local_today",
     "mark_spoke",
     "may_speak",

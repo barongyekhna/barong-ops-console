@@ -80,14 +80,18 @@ def test_speech_rules_one_per_day_never_repeat_and_mute() -> None:
     warn = {"id": "s3", "severity": "warn", "store_code": "01us", "created_at": "2026-09-15T00:00:00"}
     assert speech.pick_one([warn], state) is None
     assert speech.pick_one([warn, bad1, bad2], state)["id"] == "s2"  # 店铺序稳定
-    assert speech.may_speak(state, today="2026-09-16")
+    assert speech.may_speak(state, today="2026-09-16", hour=10)
     speech.mark_spoke(state, "s2", today="2026-09-16")
-    assert not speech.may_speak(state, today="2026-09-16")
-    assert speech.may_speak(state, today="2026-09-17")
+    assert not speech.may_speak(state, today="2026-09-16", hour=10)
+    assert speech.may_speak(state, today="2026-09-17", hour=10)
     assert speech.pick_one([bad1, bad2], state)["id"] == "s1"  # s2 永不重提
     assert speech.set_mute(state, 2, today="2026-09-17") == "2026-09-18"
-    assert not speech.may_speak(state, today="2026-09-18")
-    assert speech.may_speak(state, today="2026-09-19")
+    assert not speech.may_speak(state, today="2026-09-18", hour=10)
+    assert speech.may_speak(state, today="2026-09-19", hour=10)
+    # 深夜不开口:默认 08:00–22:00 之外一律等
+    assert not speech.may_speak(state, today="2026-09-19", hour=22)
+    assert not speech.may_speak(state, today="2026-09-19", hour=6)
+    assert speech.may_speak(state, today="2026-09-19", hour=8)
 
 
 # ---------------------------------------------------------------- worker
@@ -148,7 +152,7 @@ def worker(monkeypatch, tmp_path):
         wm.EmployeeRuntime(employee=e, client=FakeClient(user_id=170 + i), store=MemoryStore(username=EMPLOYEE_USERNAMES[e], index_title="t"))
         for i, e in enumerate(EMPLOYEES)
     ]
-    clock = {"t": 1000.0, "day": "2026-09-16"}
+    clock = {"t": 1000.0, "day": "2026-09-16", "hour": 10}
     w = wm.AmzAgentsWorker(
         runtimes=runtimes,
         session_factory=lambda: FakeDb({1: OWNER, 2: MANAGER, 168: STRANGER}),
@@ -156,6 +160,7 @@ def worker(monkeypatch, tmp_path):
         snapshot=lambda db, *, employee, store_codes: {"employee": employee, "stores": store_codes},
         clock=lambda: clock["t"],
         today=lambda: clock["day"],
+        hour=lambda: clock["hour"],
     )
     w.thoughts = thoughts
     w.clock_state = clock
@@ -202,6 +207,9 @@ def test_worker_speaks_once_a_day_per_employee_only_for_bad(worker, monkeypatch)
         {"id": "s2", "store_code": "04us", "severity": "bad", "title": "断货", "why": "", "prediction": "", "as_of": "2026-09-14", "evidence": {}, "created_at": "b"},
     ]
     monkeypatch.setattr(worker, "urgent_suggestions", lambda rt: urgent)
+    worker.clock_state["hour"] = 23
+    assert worker.patrol_once(rt) is False  # 深夜:有紧急事也等到早上
+    worker.clock_state["hour"] = 10
     assert worker.patrol_once(rt) is True
     assert [cid for cid, _ in rt.client.sent] == ["dm-1", "dm-2"]
     assert worker.thoughts[-1][2] == "org_bc53f07f27594360b6dd85ea1e980ddc"  # 03us 属于利连,用利连的钥匙

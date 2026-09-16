@@ -426,6 +426,8 @@ services:
       AMZ_AGENTS_PATROL_ENABLED: "1"
       # 主动消息只发给 owner 和王创鑫(A 系列只对这两个人开放)。
       AMZ_AGENTS_REPORT_TO_USER_IDS: "1,2"
+      # 深夜不开口(洛杉矶时间),有紧急事也等到早上。
+      AMZ_AGENTS_SPEAK_HOURS: "8-22"
       # 聊天窗里等 240 秒(路由器默认)等于死机。
       AGENT_DEEPSEEK_TIMEOUT_SECONDS: "60"
     volumes:
