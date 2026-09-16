@@ -15,7 +15,7 @@ from ...repositories.operation_logs import create_operation_log
 from . import work_log
 from .constants import EMPLOYEE_ROLE_LABELS, EMPLOYEE_USERNAMES, EMPLOYEES
 from .persona import persona_for
-from .models import AmzAdSearchTerm, AmzSuggestion, AmzTransaction
+from .models import AmzAdSearchTerm, AmzSalesDaily, AmzSuggestion, AmzTransaction
 from .service import AmzServiceError
 
 DECISIONS = ("approve", "reject", "later")
@@ -165,20 +165,41 @@ def daily_series(db: Session, *, store_codes: list[str] | None, days: int = 30) 
         row[0]: {"spend": Decimal(row[1] or 0), "ad_sales": Decimal(row[2] or 0), "ad_orders": int(row[3] or 0)}
         for row in db.execute(ads_q.where(T.report_date > since, T.report_date <= as_of).group_by(T.report_date)).all()
     }
+    # 总销售额:每个 (店, 天) 优先用 SP-API 的销售与流量报表(店铺合计行),没有的天回落到交易一览。
     X = AmzTransaction
     day_col = cast(X.posted_at, Date)
-    tx_q = select(day_col, func.sum(X.product_sales * X.fx_rate), func.count(func.distinct(X.order_id))).where(
+    tx_q = select(X.store_code, day_col, func.sum(X.product_sales * X.fx_rate), func.count(func.distinct(X.order_id))).where(
         X.txn_type.in_(("Order", "Bestellung")), day_col > since, day_col <= as_of
     )
     if store_codes is not None:
         tx_q = tx_q.where(X.store_code.in_(store_codes))
-    sales = {row[0]: {"sales": Decimal(row[1] or 0), "orders": int(row[2] or 0)} for row in db.execute(tx_q.group_by(day_col)).all()}
+    per_store_day: dict[tuple[str, date], dict[str, Any]] = {
+        (row[0], row[1]): {"sales": Decimal(row[2] or 0), "orders": int(row[3] or 0), "sessions": 0, "source": "transactions"}
+        for row in db.execute(tx_q.group_by(X.store_code, day_col)).all()
+    }
+    S = AmzSalesDaily
+    api_q = select(S.store_code, S.report_date, S.ordered_product_sales, S.total_order_items, S.sessions, S.currency).where(
+        S.child_asin == "", S.report_date > since, S.report_date <= as_of
+    )
+    if store_codes is not None:
+        api_q = api_q.where(S.store_code.in_(store_codes))
+    for store_code, day, amount, orders, sessions, currency in db.execute(api_q).all():
+        usd = Decimal(amount or 0) * (Decimal("1.08") if currency == "EUR" else Decimal(1))
+        per_store_day[(store_code, day)] = {"sales": usd, "orders": int(orders or 0), "sessions": int(sessions or 0), "source": "api"}
+    sales: dict[date, dict[str, Any]] = {}
+    for (_, day), item in per_store_day.items():
+        bucket = sales.setdefault(day, {"sales": Decimal(0), "orders": 0, "sessions": 0, "sources": set()})
+        bucket["sales"] += item["sales"]
+        bucket["orders"] += item["orders"]
+        bucket["sessions"] += item["sessions"]
+        bucket["sources"].add(item["source"])
     out = []
     cursor = since + timedelta(days=1)
     while cursor <= as_of:
         a = ads.get(cursor, {"spend": Decimal(0), "ad_sales": Decimal(0), "ad_orders": 0})
-        s = sales.get(cursor, {"sales": Decimal(0), "orders": 0})
+        s = sales.get(cursor, {"sales": Decimal(0), "orders": 0, "sessions": 0, "sources": set()})
         tacos = float(a["spend"] / s["sales"] * 100) if s["sales"] else None
+        sources = s["sources"]
         out.append(
             {
                 "date": cursor.isoformat(),
@@ -187,11 +208,13 @@ def daily_series(db: Session, *, store_codes: list[str] | None, days: int = 30) 
                 "ad_orders": a["ad_orders"],
                 "sales_usd": round(float(s["sales"]), 2),
                 "orders": s["orders"],
+                "sessions": s["sessions"],
+                "sales_source": "mixed" if len(sources) > 1 else (next(iter(sources)) if sources else "none"),
                 "tacos_pct": round(tacos, 1) if tacos is not None else None,
             }
         )
         cursor += timedelta(days=1)
-    return {"days": out, "as_of": as_of.isoformat(), "note": "种子期为日粒度;广告花费按报表原币(德国欧元未折),交易销售额已按当日汇率折美元"}
+    return {"days": out, "as_of": as_of.isoformat(), "note": "日粒度;总销售额优先用 SP-API 销售与流量报表,没接 API 的店回落到交易一览;广告花费按报表原币(德国欧元未折)"}
 
 
 __all__ = ["DECISIONS", "daily_series", "decide_suggestion", "employee_panel", "list_suggestions", "suggestion_view"]

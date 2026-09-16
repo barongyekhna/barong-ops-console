@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ..deps import granted_store_codes
-from ..models import AmzStore
+from datetime import date, timedelta
+
+from ..models import AmzSalesDaily, AmzSqp, AmzStore
 from ..persona import persona_for
 from ..rules import store_as_of
 from ..suggestions import list_suggestions, suggestion_view
@@ -71,7 +73,68 @@ def employee_snapshot(db: Session, *, employee: str, store_codes: list[str] | No
             "最要紧的几条": [compact_suggestion(v) for v in open_views[:MAX_OPEN_IN_SNAPSHOT]],
             "说明": "严重度 bad=要人拍板;warn=看一眼;info=知道就好。放行/驳回在控制台浮窗里点,不在聊天里。",
         },
+        "最近 7 天销售与流量(SP-API,按子 ASIN)": sales_section(db, store_codes=store_codes),
+        "上一整周搜索词表现 SQP(全市场 vs 我们)": sqp_section(db, store_codes=store_codes),
         "我的工作日志(硬记忆,来自数据库)": work_log_section(db, employee=employee, store_codes=store_codes, question=question),
+    }
+
+
+def sales_section(db: Session, *, store_codes: list[str] | None, days: int = 7, limit: int = 10) -> Any:
+    """每个 (店, 子 ASIN) 最近 N 天的件数 / 访问 / 转化率;店铺合计行另列。没接 API 的店就没有。"""
+    if store_codes is not None and not store_codes:
+        return "没有店铺"
+    latest = db.scalar(select(func.max(AmzSalesDaily.report_date)).where(AmzSalesDaily.store_code.in_(store_codes)) if store_codes is not None else select(func.max(AmzSalesDaily.report_date)))
+    if latest is None:
+        return "还没有 SP-API 数据(该店未接入或未回填)"
+    since = latest - timedelta(days=days - 1)
+    S = AmzSalesDaily
+    q = (
+        select(S.store_code, S.child_asin, S.parent_asin, func.sum(S.units_ordered), func.sum(S.sessions), func.sum(S.ordered_product_sales), func.max(S.currency))
+        .where(S.report_date >= since, S.report_date <= latest)
+        .group_by(S.store_code, S.child_asin, S.parent_asin)
+    )
+    if store_codes is not None:
+        q = q.where(S.store_code.in_(store_codes))
+    rows = db.execute(q).all()
+    totals = [r for r in rows if r[1] == ""]
+    asins = sorted([r for r in rows if r[1] != ""], key=lambda r: -int(r[3] or 0))[:limit]
+
+    def _cvr(units: int, sessions: int) -> float | None:
+        return round(units / sessions * 100, 2) if sessions else None
+
+    return {
+        "数据区间": f"{since.isoformat()} 至 {latest.isoformat()}",
+        "店铺合计": [{"店铺": r[0], "件数": int(r[3] or 0), "访问": int(r[4] or 0), "销售额": f"{float(r[5] or 0):.2f} {r[6]}", "转化率%": _cvr(int(r[3] or 0), int(r[4] or 0))} for r in totals],
+        "按子ASIN(前几名)": [{"店铺": r[0], "ASIN": r[1], "父ASIN": r[2], "件数": int(r[3] or 0), "访问": int(r[4] or 0), "转化率%": _cvr(int(r[3] or 0), int(r[4] or 0))} for r in asins],
+        "说明": "转化率 = 件数 / 访问;这是自然+广告合计的真实盘子,不是广告报表。",
+    }
+
+
+def sqp_section(db: Session, *, store_codes: list[str] | None, limit: int = 10) -> Any:
+    if store_codes is not None and not store_codes:
+        return "没有店铺"
+    latest = db.scalar(select(func.max(AmzSqp.period_start)).where(AmzSqp.store_code.in_(store_codes)) if store_codes is not None else select(func.max(AmzSqp.period_start)))
+    if latest is None:
+        return "还没有 SQP 数据"
+    q = select(AmzSqp).where(AmzSqp.period_start == latest)
+    if store_codes is not None:
+        q = q.where(AmzSqp.store_code.in_(store_codes))
+    rows = sorted(db.scalars(q), key=lambda r: -(r.impressions_total or 0))[:limit]
+    return {
+        "周": f"{latest.isoformat()} 起的一周",
+        "按全市场曝光量排前几名": [
+            {
+                "店铺": r.store_code,
+                "ASIN": r.asin,
+                "搜索词": r.search_query,
+                "全市场曝光": r.impressions_total,
+                "我们曝光份额%": float(r.impressions_share_pct) if r.impressions_share_pct is not None else None,
+                "我们点击份额%": float(r.clicks_share_pct) if r.clicks_share_pct is not None else None,
+                "我们购买份额%": float(r.purchases_share_pct) if r.purchases_share_pct is not None else None,
+            }
+            for r in rows
+        ],
+        "判据": "点击份额 > 购买份额 = 详情页在漏(人点进来了没买);曝光份额低 = 词没接住(标题/后台词)。",
     }
 
 
