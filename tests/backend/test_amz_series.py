@@ -385,6 +385,9 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import jobs, rules
 
     assert len(rules.RULES) == 7
+    from backend.app.modules.amz_series import rules_cross
+
+    assert [r.__name__ for r in rules_cross.CROSS_RULES] == ["rule_listing_cvr_gap", "rule_screen_ctr_gap"]
     assert jobs.JOB_INTERVALS == {"rules_daily": 86400}
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")

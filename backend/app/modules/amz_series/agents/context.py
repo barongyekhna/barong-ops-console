@@ -16,7 +16,7 @@ from ..models import AmzStore
 from ..persona import persona_for
 from ..rules import store_as_of
 from ..suggestions import list_suggestions, suggestion_view
-from .. import work_log
+from .. import products, work_log
 
 MAX_OPEN_IN_SNAPSHOT = 8
 MAX_RECENT_LOG = 12
@@ -64,6 +64,7 @@ def employee_snapshot(db: Session, *, employee: str, store_codes: list[str] | No
             }
             for s in stores
         ],
+        "我们在卖的产品(名册,来自交易数据)": products.roster(db, store_codes=store_codes) or "还没有名册",
         "我名下待看的建议": {
             "总数": len(open_views),
             "紧急数": len(urgent),

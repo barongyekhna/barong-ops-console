@@ -20,8 +20,8 @@ from backend.app.modules.amz_series import bootstrap as bs
 from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
-from backend.app.modules.amz_series import work_log
-from backend.app.modules.amz_series.models import AmzJob, AmzSuggestion, AmzWorkLog
+from backend.app.modules.amz_series import products, work_log
+from backend.app.modules.amz_series.models import AmzJob, AmzProduct, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -42,6 +42,7 @@ def db():
 
 def _cleanup(session) -> None:
     session.execute(delete(AmzWorkLog))
+    session.execute(delete(AmzProduct))
     session.execute(delete(AmzSuggestion))
     session.execute(delete(AmzJob))
     session.execute(delete(AmzSeedImport))
@@ -134,6 +135,13 @@ def test_seed_import_is_file_idempotent_and_row_idempotent(db, tmp_path: Path) -
     txn = db.scalar(select(AmzTransaction))
     assert txn.store_code == "01de" and txn.currency == "EUR" and float(txn.total) == 16.32
     assert txn.fx_source == "seed_fixed" and float(txn.total_usd) == round(16.32 * float(si.DEFAULT_EUR_USD), 2)
+    # 产品名册从交易行长出来:德国站 Bestellung 行 → 一个泵 SKU
+    assert products.sync_from_transactions(db, store_code="01de") == {"skus": 1, "created": 1, "updated": 0}
+    db.commit()
+    product = db.scalar(select(AmzProduct).where(AmzProduct.store_code == "01de"))
+    assert product.sku == "DE-LYQ-03" and product.product_line == "pump" and product.metadata_json["units_total"] == 1
+    assert products.sync_from_transactions(db, store_code="01de")["updated"] == 1
+    assert products.roster(db, store_codes=["01de"])[0]["SKU"] == "DE-LYQ-03" and products.roster(db, store_codes=[]) == []
 
     # 改一个字节 = 新文件,但行 row_key 相同 → 不重复插入。
     (csv_dir / "ads__03us.csv").write_text((csv_dir / "ads__03us.csv").read_text(encoding="utf-8") + "\n", encoding="utf-8")
@@ -161,6 +169,14 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
         lines.append(f"2026-08-{day:02d},No Portfolio,USD,黑色泵 自动0712,黑色泵 自动0712,美国,loose-match,-,portable shower with heater,50,3,0.06,0.70,2.10,0,,0,0,0,0,0,0,0,0\n")
         lines.append(f"2026-08-{day:02d},No Portfolio,USD,蓝色 精准0711,蓝色 精准0711,美国,outdoor shower,EXACT,outdoor shower,100,5,0.05,1.00,5.00,4.00,1.25,0.8,0,0,0,0,0,0,0\n")
     (csv_dir / "ads__03us.csv").write_text("".join(lines), encoding="utf-8")
+    # 兄弟店 01us:同款泵、同两个词——camping shower 转化是 03us 的四倍;shower pump 点击率是 03us 的十几倍
+    sibling = [header]
+    for day in range(1, 11):
+        sibling.append(f"2026-08-{day:02d},No Portfolio,USD,蓝色泵 自动0801,蓝色泵 自动0801,美国,loose-match,-,camping shower,200,10,0.05,0.70,7.00,240.00,0.03,34,4,4,0.4,4,0,240.00,0\n")
+        sibling.append(f"2026-08-{day:02d},No Portfolio,USD,蓝色泵 自动0801,蓝色泵 自动0801,美国,loose-match,-,shower pump,1000,30,0.03,0.70,21.00,60.00,0.35,2.8,1,1,0.03,1,0,60.00,0\n")
+        lines.append(f"2026-08-{day:02d},No Portfolio,USD,黑色泵 自动0712,黑色泵 自动0712,美国,loose-match,-,shower pump,1000,2,0.002,0.70,1.40,0,,0,0,0,0,0,0,0,0\n")
+    (csv_dir / "ads__03us.csv").write_text("".join(lines), encoding="utf-8")
+    (csv_dir / "ads__01us.csv").write_text("".join(sibling), encoding="utf-8")
     si.import_directory(db, tmp_path)
     db.commit()
 
@@ -175,6 +191,14 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     reserve = next(row for row in rows if row.action_type == "demand_reserve")
     assert "portable shower with heater" in reserve.evidence_json["terms"]
     assert not any(row.action_type == "negative" and "heater" in row.title for row in rows)
+    # 跨店对照:笑笑拿到 camping shower 的转化差,熊拿到 shower pump 的点击率差;01us 自己跑不会拿到这两条
+    cvr_gap = next(row for row in rows if row.action_type == "listing_cvr_gap")
+    assert cvr_gap.employee == "A" and "camping shower" in cvr_gap.title and cvr_gap.evidence_json["best"]["store"] == "01us" and cvr_gap.evidence_json["best"]["cvr_pct"] == 40.0
+    ctr_gap = next(row for row in rows if row.action_type == "screen_ctr_gap")
+    assert ctr_gap.employee == "B" and "shower pump" in ctr_gap.title and ctr_gap.evidence_json["mine"]["ctr_pct"] == 0.2
+    rules.run_rules_for_store(db, store_code="01us", currency="USD")
+    db.commit()
+    assert not [r for r in sug.list_suggestions(db, store_codes=["01us"], status="open") if r.employee in ("A", "B")]
 
     # 第二次跑:同样的建议只更新不新增;决定过的不再重发。
     again = rules.run_rules_for_store(db, store_code="03us", currency="USD")
@@ -185,17 +209,18 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     assert decided.status == "rejected" and decided.reject_reason == "先不收"
 
     # 硬记忆:每条建议一条 suggested;驳回一条带原因;按问题能检索出来;没授权的店看不到
-    assert work_log.counts(db, employee="D", store_codes=None)["suggested"] == counts["created"]
+    logged = sum(work_log.counts(db, employee=e, store_codes=None).get("suggested", 0) for e in EMPLOYEES)
+    assert logged == db.scalar(select(func.count()).select_from(AmzSuggestion))
     hits = work_log.relevant(db, employee="D", store_codes=["03us"], question="03us 的 camping shower 最近怎么了")
     assert [h.kind for h in hits[:2]] == ["rejected", "suggested"] and hits[0].why == "先不收" and hits[0].actor_user_id == manager.id
-    assert work_log.relevant(db, employee="D", store_codes=["01us"], question="camping shower") == []
+    assert work_log.relevant(db, employee="D", store_codes=["01de"], question="camping shower") == []
     spoken = work_log.record(db, employee="A", kind="note", title="01us 的泵标题加了 heater", why="冬季", store_code="01us", subject="B0ABCDEFGH", source="chat", actor_user_id=owner.id)
     db.commit()
     assert spoken.asin == "B0ABCDEFGH"
     assert work_log.relevant(db, employee="A", store_codes=None, question="B0ABCDEFGH 标题为什么改")[0].why == "冬季"
     assert work_log.backfill_from_suggestions(db) == 0  # 都已经记过
     section = __import__("backend.app.modules.amz_series.agents.context", fromlist=["work_log_section"]).work_log_section(db, employee="D", store_codes=None, question="camping shower")
-    assert section["总条数"] >= counts["created"] + 1 and section["跟这句话有关的"][0]["为什么"] == "先不收"
+    assert section["总条数"] >= 3 and section["跟这句话有关的"][0]["为什么"] == "先不收"
     third = rules.run_rules_for_store(db, store_code="03us", currency="USD")
     db.commit()
     assert third["skipped_decided"] >= 1

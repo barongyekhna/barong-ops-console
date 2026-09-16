@@ -146,7 +146,11 @@ def run_rules_daily(store_code: str) -> dict[str, Any]:
         store = db.get(AmzStore, store_code)
         if store is None:
             raise RuntimeError(f"store {store_code} missing")
+        from . import products  # noqa: PLC0415
+
+        roster = products.sync_from_transactions(db, store_code=store_code)
         counts = rules.run_rules_for_store(db, store_code=store_code, currency=store.currency)
+        counts["roster"] = roster
         db.commit()
         return counts
 
