@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import styles from "./AmzWorkspace.module.css";
+import { AdsAuthPanel } from "./AdsAuthPanel";
 import { FactSheetPanel } from "./FactSheetPanel";
 import {
   deleteGrant,
@@ -195,7 +196,10 @@ export function AmzWorkspace() {
       <FactSheetPanel stores={stores} canWrite={isOwner || stores.some((store) => store.role !== "view")} />
 
       {stores.some((store) => store.role === "grant") ? (
-        <GrantsPanel stores={stores.filter((store) => store.role === "grant")} />
+        <>
+          <AdsAuthPanel stores={stores.filter((store) => store.role === "grant")} />
+          <GrantsPanel stores={stores.filter((store) => store.role === "grant")} />
+        </>
       ) : null}
 
       <section className={styles.panel} aria-label="种子导入">

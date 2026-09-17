@@ -237,3 +237,20 @@ export function saveFactSheet(payload: { product_line: string; store_code?: stri
 export function judgeFactSheet(id: string) {
   return amzRequest<AmzFactSheet>(`${BASE}/fact-sheets/${id}/judge`, "事实表核对失败", { method: "POST" });
 }
+
+// ---- 广告 API 授权通道(四家公司都走这条)。
+export function startAdsOauth(payload: { store_code: string; client_id: string; client_secret: string }) {
+  return amzRequest<{ store_code: string; authorize_url: string }>(`${BASE}/ads/oauth/start`, "广告授权启动失败", { body: payload, method: "POST" });
+}
+
+export type AdsOauthResult = {
+  store_code: string;
+  key_id: string;
+  alias: string;
+  profiles: { profileId: string; countryCode: string; currencyCode: string; timezone: string; accountInfo?: Record<string, unknown> }[];
+  all_profiles: number;
+};
+
+export function completeAdsOauth(payload: { code: string; state: string }) {
+  return amzRequest<AdsOauthResult>(`${BASE}/ads/oauth/callback`, "广告授权收尾失败", { body: payload, method: "POST" });
+}

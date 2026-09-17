@@ -304,6 +304,73 @@ def fact_sheets_judge(
     return fact_sheets.view(row)
 
 
+# ---------------------------------------------------------------- 广告 API 授权(四家公司都走这条)
+
+
+class AdsOauthStart(BaseModel):
+    store_code: str = Field(min_length=4, max_length=16)
+    client_id: str = Field(min_length=10, max_length=200)
+    client_secret: str = Field(min_length=10, max_length=300)
+
+
+class AdsOauthCallback(BaseModel):
+    code: str = Field(min_length=1, max_length=500)
+    state: str = Field(min_length=1, max_length=200)
+
+
+@router.post("/ads/oauth/start")
+def ads_oauth_start(
+    payload: AdsOauthStart,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """存钥匙对(加密)、给授权链接。要店铺「授权」角色或 owner。"""
+    from .clients import ads_oauth  # noqa: PLC0415
+    from .constants import STORE_ROLE_RANK  # noqa: PLC0415
+
+    store = db.get(service.AmzStore, payload.store_code.strip().lower())
+    if store is None:
+        raise HTTPException(status_code=404, detail="store not found")
+    role = service.grant_role_for(db, user=user, store_code=store.store_code, is_owner=is_owner_role(user.role))
+    if STORE_ROLE_RANK.get(role, 0) < STORE_ROLE_RANK[STORE_ROLE_GRANT]:
+        raise HTTPException(status_code=403, detail="需要店铺「授权」角色。")
+    try:
+        url = ads_oauth.start(db, store=store, client_id=payload.client_id, client_secret=payload.client_secret, actor_user_id=int(user.id))
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.ads.oauth.start", target_type="amz_store", target_id=store.store_code, result="success", request_id=_request_id(request))
+    db.commit()
+    return {"store_code": store.store_code, "authorize_url": url}
+
+
+@router.post("/ads/oauth/callback")
+def ads_oauth_callback(
+    payload: AdsOauthCallback,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """授权码换令牌、拉 profile、存密钥。谁点的授权链接谁来收尾(同一个浏览器会话)。"""
+    from .clients import ads_oauth  # noqa: PLC0415
+    from .constants import STORE_ROLE_RANK  # noqa: PLC0415
+
+    try:
+        store_code = ads_oauth.parse_state(payload.state)
+        role = service.grant_role_for(db, user=user, store_code=store_code, is_owner=is_owner_role(user.role))
+        if STORE_ROLE_RANK.get(role, 0) < STORE_ROLE_RANK[STORE_ROLE_GRANT]:
+            raise HTTPException(status_code=403, detail="需要店铺「授权」角色。")
+        result = ads_oauth.complete(db, code=payload.code, state=payload.state, actor_user_id=int(user.id))
+    except service.AmzServiceError as exc:
+        db.rollback()
+        create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.ads.oauth.complete", target_type="amz_store", target_id=payload.state.split(".")[0], result="failure", error_code=exc.code, request_id=_request_id(request), details={"error": str(exc)[:300]})
+        db.commit()
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.ads.oauth.complete", target_type="amz_store", target_id=result["store_code"], result="success", request_id=_request_id(request), details={"profiles": result["profiles"], "key_id": result["key_id"]})
+    db.commit()
+    return result
+
+
 @router.get("/overview/series")
 def overview_series(
     store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),

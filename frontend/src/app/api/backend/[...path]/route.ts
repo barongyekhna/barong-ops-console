@@ -1591,6 +1591,9 @@ function isAllowedAmzPath(method: string, path: string[]) {
   if (path.length === 4 && path[1] === "fact-sheets" && isUuidPathSegment(path[2]) && path[3] === "judge") {
     return method === "POST";
   }
+  if (path.length === 4 && path[1] === "ads" && path[2] === "oauth" && (path[3] === "start" || path[3] === "callback")) {
+    return method === "POST";
+  }
   const store = path[1] === "stores" && /^0\d(?:us|de)$/.test(path[2] ?? "");
   if (path.length === 3) {
     if (path[1] === "overview" && path[2] === "series") return method === "GET";
