@@ -353,3 +353,13 @@ export function getReviewClusters(productLine: string, whose?: string) {
   const query = `?product_line=${encodeURIComponent(productLine)}${whose ? `&whose=${whose}` : ""}`;
   return amzRequest<{ clusters: AmzReviewCluster[]; pits: AmzReviewCluster[]; families: Record<string, string> }>(`${BASE}/reviews/clusters${query}`, "评论簇加载失败");
 }
+
+// ---- 员工工作日志(硬记忆)。
+export type AmzWorkLogEntry = { id: string; kind: string; source: string; 日期: string | null; 店铺: string; 对象: string; 类型: string; 做了什么: string; 为什么: string; 来源: string; 谁: string };
+
+export function getWorkLog(params: { employee: string; store?: string; q?: string }) {
+  const query = new URLSearchParams({ employee: params.employee });
+  if (params.store) query.set("store", params.store);
+  if (params.q) query.set("q", params.q);
+  return amzRequest<{ items: AmzWorkLogEntry[]; counts: Record<string, number> }>(`${BASE}/work-log?${query.toString()}`, "工作日志加载失败");
+}

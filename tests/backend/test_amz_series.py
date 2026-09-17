@@ -598,3 +598,12 @@ def test_fx_fetch_fill_and_lookup() -> None:
     from backend.app.modules.amz_series import jobs
 
     assert jobs.JOB_INTERVALS["fx_daily"] == 86400 and "fx_daily" in jobs.HANDLERS
+
+
+def test_work_log_route_is_registered_and_proxied() -> None:
+    from backend.app.modules.amz_series.router import router
+
+    paths = {(getattr(r, "path", ""), tuple(sorted(getattr(r, "methods", []) or []))) for r in router.routes}
+    assert ("/amz/work-log", ("GET",)) in paths
+    proxy = (REPO / "frontend/src/app/api/backend/[...path]/route.ts").read_text(encoding="utf-8")
+    assert '"work-log"' in proxy

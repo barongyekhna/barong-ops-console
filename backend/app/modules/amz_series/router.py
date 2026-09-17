@@ -207,6 +207,30 @@ def suggestions_list(
     return {"items": [suggestions.suggestion_view(row) for row in rows], "shadow": True}
 
 
+@router.get("/work-log")
+def work_log_list(
+    employee: str = Query(pattern="^[A-Da-d]$"),
+    store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),
+    q: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=40, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """员工的硬记忆:最近的,或按一句话检索(ASIN / SKU / 词 / 中文片段)。和员工聊天时读到的是同一份。"""
+    from . import work_log  # noqa: PLC0415
+
+    codes = granted_store_codes(db, user)
+    if store:
+        if codes is not None and store not in codes:
+            raise HTTPException(status_code=403, detail=f"no access to store {store}")
+        codes = [store]
+    if q and q.strip():
+        rows = work_log.relevant(db, employee=employee, store_codes=codes, question=q, limit=limit)
+    else:
+        rows = work_log.recent(db, employee=employee, store_codes=codes, limit=limit)
+    return {"items": [{"id": str(r.id), "kind": r.kind, "source": r.source, **work_log.view(r)} for r in rows], "counts": work_log.counts(db, employee=employee, store_codes=codes)}
+
+
 class DecidePayload(BaseModel):
     decision: str = Field(pattern="^(approve|reject|later)$")
     reason: str | None = Field(default=None, max_length=2000)

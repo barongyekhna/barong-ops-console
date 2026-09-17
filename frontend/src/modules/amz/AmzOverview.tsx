@@ -17,6 +17,8 @@ import {
   type AmzSeries,
   type AmzStore,
   type AmzSuggestion,
+  getWorkLog,
+  type AmzWorkLogEntry,
 } from "./api";
 
 const TONE: Record<string, string> = { A: styles.toneA, B: styles.toneB, C: styles.toneC, D: styles.toneD };
@@ -342,6 +344,54 @@ function SeasonStrip() {
   );
 }
 
+/** 员工的硬记忆:提过什么、谁拍板、为什么、老板口述的事。和她在 C19 里读到的是同一份。 */
+function WorkLogSection({ employee, storeFilter }: { employee: string; storeFilter: string }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [items, setItems] = useState<AmzWorkLogEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(
+    async (query: string) => {
+      try {
+        const payload = await getWorkLog({ employee, store: storeFilter || undefined, q: query.trim() || undefined });
+        setItems(payload.items);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [employee, storeFilter],
+  );
+
+  useEffect(() => {
+    if (open) void load("");
+  }, [open, load]);
+
+  return (
+    <details className={styles.logBox} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary>工作日志 · 她记得的每件事</summary>
+      <div className={styles.logSearch}>
+        <input onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void load(q)} placeholder="搜 ASIN / SKU / 词 / 一句话,回车" value={q} />
+      </div>
+      {error ? <div className={styles.error}>{error}</div> : null}
+      {items.length === 0 && !error ? <div className={styles.muted}>没有记录。</div> : null}
+      <ul className={styles.logList}>
+        {items.map((entry) => (
+          <li key={entry.id}>
+            <span className={styles.muted}>
+              {entry.日期} · {entry.店铺} · {entry.类型} · {entry.来源}
+              {entry.对象 ? ` · ${entry.对象}` : ""}
+            </span>
+            <div>{entry.做了什么}</div>
+            {entry.为什么 ? <div className={styles.muted}>为什么:{entry.为什么}</div> : null}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePanelItem; onChanged: () => Promise<void>; storeFilter: string }) {
   const [rows, setRows] = useState<AmzSuggestion[]>([]);
   const [status, setStatus] = useState<string | null>(null);
@@ -457,6 +507,7 @@ function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePan
           </article>
         ))
       )}
+      <WorkLogSection employee={item.employee} storeFilter={storeFilter} />
     </div>
   );
 }
