@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import textwrap
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -42,6 +42,9 @@ def db():
 
 
 def _cleanup(session) -> None:
+    from backend.app.modules.amz_series.models import AmzBaTopClick
+
+    session.execute(delete(AmzBaTopClick))
     session.execute(delete(AmzCompetitorSnapshot))
     session.execute(delete(AmzCompetitor))
     session.execute(delete(AmzReview))
@@ -478,6 +481,70 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     board = comps.board(db, marketplace="US")
     assert any(b["asin"] == "B0AAAAAAA1" and b["latest"]["price"] == 27.98 and b["previous"]["price"] == 32.98 for b in board)
 
+    # 竞品名单自动派生:核心词(真出过单的词)→ 品牌分析报表(假客户端,两步:没好 deferred → 好了流式过滤)→ 名单
+    from backend.app.modules.amz_series import ba_competitors as ba
+
+    today_ba = date(2026, 9, 17)
+    db.add(AmzSqp(store_code="01us", period_start=date(2026, 9, 6), period_end=date(2026, 9, 12), asin="B0TESTA0001", search_query="Portable Shower", query_volume=190000, purchases_total=3000, purchases_asin=5, raw_json={}))
+    db.add(AmzSqp(store_code="01us", period_start=date(2026, 9, 6), period_end=date(2026, 9, 12), asin="B0TESTA0001", search_query="camping essentials", query_volume=260000, purchases_total=5000, purchases_asin=9, raw_json={}))
+    db.commit()
+    core = ba.core_terms(db, "US", today=today_ba)
+    assert "portable shower" in core["pump"] and all("camping essentials" not in terms for terms in core.values())
+
+    class _FakeSp:
+        def __init__(self) -> None:
+            self.polls = 0
+            self.created: list[str] = []
+
+        def create_report(self, report_type, *, start, end, options=None):
+            self.created.append(report_type)
+            assert (start, end, options) == (date(2026, 9, 6), date(2026, 9, 12), {"reportPeriod": "WEEK"})
+            return "RPT-BA-1"
+
+        def get_report(self, report_id):
+            self.polls += 1
+            return {"processingStatus": "IN_PROGRESS"} if self.polls == 1 else {"processingStatus": "DONE", "reportDocumentId": "DOC-1"}
+
+        def get_document(self, document_id):
+            return {"url": "https://example.invalid/doc", "compressionAlgorithm": "GZIP"}
+
+        def stream_document(self, document):
+            body = _json.dumps({"reportSpecification": {}, "dataByDepartmentAndSearchTerm": [
+                {"searchTerm": "portable shower", "searchFrequencyRank": 900, "clickedAsin": "B0RIVAL001", "clickedItemName": "Rival Portable Shower 7800mAh", "clickShareRank": 1, "clickShare": 0.23, "conversionShare": 0.2},
+                {"searchTerm": "portable shower", "searchFrequencyRank": 900, "clickedAsin": "B0OURS0001", "clickedItemName": "Our shower", "clickShareRank": 2, "clickShare": 0.1, "conversionShare": 0.1},
+                {"searchTerm": "portable shower", "searchFrequencyRank": 900, "clickedAsin": "B0CHAIR001", "clickedItemName": "Camping chair", "clickShareRank": 3, "clickShare": 0.05, "conversionShare": 0.0},
+                {"searchTerm": "dog toys", "searchFrequencyRank": 10, "clickedAsin": "B0DOGTOY01", "clickedItemName": "Dog toy", "clickShareRank": 1, "clickShare": 0.3, "conversionShare": 0.3},
+            ]}).encode()
+            yield from (body[i : i + 50] for i in range(0, len(body), 50))
+
+    comps.upsert_competitor(db, marketplace="US", asin="B0OURS0001", product_line="pump", whose="ours", source="sales_report")  # 自家 ASIN 点进前三也不算对手
+    db.commit()
+    fake = _FakeSp()
+    us01 = db.get(AmzStore, "01us")
+    step1 = ba.run(db, fake, us01, today=today_ba)
+    assert step1["requested"] == "RPT-BA-1" and step1["deferred_seconds"] > 0
+    step2 = ba.run(db, fake, us01, today=today_ba)
+    assert step2["waiting"] == "IN_PROGRESS" and step2["deferred_seconds"] > 0 and fake.created == [ba.REPORT_BA_SEARCH_TERMS]
+    step3 = ba.run(db, fake, us01, today=today_ba)
+    assert step3["rows_scanned"] == 4 and step3["rows_kept"] == 3 and step3["watchlist"]["added"] == 1 and step3["watchlist"]["per_line"] == {"pump": ["B0RIVAL001"]}
+    rival = db.scalar(select(AmzCompetitor).where(AmzCompetitor.asin == "B0RIVAL001"))
+    assert rival.source == "brand_analytics" and rival.whose == "competitor" and rival.product_line == "pump" and rival.active
+    assert db.scalar(select(AmzCompetitor).where(AmzCompetitor.asin == "B0CHAIR001")) is None  # 椅子不是泵的对手
+    step4 = ba.run(db, fake, db.get(AmzStore, "03us"), today=today_ba)  # 同站点同周别的店:不再拉报表
+    assert step4["skipped"] == "already imported" and fake.created == [ba.REPORT_BA_SEARCH_TERMS]
+    board = comps.board(db, marketplace="US")
+    rival_row = next(b for b in board if b["asin"] == "B0RIVAL001")
+    assert rival_row["ba_terms"] == [{"term": "portable shower", "rank": 1, "click_share": 0.23, "week_start": "2026-09-06"}]
+    # 掉出前五 → 系统来源的停盯;再回来 → 复活
+    newcomer = {"search_term": "portable shower", "product_line": "pump", "search_frequency_rank": 800, "click_rank": 1, "asin": "B0RIVAL002", "item_name": "New Portable Shower", "click_share": 0.3, "conversion_share": 0.3}
+    ba.store_week(db, marketplace="US", week_start=date(2026, 9, 6), rows=[newcomer])
+    moved = ba.apply_watchlist(db, "US")
+    db.commit()
+    assert moved["added"] == 1 and moved["retired"] == 1 and db.get(AmzCompetitor, rival.id).active is False
+    ba.store_week(db, marketplace="US", week_start=date(2026, 9, 6), rows=[newcomer, {**newcomer, "click_rank": 2, "asin": "B0RIVAL001", "item_name": "Rival Portable Shower", "click_share": 0.2}])
+    assert ba.apply_watchlist(db, "US")["reactivated"] == 1
+    db.commit()
+
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
     assert created == 21  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily;fx_daily 只给欧元店 01de;出网作业因无凭据一条不排
@@ -500,3 +567,19 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     for name in ("amz-worker:03us:rules_daily", "amz-worker:03us:experience_weekly", "amz-worker:03us:image_lookback"):
         assert name in beats and beats[name]["stale"] is False
     assert schedule_due_jobs(db) == 0  # 刚跑完,间隔内不再补
+    # 报表没好:作业放回队列、不写心跳
+    from backend.app.modules.amz_series import jobs as amz_jobs
+
+    waiting = AmzJob(store_code="01us", job_type="ba_competitors", status="running", run_after=datetime.now(UTC))
+    db.add(waiting)
+    db.commit()
+    monkey3 = pytest.MonkeyPatch()
+    monkey3.setitem(amz_jobs.HANDLERS, "ba_competitors", lambda store_code: {"waiting": "IN_PROGRESS", "deferred_seconds": 900})
+    try:
+        assert process_job({"id": waiting.id, "store_code": "01us", "job_type": "ba_competitors"}) is True
+    finally:
+        monkey3.undo()
+    db.expire_all()
+    again = db.get(AmzJob, waiting.id)
+    assert again.status == "pending" and again.run_after > datetime.now(UTC) + timedelta(seconds=800) and again.finished_at is None
+    assert "amz-worker:01us:ba_competitors" not in {beat["worker_name"] for beat in list_heartbeats(db)}

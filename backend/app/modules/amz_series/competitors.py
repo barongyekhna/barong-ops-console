@@ -1,7 +1,8 @@
 """A4 竞品盯盘(殷长辰):每天一张 Keepa 快照,只报变化。
 
 盯谁:
-- 对手:事实表里填的「对手 ASIN」、推新页填的对手、人在竞品页手动加的;
+- 对手:**主要来自品牌分析**——我们核心词的点击前三,系统每周自己算(ba_competitors.py),人不用填;
+  事实表里的「对手 ASIN」、竞品页手动加的只是补充;
 - 自家:销售与流量报表里出现过的子 ASIN(评分、评论数和对手放在一起看才有意义)。
 
 每天一次、每个 ASIN 一个 Keepa token(stats=1、不拉历史),台账桶 amz_keepa_tokens 默认每天 150 个封顶。
@@ -259,6 +260,9 @@ def board(db: Session, *, marketplace: str | None = None) -> list[dict[str, Any]
     q = select(AmzCompetitor).where(AmzCompetitor.active.is_(True))
     if marketplace:
         q = q.where(AmzCompetitor.marketplace == marketplace.upper())
+    from . import ba_competitors  # noqa: PLC0415
+
+    ba_terms: dict[str, dict[str, list[dict[str, Any]]]] = {}
     out = []
     for comp in db.scalars(q.order_by(AmzCompetitor.product_line, AmzCompetitor.whose, AmzCompetitor.asin)):
         snaps = list(db.scalars(select(AmzCompetitorSnapshot).where(AmzCompetitorSnapshot.marketplace == comp.marketplace, AmzCompetitorSnapshot.asin == comp.asin).order_by(AmzCompetitorSnapshot.snap_date.desc()).limit(2)))
@@ -268,7 +272,7 @@ def board(db: Session, *, marketplace: str | None = None) -> list[dict[str, Any]
                 return None
             return {"date": s.snap_date.isoformat(), "title": s.title, "brand": s.brand, "price": float(s.price) if s.price is not None else None, "in_stock": s.in_stock, "rating": float(s.rating) if s.rating is not None else None, "reviews": s.reviews, "bsr": s.bsr, "monthly_sold": s.monthly_sold, "coupon": s.coupon}
 
-        out.append({"id": str(comp.id), "marketplace": comp.marketplace, "asin": comp.asin, "product_line": comp.product_line, "product_line_label": PRODUCT_LINE_LABELS.get(comp.product_line, comp.product_line), "whose": comp.whose, "label": comp.label, "source": comp.source, "latest": _s(snaps[0] if snaps else None), "previous": _s(snaps[1] if len(snaps) > 1 else None)})
+        out.append({"id": str(comp.id), "marketplace": comp.marketplace, "asin": comp.asin, "product_line": comp.product_line, "product_line_label": PRODUCT_LINE_LABELS.get(comp.product_line, comp.product_line), "whose": comp.whose, "label": comp.label, "source": comp.source, "ba_terms": ba_terms.setdefault(comp.marketplace, ba_competitors.terms_by_asin(db, comp.marketplace)).get(comp.asin, []), "latest": _s(snaps[0] if snaps else None), "previous": _s(snaps[1] if len(snaps) > 1 else None)})
     return out
 
 

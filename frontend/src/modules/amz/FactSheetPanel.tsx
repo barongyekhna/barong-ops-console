@@ -310,7 +310,7 @@ export function FactSheetPanel({ stores, canWrite }: { stores: AmzStore[]; canWr
               <input disabled={!canWrite} inputMode="decimal" onChange={(e) => set("price_usd", e.target.value)} value={draft.price_usd} />
             </label>
             <label>
-              对手 ASIN(逗号分开)
+              对手 ASIN(选填 · 系统会从品牌分析自己找)
               <input disabled={!canWrite} onChange={(e) => set("competitor_asins", e.target.value)} placeholder="B0XXXXXXXX, B0YYYYYYYY" value={draft.competitor_asins} />
             </label>
           </div>

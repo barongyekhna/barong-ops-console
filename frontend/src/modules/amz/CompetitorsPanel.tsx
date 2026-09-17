@@ -26,7 +26,20 @@ function Row({ item }: { item: AmzCompetitor }) {
     <tr>
       <td>
         <code>{item.asin}</code>
-        <div className={styles.muted}>{item.label || s?.brand || ""}{item.whose === "ours" ? " · 自家" : ""}</div>
+        <div className={styles.muted}>
+          {item.whose === "ours" ? "自家 · " : ""}
+          {s?.brand || item.label || ""}
+        </div>
+        {item.ba_terms.length ? (
+          <div className={styles.muted}>
+            {item.ba_terms
+              .slice(0, 3)
+              .map((t) => `「${t.term}」点击第${t.rank}${t.click_share != null ? ` ${(t.click_share * 100).toFixed(1)}%` : ""}`)
+              .join(" · ")}
+          </div>
+        ) : item.source !== "brand_analytics" && item.whose === "competitor" ? (
+          <div className={styles.muted}>{item.source === "manual" ? "人手加的" : "事实表里的"}</div>
+        ) : null}
       </td>
       <td>{item.product_line_label}</td>
       <td>
@@ -50,7 +63,8 @@ function Row({ item }: { item: AmzCompetitor }) {
 }
 
 /**
- * 殷长辰的竞品盯盘:名单来自事实表里的对手 ASIN + 自家子 ASIN,也可手加。
+ * 殷长辰的竞品盯盘:对手由系统每周从品牌分析算——我们真出过单的核心词,点击前三里的同类商品(剔掉自家),每条产品线前 5;
+ * 自家子 ASIN 从销售报表来。手加只是补充,不需要人填。
  * Keepa 每天一张快照,只在「变化」时出建议(价格 ±8%、断货、评分、评论一周猛涨、排名大涨)。这一页不碰亚马逊。
  */
 export function CompetitorsPanel() {
@@ -100,7 +114,7 @@ export function CompetitorsPanel() {
         <div className={styles.panelHead}>
           <h2>竞品 · 殷长辰盯盘</h2>
           <span className={styles.muted}>
-            Keepa 每天一张快照,只报变化 · 名单 {items.length} 个,已拍 {snapped} 个
+            对手每周从品牌分析自动选(核心词点击前三) · Keepa 每天一张快照,只报变化 · 对手 {items.filter((i) => i.whose === "competitor").length} 个、自家 {items.filter((i) => i.whose === "ours").length} 个,有快照 {snapped} 个
           </span>
         </div>
         <div className={styles.sheetActions}>
@@ -131,12 +145,15 @@ export function CompetitorsPanel() {
               {items.length === 0 ? (
                 <tr>
                   <td className={styles.muted} colSpan={8}>
-                    名单是空的:在事实表的「竞品 ASIN」里填,或在下面手加
+                    名单还是空的:系统每周从品牌分析里自己找对手(核心词点击前三),报表生成要一点时间
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+        </div>
+        <div className={styles.muted} style={{ padding: "8px 2px 0" }}>
+          补充(一般用不上):系统没选到但你想盯的
         </div>
         <div className={styles.sheetRow}>
           <label>

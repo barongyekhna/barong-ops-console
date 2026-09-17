@@ -217,6 +217,16 @@ def update_inputs(db: Session, *, launch: AmzLaunch, patch: dict[str, Any]) -> A
     return launch
 
 
+def _derived_competitors(db: Session, launch: AmzLaunch) -> list[str]:
+    """人没填就用系统从品牌分析选出来的对手(同站点、同产品线、在盯的)。"""
+    from .models import AmzCompetitor, AmzStore  # noqa: PLC0415
+
+    store = db.get(AmzStore, launch.store_code)
+    if store is None:
+        return []
+    return list(db.scalars(select(AmzCompetitor.asin).where(AmzCompetitor.marketplace == store.country, AmzCompetitor.product_line == launch.product_line, AmzCompetitor.whose == "competitor", AmzCompetitor.active.is_(True)).order_by(AmzCompetitor.created_at)))
+
+
 def refresh(db: Session, *, launch: AmzLaunch) -> AmzLaunch:
     """重算所有能算的:损益、战场(对手差评坑)、清单、蜜月指标。"""
     sheet = fact_sheets.ready_for(db, product_line=launch.product_line, use="pnl", store_code=launch.store_code, sku=launch.sku)
@@ -227,7 +237,7 @@ def refresh(db: Session, *, launch: AmzLaunch) -> AmzLaunch:
     launch.pnl_json = pnl
     inputs = launch.inputs_json or {}
     launch.battlefield_json = {
-        "competitor_asins": inputs.get("competitor_asins") or (facts.get("competitor_asins") or []),
+        "competitor_asins": inputs.get("competitor_asins") or (facts.get("competitor_asins") or []) or _derived_competitors(db, launch),
         "keywords": inputs.get("keywords") or [],
         "window_note": inputs.get("window_note") or "",
         "pits": reviews.top_pits(db, product_line=launch.product_line),

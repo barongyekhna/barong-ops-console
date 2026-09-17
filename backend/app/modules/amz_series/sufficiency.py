@@ -37,13 +37,14 @@ FIELD_LABELS = {
     "cost.factory_cny": "成本:出厂价(元)",
     "cost.freight_cny": "成本:头程(元)",
     "cost.price_usd": "售价(美元)",
-    "competitor_asins": "对手 ASIN(至少一个)",
+    "competitor_asins": "对手 ASIN(补充;系统会从品牌分析自己找)",
 }
 
 # 每种用途的硬清单。
 CHECKLISTS: dict[str, tuple[str, ...]] = {
     "copy": ("is", "how_it_works", "is_not", "specs", "indicators", "package", "audience", "misreadings"),
-    "image": ("is", "specs.dimensions_cm", "package", "indicators", "audience", "competitor_asins"),
+    # 对手 ASIN 不在清单里:系统每周从品牌分析自己算(ba_competitors),人不用填;事实表那一栏只是补充。
+    "image": ("is", "specs.dimensions_cm", "package", "indicators", "audience"),
     "faq": ("is", "is_not", "how_it_works", "indicators", "misreadings"),
     "pnl": ("cost.factory_cny", "cost.freight_cny", "cost.price_usd", "specs.weight_g", "specs.dimensions_cm"),
 }

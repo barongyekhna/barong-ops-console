@@ -34,10 +34,11 @@ JOB_EXPERIENCE_WEEKLY = "experience_weekly"
 JOB_LAUNCH_DAILY = "launch_daily"
 JOB_FX_DAILY = "fx_daily"
 JOB_COMPETITOR_DAILY = "competitor_daily"
+JOB_BA_COMPETITORS = "ba_competitors"
 # 作业 → 期望间隔(秒)。心跳的 expected_interval 也用它;超过 3 倍没干成活 = stale。
-JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600}
+JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600, JOB_BA_COMPETITORS: 7 * 24 * 3600}
 # 要出网的作业:只在店铺有 SP-API 凭据时才排。
-API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY})
+API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY, JOB_BA_COMPETITORS})
 # 失败后的重试间隔:失败不等于「该再排一条」,否则一个坏凭据会每 15 秒失败一次刷满作业表。
 FAILED_RETRY_SECONDS = 3600
 _TABLE = "amz_jobs"
@@ -313,7 +314,15 @@ def run_competitor_daily(store_code: str) -> dict[str, Any]:
         return {**out, "watchlist_added": watch["added"]}
 
 
+def run_ba_competitors(store_code: str) -> dict[str, Any]:
+    """品牌分析搜索词报表 → 核心词点击前三 → 竞品名单(站点级,一周一次;报表没好就 deferred,不写心跳)。"""
+    from . import ba_competitors  # noqa: PLC0415
+
+    return _with_client(store_code, lambda db, client, store: ba_competitors.run(db, client, store))
+
+
 HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {
+    JOB_BA_COMPETITORS: run_ba_competitors,
     JOB_RULES_DAILY: run_rules_daily,
     JOB_COMPETITOR_DAILY: run_competitor_daily,
     JOB_FX_DAILY: run_fx_daily,
@@ -339,6 +348,19 @@ def process_job(job: dict[str, Any]) -> bool:
         with SessionLocal() as db:
             record_failure(db, worker_name=heartbeat_name(store_code, job_type), error=str(exc)[:500], module_key=MODULE_KEY, expected_interval_seconds=JOB_INTERVALS[job_type])
         return False
+    deferred = result.get("deferred_seconds") if isinstance(result, dict) else None
+    if deferred:
+        # 还没干成(比如报表还在生成):放回队列过一会再来,不写心跳——心跳只记真干成的活
+        with SessionLocal() as db:
+            row = db.get(AmzJob, job["id"])
+            if row is not None:
+                row.status = "pending"
+                row.run_after = datetime.now(UTC) + timedelta(seconds=float(deferred))
+                row.payload_json = result
+                db.add(row)
+                db.commit()
+        logger.info("amz job deferred store=%s job=%s result=%s", store_code, job_type, result)
+        return True
     finish(job["id"], "done", payload=result)
     with SessionLocal() as db:
         record_success(db, worker_name=heartbeat_name(store_code, job_type), module_key=MODULE_KEY, expected_interval_seconds=JOB_INTERVALS[job_type])

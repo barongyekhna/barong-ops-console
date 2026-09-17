@@ -181,6 +181,7 @@ from ..modules.amz_series.models import (
     AmzExperience,
     AmzLaunch,
     AmzReview,
+    AmzBaTopClick,
     AmzCompetitor,
     AmzCompetitorSnapshot,
 )

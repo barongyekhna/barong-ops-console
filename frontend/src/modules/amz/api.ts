@@ -388,6 +388,8 @@ export type AmzCompetitor = {
   whose: "competitor" | "ours";
   label: string | null;
   source: string;
+  /** 最新一周品牌分析里,这个 ASIN 在我们哪些核心词上点击排第几(系统自己选对手的依据)。 */
+  ba_terms: { term: string; rank: number; click_share: number | null; week_start: string }[];
   latest: AmzCompetitorSnap | null;
   previous: AmzCompetitorSnap | null;
 };

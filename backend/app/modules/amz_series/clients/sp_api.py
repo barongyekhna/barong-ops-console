@@ -16,6 +16,8 @@ import json
 import logging
 import os
 import time
+import zlib
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable
@@ -253,6 +255,21 @@ class SpApiClient:
         if str(document.get("compressionAlgorithm") or "").upper() == "GZIP":
             raw = gzip.decompress(raw)
         return raw
+
+    def stream_document(self, document: dict[str, Any], *, chunk_size: int = 1 << 20) -> Iterator[bytes]:
+        """大报表(品牌分析搜索词,全站几百万行)边下边解压,不整份进内存。"""
+        gz = str(document.get("compressionAlgorithm") or "").upper() == "GZIP"
+        inflater = zlib.decompressobj(wbits=31) if gz else None
+        with self._http.stream("GET", str(document["url"]), headers={"User-Agent": self.user_agent}, timeout=httpx.Timeout(120.0)) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes(chunk_size):
+                out = inflater.decompress(chunk) if inflater is not None else chunk
+                if out:
+                    yield out
+        if inflater is not None:
+            tail = inflater.flush()
+            if tail:
+                yield tail
 
     def wait_report(self, report_id: str, *, poll_seconds: float = 15.0, max_wait: float = 1800.0) -> dict[str, Any]:
         deadline = self._clock() + max_wait

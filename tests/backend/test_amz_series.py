@@ -92,7 +92,7 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
     assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
-    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors"
+    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors" and order[i + 10] == "20260917_05_amz_ba_top_clicks"
     comp_mig = (versions / "20260917_04_amz_competitors.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260917_03_amz_launches"' in comp_mig and 'sa.Column("org_id"' not in comp_mig
     launch_mig = (versions / "20260917_03_amz_launches.py").read_text(encoding="utf-8")
@@ -406,8 +406,8 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400}
-    assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400, "ba_competitors": 7 * 86400}
+    assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly", "ba_competitors"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
     assert "backend.app.modules.amz_series.worker_main" in compose and "container_name: amz-worker" in compose
@@ -654,3 +654,40 @@ def test_competitor_parse_and_diff() -> None:
     from r_system_v2.ra import quota_ledger as ql
 
     assert ql.DEFAULT_DAILY_BUDGETS[ql.PROVIDER_AMZ_KEEPA] == 150
+
+
+# ---------------------------------------------------------------- 竞品名单自动派生(品牌分析,纯函数)
+
+
+def test_ba_report_stream_parser_and_picks() -> None:
+    import json as _json
+    from datetime import date as _date
+    from decimal import Decimal as _D
+    from types import SimpleNamespace as _N
+
+    from backend.app.modules.amz_series import ba_competitors as ba
+
+    rows = [
+        {"departmentName": "Amazon.com", "searchTerm": "Portable Shower", "searchFrequencyRank": 900, "clickedAsin": "B0RIVAL001", "clickedItemName": 'Rival "Pro" shower {7800mAh}, ]pump[', "clickShareRank": 1, "clickShare": 0.2312, "conversionShare": 0.19},
+        {"departmentName": "Amazon.com", "searchTerm": "portable shower", "searchFrequencyRank": 900, "clickedAsin": "B0OURS0001", "clickedItemName": "Our shower", "clickShareRank": 2, "clickShare": 0.1, "conversionShare": 0.1},
+        {"departmentName": "Amazon.com", "searchTerm": "camping essentials", "searchFrequencyRank": 50, "clickedAsin": "B0CHAIR001", "clickedItemName": "Camping chair", "clickShareRank": 1, "clickShare": 0.3, "conversionShare": 0.2},
+        {"departmentName": "Amazon.com", "searchTerm": "water heater", "searchFrequencyRank": 5000, "clickedAsin": "B0TANK0001", "clickedItemName": "Tank water heater 50 gal", "clickShareRank": 1, "clickShare": 0.4, "conversionShare": 0.1},
+        {"departmentName": "Amazon.com", "searchTerm": "water heater", "searchFrequencyRank": 5000, "clickedAsin": "B0IMMERSE1", "clickedItemName": "Immersion water heater 1500W", "clickShareRank": 2, "clickShare": 0.2, "conversionShare": 0.3},
+    ]
+    doc = _json.dumps({"reportSpecification": {"reportType": ba.REPORT_BA_SEARCH_TERMS, "dataStartTime": "2026-09-06"}, "dataByDepartmentAndSearchTerm": rows}, ensure_ascii=False).encode("utf-8")
+    for size in (1, 3, 7, 64, len(doc)):  # 任意切块(包括把中文、转义、括号切两半)都得原样还原
+        parsed = list(ba.iter_report_rows(doc[i : i + size] for i in range(0, len(doc), size)))
+        assert parsed == rows, size
+    with pytest.raises(ValueError):
+        list(ba.iter_report_rows([doc[: len(doc) - 30]]))
+
+    assert ba.line_of_term("ducha portatil") == "pump" and ba.line_of_term("camping essentials") is None and ba.line_of_term("pool heater") is None and ba.line_of_term("immersion heater") == "heater"
+    core = {"pump": ["portable shower"], "heater": ["water heater"]}
+    kept, seen = ba.filter_core_rows(rows, core)
+    assert seen == 5 and [r["asin"] for r in kept] == ["B0RIVAL001", "B0OURS0001", "B0TANK0001", "B0IMMERSE1"]
+    assert kept[0]["search_term"] == "portable shower" and kept[0]["click_share"] == _D("0.2312")
+    picks = ba.pick_competitors([_N(**r) for r in kept], {"B0OURS0001"})
+    assert picks == {"pump": [("B0RIVAL001", 'Rival "Pro" shower {7800mAh}, ]pump[', 0.2312)], "heater": [("B0IMMERSE1", "Immersion water heater 1500W", 0.2)]}  # 自家剔掉、储水式热水器不算热水棒对手
+
+    assert ba.target_week(_date(2026, 9, 17)) == (_date(2026, 9, 6), _date(2026, 9, 12))  # 周四:上周六结束已 5 天
+    assert ba.target_week(_date(2026, 9, 15)) == (_date(2026, 8, 30), _date(2026, 9, 5))  # 周二:上周六才过 3 天,再往前一周

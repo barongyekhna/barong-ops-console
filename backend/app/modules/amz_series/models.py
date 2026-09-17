@@ -602,6 +602,26 @@ class AmzCompetitorSnapshot(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class AmzBaTopClick(Base):
+    """品牌分析搜索词报表:我们核心词的点击前三(每周)。竞品名单从这里派生,不用人填。"""
+
+    __tablename__ = "amz_ba_top_clicks"
+    __table_args__ = (UniqueConstraint("marketplace", "week_start", "search_term", "click_rank", name="uq_amz_ba_top_clicks_week_term_rank"), Index("ix_amz_ba_top_clicks_asin", "marketplace", "asin", "week_start"))
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    marketplace: Mapped[str] = mapped_column(String(4), nullable=False)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    search_term: Mapped[str] = mapped_column(Text, nullable=False)
+    product_line: Mapped[str] = mapped_column(String(32), nullable=False)
+    search_frequency_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    click_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    asin: Mapped[str] = mapped_column(String(16), nullable=False)
+    item_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    click_share: Mapped[Decimal | None] = mapped_column(Numeric(7, 4), nullable=True)
+    conversion_share: Mapped[Decimal | None] = mapped_column(Numeric(7, 4), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
