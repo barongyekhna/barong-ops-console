@@ -402,13 +402,14 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
     as_of = as_of or store_as_of(db, store_code)
     if as_of is None:
         return {"drafts": 0, "created": 0, "updated": 0, "skipped_decided": 0}
+    from .competitors import rule_competitor_changes  # noqa: PLC0415
     from .rules_c import C_RULES  # noqa: PLC0415 — 依赖本模块的 Draft,放这里避免循环导入
     from .rules_cross import CROSS_RULES  # noqa: PLC0415
 
     from . import experience  # noqa: PLC0415
 
     drafts: list[SuggestionDraft] = []
-    for rule in (*RULES, *CROSS_RULES, *C_RULES):
+    for rule in (*RULES, *CROSS_RULES, *C_RULES, rule_competitor_changes):
         drafts.extend(rule(db, store_code, currency, as_of))
     # 生成前查经验库:相关经验附在建议上;被反复驳回 / 命中率太低的那类降一档。
     advice_cache: dict[str, dict[str, Any]] = {}

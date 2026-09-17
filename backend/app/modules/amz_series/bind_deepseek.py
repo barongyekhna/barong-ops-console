@@ -32,10 +32,12 @@ SOURCE_MARK = "amz_bind_deepseek"
 SOURCE_MODULE = "k.product_knowledge"
 DEEPSEEK_ALIAS = provider_key_alias("deepseek")
 # 2026-09-17:同一把梯子也给看图模型用(图片四道门走 chatgpt / 4sapi)。--provider chatgpt。
-PROVIDERS = ("deepseek", "chatgpt")
+PROVIDERS = ("deepseek", "chatgpt", "keepa")
+# 源钥匙在哪个模块下找:deepseek/chatgpt 在 K,keepa 在 R 仓库。
+SOURCE_MODULE_BY_PROVIDER = {"deepseek": "k.product_knowledge", "chatgpt": "k.product_knowledge", "keepa": "r.warehouse"}
 
 
-def find_source_key(db: Session, *, key_id: str | None, alias: str = DEEPSEEK_ALIAS) -> ApiKeyRecord:
+def find_source_key(db: Session, *, key_id: str | None, alias: str = DEEPSEEK_ALIAS, source_module: str = SOURCE_MODULE) -> ApiKeyRecord:
     if key_id:
         record = db.scalar(select(ApiKeyRecord).where(ApiKeyRecord.key_id == key_id, ApiKeyRecord.status == "active"))
         if record is None:
@@ -44,14 +46,14 @@ def find_source_key(db: Session, *, key_id: str | None, alias: str = DEEPSEEK_AL
     binding = db.scalar(
         select(ApiKeyModuleBindingRecord)
         .where(
-            ApiKeyModuleBindingRecord.module_id == SOURCE_MODULE,
+            ApiKeyModuleBindingRecord.module_id == source_module,
             ApiKeyModuleBindingRecord.key_alias == alias,
             ApiKeyModuleBindingRecord.status == "active",
         )
         .order_by(ApiKeyModuleBindingRecord.created_at)
     )
     if binding is None:
-        raise SystemExit(f"找不到 {SOURCE_MODULE} 的 {alias} 绑定,用 --source-key-id 指定")
+        raise SystemExit(f"找不到 {source_module} 的 {alias} 绑定,用 --source-key-id 指定")
     record = db.scalar(select(ApiKeyRecord).where(ApiKeyRecord.key_id == binding.key_id))
     if record is None or record.status != "active":
         raise SystemExit("源 DeepSeek 钥匙不是 active")
@@ -99,8 +101,8 @@ def copy_key_into_org(db: Session, *, source: ApiKeyRecord, org_id: str) -> ApiK
     return record
 
 
-def plan(db: Session, *, source_key_id: str | None, alias: str = DEEPSEEK_ALIAS) -> list[dict[str, Any]]:
-    source = find_source_key(db, key_id=source_key_id, alias=alias)
+def plan(db: Session, *, source_key_id: str | None, alias: str = DEEPSEEK_ALIAS, source_module: str = SOURCE_MODULE) -> list[dict[str, Any]]:
+    source = find_source_key(db, key_id=source_key_id, alias=alias, source_module=source_module)
     rows: list[dict[str, Any]] = []
     for company in COMPANIES:
         binding = existing_binding(db, org_id=company.org_id, alias=alias)
@@ -116,8 +118,8 @@ def plan(db: Session, *, source_key_id: str | None, alias: str = DEEPSEEK_ALIAS)
     return rows
 
 
-def apply(db: Session, *, source_key_id: str | None, alias: str = DEEPSEEK_ALIAS) -> list[dict[str, Any]]:
-    source = find_source_key(db, key_id=source_key_id, alias=alias)
+def apply(db: Session, *, source_key_id: str | None, alias: str = DEEPSEEK_ALIAS, source_module: str = SOURCE_MODULE) -> list[dict[str, Any]]:
+    source = find_source_key(db, key_id=source_key_id, alias=alias, source_module=source_module)
     out: list[dict[str, Any]] = []
     for company in COMPANIES:
         if existing_binding(db, org_id=company.org_id, alias=alias) is not None:
@@ -166,6 +168,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--provider", default="deepseek", choices=PROVIDERS)
     args = parser.parse_args(argv)
     alias = provider_key_alias(args.provider)
+    source_module = SOURCE_MODULE_BY_PROVIDER[args.provider]
     with without_org_data_isolation(), SessionLocal() as db:
         if args.undo:
             if not args.execute:
@@ -176,9 +179,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"undo": result}, ensure_ascii=False))
             return 0
         if not args.execute:
-            print(json.dumps({"plan": plan(db, source_key_id=args.source_key_id, alias=alias)}, ensure_ascii=False))
+            print(json.dumps({"plan": plan(db, source_key_id=args.source_key_id, alias=alias, source_module=source_module)}, ensure_ascii=False))
             return 0
-        result = apply(db, source_key_id=args.source_key_id, alias=alias)
+        result = apply(db, source_key_id=args.source_key_id, alias=alias, source_module=source_module)
         db.commit()
         print(json.dumps({"applied": result}, ensure_ascii=False))
     return 0

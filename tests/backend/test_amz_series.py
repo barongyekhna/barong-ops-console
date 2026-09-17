@@ -92,7 +92,9 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
     assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
-    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches"
+    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors"
+    comp_mig = (versions / "20260917_04_amz_competitors.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260917_03_amz_launches"' in comp_mig and 'sa.Column("org_id"' not in comp_mig
     launch_mig = (versions / "20260917_03_amz_launches.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260917_02_amz_experience"' in launch_mig and 'sa.Column("org_id"' not in launch_mig
     exp_mig = (versions / "20260917_02_amz_experience.py").read_text(encoding="utf-8")
@@ -404,7 +406,7 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
@@ -607,3 +609,48 @@ def test_work_log_route_is_registered_and_proxied() -> None:
     assert ("/amz/work-log", ("GET",)) in paths
     proxy = (REPO / "frontend/src/app/api/backend/[...path]/route.ts").read_text(encoding="utf-8")
     assert '"work-log"' in proxy
+
+
+# ---------------------------------------------------------------- 竞品盯盘(纯函数)
+
+
+def test_competitor_parse_and_diff() -> None:
+    from datetime import date as _date
+    from decimal import Decimal as _D
+    from types import SimpleNamespace as _N
+
+    from backend.app.modules.amz_series import competitors as cp
+
+    current = [-1] * 20
+    current[cp.IDX_BUY_BOX], current[cp.IDX_RATING], current[cp.IDX_REVIEWS], current[cp.IDX_SALES_RANK] = 3298, 45, 814, 1960
+    snap = cp.parse_product({"asin": "B0DZPBH6V3", "title": "vignuto shower", "brand": "vignuto", "stats": {"current": current}, "monthlySold": 2000, "coupon": [-10, 0]})
+    assert snap["price"] == _D("32.98") and snap["rating"] == _D("4.5") and snap["reviews"] == 814 and snap["bsr"] == 1960 and snap["in_stock"] is True and snap["coupon"] == "10%" and snap["monthly_sold"] == 2000
+    gone = cp.parse_product({"asin": "X", "stats": {"current": [-1] * 20}})
+    assert gone["price"] is None and gone["in_stock"] is False
+
+    prev = _N(price=_D("32.98"), in_stock=True, rating=_D("4.5"), reviews=814, bsr=2000, snap_date=_date(2026, 9, 10))
+    now = _N(price=_D("27.98"), in_stock=True, rating=_D("4.3"), reviews=815, bsr=1000, snap_date=_date(2026, 9, 11))
+    week = _N(price=None, in_stock=True, rating=None, reviews=700, bsr=None, snap_date=_date(2026, 9, 4))
+    kinds = {c["kind"]: c for c in cp.diff(prev, now, week_ago=week)}
+    assert set(kinds) == {"price_drop", "rating", "reviews_jump", "bsr_up"}
+    assert kinds["price_drop"]["severity"] == "warn" and kinds["price_drop"]["handoff"] == ["D", "A"]
+    out = cp.diff(prev, _N(price=None, in_stock=False, rating=_D("4.5"), reviews=814, bsr=2000, snap_date=_date(2026, 9, 11)))
+    assert [c["kind"] for c in out] == ["out_of_stock"] and out[0]["handoff"] == ["D"]
+    assert cp.diff(prev, _N(price=_D("33.50"), in_stock=True, rating=_D("4.5"), reviews=820, bsr=1900, snap_date=_date(2026, 9, 11))) == []  # 小波动不报
+
+    class _Resp:
+        status_code = 200
+        text = ""
+        content = b'{"products": [{"asin": "B0DZPBH6V3", "stats": {"current": []}}], "tokensLeft": 42}'
+
+    seen = {}
+
+    def fake_get(url, params):
+        seen.update(params)
+        return _Resp()
+
+    products, left = cp.fetch_products(base_url="https://api.keepa.com", key="K", marketplace="DE", asins=["B0DZPBH6V3"], get=fake_get)
+    assert left == 42 and products[0]["asin"] == "B0DZPBH6V3" and seen["domain"] == 3 and seen["history"] == 0 and seen["stats"] == 1
+    from r_system_v2.ra import quota_ledger as ql
+
+    assert ql.DEFAULT_DAILY_BUDGETS[ql.PROVIDER_AMZ_KEEPA] == 150

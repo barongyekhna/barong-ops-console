@@ -33,8 +33,9 @@ JOB_IMAGE_LOOKBACK = "image_lookback"
 JOB_EXPERIENCE_WEEKLY = "experience_weekly"
 JOB_LAUNCH_DAILY = "launch_daily"
 JOB_FX_DAILY = "fx_daily"
+JOB_COMPETITOR_DAILY = "competitor_daily"
 # 作业 → 期望间隔(秒)。心跳的 expected_interval 也用它;超过 3 倍没干成活 = stale。
-JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600}
+JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600}
 # 要出网的作业:只在店铺有 SP-API 凭据时才排。
 API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY})
 # 失败后的重试间隔:失败不等于「该再排一条」,否则一个坏凭据会每 15 秒失败一次刷满作业表。
@@ -54,6 +55,17 @@ def heartbeat_name(store_code: str, job_type: str) -> str:
 
 
 # ---------------------------------------------------------------- 排队
+
+
+def _has_keepa(db: Session, store: AmzStore) -> bool:
+    from ...models.api_keys import ApiKeyModuleBindingRecord  # noqa: PLC0415
+    from ...services.data_isolation import without_org_data_isolation  # noqa: PLC0415
+    from .constants import KEY_ALIAS_KEEPA  # noqa: PLC0415
+
+    with without_org_data_isolation():
+        found = db.scalar(select(ApiKeyModuleBindingRecord.id).where(ApiKeyModuleBindingRecord.org_id == store.company_org_id, ApiKeyModuleBindingRecord.module_id == MODULE_KEY, ApiKeyModuleBindingRecord.key_alias == KEY_ALIAS_KEEPA, ApiKeyModuleBindingRecord.status == "active"))
+    db.commit()
+    return found is not None
 
 
 def schedule_due_jobs(db: Session, *, now: datetime | None = None) -> int:
@@ -76,6 +88,8 @@ def schedule_due_jobs(db: Session, *, now: datetime | None = None) -> int:
                 continue
             if job_type == JOB_FX_DAILY and store.currency == "USD":
                 continue  # 美元店不需要汇率
+            if job_type == JOB_COMPETITOR_DAILY and not _has_keepa(db, store):
+                continue  # 这家公司还没绑 Keepa 钥匙
             active = db.scalar(
                 select(AmzJob.id).where(
                     AmzJob.store_code == store_code,
@@ -273,8 +287,35 @@ def run_fx_daily(store_code: str) -> dict[str, Any]:
         return out
 
 
+def run_competitor_daily(store_code: str) -> dict[str, Any]:
+    """补名单 → 这家店所在站点今天还没拍的 ASIN 拍 Keepa 快照(台账封顶)→ 变化规则跟着 rules_daily 出。"""
+    from r_system_v2.ra.quota_ledger import PROVIDER_AMZ_KEEPA, RAQuotaExhaustedError, try_consume  # noqa: PLC0415
+
+    from . import competitors  # noqa: PLC0415
+
+    with SessionLocal() as db:
+        store = db.get(AmzStore, store_code)
+        if store is None:
+            raise RuntimeError(f"store {store_code} missing")
+        watch = competitors.sync_watchlist(db)
+        db.commit()
+
+        def budget(amount: int) -> bool:
+            with SessionLocal() as ledger_db:
+                try:
+                    try_consume(ledger_db, PROVIDER_AMZ_KEEPA, amount=amount)
+                    return True
+                except RAQuotaExhaustedError:
+                    return False
+
+        out = competitors.snapshot_marketplace(db, store, budget=budget)
+        db.commit()
+        return {**out, "watchlist_added": watch["added"]}
+
+
 HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {
     JOB_RULES_DAILY: run_rules_daily,
+    JOB_COMPETITOR_DAILY: run_competitor_daily,
     JOB_FX_DAILY: run_fx_daily,
     JOB_LAUNCH_DAILY: run_launch_daily,
     JOB_EXPERIENCE_WEEKLY: run_experience_weekly,

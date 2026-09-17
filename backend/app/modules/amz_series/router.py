@@ -20,7 +20,7 @@ from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
-from . import experience, fact_sheets, images, launches, reviews, service, suggestions
+from . import competitors, experience, fact_sheets, images, launches, reviews, service, suggestions
 from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_VIEW, STORE_ROLES
 from .deps import StoreAccess, granted_store_codes, require_amz_access, require_store
 
@@ -490,6 +490,35 @@ def reviews_paste(payload: ReviewsPaste, db: Session = Depends(get_db), user: Us
 @router.get("/reviews/clusters")
 def reviews_clusters(product_line: str = Query(...), whose: str | None = Query(default=None), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
     return {"clusters": reviews.cluster_table(db, product_line=product_line, whose=whose), "pits": reviews.top_pits(db, product_line=product_line), "families": reviews.FAMILY_LABELS}
+
+
+# ---------------------------------------------------------------- 竞品盯盘(A4)
+
+
+class CompetitorAdd(BaseModel):
+    marketplace: str = Field(pattern="^(US|DE|us|de)$")
+    asin: str = Field(min_length=10, max_length=10)
+    product_line: str = Field(min_length=1, max_length=32)
+    whose: str = Field(default="competitor", pattern="^(competitor|ours)$")
+    label: str | None = Field(default=None, max_length=120)
+
+
+@router.get("/competitors")
+def competitors_board(marketplace: str | None = Query(default=None, pattern="^(US|DE|us|de)$"), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    return {"items": competitors.board(db, marketplace=marketplace)}
+
+
+@router.post("/competitors")
+def competitors_add(payload: CompetitorAdd, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    from .constants import STORE_ROLE_OPERATE, STORE_ROLE_RANK  # noqa: PLC0415
+
+    if not is_owner_role(user.role):
+        codes = granted_store_codes(db, user) or []
+        if not any(STORE_ROLE_RANK.get(service.grant_role_for(db, user=user, store_code=c, is_owner=False), 0) >= STORE_ROLE_RANK[STORE_ROLE_OPERATE] for c in codes):
+            raise HTTPException(status_code=403, detail="需要任一店铺「操作」角色")
+    added = competitors.upsert_competitor(db, marketplace=payload.marketplace, asin=payload.asin, product_line=payload.product_line, whose=payload.whose, source="manual", label=payload.label, actor_user_id=int(user.id))
+    db.commit()
+    return {"added": added, "items": competitors.board(db, marketplace=payload.marketplace)}
 
 
 # ---------------------------------------------------------------- 图片通道(A5):brief / 参考图 / 交稿 / 选定 / 上线

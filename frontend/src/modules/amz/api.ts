@@ -363,3 +363,39 @@ export function getWorkLog(params: { employee: string; store?: string; q?: strin
   if (params.q) query.set("q", params.q);
   return amzRequest<{ items: AmzWorkLogEntry[]; counts: Record<string, number> }>(`${BASE}/work-log?${query.toString()}`, "工作日志加载失败");
 }
+
+// ---------------------------------------------------------------- 竞品盯盘(殷长辰 · Keepa 每日快照)
+
+export type AmzCompetitorSnap = {
+  date: string;
+  title: string | null;
+  brand: string | null;
+  price: number | null;
+  in_stock: boolean | null;
+  rating: number | null;
+  reviews: number | null;
+  bsr: number | null;
+  monthly_sold: number | null;
+  coupon: string | null;
+};
+
+export type AmzCompetitor = {
+  id: string;
+  marketplace: string;
+  asin: string;
+  product_line: string;
+  product_line_label: string;
+  whose: "competitor" | "ours";
+  label: string | null;
+  source: string;
+  latest: AmzCompetitorSnap | null;
+  previous: AmzCompetitorSnap | null;
+};
+
+export function getCompetitors(marketplace?: string) {
+  const query = marketplace ? `?marketplace=${encodeURIComponent(marketplace)}` : "";
+  return amzRequest<{ items: AmzCompetitor[] }>(`${BASE}/competitors${query}`, "竞品名单加载失败");
+}
+export function addCompetitor(payload: { marketplace: string; asin: string; product_line: string; whose: "competitor" | "ours"; label?: string }) {
+  return amzRequest<{ added: boolean; items: AmzCompetitor[] }>(`${BASE}/competitors`, "加竞品失败", { body: payload, method: "POST" });
+}

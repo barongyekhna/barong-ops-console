@@ -181,6 +181,8 @@ from ..modules.amz_series.models import (
     AmzExperience,
     AmzLaunch,
     AmzReview,
+    AmzCompetitor,
+    AmzCompetitorSnapshot,
 )
 from ..modules.rd_series.models import (
     RdDevice,

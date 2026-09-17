@@ -22,7 +22,7 @@ from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
 from backend.app.modules.amz_series import experience, fact_sheets, images, launches, products, reports_sync, reviews, work_log
-from backend.app.modules.amz_series.models import AmzLaunch, AmzReview, AmzExperience, AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzOutcome, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
+from backend.app.modules.amz_series.models import AmzCompetitor, AmzCompetitorSnapshot, AmzLaunch, AmzReview, AmzExperience, AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzOutcome, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzFxRate, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -42,6 +42,8 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzCompetitorSnapshot))
+    session.execute(delete(AmzCompetitor))
     session.execute(delete(AmzReview))
     session.execute(delete(AmzLaunch))
     session.execute(delete(AmzExperience))
@@ -431,6 +433,50 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     launches.close(db, launch=launch, outcome="growth", retro={"lessons": ["冬季重推前先把「不加热」写进主图副标题"]}, actor=owner)
     db.commit()
     assert launch.stage == "growth" and db.scalar(select(AmzExperience).where(AmzExperience.kind == "launch")).statement.startswith("推新「03us 泵 冬季重推」进了成长期")
+
+    # 竞品盯盘:事实表里的对手 ASIN 进名单 → 两天快照(假 Keepa)→ 只给泵线主场店出变化草稿
+    from types import SimpleNamespace as _NS
+
+    from backend.app.modules.amz_series import competitors as comps
+
+    assert comps.sync_watchlist(db)["added"] >= 1  # 泵事实表里填了 B0AAAAAAA1
+    assert comps.upsert_competitor(db, marketplace="US", asin="B0AAAAAAA1", product_line="pump", whose="competitor", source="manual") is False  # 已在名单
+    db.commit()
+    day1, day2 = date(2026, 9, 10), date(2026, 9, 11)
+
+    def _keepa(price_cents, reviews):
+        cur = [-1] * 20
+        cur[comps.IDX_BUY_BOX], cur[comps.IDX_RATING], cur[comps.IDX_REVIEWS], cur[comps.IDX_SALES_RANK] = price_cents, 45, reviews, 2000
+
+        def _get(url, params):
+            import json as __json
+
+            products = [{"asin": a, "brand": "rival", "stats": {"current": cur}} for a in params["asin"].split(",")]
+            return _NS(status_code=200, text="", content=__json.dumps({"products": products, "tokensLeft": 99}).encode())
+
+        return _get
+
+    monkey2 = pytest.MonkeyPatch()
+    monkey2.setattr(comps, "keepa_key", lambda db, store: ("https://api.keepa.com", "K"))
+    spent = []
+    try:
+        us_store = db.get(AmzStore, "03us")
+        r1 = comps.snapshot_marketplace(db, us_store, today=day1, get=_keepa(3298, 800), budget=lambda n: spent.append(n) or True)
+        assert r1["snapped"] >= 1 and r1["tokens_left"] == 99
+        assert comps.snapshot_marketplace(db, db.get(AmzStore, "04us"), today=day1, get=_keepa(1, 1), budget=lambda n: spent.append(n) or True)["snapped"] == 0  # 同站点今天拍过,不重复花 token
+        comps.snapshot_marketplace(db, us_store, today=day2, get=_keepa(2798, 801), budget=lambda n: True)
+        db.commit()
+        assert sum(spent) == r1["snapped"]
+        assert comps.snapshot_marketplace(db, us_store, today=date(2026, 9, 12), get=_keepa(1, 1), budget=lambda n: False)["skipped_budget"] >= 1  # 台账封顶就不拍
+    finally:
+        monkey2.undo()
+    home = comps.home_store(db, marketplace="US", product_line="pump")
+    drafts = comps.rule_competitor_changes(db, home, "USD", day2)
+    assert any(d.evidence["asin"] == "B0AAAAAAA1" and d.evidence["kind"] == "price_drop" and d.employee == "C" for d in drafts)
+    other = next(s for s in ("01us", "03us", "04us") if s != home)
+    assert comps.rule_competitor_changes(db, other, "USD", day2) == []  # 非主场店不重复报
+    board = comps.board(db, marketplace="US")
+    assert any(b["asin"] == "B0AAAAAAA1" and b["latest"]["price"] == 27.98 and b["previous"]["price"] == 32.98 for b in board)
 
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)

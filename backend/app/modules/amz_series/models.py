@@ -560,6 +560,48 @@ class AmzReview(AmzTimestampMixin, Base):
     created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
+class AmzCompetitor(Base):
+    """盯的 ASIN:对手或自家。站点 + ASIN 唯一。无 org_id 列。"""
+
+    __tablename__ = "amz_competitors"
+    __table_args__ = (UniqueConstraint("marketplace", "asin", name="uq_amz_competitors_market_asin"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    marketplace: Mapped[str] = mapped_column(String(4), nullable=False)
+    asin: Mapped[str] = mapped_column(String(16), nullable=False)
+    product_line: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other", default="other")
+    whose: Mapped[str] = mapped_column(String(16), nullable=False, server_default="competitor", default="competitor")
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, server_default="manual", default="manual")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true", default=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class AmzCompetitorSnapshot(Base):
+    """每天一张 Keepa 快照。"""
+
+    __tablename__ = "amz_competitor_snapshots"
+    __table_args__ = (UniqueConstraint("marketplace", "asin", "snap_date", name="uq_amz_competitor_snap_day"), Index("ix_amz_competitor_snapshots_asin_date", "marketplace", "asin", "snap_date"))
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    marketplace: Mapped[str] = mapped_column(String(4), nullable=False)
+    asin: Mapped[str] = mapped_column(String(16), nullable=False)
+    snap_date: Mapped[date] = mapped_column(Date, nullable=False)
+    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    in_stock: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    rating: Mapped[Decimal | None] = mapped_column(Numeric(3, 1), nullable=True)
+    reviews: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bsr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    monthly_sold: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    coupon: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    raw_json: Mapped[dict[str, Any]] = mapped_column("raw", json_type(), nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
@@ -623,4 +665,6 @@ __all__ = [
     "AmzExperience",
     "AmzLaunch",
     "AmzReview",
+    "AmzCompetitor",
+    "AmzCompetitorSnapshot",
 ]

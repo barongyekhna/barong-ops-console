@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 import { AmzOverview } from "./AmzOverview";
 import { AmzWorkspace } from "./AmzWorkspace";
+import { CompetitorsPanel } from "./CompetitorsPanel";
 import { ImagesPanel } from "./ImagesPanel";
 import { LaunchPanel } from "./LaunchPanel";
 import styles from "./AmzOverview.module.css";
@@ -13,7 +14,7 @@ import styles from "./AmzOverview.module.css";
 export function AmzPage() {
   const params = useSearchParams();
   const raw = params.get("tab");
-  const tab = raw === "manage" ? "manage" : raw === "images" ? "images" : raw === "launch" ? "launch" : "overview";
+  const tab = raw === "manage" ? "manage" : raw === "images" ? "images" : raw === "launch" ? "launch" : raw === "competitors" ? "competitors" : "overview";
   return (
     <>
       <div className={styles.filters} role="tablist" aria-label="页面">
@@ -23,6 +24,9 @@ export function AmzPage() {
         <Link aria-selected={tab === "launch"} className={`${styles.chip} ${tab === "launch" ? styles.chipOn : ""}`} href="/amz?tab=launch" role="tab">
           推新 · 六步
         </Link>
+        <Link aria-selected={tab === "competitors"} className={`${styles.chip} ${tab === "competitors" ? styles.chipOn : ""}`} href="/amz?tab=competitors" role="tab">
+          竞品 · 殷长辰盯盘
+        </Link>
         <Link aria-selected={tab === "images"} className={`${styles.chip} ${tab === "images" ? styles.chipOn : ""}`} href="/amz?tab=images" role="tab">
           图片 · 殷熊的 brief
         </Link>
@@ -30,7 +34,7 @@ export function AmzPage() {
           管理 · 店铺 / 授权 / 种子
         </Link>
       </div>
-      {tab === "manage" ? <AmzWorkspace /> : tab === "launch" ? <LaunchPanel /> : tab === "images" ? <ImagesPanel briefId={params.get("brief")} suggestionId={params.get("suggestion")} /> : <AmzOverview />}
+      {tab === "manage" ? <AmzWorkspace /> : tab === "launch" ? <LaunchPanel /> : tab === "competitors" ? <CompetitorsPanel /> : tab === "images" ? <ImagesPanel briefId={params.get("brief")} suggestionId={params.get("suggestion")} /> : <AmzOverview />}
     </>
   );
 }
