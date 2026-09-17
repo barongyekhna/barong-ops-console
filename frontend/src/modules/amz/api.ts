@@ -14,6 +14,8 @@ export type AmzStoreAds = {
   acos_pct: number | null;
   first_date: string | null;
   last_date: string | null;
+  spend_usd?: number;
+  sales_usd?: number;
 };
 
 export type AmzStoreTransactions = {
@@ -38,6 +40,7 @@ export type AmzStore = {
   role: string;
   ads: AmzStoreAds;
   transactions: AmzStoreTransactions;
+  fx_latest?: { date: string; rate: number } | null;
 };
 
 export type AmzStoresResponse = {

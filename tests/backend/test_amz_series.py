@@ -404,7 +404,7 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
@@ -562,3 +562,39 @@ def test_review_paste_splitting_and_keyword_fallback() -> None:
     from r_system_v2.ra import quota_ledger as ql
 
     assert ql.PROVIDER_AMZ_REVIEWS in ql.DEFAULT_DAILY_BUDGETS and ql.PROVIDER_AMZ_REVIEWS in ql.BUDGET_ENV_NAMES
+
+
+# ---------------------------------------------------------------- 汇率(纯函数 + 假接口)
+
+
+def test_fx_fetch_fill_and_lookup() -> None:
+    from datetime import date as _date
+    from decimal import Decimal as _D
+
+    from backend.app.modules.amz_series import fx
+
+    class _Resp:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            # 9/12、9/13 是周末,央行不出价
+            return {"base": "EUR", "rates": {"2026-09-11": {"USD": 1.1500}, "2026-09-14": {"USD": 1.1539}}}
+
+    seen = {}
+
+    def fake_get(url, params):
+        seen["url"], seen["params"] = url, params
+        return _Resp()
+
+    raw = fx.fetch_range(_date(2026, 9, 10), _date(2026, 9, 14), get=fake_get)
+    assert seen["url"].endswith("/2026-09-10..2026-09-14") and seen["params"] == {"from": "EUR", "to": "USD"}
+    assert raw == {_date(2026, 9, 11): _D("1.15"), _date(2026, 9, 14): _D("1.1539")}
+    filled = fx.fill_calendar(raw, _date(2026, 9, 10), _date(2026, 9, 14))
+    assert _date(2026, 9, 10) not in filled  # 开头没前值不猜
+    assert filled[_date(2026, 9, 12)] == _D("1.15") and filled[_date(2026, 9, 13)] == _D("1.15") and filled[_date(2026, 9, 14)] == _D("1.1539")
+    assert fx.rate_on(filled, _date(2026, 9, 16)) == _D("1.1539")  # 往前找
+    assert fx.rate_on(filled, _date(2026, 9, 30)) is None  # 超过 7 天不硬套
+    from backend.app.modules.amz_series import jobs
+
+    assert jobs.JOB_INTERVALS["fx_daily"] == 86400 and "fx_daily" in jobs.HANDLERS

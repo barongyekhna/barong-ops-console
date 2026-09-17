@@ -154,17 +154,24 @@ def daily_series(db: Session, *, store_codes: list[str] | None, days: int = 30) 
     if store_codes is not None and not store_codes:
         return {"days": [], "as_of": None}
     T = AmzAdSearchTerm
-    ads_q = select(T.report_date, func.sum(T.spend), func.sum(T.sales_7d), func.sum(T.orders_7d))
+    from . import fx  # noqa: PLC0415
+
+    fx_cache: dict = {}
+    ads_q = select(T.report_date, T.currency, func.sum(T.spend), func.sum(T.sales_7d), func.sum(T.orders_7d))
     if store_codes is not None:
         ads_q = ads_q.where(T.store_code.in_(store_codes))
     as_of = db.scalar(select(func.max(T.report_date)).where(T.store_code.in_(store_codes)) if store_codes is not None else select(func.max(T.report_date)))
     if as_of is None:
         return {"days": [], "as_of": None}
     since = as_of - timedelta(days=days)
-    ads = {
-        row[0]: {"spend": Decimal(row[1] or 0), "ad_sales": Decimal(row[2] or 0), "ad_orders": int(row[3] or 0)}
-        for row in db.execute(ads_q.where(T.report_date > since, T.report_date <= as_of).group_by(T.report_date)).all()
-    }
+    # 广告花费 / 广告销售按「当天」汇率折美元(欧元店)。
+    ads: dict[date, dict[str, Any]] = {}
+    for day, currency, spend, ad_sales, ad_orders in db.execute(ads_q.where(T.report_date > since, T.report_date <= as_of).group_by(T.report_date, T.currency)).all():
+        factor = fx.usd_factor(db, currency, cache=fx_cache)(day)
+        bucket = ads.setdefault(day, {"spend": Decimal(0), "ad_sales": Decimal(0), "ad_orders": 0})
+        bucket["spend"] += Decimal(spend or 0) * factor
+        bucket["ad_sales"] += Decimal(ad_sales or 0) * factor
+        bucket["ad_orders"] += int(ad_orders or 0)
     # 总销售额:每个 (店, 天) 优先用 SP-API 的销售与流量报表(店铺合计行),没有的天回落到交易一览。
     X = AmzTransaction
     day_col = cast(X.posted_at, Date)
@@ -184,7 +191,7 @@ def daily_series(db: Session, *, store_codes: list[str] | None, days: int = 30) 
     if store_codes is not None:
         api_q = api_q.where(S.store_code.in_(store_codes))
     for store_code, day, amount, orders, sessions, currency in db.execute(api_q).all():
-        usd = Decimal(amount or 0) * (Decimal("1.08") if currency == "EUR" else Decimal(1))
+        usd = Decimal(amount or 0) * fx.usd_factor(db, currency, cache=fx_cache)(day)
         per_store_day[(store_code, day)] = {"sales": usd, "orders": int(orders or 0), "sessions": int(sessions or 0), "source": "api"}
     sales: dict[date, dict[str, Any]] = {}
     for (_, day), item in per_store_day.items():
@@ -214,7 +221,7 @@ def daily_series(db: Session, *, store_codes: list[str] | None, days: int = 30) 
             }
         )
         cursor += timedelta(days=1)
-    return {"days": out, "as_of": as_of.isoformat(), "note": "日粒度;总销售额优先用 SP-API 销售与流量报表,没接 API 的店回落到交易一览;广告花费按报表原币(德国欧元未折)"}
+    return {"days": out, "as_of": as_of.isoformat(), "note": "日粒度;全部按当天汇率折美元;总销售额优先用 SP-API 销售与流量报表,没接 API 的店回落到交易一览"}
 
 
 __all__ = ["DECISIONS", "daily_series", "decide_suggestion", "employee_panel", "list_suggestions", "suggestion_view"]

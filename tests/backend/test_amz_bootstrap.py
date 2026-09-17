@@ -25,7 +25,7 @@ from backend.app.modules.amz_series import experience, fact_sheets, images, laun
 from backend.app.modules.amz_series.models import AmzLaunch, AmzReview, AmzExperience, AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzOutcome, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
-from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
+from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzFxRate, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
 from backend.app.services.data_isolation import without_org_data_isolation
 
 pytestmark = pytest.mark.integration
@@ -59,6 +59,7 @@ def _cleanup(session) -> None:
     session.execute(delete(AmzSeedImport))
     session.execute(delete(AmzAdSearchTerm))
     session.execute(delete(AmzTransaction))
+    session.execute(delete(AmzFxRate))
     session.execute(delete(AmzStoreGrant))
     session.execute(delete(AmzStore))
     user_ids = list(session.scalars(select(User.id).where(User.username.in_(USERNAMES))))
@@ -146,6 +147,20 @@ def test_seed_import_is_file_idempotent_and_row_idempotent(db, tmp_path: Path) -
     txn = db.scalar(select(AmzTransaction))
     assert txn.store_code == "01de" and txn.currency == "EUR" and float(txn.total) == 16.32
     assert txn.fx_source == "seed_fixed" and float(txn.total_usd) == round(16.32 * float(si.DEFAULT_EUR_USD), 2)
+    # 汇率:央行价到位后,种子期按 1.08 折的欧元行按「当天」汇率重算(周末用之前工作日的价)
+    from decimal import Decimal as _D
+
+    from backend.app.modules.amz_series import fx as _fx
+
+    posted_day = txn.posted_at.date()
+    assert _fx.upsert_rates(db, _fx.fill_calendar({posted_day - timedelta(days=1): _D("1.1467")}, posted_day - timedelta(days=1), posted_day)) == 2
+    assert _fx.recompute_transactions(db, store_code="01de", currency="EUR") == 1
+    db.commit()
+    db.refresh(txn)
+    assert txn.fx_source == "ecb" and float(txn.fx_rate) == 1.1467 and float(txn.total_usd) == round(16.32 * 1.1467, 2)
+    assert _fx.recompute_transactions(db, store_code="01de", currency="EUR") == 0  # 幂等
+    assert _fx.recompute_transactions(db, store_code="03us", currency="USD") == 0
+
     # 产品名册从交易行长出来:德国站 Bestellung 行 → 一个泵 SKU
     assert products.sync_from_transactions(db, store_code="01de") == {"skus": 1, "created": 1, "updated": 0}
     db.commit()
@@ -419,11 +434,22 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
 
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
-    assert created == 20  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily;出网作业因无凭据一条不排
+    assert created == 21  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily;fx_daily 只给欧元店 01de;出网作业因无凭据一条不排
     jobs = claim(db, 30)
-    assert len(jobs) == 20 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly", "launch_daily"}
-    for job in jobs:
-        assert process_job(job) is True
+    assert len(jobs) == 21 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly", "launch_daily", "fx_daily"}
+    assert [j["store_code"] for j in jobs if j["job_type"] == "fx_daily"] == ["01de"]
+    from backend.app.modules.amz_series import fx as _fx
+
+    def _no_network(start, end, *, base="EUR", quote="USD", get=None):  # 测试不出网
+        return {start + timedelta(days=i): __import__("decimal").Decimal("1.15") for i in range((end - start).days + 1)}
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(_fx, "fetch_range", _no_network)
+    try:
+        for job in jobs:
+            assert process_job(job) is True
+    finally:
+        monkey.undo()
     beats = {beat["worker_name"]: beat for beat in list_heartbeats(db)}
     for name in ("amz-worker:03us:rules_daily", "amz-worker:03us:experience_weekly", "amz-worker:03us:image_lookback"):
         assert name in beats and beats[name]["stale"] is False

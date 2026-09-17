@@ -92,13 +92,13 @@ export function AmzOverview() {
   );
 
   const totals = useMemo(() => {
-    // 合计按美元:欧元卡上有原值,合计里按种子期固定汇率 1.08 折(A1 后按当日汇率)。
-    const fx = (s: AmzStore) => (s.currency === "EUR" ? 1.08 : 1);
-    const spend = visibleStores.reduce((n, s) => n + s.ads.spend * fx(s), 0);
-    const sales = visibleStores.reduce((n, s) => n + s.ads.sales * fx(s), 0);
+    // 合计按美元:后端已按「当天」欧洲央行汇率逐日折好(spend_usd / sales_usd);欧元卡上显示原值。
+    const spend = visibleStores.reduce((n, s) => n + (s.ads.spend_usd ?? s.ads.spend), 0);
+    const sales = visibleStores.reduce((n, s) => n + (s.ads.sales_usd ?? s.ads.sales), 0);
     const orders = visibleStores.reduce((n, s) => n + s.ads.orders, 0);
     const acos = sales > 0 ? Math.round((spend / sales) * 1000) / 10 : null;
-    return { spend, sales, orders, acos, hasEur: visibleStores.some((s) => s.currency === "EUR") };
+    const eur = visibleStores.find((s) => s.currency === "EUR");
+    return { spend, sales, orders, acos, hasEur: Boolean(eur), fxLatest: eur?.fx_latest ?? null };
   }, [visibleStores]);
 
   const closeDrawer = useCallback(() => setOpenEmployee(null), []);
@@ -135,7 +135,11 @@ export function AmzOverview() {
           <div className={styles.head}>
             <span className={styles.code}>ALL</span>
             <span className={styles.name}>{visibleStores.length} 店合计 · USD</span>
-            {totals.hasEur ? <span className={`${styles.phase} ${styles.phMixed}`}>€ 按 1.08 折(种子期)</span> : null}
+            {totals.hasEur ? (
+              <span className={`${styles.phase} ${styles.phMixed}`}>
+                {totals.fxLatest ? `€ 按当天央行汇率折 · 最新 ${totals.fxLatest.rate}` : "€ 汇率未同步,暂按 1.08"}
+              </span>
+            ) : null}
           </div>
           <div className={styles.big}>
             <span className={`${styles.v} ${acosTone(totals.acos)}`}>

@@ -35,6 +35,9 @@ class StoreSummary:
     txn_rows: int
     txn_first_at: str | None
     txn_last_at: str | None
+    ads_spend_usd: Decimal = Decimal(0)
+    ads_sales_usd: Decimal = Decimal(0)
+    fx_latest: tuple[str, float] | None = None
 
 
 def list_visible_stores(db: Session, *, store_codes: list[str] | None) -> list[AmzStore]:
@@ -70,6 +73,21 @@ def store_summaries(db: Session, *, stores: list[AmzStore], user: User, is_owner
         .group_by(AmzAdSearchTerm.store_code)
     ).all()
     ads_by_store = {row[0]: row for row in ads_rows}
+    # 美元口径:按天、按当天汇率折(欧元店)。
+    from . import fx  # noqa: PLC0415
+
+    fx_cache: dict = {}
+    usd_by_store: dict[str, list[Decimal]] = {}
+    for store_code, day, currency, spend, sales in db.execute(
+        select(AmzAdSearchTerm.store_code, AmzAdSearchTerm.report_date, AmzAdSearchTerm.currency, func.sum(AmzAdSearchTerm.spend), func.sum(AmzAdSearchTerm.sales_7d))
+        .where(AmzAdSearchTerm.store_code.in_(codes))
+        .group_by(AmzAdSearchTerm.store_code, AmzAdSearchTerm.report_date, AmzAdSearchTerm.currency)
+    ).all():
+        factor = fx.usd_factor(db, currency, cache=fx_cache)(day)
+        bucket = usd_by_store.setdefault(store_code, [Decimal(0), Decimal(0)])
+        bucket[0] += Decimal(spend or 0) * factor
+        bucket[1] += Decimal(sales or 0) * factor
+    latest = fx.latest_rate(db)
     txn_rows = db.execute(
         select(
             AmzTransaction.store_code,
@@ -97,6 +115,9 @@ def store_summaries(db: Session, *, stores: list[AmzStore], user: User, is_owner
                 txn_rows=int(txn[1]) if txn else 0,
                 txn_first_at=txn[2].isoformat() if txn and txn[2] else None,
                 txn_last_at=txn[3].isoformat() if txn and txn[3] else None,
+                ads_spend_usd=usd_by_store.get(store.store_code, [Decimal(0), Decimal(0)])[0],
+                ads_sales_usd=usd_by_store.get(store.store_code, [Decimal(0), Decimal(0)])[1],
+                fx_latest=(latest[0].isoformat(), float(latest[1])) if latest and store.currency != "USD" else None,
             )
         )
     return summaries
@@ -179,7 +200,10 @@ def summary_view(item: StoreSummary) -> dict[str, Any]:
             "acos_pct": round(acos, 1) if acos is not None else None,
             "first_date": item.ads_first_date.isoformat() if item.ads_first_date else None,
             "last_date": item.ads_last_date.isoformat() if item.ads_last_date else None,
+            "spend_usd": round(float(item.ads_spend_usd), 2),
+            "sales_usd": round(float(item.ads_sales_usd), 2),
         },
+        "fx_latest": {"date": item.fx_latest[0], "rate": item.fx_latest[1]} if item.fx_latest else None,
         "transactions": {
             "rows": item.txn_rows,
             "first_at": item.txn_first_at,
