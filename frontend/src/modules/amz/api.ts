@@ -254,3 +254,47 @@ export type AdsOauthResult = {
 export function completeAdsOauth(payload: { code: string; state: string }) {
   return amzRequest<AdsOauthResult>(`${BASE}/ads/oauth/callback`, "广告授权收尾失败", { body: payload, method: "POST" });
 }
+
+// ---- 图片通道(A5):brief / 参考图 / 交稿 / 选定 / 上线。
+export type AmzImageGate = { name: string; passed: boolean | null; problems?: string[]; fix?: string[]; skipped?: string; unknown?: string; stands_out?: string; click_rank?: number; must_have_missing?: string[]; forbidden_found?: string[]; text_or_logo?: boolean; notes?: string[]; distances?: { reference_id: string; note: string | null; hamming: number }[] };
+export type AmzImageReview = { verdict?: "passed" | "failed" | "unknown"; gates?: AmzImageGate[]; fix?: string[]; reviewed_at?: string; human?: { decision: string; reason: string | null } };
+export type AmzImageAsset = { id: string; brief_id: string; kind: string; kind_label: string; round: number; mime_type: string; width: number; height: number; bytes: number; note: string | null; submitted_via: string; status: string; review: AmzImageReview; created_at: string | null };
+export type AmzImageBrief = {
+  id: string; store_code: string; sku: string | null; asin: string | null; product_line: string; product_line_label: string; position: string; position_label: string; title: string; status: string;
+  evidence: Record<string, unknown>; must_have: string[]; forbidden: string[]; rounds: number; max_rounds: number; source_suggestion_id: string | null; chosen_asset_id: string | null;
+  live_at: string | null; baseline: Record<string, unknown>; lookback: Record<string, unknown>; created_at: string | null; updated_at: string | null; brief_md?: string;
+};
+export type AmzImageBriefDetail = { brief: AmzImageBrief; references: AmzImageAsset[]; submissions: AmzImageAsset[]; codex_prompt: string };
+
+export function getImageBriefs(status?: string) {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return amzRequest<{ items: AmzImageBrief[]; positions: Record<string, string>; reference_kinds: Record<string, string> }>(`${BASE}/images/briefs${query}`, "图片 brief 加载失败");
+}
+export function createImageBrief(payload: { suggestion_id?: string; store_code?: string; position?: string; product_line?: string; sku?: string; asin?: string; title?: string; reason?: string }) {
+  return amzRequest<AmzImageBrief>(`${BASE}/images/briefs`, "建 brief 失败", { body: payload, method: "POST" });
+}
+export function getImageBrief(id: string) {
+  return amzRequest<AmzImageBriefDetail>(`${BASE}/images/briefs/${id}`, "brief 加载失败");
+}
+export function uploadImageReference(id: string, file: File, kind: string, note: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", kind);
+  form.append("note", note);
+  return amzRequest<AmzImageAsset>(`${BASE}/images/briefs/${id}/references`, "参考图上传失败", { body: form, method: "POST" });
+}
+export function uploadImageSubmission(id: string, file: File, note: string) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("note", note);
+  return amzRequest<AmzImageAsset>(`${BASE}/images/briefs/${id}/submit`, "交稿失败", { body: form, method: "POST" });
+}
+export function decideImageAsset(assetId: string, decision: "choose" | "reject", reason?: string) {
+  return amzRequest<AmzImageAsset>(`${BASE}/images/assets/${assetId}/decide`, "选定/驳回失败", { body: { decision, reason: reason ?? null }, method: "POST" });
+}
+export function markImageBriefLive(id: string, liveOn?: string) {
+  return amzRequest<AmzImageBrief>(`${BASE}/images/briefs/${id}/live`, "标记上线失败", { body: { live_on: liveOn ?? null }, method: "POST" });
+}
+export function imageAssetUrl(assetId: string, kind: "thumbnail" | "preview" | "original" = "preview") {
+  return `/api/backend/amz/images/assets/${assetId}/file?kind=${kind}`;
+}

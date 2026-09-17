@@ -106,6 +106,22 @@ server {
         proxy_read_timeout 120s;
     }
 
+    # A 系列图片通道(MCP):Codex 经 Bearer 直达 amz-mcp sidecar(127.0.0.1:8096)。
+    location ^~ /mcp/amz-images {
+        limit_except POST GET DELETE { deny all; }
+        client_max_body_size 32m;
+        proxy_pass http://127.0.0.1:8096;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 120s;
+    }
+
     location = /w/tracking/webhook {
         limit_except POST { deny all; }
         client_max_body_size 2m;

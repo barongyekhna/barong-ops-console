@@ -21,8 +21,8 @@ from backend.app.modules.amz_series import bootstrap as bs
 from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
-from backend.app.modules.amz_series import fact_sheets, products, reports_sync, work_log
-from backend.app.modules.amz_series.models import AmzFactSheet, AmzJob, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
+from backend.app.modules.amz_series import fact_sheets, images, products, reports_sync, work_log
+from backend.app.modules.amz_series.models import AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -42,6 +42,8 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzImageAsset))
+    session.execute(delete(AmzImageBrief))
     session.execute(delete(AmzFactSheet))
     session.execute(delete(AmzSqp))
     session.execute(delete(AmzSalesDaily))
@@ -291,9 +293,65 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     with pytest.raises(Exception):
         fact_sheets.upsert_sheet(db, product_line="rocket", store_code=None, sku=None, title="x", facts={}, actor=owner)
 
+    # 图片通道:事实表不够 → 不建 brief;填够 → 从「同屏输了」建 brief → 参考图 → 交稿过四道门(看图桩)→ 选定 → 上线 → 28 天回看
+    import io as _io
+
+    from PIL import Image as _Image
+
+    def _png(w, h, stripe):
+        img = _Image.new("RGB", (w, h), (255, 255, 255))
+        for x in range(stripe, min(w, stripe + w // 4)):
+            for y in range(h):
+                img.putpixel((x, y), (0, 0, 0))
+        buf = _io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setenv("AMZ_MEDIA_ROOT", str(tmp_path / "amz-media"))
+    try:
+        with pytest.raises(Exception) as not_ready:
+            images.create_brief_from_suggestion(db, suggestion_id=ctr_gap.id, actor=owner)
+        assert getattr(not_ready.value, "code", "") == "amz_fact_sheet_not_ready"
+        fact_sheets.upsert_sheet(db, product_line="pump", store_code=None, sku=None, title="沐浴泵 7800mAh", facts={"is": "便携淋浴泵,不加热", "how_it_works": "整机入水", "is_not": "不是热水器", "specs": {"weight_g": "650", "dimensions_cm": "10x10x20", "battery_mah": "7800"}, "indicators": "红灯充电", "package": "泵、软管、花洒", "audience": "露营", "misreadings": "以为能加热", "cost": {"factory_cny": 60, "freight_cny": 7, "price_usd": 32.99}, "competitor_asins": "B0AAAAAAA1"}, actor=owner)
+        db.commit()
+        brief = images.create_brief_from_suggestion(db, suggestion_id=ctr_gap.id, actor=owner)
+        db.commit()
+        assert brief.store_code == "03us" and brief.position == "main" and "shower pump" in brief.title and "01us" in brief.brief_md
+        assert images.create_brief_from_suggestion(db, suggestion_id=ctr_gap.id, actor=owner).id == brief.id  # 幂等
+        ref = images.add_reference(db, brief=brief, kind="sibling_main", contents=_png(600, 600, 100), note="01us", actor=owner)
+        images.add_reference(db, brief=brief, kind="competitor_thumb", contents=_png(300, 300, 200), note="vignuto", actor=owner)
+        db.commit()
+        assert ref.dhash and images.asset_bytes(ref)
+        stub = lambda messages, *, org_id: {"passed": True, "click_rank": 1, "stands_out": "亮", "fix": [], "must_have_missing": [], "forbidden_found": [], "text_or_logo": False, "notes": []}  # noqa: E731
+        same_as_sibling = images.submit(db, brief=brief, contents=_png(1200, 1200, 200), note="r1", submitted_via="mcp", actor_user_id=owner.id, call=stub)
+        db.commit()
+        assert same_as_sibling.round == 1 and same_as_sibling.review_json["verdict"] == "failed"
+        assert any("兄弟店" in g["name"] and g["passed"] is False for g in same_as_sibling.review_json["gates"])
+        good = images.submit(db, brief=brief, contents=_png(1200, 1200, 900), note="r2", submitted_via="upload", actor_user_id=owner.id, call=stub)
+        db.commit()
+        assert good.round == 2 and good.review_json["verdict"] == "passed" and brief.status == "in_review"
+        with pytest.raises(Exception):
+            images.decide_asset(db, asset=good, decision="reject", reason="", actor=owner)
+        images.decide_asset(db, asset=good, decision="choose", reason=None, actor=owner)
+        db.commit()
+        assert brief.status == "approved" and brief.chosen_asset_id == good.id
+        live = images.mark_live(db, brief=brief, actor=owner, live_on=date(2026, 8, 5))
+        db.commit()
+        assert live.status == "live" and live.baseline_json["term"] == "shower pump" and live.baseline_json["ads_ctr_14d_before"]["impressions"] > 0
+        assert images.run_lookbacks(db, today=date(2026, 8, 12)) == 0  # 未满 14 天
+        assert images.run_lookbacks(db, today=date(2026, 9, 10)) == 2  # 14 与 28 天一起补
+        db.commit()
+        assert set(brief.lookback_json) == {"d14", "d28"} and images.run_lookbacks(db, today=date(2026, 9, 11)) == 0
+        assert [r.kind for r in work_log.recent(db, employee="B", store_codes=["03us"], limit=3)] == ["observation", "observation", "executed"]
+        with pytest.raises(Exception):
+            images.submit(db, brief=brief, contents=_png(1200, 1200, 50), note="", submitted_via="upload", actor_user_id=owner.id, call=stub)  # 已上线不收稿
+    finally:
+        monkeypatch.undo()
+
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
-    assert created == 5  # 五店各一条 rules_daily;sales_traffic / sqp_weekly 因无凭据一条不排
+    assert created == 10  # 五店各一条 rules_daily + image_lookback;sales_traffic / sqp_weekly 因无凭据一条不排
     jobs = claim(db, 5)
     assert len(jobs) == 5
     for job in jobs:

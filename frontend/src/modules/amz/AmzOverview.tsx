@@ -423,6 +423,12 @@ function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePan
                 </div>
               ) : null}
               {row.reject_reason ? <div className={styles.pred}><span className={styles.predK}>原因</span><span>{row.reject_reason}</span></div> : null}
+              {row.action_type === "screen_ctr_gap" ? (
+                <div className={styles.pred}>
+                  <span className={styles.predK}>图片</span>
+                  <a className={styles.linkish} href={`/amz?tab=images&suggestion=${row.id}`}>让殷熊写 brief → 去图片页</a>
+                </div>
+              ) : null}
               {row.status === "open" ? (
                 <div className={styles.actRow}>
                   <button className={`${styles.btn} ${styles.btnGo}`} disabled={busy === row.id} onClick={() => void decide(row, "approve")} type="button">

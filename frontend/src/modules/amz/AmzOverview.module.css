@@ -854,3 +854,9 @@
   color: var(--color-on-primary);
   background: var(--color-error);
 }
+
+.linkish {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

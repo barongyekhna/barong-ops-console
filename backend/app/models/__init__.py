@@ -175,6 +175,8 @@ from ..modules.amz_series.models import (
     AmzSqp,
     AmzReportRun,
     AmzFactSheet,
+    AmzImageBrief,
+    AmzImageAsset,
 )
 from ..modules.rd_series.models import (
     RdDevice,

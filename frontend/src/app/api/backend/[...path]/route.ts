@@ -1594,6 +1594,20 @@ function isAllowedAmzPath(method: string, path: string[]) {
   if (path.length === 4 && path[1] === "ads" && path[2] === "oauth" && (path[3] === "start" || path[3] === "callback")) {
     return method === "POST";
   }
+  // 图片通道(A5)
+  if (path.length === 3 && path[1] === "images" && path[2] === "briefs") {
+    return method === "GET" || method === "POST";
+  }
+  if (path.length === 4 && path[1] === "images" && path[2] === "briefs" && isUuidPathSegment(path[3])) {
+    return method === "GET";
+  }
+  if (path.length === 5 && path[1] === "images" && path[2] === "briefs" && isUuidPathSegment(path[3]) && ["references", "submit", "live"].includes(path[4])) {
+    return method === "POST";
+  }
+  if (path.length === 5 && path[1] === "images" && path[2] === "assets" && isUuidPathSegment(path[3])) {
+    if (path[4] === "decide") return method === "POST";
+    if (path[4] === "file") return method === "GET";
+  }
   const store = path[1] === "stores" && /^0\d(?:us|de)$/.test(path[2] ?? "");
   if (path.length === 3) {
     if (path[1] === "overview" && path[2] === "series") return method === "GET";

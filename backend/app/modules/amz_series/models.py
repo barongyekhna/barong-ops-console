@@ -413,6 +413,63 @@ class AmzFactSheet(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
+class AmzImageBrief(AmzTimestampMixin, Base):
+    """图片 brief:带证据(在哪个词上同屏输给谁)、必须出现 / 禁止出现(来自事实表)、轮数上限、上线后回看。无 org_id 列。"""
+
+    __tablename__ = "amz_image_briefs"
+    __table_args__ = (Index("ix_amz_image_briefs_store_status", "store_code", "status"), Index("ix_amz_image_briefs_suggestion", "source_suggestion_id"))
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    product_line: Mapped[str] = mapped_column(String(32), nullable=False, server_default="other", default="other")
+    position: Mapped[str] = mapped_column(String(16), nullable=False, server_default="main", default="main")
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="queued", default="queued")
+    brief_md: Mapped[str] = mapped_column(Text, nullable=False, server_default="", default="")
+    evidence_json: Mapped[dict[str, Any]] = mapped_column("evidence", json_type(), nullable=False, default=dict)
+    must_have_json: Mapped[list[Any]] = mapped_column("must_have", json_type(), nullable=False, default=list)
+    forbidden_json: Mapped[list[Any]] = mapped_column("forbidden", json_type(), nullable=False, default=list)
+    rounds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    max_rounds: Mapped[int] = mapped_column(Integer, nullable=False, server_default="4", default=4)
+    source_suggestion_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    fact_sheet_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    chosen_asset_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    decided_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    live_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    baseline_json: Mapped[dict[str, Any]] = mapped_column("baseline", json_type(), nullable=False, default=dict)
+    lookback_json: Mapped[dict[str, Any]] = mapped_column("lookback", json_type(), nullable=False, default=dict)
+
+
+class AmzImageAsset(AmzTimestampMixin, Base):
+    """一张图:参考图(product_photo / current_main / sibling_main / competitor_thumb)或交稿(submission),带四道门结果。"""
+
+    __tablename__ = "amz_image_assets"
+    __table_args__ = (Index("ix_amz_image_assets_brief_kind", "brief_id", "kind"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    brief_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("amz_image_briefs.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    round: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    object_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    width: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    height: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    bytes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    dhash: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_via: Mapped[str] = mapped_column(String(16), nullable=False, server_default="upload", default="upload")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="available", default="available")
+    review_json: Mapped[dict[str, Any]] = mapped_column("review", json_type(), nullable=False, default=dict)
+    decided_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
@@ -470,4 +527,6 @@ __all__ = [
     "AmzSqp",
     "AmzReportRun",
     "AmzFactSheet",
+    "AmzImageBrief",
+    "AmzImageAsset",
 ]

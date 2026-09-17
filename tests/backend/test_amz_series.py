@@ -91,7 +91,9 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     manifest = json.loads((REPO / "migration_manifest.json").read_text(encoding="utf-8"))
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
-    assert order[i : i + 6] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets"]
+    assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
+    images_mig = (versions / "20260917_01_amz_images.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260916_04_amz_fact_sheets"' in images_mig and 'sa.Column("org_id"' not in images_mig and "amz_image_briefs" in images_mig
     sheets_mig = (versions / "20260916_04_amz_fact_sheets.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260916_03_amz_reports"' in sheets_mig and 'sa.Column("org_id"' not in sheets_mig and "amz_fact_sheets" in sheets_mig
     reports_mig = (versions / "20260916_03_amz_reports.py").read_text(encoding="utf-8")
@@ -397,7 +399,7 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")

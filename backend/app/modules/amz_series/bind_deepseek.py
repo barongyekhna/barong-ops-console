@@ -31,9 +31,11 @@ from .constants import MODULE_KEY
 SOURCE_MARK = "amz_bind_deepseek"
 SOURCE_MODULE = "k.product_knowledge"
 DEEPSEEK_ALIAS = provider_key_alias("deepseek")
+# 2026-09-17:同一把梯子也给看图模型用(图片四道门走 chatgpt / 4sapi)。--provider chatgpt。
+PROVIDERS = ("deepseek", "chatgpt")
 
 
-def find_source_key(db: Session, *, key_id: str | None) -> ApiKeyRecord:
+def find_source_key(db: Session, *, key_id: str | None, alias: str = DEEPSEEK_ALIAS) -> ApiKeyRecord:
     if key_id:
         record = db.scalar(select(ApiKeyRecord).where(ApiKeyRecord.key_id == key_id, ApiKeyRecord.status == "active"))
         if record is None:
@@ -43,25 +45,25 @@ def find_source_key(db: Session, *, key_id: str | None) -> ApiKeyRecord:
         select(ApiKeyModuleBindingRecord)
         .where(
             ApiKeyModuleBindingRecord.module_id == SOURCE_MODULE,
-            ApiKeyModuleBindingRecord.key_alias == DEEPSEEK_ALIAS,
+            ApiKeyModuleBindingRecord.key_alias == alias,
             ApiKeyModuleBindingRecord.status == "active",
         )
         .order_by(ApiKeyModuleBindingRecord.created_at)
     )
     if binding is None:
-        raise SystemExit(f"找不到 {SOURCE_MODULE} 的 DeepSeek 绑定,用 --source-key-id 指定")
+        raise SystemExit(f"找不到 {SOURCE_MODULE} 的 {alias} 绑定,用 --source-key-id 指定")
     record = db.scalar(select(ApiKeyRecord).where(ApiKeyRecord.key_id == binding.key_id))
     if record is None or record.status != "active":
         raise SystemExit("源 DeepSeek 钥匙不是 active")
     return record
 
 
-def existing_binding(db: Session, *, org_id: str) -> ApiKeyModuleBindingRecord | None:
+def existing_binding(db: Session, *, org_id: str, alias: str = DEEPSEEK_ALIAS) -> ApiKeyModuleBindingRecord | None:
     return db.scalar(
         select(ApiKeyModuleBindingRecord).where(
             ApiKeyModuleBindingRecord.org_id == org_id,
             ApiKeyModuleBindingRecord.module_id == MODULE_KEY,
-            ApiKeyModuleBindingRecord.key_alias == DEEPSEEK_ALIAS,
+            ApiKeyModuleBindingRecord.key_alias == alias,
             ApiKeyModuleBindingRecord.status == "active",
         )
     )
@@ -97,11 +99,11 @@ def copy_key_into_org(db: Session, *, source: ApiKeyRecord, org_id: str) -> ApiK
     return record
 
 
-def plan(db: Session, *, source_key_id: str | None) -> list[dict[str, Any]]:
-    source = find_source_key(db, key_id=source_key_id)
+def plan(db: Session, *, source_key_id: str | None, alias: str = DEEPSEEK_ALIAS) -> list[dict[str, Any]]:
+    source = find_source_key(db, key_id=source_key_id, alias=alias)
     rows: list[dict[str, Any]] = []
     for company in COMPANIES:
-        binding = existing_binding(db, org_id=company.org_id)
+        binding = existing_binding(db, org_id=company.org_id, alias=alias)
         rows.append(
             {
                 "company": company.short_name,
@@ -114,18 +116,18 @@ def plan(db: Session, *, source_key_id: str | None) -> list[dict[str, Any]]:
     return rows
 
 
-def apply(db: Session, *, source_key_id: str | None) -> list[dict[str, Any]]:
-    source = find_source_key(db, key_id=source_key_id)
+def apply(db: Session, *, source_key_id: str | None, alias: str = DEEPSEEK_ALIAS) -> list[dict[str, Any]]:
+    source = find_source_key(db, key_id=source_key_id, alias=alias)
     out: list[dict[str, Any]] = []
     for company in COMPANIES:
-        if existing_binding(db, org_id=company.org_id) is not None:
+        if existing_binding(db, org_id=company.org_id, alias=alias) is not None:
             out.append({"company": company.short_name, "outcome": "skipped"})
             continue
         key = copy_key_into_org(db, source=source, org_id=company.org_id)
         binding = create_api_key_binding(
             db,
             org_id=company.org_id,
-            payload=ApiKeyBindingCreateRequest(module_id=MODULE_KEY, key_id=key.key_id, key_alias=DEEPSEEK_ALIAS),
+            payload=ApiKeyBindingCreateRequest(module_id=MODULE_KEY, key_id=key.key_id, key_alias=alias),
             actor_user_id=str(OWNER_USER_ID),
         )
         out.append({"company": company.short_name, "outcome": "bound", "key_id": key.key_id, "binding_id": binding.binding_id})
@@ -135,9 +137,11 @@ def apply(db: Session, *, source_key_id: str | None) -> list[dict[str, Any]]:
 def undo(db: Session) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for company in COMPANIES:
-        binding = existing_binding(db, org_id=company.org_id)
-        if binding is not None:
-            delete_api_key_binding(db, binding_id=binding.binding_id, actor_user_id=str(OWNER_USER_ID))
+        binding = None
+        for provider in PROVIDERS:
+            binding = existing_binding(db, org_id=company.org_id, alias=provider_key_alias(provider))
+            if binding is not None:
+                delete_api_key_binding(db, binding_id=binding.binding_id, actor_user_id=str(OWNER_USER_ID))
         copies = list(
             db.scalars(
                 select(ApiKeyRecord).where(ApiKeyRecord.org_id == company.org_id, ApiKeyRecord.status == "active")
@@ -159,7 +163,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--execute", action="store_true", help="真的写库;默认只打印计划")
     parser.add_argument("--undo", action="store_true", help="撤掉本工具建的绑定与钥匙副本")
     parser.add_argument("--source-key-id", default=None)
+    parser.add_argument("--provider", default="deepseek", choices=PROVIDERS)
     args = parser.parse_args(argv)
+    alias = provider_key_alias(args.provider)
     with without_org_data_isolation(), SessionLocal() as db:
         if args.undo:
             if not args.execute:
@@ -170,9 +176,9 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"undo": result}, ensure_ascii=False))
             return 0
         if not args.execute:
-            print(json.dumps({"plan": plan(db, source_key_id=args.source_key_id)}, ensure_ascii=False))
+            print(json.dumps({"plan": plan(db, source_key_id=args.source_key_id, alias=alias)}, ensure_ascii=False))
             return 0
-        result = apply(db, source_key_id=args.source_key_id)
+        result = apply(db, source_key_id=args.source_key_id, alias=alias)
         db.commit()
         print(json.dumps({"applied": result}, ensure_ascii=False))
     return 0

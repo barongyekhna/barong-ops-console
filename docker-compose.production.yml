@@ -109,6 +109,7 @@ services:
       - console_i_media_data:/var/lib/barong/i-media
       - console_k_media_data:/var/lib/barong/k-media
       - console_f_media_data:/var/lib/barong/f-media
+      - console_amz_media_data:/var/lib/barong/amz-media
     depends_on:
       console_postgres:
         condition: service_healthy
@@ -400,6 +401,41 @@ services:
     networks:
       - barong-ops-console-prod
 
+  # A 系列图片通道 MCP(给 Codex 桌面版):独立镜像,127.0.0.1:8096,nginx location /mcp/amz-images 直达。
+  # 启动只许 `rm -f -s` + `up -d --no-deps`。
+  amz-mcp:
+    container_name: amz-mcp
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.amz-mcp
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "4"
+      DB_MAX_OVERFLOW: "4"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "20000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      AMZ_MCP_PORT: "8096"
+      AMZ_MEDIA_ROOT: "/var/lib/barong/amz-media"
+    volumes:
+      - console_amz_media_data:/var/lib/barong/amz-media
+    ports:
+      - "127.0.0.1:8096:8096"
+    command:
+      - python
+      - -m
+      - backend.app.mcp.amz_images_server
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
   # A 系列四名数字员工(殷笑笑/殷熊/殷长辰/殷素素):一个进程四个 C19 身份,人设焊死在 persona.py。
   # 心跳按身份分开 amz-agents-worker:{amz_a..d}。启动只许 `rm -f -s` + `up -d --no-deps`,绝不对 console_postgres 跑 up。
   amz-agents-worker:
@@ -678,6 +714,7 @@ volumes:
   console_k_media_data:
     name: console_k_media_data
   console_f_media_data:
+  console_amz_media_data:
     name: console_f_media_data
   # 数字员工的记忆。刻意单独一块盘:老板要能直接翻、直接改、直接删,
   # 跟媒体文件混在一起就找不着了。

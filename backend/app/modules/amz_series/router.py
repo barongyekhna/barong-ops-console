@@ -10,7 +10,8 @@ from typing import Any
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -19,7 +20,7 @@ from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
-from . import fact_sheets, service, suggestions
+from . import fact_sheets, images, service, suggestions
 from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_VIEW, STORE_ROLES
 from .deps import StoreAccess, granted_store_codes, require_amz_access, require_store
 
@@ -302,6 +303,195 @@ def fact_sheets_judge(
     _can_write_sheets(db, user, row.store_code)
     db.commit()
     return fact_sheets.view(row)
+
+
+# ---------------------------------------------------------------- 图片通道(A5):brief / 参考图 / 交稿 / 选定 / 上线
+
+
+class BriefCreate(BaseModel):
+    suggestion_id: UUID | None = None
+    store_code: str | None = Field(default=None, max_length=16)
+    position: str = Field(default="main", max_length=16)
+    product_line: str | None = Field(default=None, max_length=32)
+    sku: str | None = Field(default=None, max_length=128)
+    asin: str | None = Field(default=None, max_length=16)
+    title: str | None = Field(default=None, max_length=255)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class AssetDecide(BaseModel):
+    decision: str = Field(pattern="^(choose|reject)$")
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class BriefLive(BaseModel):
+    live_on: str | None = Field(default=None, max_length=10)
+
+
+def _brief_or_404(db: Session, user: User, brief_id: UUID, *, min_role: str = STORE_ROLE_VIEW) -> Any:
+    from .constants import STORE_ROLE_RANK  # noqa: PLC0415
+
+    brief = db.get(images.AmzImageBrief, brief_id)
+    if brief is None:
+        raise HTTPException(status_code=404, detail="brief not found")
+    role = service.grant_role_for(db, user=user, store_code=brief.store_code, is_owner=is_owner_role(user.role))
+    if STORE_ROLE_RANK.get(role, 0) < STORE_ROLE_RANK[min_role]:
+        raise HTTPException(status_code=403, detail="no access to this store")
+    return brief
+
+
+@router.get("/images/briefs")
+def image_briefs_list(
+    status: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    codes = granted_store_codes(db, user)
+    rows = images.list_briefs(db, store_codes=codes, status=status)
+    return {"items": [images.brief_view(r) for r in rows], "positions": images.POSITION_LABELS, "reference_kinds": images.REFERENCE_LABELS}
+
+
+@router.post("/images/briefs")
+def image_briefs_create(
+    payload: BriefCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """从殷熊的「同屏输了」建议生成 brief,或手动建一份。事实表不够会拒(不够不画)。"""
+    from .constants import STORE_ROLE_OPERATE, STORE_ROLE_RANK  # noqa: PLC0415
+
+    try:
+        if payload.suggestion_id is not None:
+            row = db.get(images.AmzSuggestion, payload.suggestion_id)
+            if row is None:
+                raise HTTPException(status_code=404, detail="suggestion not found")
+            store_code = row.store_code
+        else:
+            store_code = (payload.store_code or "").strip().lower()
+            if not store_code:
+                raise HTTPException(status_code=422, detail="store_code required")
+        role = service.grant_role_for(db, user=user, store_code=store_code, is_owner=is_owner_role(user.role))
+        if STORE_ROLE_RANK.get(role, 0) < STORE_ROLE_RANK[STORE_ROLE_OPERATE]:
+            raise HTTPException(status_code=403, detail="需要店铺「操作」角色")
+        if payload.suggestion_id is not None:
+            brief = images.create_brief_from_suggestion(db, suggestion_id=payload.suggestion_id, actor=user)
+        else:
+            brief = images.create_brief(db, store_code=store_code, position=payload.position, actor=user, product_line=payload.product_line, sku=payload.sku, asin=payload.asin, title=payload.title, reason=payload.reason)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.image.brief.create", target_type="amz_image_brief", target_id=str(brief.id), result="success", request_id=_request_id(request), details={"store_code": brief.store_code, "position": brief.position})
+    db.commit()
+    return images.brief_view(brief, with_md=True)
+
+
+@router.get("/images/briefs/{brief_id}")
+def image_brief_detail(brief_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    brief = _brief_or_404(db, user, brief_id)
+    return {
+        "brief": images.brief_view(brief, with_md=True),
+        "references": [images.asset_view(a) for a in images.references(db, brief)],
+        "submissions": [images.asset_view(a) for a in images.submissions(db, brief)],
+        "codex_prompt": images.codex_prompt(brief),
+    }
+
+
+@router.post("/images/briefs/{brief_id}/references")
+def image_brief_add_reference(
+    brief_id: UUID,
+    request: Request,
+    kind: str = Form(...),
+    note: str = Form(default=""),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    from .constants import STORE_ROLE_OPERATE  # noqa: PLC0415
+
+    brief = _brief_or_404(db, user, brief_id, min_role=STORE_ROLE_OPERATE)
+    try:
+        asset = images.add_reference(db, brief=brief, kind=kind, contents=file.file.read(), note=note, actor=user)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    db.commit()
+    return images.asset_view(asset)
+
+
+@router.post("/images/briefs/{brief_id}/submit")
+def image_brief_submit(
+    brief_id: UUID,
+    request: Request,
+    note: str = Form(default=""),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """人手上传一张候选(和 Codex 经 MCP 交稿走同一条路、同四道门)。"""
+    from .constants import STORE_ROLE_OPERATE  # noqa: PLC0415
+
+    brief = _brief_or_404(db, user, brief_id, min_role=STORE_ROLE_OPERATE)
+    try:
+        asset = images.submit(db, brief=brief, contents=file.file.read(), note=note, submitted_via="upload", actor_user_id=int(user.id))
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    db.commit()
+    return images.asset_view(asset)
+
+
+@router.post("/images/assets/{asset_id}/decide")
+def image_asset_decide(asset_id: UUID, payload: AssetDecide, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    from .constants import STORE_ROLE_OPERATE  # noqa: PLC0415
+
+    asset = db.get(images.AmzImageAsset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    _brief_or_404(db, user, asset.brief_id, min_role=STORE_ROLE_OPERATE)
+    try:
+        asset = images.decide_asset(db, asset=asset, decision=payload.decision, reason=payload.reason, actor=user)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action=f"amz.image.{payload.decision}", target_type="amz_image_asset", target_id=str(asset.id), result="success", request_id=_request_id(request), details={"reason": payload.reason})
+    db.commit()
+    return images.asset_view(asset)
+
+
+@router.post("/images/briefs/{brief_id}/live")
+def image_brief_live(brief_id: UUID, payload: BriefLive, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """人在亚马逊后台传完图后来点一下:记上线日和基线,14 / 28 天回看从这天算。"""
+    from datetime import date as _date  # noqa: PLC0415
+
+    from .constants import STORE_ROLE_OPERATE  # noqa: PLC0415
+
+    brief = _brief_or_404(db, user, brief_id, min_role=STORE_ROLE_OPERATE)
+    try:
+        live_on = _date.fromisoformat(payload.live_on) if payload.live_on else None
+        brief = images.mark_live(db, brief=brief, actor=user, live_on=live_on)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="live_on 要是 YYYY-MM-DD") from None
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.image.live", target_type="amz_image_brief", target_id=str(brief.id), result="success", request_id=_request_id(request))
+    db.commit()
+    return images.brief_view(brief)
+
+
+@router.get("/images/assets/{asset_id}/file")
+def image_asset_file(asset_id: UUID, kind: str = Query(default="preview"), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
+    asset = db.get(images.AmzImageAsset, asset_id)
+    if asset is None:
+        raise HTTPException(status_code=404, detail="asset not found")
+    _brief_or_404(db, user, asset.brief_id)
+    if kind == "original":
+        path = images.asset_path(asset)
+        media_type = asset.mime_type
+    else:
+        path = images.derivative_path(asset, kind="thumbnail" if kind == "thumbnail" else "preview", max_side=320 if kind == "thumbnail" else 1280)
+        media_type = "image/webp" if path.suffix == ".webp" else asset.mime_type
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="file missing")
+    response = FileResponse(path=path, content_disposition_type="inline", filename=path.name, media_type=media_type)
+    response.headers["Cache-Control"] = "private, max-age=600"
+    return response
 
 
 # ---------------------------------------------------------------- 广告 API 授权(四家公司都走这条)

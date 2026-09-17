@@ -16,7 +16,7 @@ RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app \
-    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media /var/lib/barong/f-media \
+    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media /var/lib/barong/f-media /var/lib/barong/amz-media \
                 /var/lib/barong/agent-memory \
     && chown -R app:app /app /var/lib/barong /ms-playwright
 
