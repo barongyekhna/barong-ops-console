@@ -68,6 +68,8 @@ PROVIDER_AGENT_CHAT_AMZ = "agent_chat_amz_deepseek"
 PROVIDER_AMZ_SUFFICIENCY = "amz_sufficiency_deepseek"
 # A 系列图片四道门里的看图模型(同屏门 + 事实门,每张交稿两次)。默认 120/天:一张图最多四轮。
 PROVIDER_AMZ_IMAGE_GATES = "amz_image_gates_chatgpt"
+# A 系列评论归簇(人贴一批评论点一次,一批最多 60 条一调)。先只记数。
+PROVIDER_AMZ_REVIEWS = "amz_reviews_deepseek"
 # SM 社媒写手(DeepSeek 生成一条帖子 = 1 次)。新出网付费调用当天接台账(铁律)。
 # 默认 200/天:mock 期四周日历满打满算约 150 格,够一次性写完还留余量。
 PROVIDER_SM_WRITER = "sm_writer_deepseek"
@@ -94,6 +96,7 @@ DEFAULT_DAILY_BUDGETS = {
     PROVIDER_AGENT_CHAT_AMZ: 0,
     PROVIDER_AMZ_SUFFICIENCY: 0,
     PROVIDER_AMZ_IMAGE_GATES: 120,
+    PROVIDER_AMZ_REVIEWS: 0,
     PROVIDER_SM_WRITER: 200,
 }
 
@@ -116,6 +119,7 @@ BUDGET_ENV_NAMES = {
     PROVIDER_AGENT_CHAT_AMZ: "AMZ_AGENT_CHAT_DAILY_BUDGET",
     PROVIDER_AMZ_SUFFICIENCY: "AMZ_SUFFICIENCY_DAILY_BUDGET",
     PROVIDER_AMZ_IMAGE_GATES: "AMZ_IMAGE_GATES_DAILY_BUDGET",
+    PROVIDER_AMZ_REVIEWS: "AMZ_REVIEWS_DAILY_BUDGET",
     PROVIDER_SM_WRITER: "SM_WRITER_DAILY_BUDGET",
 }
 
@@ -153,6 +157,7 @@ def provider_label(provider: str) -> str:
         PROVIDER_AGENT_CHAT_AMZ: "亚马逊四员工对话",
         PROVIDER_AMZ_SUFFICIENCY: "亚马逊事实表核对",
         PROVIDER_AMZ_IMAGE_GATES: "亚马逊图片看图门",
+        PROVIDER_AMZ_REVIEWS: "亚马逊评论归簇",
         PROVIDER_SM_WRITER: "SM 社媒写手",
     }.get(provider, provider)
 

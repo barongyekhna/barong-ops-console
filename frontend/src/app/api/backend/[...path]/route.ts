@@ -1586,6 +1586,8 @@ function isAllowedAmzPath(method: string, path: string[]) {
   }
   if (path.length === 2) {
     if (path[1] === "fact-sheets") return method === "GET" || method === "POST";
+    if (path[1] === "launches") return method === "GET" || method === "POST";
+    if (path[1] === "reviews") return method === "POST";
     return ["stores", "seed-imports", "employees", "suggestions", "experience"].includes(path[1]) && method === "GET";
   }
   if (path.length === 4 && path[1] === "fact-sheets" && isUuidPathSegment(path[2]) && path[3] === "judge") {
@@ -1593,6 +1595,16 @@ function isAllowedAmzPath(method: string, path: string[]) {
   }
   if (path.length === 4 && path[1] === "ads" && path[2] === "oauth" && (path[3] === "start" || path[3] === "callback")) {
     return method === "POST";
+  }
+  // 推新流程与评论簇(A4)
+  if (path.length === 3 && path[1] === "launches" && isUuidPathSegment(path[2])) {
+    return method === "GET";
+  }
+  if (path.length === 4 && path[1] === "launches" && isUuidPathSegment(path[2]) && ["inputs", "tick", "advance", "close"].includes(path[3])) {
+    return method === "POST";
+  }
+  if (path.length === 3 && path[1] === "reviews" && path[2] === "clusters") {
+    return method === "GET";
   }
   // 图片通道(A5)
   if (path.length === 3 && path[1] === "images" && path[2] === "briefs") {

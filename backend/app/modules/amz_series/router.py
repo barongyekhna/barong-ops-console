@@ -20,7 +20,7 @@ from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
-from . import experience, fact_sheets, images, service, suggestions
+from . import experience, fact_sheets, images, launches, reviews, service, suggestions
 from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_VIEW, STORE_ROLES
 from .deps import StoreAccess, granted_store_codes, require_amz_access, require_store
 
@@ -317,6 +317,155 @@ def experience_list(
     codes = granted_store_codes(db, user)
     rows = experience.list_entries(db, store_codes=codes, employee=employee)
     return {"items": [experience.view(r) for r in rows], "params": {name: {"default": spec[0], "cap": spec[2], "driven_by": spec[3]} for name, spec in experience.PARAMS.items()}}
+
+
+# ---------------------------------------------------------------- 推新流程与评论簇(A4)
+
+
+class LaunchCreate(BaseModel):
+    store_code: str = Field(min_length=4, max_length=16)
+    product_line: str = Field(min_length=1, max_length=32)
+    title: str = Field(default="", max_length=255)
+    sku: str | None = Field(default=None, max_length=128)
+    asin: str | None = Field(default=None, max_length=16)
+
+
+class LaunchInputs(BaseModel):
+    inputs: dict[str, Any] = Field(default_factory=dict)
+
+
+class LaunchTick(BaseModel):
+    key: str = Field(min_length=1, max_length=48)
+    ok: bool = True
+
+
+class LaunchAdvance(BaseModel):
+    override_reason: str | None = Field(default=None, max_length=500)
+
+
+class LaunchClose(BaseModel):
+    outcome: str = Field(pattern="^(growth|killed)$")
+    lessons: list[str] = Field(default_factory=list)
+
+
+class ReviewsPaste(BaseModel):
+    product_line: str = Field(min_length=1, max_length=32)
+    whose: str = Field(pattern="^(ours|competitor)$")
+    text: str = Field(min_length=4, max_length=200000)
+    store_code: str | None = Field(default=None, max_length=16)
+    asin: str | None = Field(default=None, max_length=16)
+
+
+def _launch_for(db: Session, user: User, launch_id: UUID, *, write: bool) -> Any:
+    from .constants import STORE_ROLE_OPERATE, STORE_ROLE_RANK  # noqa: PLC0415
+
+    try:
+        launch = launches.get(db, launch_id)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    role = service.grant_role_for(db, user=user, store_code=launch.store_code, is_owner=is_owner_role(user.role))
+    need = STORE_ROLE_OPERATE if write else STORE_ROLE_VIEW
+    if STORE_ROLE_RANK.get(role, 0) < STORE_ROLE_RANK[need]:
+        raise HTTPException(status_code=403, detail="no access to this store")
+    return launch
+
+
+def _commit_view(db: Session, launch: Any) -> dict[str, Any]:
+    db.commit()
+    return launches.view(launch)
+
+
+@router.get("/launches")
+def launches_list(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    rows = launches.list_launches(db, store_codes=granted_store_codes(db, user))
+    return {"items": [launches.view(r) for r in rows], "stages": launches.STAGE_LABELS, "manual_items": dict(launches.MANUAL_ITEMS)}
+
+
+@router.post("/launches")
+def launches_create(payload: LaunchCreate, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    from .constants import STORE_ROLE_OPERATE, STORE_ROLE_RANK  # noqa: PLC0415
+
+    role = service.grant_role_for(db, user=user, store_code=payload.store_code.lower(), is_owner=is_owner_role(user.role))
+    if STORE_ROLE_RANK.get(role, 0) < STORE_ROLE_RANK[STORE_ROLE_OPERATE]:
+        raise HTTPException(status_code=403, detail="需要店铺「操作」角色")
+    try:
+        launch = launches.create(db, store_code=payload.store_code, product_line=payload.product_line, title=payload.title, actor=user, sku=payload.sku, asin=payload.asin)
+        launches.refresh(db, launch=launch)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.launch.create", target_type="amz_launch", target_id=str(launch.id), result="success", request_id=_request_id(request))
+    return _commit_view(db, launch)
+
+
+@router.get("/launches/{launch_id}")
+def launches_detail(launch_id: UUID, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    launch = _launch_for(db, user, launch_id, write=False)
+    launches.refresh(db, launch=launch)
+    return _commit_view(db, launch)
+
+
+@router.post("/launches/{launch_id}/inputs")
+def launches_inputs(launch_id: UUID, payload: LaunchInputs, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    launch = _launch_for(db, user, launch_id, write=True)
+    launches.update_inputs(db, launch=launch, patch=payload.inputs)
+    return _commit_view(db, launch)
+
+
+@router.post("/launches/{launch_id}/tick")
+def launches_tick(launch_id: UUID, payload: LaunchTick, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    launch = _launch_for(db, user, launch_id, write=True)
+    try:
+        launches.tick(db, launch=launch, key=payload.key, ok=payload.ok, actor=user)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    return _commit_view(db, launch)
+
+
+@router.post("/launches/{launch_id}/advance")
+def launches_advance(launch_id: UUID, payload: LaunchAdvance, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    launch = _launch_for(db, user, launch_id, write=True)
+    try:
+        launches.advance(db, launch=launch, actor=user, override_reason=payload.override_reason)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.launch.advance", target_type="amz_launch", target_id=str(launch.id), result="success", request_id=_request_id(request), details={"stage": launch.stage, "override_reason": payload.override_reason})
+    return _commit_view(db, launch)
+
+
+@router.post("/launches/{launch_id}/close")
+def launches_close(launch_id: UUID, payload: LaunchClose, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    launch = _launch_for(db, user, launch_id, write=True)
+    try:
+        launches.close(db, launch=launch, outcome=payload.outcome, retro={"lessons": payload.lessons}, actor=user)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.launch.close", target_type="amz_launch", target_id=str(launch.id), result="success", request_id=_request_id(request), details={"outcome": payload.outcome})
+    return _commit_view(db, launch)
+
+
+@router.post("/reviews")
+def reviews_paste(payload: ReviewsPaste, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """贴一批评论(空行分条,开头可写「3星」)→ 入库去重 → 归簇。"""
+    from .constants import STORE_ROLE_OPERATE, STORE_ROLE_RANK  # noqa: PLC0415
+
+    if not is_owner_role(user.role):
+        codes = granted_store_codes(db, user) or []
+        roles = [service.grant_role_for(db, user=user, store_code=c, is_owner=False) for c in codes]
+        if not any(STORE_ROLE_RANK.get(r, 0) >= STORE_ROLE_RANK[STORE_ROLE_OPERATE] for r in roles):
+            raise HTTPException(status_code=403, detail="需要任一店铺「操作」角色")
+    try:
+        added = reviews.add_reviews(db, product_line=payload.product_line, whose=payload.whose, raw=payload.text, actor_user_id=int(user.id), store_code=payload.store_code, asin=payload.asin)
+        db.commit()
+        clustered = reviews.cluster_pending(db, product_line=payload.product_line)
+    except service.AmzServiceError as exc:
+        _raise(exc)
+    db.commit()
+    return {"added": added, "clustered": clustered, "clusters": reviews.cluster_table(db, product_line=payload.product_line, whose=payload.whose)}
+
+
+@router.get("/reviews/clusters")
+def reviews_clusters(product_line: str = Query(...), whose: str | None = Query(default=None), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    return {"clusters": reviews.cluster_table(db, product_line=product_line, whose=whose), "pits": reviews.top_pits(db, product_line=product_line), "families": reviews.FAMILY_LABELS}
 
 
 # ---------------------------------------------------------------- 图片通道(A5):brief / 参考图 / 交稿 / 选定 / 上线

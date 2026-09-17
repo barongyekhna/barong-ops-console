@@ -515,6 +515,51 @@ class AmzExperience(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
+class AmzLaunch(AmzTimestampMixin, Base):
+    """推新六步状态机:损益表门 → 看战场 → 建 listing → 上架前门 → 蜜月 45 天 → 第 45 天判 → 复盘。无 org_id 列。"""
+
+    __tablename__ = "amz_launches"
+    __table_args__ = (Index("ix_amz_launches_store_stage", "store_code", "stage"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    product_line: Mapped[str] = mapped_column(String(32), nullable=False)
+    sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    stage: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pnl", default="pnl")
+    inputs_json: Mapped[dict[str, Any]] = mapped_column("inputs", json_type(), nullable=False, default=dict)
+    pnl_json: Mapped[dict[str, Any]] = mapped_column("pnl", json_type(), nullable=False, default=dict)
+    battlefield_json: Mapped[dict[str, Any]] = mapped_column("battlefield", json_type(), nullable=False, default=dict)
+    checklist_json: Mapped[dict[str, Any]] = mapped_column("checklist", json_type(), nullable=False, default=dict)
+    honeymoon_json: Mapped[dict[str, Any]] = mapped_column("honeymoon", json_type(), nullable=False, default=dict)
+    verdict_json: Mapped[dict[str, Any]] = mapped_column("verdict", json_type(), nullable=False, default=dict)
+    retro_json: Mapped[dict[str, Any]] = mapped_column("retro", json_type(), nullable=False, default=dict)
+    live_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+
+class AmzReview(AmzTimestampMixin, Base):
+    """贴进来的评论(自家 / 对手)+ 归簇结果。亚马逊没有评论正文 API。"""
+
+    __tablename__ = "amz_reviews"
+    __table_args__ = (UniqueConstraint("product_line", "whose", "asin", "text_sha256", name="uq_amz_reviews_text"), Index("ix_amz_reviews_line_whose", "product_line", "whose"))
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    launch_id: Mapped[UUID | None] = mapped_column(Uuid, ForeignKey("amz_launches.id", ondelete="CASCADE"), nullable=True)
+    store_code: Mapped[str | None] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="SET NULL"), nullable=True)
+    product_line: Mapped[str] = mapped_column(String(32), nullable=False)
+    asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    whose: Mapped[str] = mapped_column(String(16), nullable=False, server_default="ours", default="ours")
+    stars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    text_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    family: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    cluster: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    clustered_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
@@ -576,4 +621,6 @@ __all__ = [
     "AmzImageAsset",
     "AmzOutcome",
     "AmzExperience",
+    "AmzLaunch",
+    "AmzReview",
 ]

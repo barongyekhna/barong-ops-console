@@ -92,7 +92,9 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
     assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
-    assert order[i + 7] == "20260917_02_amz_experience"
+    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches"
+    launch_mig = (versions / "20260917_03_amz_launches.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260917_02_amz_experience"' in launch_mig and 'sa.Column("org_id"' not in launch_mig
     exp_mig = (versions / "20260917_02_amz_experience.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260917_01_amz_images"' in exp_mig and 'sa.Column("org_id"' not in exp_mig
     images_mig = (versions / "20260917_01_amz_images.py").read_text(encoding="utf-8")
@@ -402,7 +404,7 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
@@ -517,3 +519,46 @@ def test_experience_judge_drift_and_draft_advice() -> None:
     assert draft.severity == "warn" and "experience" not in draft.evidence
     ex.apply_to_draft(draft, {"notes": ["03us 的收割 6 条里 1 条成立"], "downgrade": True})
     assert draft.severity == "info" and draft.evidence["experience"] == ["03us 的收割 6 条里 1 条成立"] and draft.evidence["experience_downgraded"] is True
+
+
+# ---------------------------------------------------------------- A4:推新流程与评论簇(纯函数)
+
+
+def test_launch_pnl_gate_day45_and_stock() -> None:
+    from backend.app.modules.amz_series import launches as ln
+
+    facts = {"cost": {"factory_cny": 60, "freight_cny": 7, "price_usd": 32.99}}
+    missing = ln.compute_pnl({"price_usd": 32.99}, facts)
+    assert missing["ok"] is False and missing["missing"] == ["FBA 配送费(美元)"]
+    pnl = ln.compute_pnl({"price_usd": 32.99, "fba_fee_usd": 6}, facts)
+    # 32.99 − 4.95 佣金 − 6 FBA − 9.31 出厂头程 − 8.25 推新广告 − 3.30 促销退款 ≈ 1.18,低于 $4 线
+    assert pnl["ok"] is False and abs(pnl["margin_usd"] - 1.18) < 0.02 and pnl["floor_usd"] == 4.0
+    assert pnl["breakeven_price_usd"] > 32.99  # 要卖到这个价才过线
+    assert ln.compute_pnl({"price_usd": 49.99, "fba_fee_usd": 6}, facts)["ok"] is True
+
+    assert ln.stock_days({"fba_units": 300, "expected_daily_units": 5}) == 60.0
+    assert ln.stock_days({"fba_units": 300}) is None
+
+    assert ln.judge_day45({"reviews": 20, "cvr_pct": 12.0, "main_rank": 8})["result"] == "pass"
+    inc = ln.judge_day45({"reviews": 20, "cvr_pct": None, "main_rank": 8})
+    assert inc["result"] == "incomplete" and inc["missing"]
+    fail = ln.judge_day45({"reviews": 6, "cvr_pct": 7.5, "main_rank": 55, "main_term_click_share_pct": 0.4}, pits_expectation_share_pct=45.0)
+    links = [b["link"] for b in fail["breaks"]]
+    assert fail["result"] == "fail" and links == ["词", "预期", "评论"]
+    assert "绝不做任何激励评论" in fail["breaks"][2]["fix"]
+    assert [b["link"] for b in ln.judge_day45({"reviews": 30, "cvr_pct": 15.0, "main_rank": 40, "main_term_click_share_pct": 3.0})["breaks"]] == ["主图"]
+
+
+def test_review_paste_splitting_and_keyword_fallback() -> None:
+    from backend.app.modules.amz_series import reviews as rv
+
+    raw = "2星: It does not heat the water at all\n\n★ leaked after two days\n\n5/5 great for camping\n\nok"
+    items = rv.split_paste(raw)
+    assert items == [(2, "It does not heat the water at all"), (1, "leaked after two days"), (5, "great for camping")]
+    assert rv.fallback_cluster("It does not heat the water") == ("expectation", "以为能加热")
+    assert rv.fallback_cluster("box arrived damaged, pump missing") == ("logistics", "到货损坏 / 缺件")
+    assert rv.fallback_cluster("stopped working after a week") == ("defect", "用几次就坏")
+    assert rv.fallback_cluster("nice color") == ("other", "其他")
+    from r_system_v2.ra import quota_ledger as ql
+
+    assert ql.PROVIDER_AMZ_REVIEWS in ql.DEFAULT_DAILY_BUDGETS and ql.PROVIDER_AMZ_REVIEWS in ql.BUDGET_ENV_NAMES

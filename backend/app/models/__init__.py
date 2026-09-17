@@ -179,6 +179,8 @@ from ..modules.amz_series.models import (
     AmzImageAsset,
     AmzOutcome,
     AmzExperience,
+    AmzLaunch,
+    AmzReview,
 )
 from ..modules.rd_series.models import (
     RdDevice,

@@ -21,8 +21,8 @@ from backend.app.modules.amz_series import bootstrap as bs
 from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
-from backend.app.modules.amz_series import experience, fact_sheets, images, products, reports_sync, work_log
-from backend.app.modules.amz_series.models import AmzExperience, AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzOutcome, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
+from backend.app.modules.amz_series import experience, fact_sheets, images, launches, products, reports_sync, reviews, work_log
+from backend.app.modules.amz_series.models import AmzLaunch, AmzReview, AmzExperience, AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzOutcome, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -42,6 +42,8 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzReview))
+    session.execute(delete(AmzLaunch))
     session.execute(delete(AmzExperience))
     session.execute(delete(AmzOutcome))
     session.execute(delete(AmzImageAsset))
@@ -367,11 +369,59 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     assert {e.kind for e in entries} >= {"precision", "param"}
     assert experience.backtest(db, db.get(AmzStore, "03us")) == 0  # 数据不够长,不硬回测
 
+    # 推新六步:损益表门挡住 → 强制放行要写原因 → 贴对手差评归簇出「坑」→ listing 门(事实表 + 主图已选定)→
+    # 上架前门没全绿 → 强制放行进蜜月 → 满 45 天判定落一条 bad 建议 → 复盘进经验库
+    launch = launches.create(db, store_code="03us", product_line="pump", title="03us 泵 冬季重推", actor=owner)
+    launches.update_inputs(db, launch=launch, patch={"price_usd": 32.99, "fba_fee_usd": 6, "fba_units": 100, "expected_daily_units": 5, "not_allowed": 1})
+    db.commit()
+    assert launch.stage == "pnl" and launch.pnl_json["ok"] is False and "not_allowed" not in launch.inputs_json
+    with pytest.raises(Exception) as blocked:
+        launches.advance(db, launch=launch, actor=owner)
+    assert getattr(blocked.value, "code", "") == "amz_launch_gate_blocked" and "损益表门没过" in str(blocked.value)
+    launches.advance(db, launch=launch, actor=owner, override_reason="冬季占位,先亏一点")
+    db.commit()
+    assert launch.stage == "battlefield"
+    added = reviews.add_reviews(db, product_line="pump", whose="competitor", raw="1星 does not heat the water\n\n2星 no hot water, cold shower\n\n1星 leaked in a week", actor_user_id=owner.id, asin="B0AAAAAAA1")
+    assert added == 3 and reviews.add_reviews(db, product_line="pump", whose="competitor", raw="1星 does not heat the water", actor_user_id=owner.id, asin="B0AAAAAAA1") == 0
+    counts = reviews.cluster_pending(db, product_line="pump", call=lambda m, *, org_id: {"items": [{"n": 0, "family": "expectation", "theme": "以为能加热"}, {"n": 1, "family": "expectation", "theme": "以为能加热"}]})
+    db.commit()
+    assert counts == {"model": 2, "keywords": 1}
+    pits = reviews.top_pits(db, product_line="pump")
+    assert pits[0]["theme"] == "以为能加热" and pits[0]["count"] == 2 and pits[1]["theme"] == "漏水"
+    launches.advance(db, launch=launch, actor=owner)
+    db.commit()
+    assert launch.stage == "listing" and launch.battlefield_json["pits"][0]["theme"] == "以为能加热"
+    launches.advance(db, launch=launch, actor=owner)  # 事实表够 + 03us 泵主图已选定并上线
+    db.commit()
+    assert launch.stage == "prelaunch"
+    items = {i["key"]: i for i in launch.checklist_json["items"]}
+    assert items["main_image"]["ok"] and items["facts"]["ok"] and items["pits_known"]["ok"] and not items["stock"]["ok"]  # 100/5=20 天不够 45
+    with pytest.raises(Exception):
+        launches.tick(db, launch=launch, key="stock", ok=True, actor=owner)  # 自动项不能手勾
+    launches.tick(db, launch=launch, key="vine", ok=True, actor=owner)
+    with pytest.raises(Exception):
+        launches.advance(db, launch=launch, actor=owner)
+    launches.advance(db, launch=launch, actor=owner, override_reason="库存在路上,先上架")
+    launches.update_inputs(db, launch=launch, patch={"reviews_count": 20, "main_term_rank": 12, "asin": "B0TESTA0001"})
+    db.commit()
+    assert launch.stage == "honeymoon" and launch.live_on is not None
+    assert launches.run_daily(db, store_code="03us", today=launch.live_on + timedelta(days=10)) == {"updated": 1, "judged": 0}
+    assert launches.run_daily(db, store_code="03us", today=launch.live_on + timedelta(days=44)) == {"updated": 1, "judged": 1}
+    db.commit()
+    assert launch.stage == "verdict" and launch.verdict_json["result"] == "incomplete"  # 03us 没接 SP-API,转化率拿不到,不硬判
+    day45 = db.scalar(select(AmzSuggestion).where(AmzSuggestion.action_type == "launch_day45"))
+    assert day45.severity == "bad" and day45.employee == "D" and "缺数没法判" in day45.title
+    with pytest.raises(Exception):
+        launches.close(db, launch=launch, outcome="growth", retro={"lessons": []}, actor=owner)
+    launches.close(db, launch=launch, outcome="growth", retro={"lessons": ["冬季重推前先把「不加热」写进主图副标题"]}, actor=owner)
+    db.commit()
+    assert launch.stage == "growth" and db.scalar(select(AmzExperience).where(AmzExperience.kind == "launch")).statement.startswith("推新「03us 泵 冬季重推」进了成长期")
+
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
-    assert created == 15  # 五店各一条 rules_daily + image_lookback + experience_weekly;sales_traffic / sqp_weekly 因无凭据一条不排
-    jobs = claim(db, 20)
-    assert len(jobs) == 15 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly"}
+    assert created == 20  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily;出网作业因无凭据一条不排
+    jobs = claim(db, 30)
+    assert len(jobs) == 20 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly", "launch_daily"}
     for job in jobs:
         assert process_job(job) is True
     beats = {beat["worker_name"]: beat for beat in list_heartbeats(db)}

@@ -306,3 +306,47 @@ export function getExperience(employee?: string) {
   const query = employee ? `?employee=${encodeURIComponent(employee)}` : "";
   return amzRequest<{ items: AmzExperienceEntry[]; params: Record<string, { default: number; cap: number; driven_by: string }> }>(`${BASE}/experience${query}`, "经验库加载失败");
 }
+
+// ---- 推新流程与评论簇(A4)。
+export type AmzLaunchItem = { key: string; label: string; auto: boolean; ok: boolean; detail: string };
+export type AmzReviewCluster = { family: string; family_label: string; owner: string; theme: string; count: number; share_pct: number; sample: string };
+export type AmzLaunch = {
+  id: string; store_code: string; product_line: string; product_line_label: string; sku: string | null; asin: string | null; title: string; stage: string; stage_label: string;
+  inputs: Record<string, unknown>;
+  pnl: { ok?: boolean; missing?: string[]; lines?: Record<string, number>; margin_usd?: number; margin_pct?: number | null; floor_usd?: number; breakeven_price_usd?: number | null };
+  battlefield: { competitor_asins?: string[]; keywords?: string[]; window_note?: string; pits?: AmzReviewCluster[]; own_clusters?: AmzReviewCluster[] };
+  checklist: { items?: AmzLaunchItem[]; all_green?: boolean };
+  honeymoon: Record<string, unknown>;
+  verdict: { result?: string; missing?: string[]; breaks?: { link: string; why: string; fix: string }[]; judged_on?: string };
+  retro: { outcome?: string; lessons?: string[] };
+  live_on: string | null; updated_at: string | null;
+};
+
+export function getLaunches() {
+  return amzRequest<{ items: AmzLaunch[]; stages: Record<string, string>; manual_items: Record<string, string> }>(`${BASE}/launches`, "推新列表加载失败");
+}
+export function createLaunch(payload: { store_code: string; product_line: string; title: string; sku?: string; asin?: string }) {
+  return amzRequest<AmzLaunch>(`${BASE}/launches`, "建推新失败", { body: payload, method: "POST" });
+}
+export function getLaunch(id: string) {
+  return amzRequest<AmzLaunch>(`${BASE}/launches/${id}`, "推新加载失败");
+}
+export function saveLaunchInputs(id: string, inputs: Record<string, unknown>) {
+  return amzRequest<AmzLaunch>(`${BASE}/launches/${id}/inputs`, "保存失败", { body: { inputs }, method: "POST" });
+}
+export function tickLaunch(id: string, key: string, ok: boolean) {
+  return amzRequest<AmzLaunch>(`${BASE}/launches/${id}/tick`, "勾选失败", { body: { key, ok }, method: "POST" });
+}
+export function advanceLaunch(id: string, overrideReason?: string) {
+  return amzRequest<AmzLaunch>(`${BASE}/launches/${id}/advance`, "往下走失败", { body: { override_reason: overrideReason || null }, method: "POST" });
+}
+export function closeLaunch(id: string, outcome: "growth" | "killed", lessons: string[]) {
+  return amzRequest<AmzLaunch>(`${BASE}/launches/${id}/close`, "收尾失败", { body: { outcome, lessons }, method: "POST" });
+}
+export function pasteReviews(payload: { product_line: string; whose: "ours" | "competitor"; text: string; store_code?: string; asin?: string }) {
+  return amzRequest<{ added: number; clustered: { model: number; keywords: number }; clusters: AmzReviewCluster[] }>(`${BASE}/reviews`, "评论入库失败", { body: payload, method: "POST" });
+}
+export function getReviewClusters(productLine: string, whose?: string) {
+  const query = `?product_line=${encodeURIComponent(productLine)}${whose ? `&whose=${whose}` : ""}`;
+  return amzRequest<{ clusters: AmzReviewCluster[]; pits: AmzReviewCluster[]; families: Record<string, string> }>(`${BASE}/reviews/clusters${query}`, "评论簇加载失败");
+}
