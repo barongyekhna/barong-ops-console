@@ -470,6 +470,51 @@ class AmzImageAsset(AmzTimestampMixin, Base):
     created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
+class AmzOutcome(Base):
+    """一条建议在 14 / 28 天后对不对(live = 真建议;backtest = 规则放回过去跑)。无 org_id 列。"""
+
+    __tablename__ = "amz_outcomes"
+    __table_args__ = (
+        UniqueConstraint("store_code", "action_type", "subject", "as_of", "horizon_days", "source", name="uq_amz_outcomes_key"),
+        Index("ix_amz_outcomes_store_action", "store_code", "action_type"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    as_of: Mapped[date] = mapped_column(Date, nullable=False)
+    horizon_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, server_default="live", default="live")
+    verdict: Mapped[str] = mapped_column(String(8), nullable=False)
+    metrics_json: Mapped[dict[str, Any]] = mapped_column("metrics", json_type(), nullable=False, default=dict)
+    suggestion_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class AmzExperience(Base):
+    """经验条目(precision / rejection / image)与参数漂移(param)。一句人话 + 证据 + 样本数。"""
+
+    __tablename__ = "amz_experience"
+    __table_args__ = (UniqueConstraint("entry_key", name="uq_amz_experience_key"), Index("ix_amz_experience_store_action", "store_code", "action_type"))
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    entry_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    scope: Mapped[str] = mapped_column(String(8), nullable=False, server_default="store", default="store")
+    store_code: Mapped[str | None] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=True)
+    action_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    employee: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_json: Mapped[dict[str, Any]] = mapped_column("evidence", json_type(), nullable=False, default=dict)
+    samples: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    hits: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    value: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="active", default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 
@@ -529,4 +574,6 @@ __all__ = [
     "AmzFactSheet",
     "AmzImageBrief",
     "AmzImageAsset",
+    "AmzOutcome",
+    "AmzExperience",
 ]

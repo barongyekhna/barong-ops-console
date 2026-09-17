@@ -18,7 +18,7 @@ from ..models import AmzSalesDaily, AmzSqp, AmzStore
 from ..persona import persona_for
 from ..rules import store_as_of
 from ..suggestions import list_suggestions, suggestion_view
-from .. import products, work_log
+from .. import experience, products, work_log
 
 MAX_OPEN_IN_SNAPSHOT = 8
 MAX_RECENT_LOG = 12
@@ -75,6 +75,7 @@ def employee_snapshot(db: Session, *, employee: str, store_codes: list[str] | No
         },
         "最近 7 天销售与流量(SP-API,按子 ASIN)": sales_section(db, store_codes=store_codes),
         "上一整周搜索词表现 SQP(全市场 vs 我们)": sqp_section(db, store_codes=store_codes),
+        "经验库(跟我有关的;回头看建议对不对、老板驳回的规律、参数漂移)": [experience.view(r)["statement"] for r in experience.list_entries(db, store_codes=store_codes, employee=employee, limit=8)] or "还没有经验条目",
         "我的工作日志(硬记忆,来自数据库)": work_log_section(db, employee=employee, store_codes=store_codes, question=question),
     }
 

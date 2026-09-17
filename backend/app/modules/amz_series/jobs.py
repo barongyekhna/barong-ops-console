@@ -30,8 +30,9 @@ JOB_RULES_DAILY = "rules_daily"
 JOB_SALES_TRAFFIC = "sales_traffic"
 JOB_SQP_WEEKLY = "sqp_weekly"
 JOB_IMAGE_LOOKBACK = "image_lookback"
+JOB_EXPERIENCE_WEEKLY = "experience_weekly"
 # 作业 → 期望间隔(秒)。心跳的 expected_interval 也用它;超过 3 倍没干成活 = stale。
-JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600}
+JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600}
 # 要出网的作业:只在店铺有 SP-API 凭据时才排。
 API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY})
 # 失败后的重试间隔:失败不等于「该再排一条」,否则一个坏凭据会每 15 秒失败一次刷满作业表。
@@ -232,8 +233,22 @@ def run_image_lookback(store_code: str) -> dict[str, Any]:
         return {"lookbacks": done}
 
 
+def run_experience_weekly(store_code: str) -> dict[str, Any]:
+    """经验库每周刷新:判结果(真建议 + 回测)→ 条目 → 参数漂移。不出网。"""
+    from . import experience  # noqa: PLC0415
+
+    with SessionLocal() as db:
+        store = db.get(AmzStore, store_code)
+        if store is None:
+            raise RuntimeError(f"store {store_code} missing")
+        out = experience.refresh_store(db, store)
+        db.commit()
+        return out
+
+
 HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {
     JOB_RULES_DAILY: run_rules_daily,
+    JOB_EXPERIENCE_WEEKLY: run_experience_weekly,
     JOB_IMAGE_LOOKBACK: run_image_lookback,
     JOB_SALES_TRAFFIC: run_sales_traffic,
     JOB_SQP_WEEKLY: run_sqp_weekly,

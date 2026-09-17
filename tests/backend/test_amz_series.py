@@ -92,6 +92,9 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
     assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
+    assert order[i + 7] == "20260917_02_amz_experience"
+    exp_mig = (versions / "20260917_02_amz_experience.py").read_text(encoding="utf-8")
+    assert 'down_revision = "20260917_01_amz_images"' in exp_mig and 'sa.Column("org_id"' not in exp_mig
     images_mig = (versions / "20260917_01_amz_images.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260916_04_amz_fact_sheets"' in images_mig and 'sa.Column("org_id"' not in images_mig and "amz_image_briefs" in images_mig
     sheets_mig = (versions / "20260916_04_amz_fact_sheets.py").read_text(encoding="utf-8")
@@ -399,7 +402,7 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
@@ -481,3 +484,36 @@ def test_sufficiency_checklists_fail_closed_and_flag_contradictions_and_question
     from r_system_v2.ra import quota_ledger as ql
 
     assert ql.PROVIDER_AMZ_SUFFICIENCY in ql.DEFAULT_DAILY_BUDGETS and ql.PROVIDER_AMZ_SUFFICIENCY in ql.BUDGET_ENV_NAMES
+
+
+# ---------------------------------------------------------------- A4:经验库(纯函数)
+
+
+def test_experience_judge_drift_and_draft_advice() -> None:
+    from decimal import Decimal as _D
+
+    from backend.app.modules.amz_series import experience as ex
+    from backend.app.modules.amz_series.rules import SuggestionDraft
+
+    W = ex.Window
+    assert ex.judge("harvest", W(3, 1, _D(1), _D(10))) == "na"  # 点击太少不硬判
+    assert ex.judge("harvest", W(20, 3, _D(10), _D(60))) == "right"
+    assert ex.judge("harvest", W(20, 0, _D(10), _D(0))) == "wrong"
+    assert ex.judge("negative", W(20, 0, _D(10), _D(0))) == "right"
+    assert ex.judge("negative", W(20, 2, _D(10), _D(50))) == "wrong"
+    assert ex.judge("bid_down", W(30, 1, _D(40), _D(50))) == "right"  # ACOS 80% 还是倒挂
+    assert ex.judge("bid_down", W(30, 5, _D(10), _D(100))) == "wrong"
+    assert ex.judge("listing_cvr_gap", W(99, 9, _D(1), _D(1))) == "na"
+
+    # 一次一档、有上限、永不低于出厂值
+    assert ex.drift_value(3, default=3, step=1, cap=5, precision=30, low=50, high=85) == 4
+    assert ex.drift_value(5, default=3, step=1, cap=5, precision=10, low=50, high=85) == 5
+    assert ex.drift_value(4, default=3, step=1, cap=5, precision=90, low=50, high=85) == 3
+    assert ex.drift_value(3, default=3, step=1, cap=5, precision=95, low=50, high=85) == 3
+    assert ex.drift_value(4, default=3, step=1, cap=5, precision=70, low=50, high=85) == 4
+
+    draft = SuggestionDraft("D", "03us", "harvest", "warn", "t", "w", "p", "s", {"term": "x"})
+    ex.apply_to_draft(draft, {"notes": [], "downgrade": False})
+    assert draft.severity == "warn" and "experience" not in draft.evidence
+    ex.apply_to_draft(draft, {"notes": ["03us 的收割 6 条里 1 条成立"], "downgrade": True})
+    assert draft.severity == "info" and draft.evidence["experience"] == ["03us 的收割 6 条里 1 条成立"] and draft.evidence["experience_downgraded"] is True

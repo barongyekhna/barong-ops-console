@@ -20,7 +20,7 @@ from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
-from . import fact_sheets, images, service, suggestions
+from . import experience, fact_sheets, images, service, suggestions
 from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_VIEW, STORE_ROLES
 from .deps import StoreAccess, granted_store_codes, require_amz_access, require_store
 
@@ -303,6 +303,20 @@ def fact_sheets_judge(
     _can_write_sheets(db, user, row.store_code)
     db.commit()
     return fact_sheets.view(row)
+
+
+# ---------------------------------------------------------------- 经验库(A4)
+
+
+@router.get("/experience")
+def experience_list(
+    employee: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    codes = granted_store_codes(db, user)
+    rows = experience.list_entries(db, store_codes=codes, employee=employee)
+    return {"items": [experience.view(r) for r in rows], "params": {name: {"default": spec[0], "cap": spec[2], "driven_by": spec[3]} for name, spec in experience.PARAMS.items()}}
 
 
 # ---------------------------------------------------------------- 图片通道(A5):brief / 参考图 / 交稿 / 选定 / 上线

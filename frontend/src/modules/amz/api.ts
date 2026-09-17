@@ -298,3 +298,11 @@ export function markImageBriefLive(id: string, liveOn?: string) {
 export function imageAssetUrl(assetId: string, kind: "thumbnail" | "preview" | "original" = "preview") {
   return `/api/backend/amz/images/assets/${assetId}/file?kind=${kind}`;
 }
+
+// ---- 经验库(A4)。
+export type AmzExperienceEntry = { id: string; scope: string; store_code: string | null; action_type: string; action_label: string; kind: string; employee: string | null; statement: string; evidence: Record<string, unknown>; samples: number; hits: number; value: number | null; updated_at: string | null };
+
+export function getExperience(employee?: string) {
+  const query = employee ? `?employee=${encodeURIComponent(employee)}` : "";
+  return amzRequest<{ items: AmzExperienceEntry[]; params: Record<string, { default: number; cap: number; driven_by: string }> }>(`${BASE}/experience${query}`, "经验库加载失败");
+}

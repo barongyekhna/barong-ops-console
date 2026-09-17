@@ -177,6 +177,8 @@ from ..modules.amz_series.models import (
     AmzFactSheet,
     AmzImageBrief,
     AmzImageAsset,
+    AmzOutcome,
+    AmzExperience,
 )
 from ..modules.rd_series.models import (
     RdDevice,

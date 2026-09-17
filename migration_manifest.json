@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260917_01_amz_images",
+  "alembic_head": "20260917_02_amz_experience",
   "environment": "staging",
-  "expected_alembic_head": "20260917_01_amz_images",
+  "expected_alembic_head": "20260917_02_amz_experience",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 125,
-  "migration_hash": "8eb38190e524fe7546cb293d8c08ce1ab8e3b9376d9d1ad7c66f807f663963c6",
+  "migration_count": 126,
+  "migration_hash": "a24bbab8bd16e8c49c3d99c437fe2899c86a1d2b5c10c7bd323aa679c4557ebf",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -132,9 +132,10 @@
     "20260916_02_amz_work_log",
     "20260916_03_amz_reports",
     "20260916_04_amz_fact_sheets",
-    "20260917_01_amz_images"
+    "20260917_01_amz_images",
+    "20260917_02_amz_experience"
   ],
-  "migration_order_checksum": "421384e565c7119c2c4ca3c819b0b8cc5dd105d9f717f2185063c9b9c26b952c",
+  "migration_order_checksum": "5e4143830b0a4eadc45a2607d7ae97494d20d946462af1398ec1c979fd3fcaa8",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -1010,6 +1011,13 @@
       "down_revision": "20260916_04_amz_fact_sheets",
       "path": "backend/alembic/versions/20260917_01_amz_images.py",
       "version": "20260917_01_amz_images"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "3ef6993356835728168cbeb4ee0eff1b3080fc4ea3805122850d572e719d0c6d",
+      "down_revision": "20260917_01_amz_images",
+      "path": "backend/alembic/versions/20260917_02_amz_experience.py",
+      "version": "20260917_02_amz_experience"
     }
   ]
 }

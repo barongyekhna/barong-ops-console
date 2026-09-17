@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import textwrap
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -21,8 +21,8 @@ from backend.app.modules.amz_series import bootstrap as bs
 from backend.app.modules.amz_series import rules, seed_import as si
 from backend.app.modules.amz_series import suggestions as sug
 from backend.app.modules.amz_series.jobs import schedule_due_jobs, claim, process_job
-from backend.app.modules.amz_series import fact_sheets, images, products, reports_sync, work_log
-from backend.app.modules.amz_series.models import AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
+from backend.app.modules.amz_series import experience, fact_sheets, images, products, reports_sync, work_log
+from backend.app.modules.amz_series.models import AmzExperience, AmzFactSheet, AmzImageAsset, AmzImageBrief, AmzJob, AmzOutcome, AmzProduct, AmzReportRun, AmzSalesDaily, AmzSqp, AmzSuggestion, AmzWorkLog
 from backend.app.modules.amz_series.catalog import COMPANIES, COMPANY_ORG_IDS, STORE_CODES
 from backend.app.modules.amz_series.constants import EMPLOYEE_USERNAMES, EMPLOYEES
 from backend.app.modules.amz_series.models import AmzAdSearchTerm, AmzSeedImport, AmzStore, AmzStoreGrant, AmzTransaction
@@ -42,6 +42,8 @@ def db():
 
 
 def _cleanup(session) -> None:
+    session.execute(delete(AmzExperience))
+    session.execute(delete(AmzOutcome))
     session.execute(delete(AmzImageAsset))
     session.execute(delete(AmzImageBrief))
     session.execute(delete(AmzFactSheet))
@@ -349,13 +351,30 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     finally:
         monkeypatch.undo()
 
+    # 经验库:真建议判结果 → 6 条「收割」都没成立 → 03us 收割门槛抬一档 → 规则真的用上新门槛,且新建议附经验、降一档
+    assert experience.evaluate_live(db, "03us") == 0  # 种子只有 10 天,as_of+14 还没到
+    harvest_as_of = harvest.as_of
+    for k in range(6):
+        db.add(AmzOutcome(store_code="03us", action_type="harvest", subject=f"t{k}", as_of=harvest_as_of - timedelta(days=30 + k), horizon_days=28, source="backtest", verdict="wrong", metrics_json={"clicks": 20, "orders": 0}))
+    db.commit()
+    assert experience.learn_precision_and_params(db, "03us") == 2
+    db.commit()
+    assert experience.param_for(db, "03us", "harvest_min_orders", 3) == 4.0
+    assert experience.param_for(db, "01us", "harvest_min_orders", 3) == 3.0  # 只动那家店
+    advice = experience.consult(db, store_code="03us", action_type="harvest")
+    assert advice["downgrade"] is True and any("0 条成立" in n or "(0.0%)" in n for n in advice["notes"])
+    entries = experience.list_entries(db, store_codes=["03us"], employee="D")
+    assert {e.kind for e in entries} >= {"precision", "param"}
+    assert experience.backtest(db, db.get(AmzStore, "03us")) == 0  # 数据不够长,不硬回测
+
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
-    assert created == 10  # 五店各一条 rules_daily + image_lookback;sales_traffic / sqp_weekly 因无凭据一条不排
-    jobs = claim(db, 5)
-    assert len(jobs) == 5
+    assert created == 15  # 五店各一条 rules_daily + image_lookback + experience_weekly;sales_traffic / sqp_weekly 因无凭据一条不排
+    jobs = claim(db, 20)
+    assert len(jobs) == 15 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly"}
     for job in jobs:
         assert process_job(job) is True
     beats = {beat["worker_name"]: beat for beat in list_heartbeats(db)}
-    assert "amz-worker:03us:rules_daily" in beats and beats["amz-worker:03us:rules_daily"]["stale"] is False
+    for name in ("amz-worker:03us:rules_daily", "amz-worker:03us:experience_weekly", "amz-worker:03us:image_lookback"):
+        assert name in beats and beats[name]["stale"] is False
     assert schedule_due_jobs(db) == 0  # 刚跑完,间隔内不再补

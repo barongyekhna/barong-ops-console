@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import styles from "./AmzWorkspace.module.css";
 import { AdsAuthPanel } from "./AdsAuthPanel";
+import { ExperiencePanel } from "./ExperiencePanel";
 import { FactSheetPanel } from "./FactSheetPanel";
 import {
   deleteGrant,
@@ -194,6 +195,8 @@ export function AmzWorkspace() {
       </section>
 
       <FactSheetPanel stores={stores} canWrite={isOwner || stores.some((store) => store.role !== "view")} />
+
+      <ExperiencePanel />
 
       {stores.some((store) => store.role === "grant") ? (
         <>

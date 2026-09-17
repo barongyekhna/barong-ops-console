@@ -97,6 +97,13 @@ def _money(value: Decimal | float | int, currency: str) -> str:
     return f"{symbol}{float(value):,.0f}"
 
 
+def _param(db: Session, store_code: str, name: str, default: float) -> float:
+    """门槛先问经验库(参数漂移),没有就用出厂值。"""
+    from .experience import param_for  # noqa: PLC0415 — experience 依赖本模块的规则函数
+
+    return param_for(db, store_code, name, default)
+
+
 def store_as_of(db: Session, store_code: str) -> date | None:
     return db.scalar(select(func.max(AmzAdSearchTerm.report_date)).where(AmzAdSearchTerm.store_code == store_code))
 
@@ -117,14 +124,14 @@ def rule_harvest_winners(db: Session, store_code: str, currency: str, as_of: dat
             func.sum(T.clicks),
             func.count(func.distinct(T.campaign_name)),
         )
-        .where(T.store_code == store_code, T.report_date > since)
+        .where(T.store_code == store_code, T.report_date > since, T.report_date <= as_of)
         .group_by(T.search_term)
-        .having(func.sum(T.orders_7d) >= HARVEST_MIN_ORDERS)
+        .having(func.sum(T.orders_7d) >= _param(db, store_code, "harvest_min_orders", HARVEST_MIN_ORDERS))
     ).all()
     exact_targets = {
         (value or "").strip().lower()
         for value in db.scalars(
-            select(T.targeting).where(T.store_code == store_code, T.match_type == "EXACT", T.report_date > since).distinct()
+            select(T.targeting).where(T.store_code == store_code, T.match_type == "EXACT", T.report_date > since, T.report_date <= as_of).distinct()
         )
     }
     winners = []
@@ -164,9 +171,9 @@ def rule_negatives_and_demand_reserve(db: Session, store_code: str, currency: st
     T = AmzAdSearchTerm
     rows = db.execute(
         select(T.search_term, func.sum(T.spend), func.sum(T.clicks), func.count(func.distinct(T.campaign_name)))
-        .where(T.store_code == store_code, T.report_date > since, T.match_type != "EXACT")
+        .where(T.store_code == store_code, T.report_date > since, T.report_date <= as_of, T.match_type != "EXACT")
         .group_by(T.search_term)
-        .having(func.sum(T.orders_7d) == 0, func.sum(T.clicks) >= NEGATIVE_MIN_CLICKS)
+        .having(func.sum(T.orders_7d) == 0, func.sum(T.clicks) >= _param(db, store_code, "negative_min_clicks", NEGATIVE_MIN_CLICKS))
         .order_by(func.sum(T.spend).desc())
     ).all()
     drafts: list[SuggestionDraft] = []
@@ -216,7 +223,7 @@ def rule_exact_inversion(db: Session, store_code: str, currency: str, as_of: dat
     T = AmzAdSearchTerm
     rows = db.execute(
         select(T.targeting, T.campaign_name, func.sum(T.spend), func.sum(T.sales_7d), func.sum(T.clicks), func.sum(T.orders_7d))
-        .where(T.store_code == store_code, T.report_date > since, T.match_type == "EXACT")
+        .where(T.store_code == store_code, T.report_date > since, T.report_date <= as_of, T.match_type == "EXACT")
         .group_by(T.targeting, T.campaign_name)
         .having(func.sum(T.clicks) >= EXACT_INVERSION_MIN_CLICKS)
     ).all()
@@ -398,9 +405,17 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
     from .rules_c import C_RULES  # noqa: PLC0415 — 依赖本模块的 Draft,放这里避免循环导入
     from .rules_cross import CROSS_RULES  # noqa: PLC0415
 
+    from . import experience  # noqa: PLC0415
+
     drafts: list[SuggestionDraft] = []
     for rule in (*RULES, *CROSS_RULES, *C_RULES):
         drafts.extend(rule(db, store_code, currency, as_of))
+    # 生成前查经验库:相关经验附在建议上;被反复驳回 / 命中率太低的那类降一档。
+    advice_cache: dict[str, dict[str, Any]] = {}
+    for draft in drafts:
+        if draft.action_type not in advice_cache:
+            advice_cache[draft.action_type] = experience.consult(db, store_code=store_code, action_type=draft.action_type)
+        experience.apply_to_draft(draft, advice_cache[draft.action_type])
     keys = [d.dedupe_key for d in drafts]
     existing = {
         row.dedupe_key: row
