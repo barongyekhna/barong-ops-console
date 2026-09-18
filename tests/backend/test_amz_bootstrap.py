@@ -765,7 +765,8 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     for i in range(8):
         db.add(AmzAdSearchTerm(store_code="04us", report_date=date(2026, 8, 20) - timedelta(days=i), campaign_name="c", adgroup_name="a", search_term=f"t{i}", clicks=1, spend=_Dec("50" if i == 0 else "10"), sales_7d=_Dec("0"), orders_7d=0, units_7d=0, currency="USD", source="test", row_key=f"brk-{i}"))
     db.commit()
-    trip = _ctl.check_breaker(db, "04us")
+    assert _ctl.check_breaker(db, "04us", today=date(2026, 9, 18))["tripped"] is False  # 数据是一个月前的:不算数
+    trip = _ctl.check_breaker(db, "04us", today=date(2026, 8, 21))
     db.commit()
     assert trip["tripped"] is True and trip["ratio"] == 5.0 and _ctl.guardrail(db, "04us").kill_switch is True
     _ctl.set_kill_switch(db, "04us", on=False, user_id=owner.id)

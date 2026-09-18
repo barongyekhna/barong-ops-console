@@ -102,14 +102,20 @@ def spend_ratio(db: Session, store_code: str) -> tuple[float | None, date | None
     return round(today / (sum(prior) / len(prior)), 2), last
 
 
-def check_breaker(db: Session, store_code: str) -> dict[str, Any]:
-    """超支熔断:比值过线就自动拉闸(系统拉的,要人开)。"""
+FRESH_DAYS = 3
+
+
+def check_breaker(db: Session, store_code: str, *, today: date | None = None) -> dict[str, Any]:
+    """超支熔断:比值过线就自动拉闸(系统拉的,要人开)。只看最近 3 天内的数据——旧数据说明不了现在在超支
+    (广告 API 接入前广告数据是种子,熔断实际上不会动)。"""
+    today = today or datetime.now(UTC).date()
     row = guardrail(db, store_code)
     ratio, day = spend_ratio(db, store_code)
-    tripped = ratio is not None and ratio > float(row.breaker_ratio) and not row.kill_switch
+    fresh = day is not None and (today - day).days <= FRESH_DAYS
+    tripped = fresh and ratio is not None and ratio > float(row.breaker_ratio) and not row.kill_switch
     if tripped:
         set_kill_switch(db, store_code, on=True, user_id=None, reason=f"超支熔断:{day} 花费是前 7 天日均的 {ratio} 倍(线 {row.breaker_ratio})")
-    return {"ratio": ratio, "day": day.isoformat() if day else None, "tripped": tripped}
+    return {"ratio": ratio, "day": day.isoformat() if day else None, "fresh": fresh, "tripped": tripped}
 
 
 def executed_today(db: Session, store_code: str, *, now: datetime | None = None) -> int:

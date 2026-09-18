@@ -111,7 +111,7 @@ def process_store(db: Session, store: AmzStore, *, now: datetime | None = None, 
     """一轮:熔断检查 → 收新的(L1 放行 / L2 倒计时 / L3 直接)→ 到点的执行 → 等 API 的重试。"""
     now = now or datetime.now(UTC)
     counts = {"new": 0, "countdown": 0, "executed": 0, "blocked": 0, "waiting_api": 0, "cancelled": 0, "failed": 0, "skipped_no_detail": 0}
-    breaker = control.check_breaker(db, store.store_code)
+    breaker = control.check_breaker(db, store.store_code, today=now.date())
     if executor is None and use_default_executor:
         executor = get_executor(db, store)
     S = AmzSuggestion
