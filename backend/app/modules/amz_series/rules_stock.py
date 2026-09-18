@@ -52,36 +52,60 @@ def cover_days(on_hand: int, rate: float) -> float | None:
     return round(on_hand / rate, 1) if rate > 0 else None
 
 
-def rule_stock(db: Session, store_code: str, currency: str, as_of: date) -> list[SuggestionDraft]:
-    """as_of 是广告数据的最后一天;库存要看「今天」,所以用最新快照日判,快照太旧就不说话。"""
+def cover_groups(db: Session, store_code: str) -> tuple[date | None, list[dict[str, Any]]]:
+    """按 ASIN 合并最新库存快照:同一个 ASIN 常挂好几个 SKU(老 SKU 0 件、新 SKU 有货),按 SKU 判会误报断货。"""
     snap = db.scalar(select(func.max(AmzInventoryDaily.snap_date)).where(AmzInventoryDaily.store_code == store_code))
+    if snap is None:
+        return None, []
+    by_asin, by_sku = daily_rates(db, store_code, today=snap)
+    groups: dict[str, dict[str, Any]] = {}
+    for row in db.scalars(select(AmzInventoryDaily).where(AmzInventoryDaily.store_code == store_code, AmzInventoryDaily.snap_date == snap).order_by(AmzInventoryDaily.sku)):
+        key = row.asin or f"sku:{row.sku}"
+        g = groups.setdefault(key, {"asin": row.asin, "skus": [], "fulfillable": 0, "inbound": 0, "reserved": 0, "sku_rate": 0.0})
+        g["skus"].append(row.sku)
+        g["fulfillable"] += int(row.fulfillable or 0)
+        g["inbound"] += int(row.inbound or 0)
+        g["reserved"] += int(row.reserved or 0)
+        g["sku_rate"] += by_sku.get(row.sku, 0.0)
+    out = []
+    for g in groups.values():
+        rate = by_asin.get(g["asin"] or "") or g["sku_rate"]
+        # 主 SKU = 有货的那个(没有就第一个),建议里写它
+        stocked = [sku for sku in g["skus"]]
+        out.append({**g, "sku": stocked[0], "daily_rate": round(rate, 2), "days_cover": cover_days(g["fulfillable"] + g["inbound"], rate), "snap_date": snap.isoformat()})
+    return snap, out
+
+
+def rule_stock(db: Session, store_code: str, currency: str, as_of: date) -> list[SuggestionDraft]:
+    """as_of 是广告数据的最后一天;库存要看「今天」,所以用最新快照日判,快照太旧就不说话。按 ASIN 判(见 cover_groups)。"""
+    snap, groups = cover_groups(db, store_code)
     if snap is None:
         return []
     latest_any = db.scalar(select(func.max(AmzInventoryDaily.snap_date)))
     if latest_any is not None and (latest_any - snap).days > SNAP_MAX_AGE_DAYS:
         return []
-    by_asin, by_sku = daily_rates(db, store_code, today=snap)
     lines = {p.sku: p.product_line for p in db.scalars(select(AmzProduct).where(AmzProduct.store_code == store_code))}
     drafts: list[SuggestionDraft] = []
-    for row in db.scalars(select(AmzInventoryDaily).where(AmzInventoryDaily.store_code == store_code, AmzInventoryDaily.snap_date == snap)):
-        rate = by_asin.get(row.asin or "") or by_sku.get(row.sku) or 0.0
+    for g in groups:
+        rate = g["daily_rate"]
         if rate <= 0:
             continue
-        on_hand = int(row.fulfillable or 0) + int(row.inbound or 0)
-        days = cover_days(on_hand, rate)
-        line = lines.get(row.sku) or product_line_of(row.sku)
-        base = {"sku": row.sku, "asin": row.asin, "fulfillable": row.fulfillable, "inbound": row.inbound, "daily_rate": round(rate, 2), "days_cover": days, "snap_date": snap.isoformat(), "product_line": line}
-        if int(row.fulfillable or 0) == 0:
+        name = g["asin"] or g["sku"]
+        skus = "、".join(g["skus"])
+        line = next((lines[s] for s in g["skus"] if s in lines), None) or product_line_of(skus)
+        days = g["days_cover"]
+        base = {"asin": g["asin"], "skus": g["skus"], "sku": g["sku"], "fulfillable": g["fulfillable"], "inbound": g["inbound"], "daily_rate": rate, "days_cover": days, "snap_date": snap.isoformat(), "product_line": line}
+        if g["fulfillable"] == 0:
             drafts.append(
                 SuggestionDraft(
                     employee=EMPLOYEE_D,
                     store_code=store_code,
                     action_type=ACTION_STOCKOUT,
                     severity="bad",
-                    title=f"{row.sku} 已断货(可售 0,在途 {row.inbound}):先停它的广告",
-                    why=f"最近 {RATE_WINDOW_DAYS} 天日均卖 {rate:.1f} 件。断货还开着广告,点进来的人看到「暂时缺货」,钱白花,转化率还被拉低。",
-                    prediction="停这个 SKU 的所有广告组;到货可售后第一天恢复,出价先回到断货前的八成,一周内爬回去。",
-                    subject=f"stockout|{row.sku}|{snap.isoformat()}",
+                    title=f"{name} 已断货(可售 0,在途 {g['inbound']}):先停它的广告",
+                    why=f"SKU {skus} 合计可售 0;最近 {RATE_WINDOW_DAYS} 天日均卖 {rate:.1f} 件。断货还开着广告,点进来的人看到「暂时缺货」,钱白花,转化率还被拉低。",
+                    prediction="停这个商品的所有广告组;到货可售后第一天恢复,出价先回到断货前的八成,一周内爬回去。",
+                    subject=f"stockout|{name}|{snap.isoformat()}",
                     evidence=base,
                 )
             )
@@ -93,10 +117,10 @@ def rule_stock(db: Session, store_code: str, currency: str, as_of: date) -> list
                     store_code=store_code,
                     action_type=ACTION_STOCK_COVER,
                     severity="bad" if bad else "warn",
-                    title=f"{row.sku} 库存只够 {days:g} 天(可售 {row.fulfillable} + 在途 {row.inbound},日均 {rate:.1f})",
-                    why=("撑不到一周:断货掉排名比少卖几单贵得多。" if bad else "撑不到三周:这时候加预算冲量,等于加速断货。") + " 广告的活是保住排名,不是把最后几件卖快。",
-                    prediction=("马上把这个 SKU 的广告降到只留精准核心词、出价降两成;催补货。" if bad else "预算不加、不开新活动;在途的货到了再说。") + f" 按日均 {rate:.1f} 件,补货要赶在 {days:g} 天内可售。",
-                    subject=f"cover|{row.sku}|{snap.isoformat()}",
+                    title=f"{name} 库存只够 {days:g} 天(可售 {g['fulfillable']} + 在途 {g['inbound']},日均 {rate:.1f})",
+                    why=("撑不到一周:断货掉排名比少卖几单贵得多。" if bad else "撑不到三周:这时候加预算冲量,等于加速断货。") + f" SKU:{skus}。广告的活是保住排名,不是把最后几件卖快。",
+                    prediction=("马上把这个商品的广告降到只留精准核心词、出价降两成;催补货。" if bad else "预算不加、不开新活动;在途的货到了再说。") + f" 按日均 {rate:.1f} 件,补货要赶在 {days:g} 天内可售。",
+                    subject=f"cover|{name}|{snap.isoformat()}",
                     evidence=base,
                 )
             )
@@ -104,16 +128,9 @@ def rule_stock(db: Session, store_code: str, currency: str, as_of: date) -> list
 
 
 def cover_table(db: Session, store_code: str) -> list[dict[str, Any]]:
-    """店铺页用:每个 SKU 能撑几天。"""
-    snap = db.scalar(select(func.max(AmzInventoryDaily.snap_date)).where(AmzInventoryDaily.store_code == store_code))
-    if snap is None:
-        return []
-    by_asin, by_sku = daily_rates(db, store_code, today=snap)
-    out = []
-    for row in db.scalars(select(AmzInventoryDaily).where(AmzInventoryDaily.store_code == store_code, AmzInventoryDaily.snap_date == snap).order_by(AmzInventoryDaily.sku)):
-        rate = by_asin.get(row.asin or "") or by_sku.get(row.sku) or 0.0
-        out.append({"sku": row.sku, "asin": row.asin, "fulfillable": row.fulfillable, "inbound": row.inbound, "reserved": row.reserved, "daily_rate": round(rate, 2), "days_cover": cover_days(int(row.fulfillable or 0) + int(row.inbound or 0), rate), "snap_date": snap.isoformat()})
-    return out
+    """店铺页用:每个商品(ASIN)能撑几天。"""
+    _snap, groups = cover_groups(db, store_code)
+    return [{"sku": "、".join(g["skus"]), "asin": g["asin"], "fulfillable": g["fulfillable"], "inbound": g["inbound"], "reserved": g["reserved"], "daily_rate": g["daily_rate"], "days_cover": g["days_cover"], "snap_date": g["snap_date"]} for g in groups]
 
 
-__all__ = ["ACTION_STOCKOUT", "ACTION_STOCK_COVER", "cover_days", "cover_table", "daily_rates", "rule_stock"]
+__all__ = ["ACTION_STOCKOUT", "ACTION_STOCK_COVER", "cover_days", "cover_groups", "cover_table", "daily_rates", "rule_stock"]

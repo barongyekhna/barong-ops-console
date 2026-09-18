@@ -274,7 +274,19 @@ def sync_finances(db: Session, client: Any, store: AmzStore, *, today: date | No
 
     now = now or datetime.now(UTC)
     seed_last = db.scalar(select(func.max(AmzTransaction.posted_at)).where(AmzTransaction.store_code == store.store_code, AmzTransaction.source == "seed"))
-    after = max(seed_last or datetime.min.replace(tzinfo=UTC), now - timedelta(days=FINANCE_LOOKBACK_DAYS))
+    api_last = db.scalar(select(func.max(AmzTransaction.posted_at)).where(AmzTransaction.store_code == store.store_code, AmzTransaction.source == "sp_api"))
+    # 接着已有数据往后拉,不留缝:有 API 行就从它往前 3 天(晚到的事件)重叠拉,靠 row_key 去重;
+    # 还没有就从种子最后一刻开始;都没有才看最近 14 天。亚马逊最多回溯 180 天。
+    api_first = db.scalar(select(func.min(AmzTransaction.posted_at)).where(AmzTransaction.store_code == store.store_code, AmzTransaction.source == "sp_api"))
+    if api_first is not None and seed_last is not None and api_first - seed_last > timedelta(days=1):
+        after = seed_last  # 种子和 API 之间有缝(第一次拉得太晚),补上
+    elif api_last is not None:
+        after = api_last - timedelta(days=3)
+    elif seed_last is not None:
+        after = seed_last
+    else:
+        after = now - timedelta(days=FINANCE_LOOKBACK_DAYS)
+    after = max(after, now - timedelta(days=179))
     factor = usd_factor(db, store.currency)
     db.commit()
     events_all: dict[str, list[Any]] = {}

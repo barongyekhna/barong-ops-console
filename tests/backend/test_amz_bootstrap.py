@@ -583,6 +583,7 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
                     {"sellerSku": "PSPE-A", "asin": "B0STOCK001", "inventoryDetails": {"fulfillableQuantity": 20}},
                     {"sellerSku": "PSPE-B", "asin": "B0STOCK002", "inventoryDetails": {"fulfillableQuantity": 0, "inboundShippedQuantity": 50}},
                     {"sellerSku": "PSPE-C", "asin": "B0STOCK003", "inventoryDetails": {"fulfillableQuantity": 300}},
+                    {"sellerSku": "PSPE-C-OLD", "asin": "B0STOCK003", "inventoryDetails": {"fulfillableQuantity": 0}},  # 同 ASIN 的老 SKU:0 件不能报断货
                 ]}, "pagination": {}}
             if path.startswith("/catalog/"):
                 return {"attributes": {"item_name": [{"value": self.title}], "bullet_point": [{"value": "7800mAh battery"}]}}
@@ -605,10 +606,11 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
 
     fake_ops = _FakeOps()
     store01 = db.get(AmzStore, "01us")
-    assert ops_sync.sync_inventory(db, fake_ops, store01, today=snap_day) == {"skus": 3, "fulfillable": 320, "inbound": 50}
-    stock = {d.evidence["sku"]: d for d in rules_stock.rule_stock(db, "01us", "USD", own_day)}
-    assert stock["PSPE-A"].action_type == "stock_cover" and stock["PSPE-A"].severity == "bad" and stock["PSPE-A"].evidence["days_cover"] == 4.0
-    assert stock["PSPE-B"].action_type == "stockout" and "PSPE-C" not in stock  # 300 件 / 日均 1 件 = 300 天,不报
+    assert ops_sync.sync_inventory(db, fake_ops, store01, today=snap_day) == {"skus": 4, "fulfillable": 320, "inbound": 50}
+    stock = {d.evidence["asin"]: d for d in rules_stock.rule_stock(db, "01us", "USD", own_day)}
+    assert stock["B0STOCK001"].action_type == "stock_cover" and stock["B0STOCK001"].severity == "bad" and stock["B0STOCK001"].evidence["days_cover"] == 4.0
+    assert stock["B0STOCK002"].action_type == "stockout" and "B0STOCK003" not in stock  # 同 ASIN 合计 300 件 / 日均 1 件,老 SKU 的 0 件不算断货
+    assert {r["asin"]: r["sku"] for r in rules_stock.cover_table(db, "01us")}["B0STOCK003"] == "PSPE-C、PSPE-C-OLD"
     demand = {r["product_line"]: r for r in portfolio.demand_board(db, marketplace="US")}
     assert all("stock_complete" in r for r in demand.values())
 
@@ -624,6 +626,15 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     assert fin["pages"] == 2 and fin["rows"] == 3 and fin["inserted"] == 3 and ops_sync.sync_finances(db, fake_ops, store01, now=fin_now)["inserted"] == 0  # 翻页 + 幂等
     order_row = db.scalar(select(AmzTransaction).where(AmzTransaction.order_id == "111-0000001-0000001", AmzTransaction.source == "sp_api"))
     assert order_row.txn_type == "Order" and order_row.quantity == 1 and order_row.product_sales == _Dec("25.64") and order_row.fba_fees == _Dec("-6.12") and order_row.selling_fees == _Dec("-3.85") and order_row.total == _Dec("17.67")
+    seed_last_01 = db.scalar(select(func.max(AmzTransaction.posted_at)).where(AmzTransaction.store_code == "01us", AmzTransaction.source == "seed"))
+    seen_after: list[str] = []
+    real_request = fake_ops.request
+    fake_ops.request = lambda method, path, *, params=None, json_body=None: (seen_after.append((params or {}).get("PostedAfter", "")) or real_request(method, path, params=params, json_body=json_body))
+    ops_sync.sync_finances(db, fake_ops, store01, now=fin_now)
+    fake_ops.request = real_request
+    expected_after = (max(order_row.posted_at, db.scalar(select(func.max(AmzTransaction.posted_at)).where(AmzTransaction.store_code == "01us", AmzTransaction.source == "sp_api"))) - timedelta(days=3))
+    gap = seed_last_01 is not None and (db.scalar(select(func.min(AmzTransaction.posted_at)).where(AmzTransaction.store_code == "01us", AmzTransaction.source == "sp_api")) - seed_last_01) > timedelta(days=1)
+    assert seen_after[0] == ((seed_last_01 if gap else expected_after).strftime("%Y-%m-%dT%H:%M:%SZ"))  # 有缝补缝,没缝接着上次往前 3 天
     refund_row = db.scalar(select(AmzTransaction).where(AmzTransaction.txn_type == "Refund", AmzTransaction.source == "sp_api"))
     assert refund_row.quantity == -1 and refund_row.total == _Dec("-22.56")
 
