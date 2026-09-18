@@ -39,8 +39,9 @@ JOB_INVENTORY_DAILY = "inventory_daily"
 JOB_LISTINGS_DAILY = "listings_daily"
 JOB_FINANCES_DAILY = "finances_daily"
 JOB_SOLICITATIONS_DAILY = "solicitations_daily"
+JOB_CONTROL_HOURLY = "control_hourly"
 # 作业 → 期望间隔(秒)。心跳的 expected_interval 也用它;超过 3 倍没干成活 = stale。
-JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600, JOB_BA_COMPETITORS: 7 * 24 * 3600, JOB_INVENTORY_DAILY: 24 * 3600, JOB_LISTINGS_DAILY: 24 * 3600, JOB_FINANCES_DAILY: 24 * 3600, JOB_SOLICITATIONS_DAILY: 24 * 3600}
+JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600, JOB_BA_COMPETITORS: 7 * 24 * 3600, JOB_INVENTORY_DAILY: 24 * 3600, JOB_LISTINGS_DAILY: 24 * 3600, JOB_FINANCES_DAILY: 24 * 3600, JOB_SOLICITATIONS_DAILY: 24 * 3600, JOB_CONTROL_HOURLY: 3600}
 # 要出网的作业:只在店铺有 SP-API 凭据时才排。
 API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY, JOB_BA_COMPETITORS, JOB_INVENTORY_DAILY, JOB_LISTINGS_DAILY, JOB_FINANCES_DAILY, JOB_SOLICITATIONS_DAILY})
 # 失败后的重试间隔:失败不等于「该再排一条」,否则一个坏凭据会每 15 秒失败一次刷满作业表。
@@ -350,7 +351,26 @@ def run_solicitations_daily(store_code: str) -> dict[str, Any]:
     return _with_client(store_code, lambda db, client, store: ops_sync.run_solicitations(db, client, store))
 
 
+def run_control_hourly(store_code: str) -> dict[str, Any]:
+    """A3 管控每小时一轮:熔断 → 台账(L1 放行 / L2 倒计时 / L3)→ 护栏 → 执行(Ads API 未接入时停在 waiting_api)
+    → 7/14/28 天回看 → 自动降级 → 够条件的出升级提议。不出网(执行器接入前)。"""
+    from . import executor, ladder  # noqa: PLC0415
+
+    with SessionLocal() as db:
+        store = db.get(AmzStore, store_code)
+        if store is None:
+            raise RuntimeError(f"store {store_code} missing")
+        out: dict[str, Any] = {"process": executor.process_store(db, store)}
+        out["lookbacks"] = executor.run_lookbacks(db, store_code)
+        out["downgraded"] = ladder.auto_downgrade(db, store_code)
+        out["upgrade_proposals"] = ladder.propose_upgrades(db, store_code)
+        out["shadow"] = ladder.in_shadow()
+        db.commit()
+        return out
+
+
 HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {
+    JOB_CONTROL_HOURLY: run_control_hourly,
     JOB_INVENTORY_DAILY: run_inventory_daily,
     JOB_LISTINGS_DAILY: run_listings_daily,
     JOB_FINANCES_DAILY: run_finances_daily,

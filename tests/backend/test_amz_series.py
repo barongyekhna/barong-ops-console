@@ -92,7 +92,7 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
     assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
-    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors" and order[i + 10] == "20260917_05_amz_ba_top_clicks" and order[i + 11] == "20260918_01_amz_inventory_listings"
+    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors" and order[i + 10] == "20260917_05_amz_ba_top_clicks" and order[i + 11] == "20260918_01_amz_inventory_listings" and order[i + 12] == "20260918_02_amz_actions_ledger"
     comp_mig = (versions / "20260917_04_amz_competitors.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260917_03_amz_launches"' in comp_mig and 'sa.Column("org_id"' not in comp_mig
     launch_mig = (versions / "20260917_03_amz_launches.py").read_text(encoding="utf-8")
@@ -406,7 +406,7 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400, "ba_competitors": 7 * 86400, "inventory_daily": 86400, "listings_daily": 86400, "finances_daily": 86400, "solicitations_daily": 86400}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400, "ba_competitors": 7 * 86400, "inventory_daily": 86400, "listings_daily": 86400, "finances_daily": 86400, "solicitations_daily": 86400, "control_hourly": 3600}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly", "ba_competitors", "inventory_daily", "listings_daily", "finances_daily", "solicitations_daily"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
@@ -729,3 +729,31 @@ def test_season_owner_inventory_listing_review_helpers() -> None:
     assert rv.review_date("Rezension aus Deutschland vom 3. August 2026") == _date(2026, 8, 3)
     assert rv.review_date("2026-07-15 leaked") == _date(2026, 7, 15) and rv.review_date("no date here") is None
     assert rv.split_paste("1.0 out of 5 stars Doesn't heat at all") == [(1, "Doesn't heat at all")]
+
+
+# ---------------------------------------------------------------- A3 梯子 / 执行(纯函数)
+
+
+def test_a3_ladder_policy_and_op_planning() -> None:
+    from datetime import date as _date
+    from types import SimpleNamespace as _N
+
+    from backend.app.modules.amz_series import executor as ex, ladder as lad
+
+    assert lad.in_shadow(_date(2026, 10, 15)) and not lad.in_shadow(_date(2026, 10, 16))
+    for forbidden in ("loss_line", "listing_cvr_gap", "screen_ctr_gap", "season_countdown", "campaign_stability", "launch_day45", "competitor_change", "ladder_upgrade"):
+        assert forbidden not in lad.ACTION_POLICY  # 改价 / 文案 / 图 / 建删活动 / 排产:永远人做
+    assert lad.ACTION_POLICY["negative"].max_level == "L3" and lad.ACTION_POLICY["spend_without_sales"].max_level == "L1"
+    ok, missing = lad.upgrade_ready({"decisions": 12, "approval_pct": 80.0, "outcomes": 8, "precision_pct": 75.0, "guard_hits_30d": 0}, days_at_level=31)
+    assert ok and missing == []
+    ok, missing = lad.upgrade_ready({"decisions": 12, "approval_pct": 80.0, "outcomes": 8, "precision_pct": 75.0, "guard_hits_30d": 1}, days_at_level=31)
+    assert not ok and "护栏" in missing[0]
+
+    def s(action, ev):
+        return _N(action_type=action, evidence_json=ev)
+
+    assert ex.plan_op(s("negative", {"term": "hot water", "campaigns": ["a"]})) == {"op": "add_negative_exact", "term": "hot water", "campaigns": ["a"]}
+    assert ex.plan_op(s("bid_down", {"campaign": "c"})) is None  # 证据不够具体不猜
+    assert ex.plan_op(s("bid_down", {"campaign": "c", "target": "t"}))["change_pct"] == -20
+    assert ex.plan_op(s("stock_cover", {"skus": ["A", "B"], "asin": "B0X"}))["skus"] == ["A", "B"]
+    assert ex.plan_op(s("loss_line", {})) is None

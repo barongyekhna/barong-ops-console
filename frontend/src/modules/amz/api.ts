@@ -452,3 +452,72 @@ export function getReviewTrend(productLine: string, whose?: string) {
   const query = `?product_line=${encodeURIComponent(productLine)}${whose ? `&whose=${whose}` : ""}`;
   return amzRequest<AmzReviewTrend>(`${BASE}/reviews/trend${query}`, "评论趋势加载失败");
 }
+
+// ---------------------------------------------------------------- A3 管控:总闸 / 护栏 / 梯子 / 台账
+
+export type AmzGuardrails = {
+  daily_budget_cap: number | null;
+  bid_max_change_pct: number;
+  budget_max_change_pct: number;
+  actions_per_day: number;
+  cpc_max: number | null;
+  breaker_ratio: number;
+  kill_switch: boolean;
+  kill_switch_by_user_id: number | null;
+  kill_switch_at: string | null;
+};
+
+export type AmzLadderRow = {
+  action_type: string;
+  label: string;
+  level: string;
+  max_level: string;
+  effective: string;
+  history: { from: string; to: string; why: string; at: string }[];
+  stats: { decisions: number; approval_pct: number | null; outcomes: number; precision_pct: number | null; guard_hits_30d: number };
+  upgrade_ready: boolean;
+  missing: string[];
+};
+
+export type AmzLedgerRow = {
+  id: number;
+  suggestion_id: string;
+  action_type: string;
+  label: string;
+  level: string;
+  status: string;
+  op: Record<string, unknown>;
+  why: string;
+  blocked_reason: string | null;
+  countdown_until: string | null;
+  executed_at: string | null;
+  readback_ok: boolean | null;
+  outcome: string | null;
+  created_at: string | null;
+};
+
+export type AmzControl = {
+  store_code: string;
+  shadow: boolean;
+  shadow_until: string;
+  guardrails: AmzGuardrails;
+  editable: Record<string, [number, number]>;
+  spend_ratio: { ratio: number | null; day: string | null };
+  executed_today: number;
+  ladder: AmzLadderRow[];
+  ledger: AmzLedgerRow[];
+  can_release: boolean;
+};
+
+export function getControl(storeCode: string) {
+  return amzRequest<AmzControl>(`${BASE}/stores/${storeCode}/control`, "管控面加载失败");
+}
+export function setKillSwitch(storeCode: string, on: boolean, reason?: string) {
+  return amzRequest<{ store_code: string; guardrails: AmzGuardrails }>(`${BASE}/stores/${storeCode}/kill-switch`, "总闸操作失败", { body: { on, reason }, method: "POST" });
+}
+export function saveGuardrails(storeCode: string, values: Record<string, number | null>) {
+  return amzRequest<{ store_code: string; guardrails: AmzGuardrails }>(`${BASE}/stores/${storeCode}/guardrails`, "护栏保存失败", { body: values, method: "POST" });
+}
+export function lowerLadder(storeCode: string, actionType: string, level: string) {
+  return amzRequest<{ store_code: string; ladder: AmzLadderRow[] }>(`${BASE}/stores/${storeCode}/ladder`, "降级失败", { body: { action_type: actionType, level }, method: "POST" });
+}

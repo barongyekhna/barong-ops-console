@@ -86,6 +86,13 @@ def decide_suggestion(
         raise AmzServiceError("suggestion not found", status_code=404, code="amz_suggestion_not_found")
     if allowed_store_codes is not None and row.store_code not in allowed_store_codes:
         raise AmzServiceError("no access to this store", status_code=403, code="amz_store_forbidden")
+    if row.action_type == "ladder_upgrade" and decision == "approve":
+        # 升级只能老板 / 这家店有「授权」角色的人点头
+        from ...core.roles import is_owner_role  # noqa: PLC0415
+        from .service import grant_role_for  # noqa: PLC0415
+
+        if grant_role_for(db, user=actor, store_code=row.store_code, is_owner=is_owner_role(actor.role)) != "grant":
+            raise AmzServiceError("升级自动化级别要老板或这家店有「授权」角色的人点头", status_code=403, code="amz_ladder_upgrade_forbidden")
     if decision == "reject" and not (reason or "").strip():
         # 驳回必须写原因:那一句话是经验库的训练信号。
         raise AmzServiceError("驳回要写一句原因", status_code=422, code="amz_reject_reason_required")
@@ -97,6 +104,19 @@ def decide_suggestion(
     db.flush()
     # 硬记忆:谁、什么时候、为什么放行 / 驳回 / 稍后——员工聊天时随时能读到。
     work_log.record_decision(db, row=row, decision=decision, actor_user_id=int(actor.id))
+    if row.action_type == "ladder_upgrade" and decision == "approve":
+        from .ladder import apply_upgrade  # noqa: PLC0415
+
+        apply_upgrade(db, row, user_id=int(actor.id))
+    if decision == "reject":
+        # L2 倒计时 / 等待中的动作:驳回当场取消,不等下一轮
+        from .models import AmzActionLedger  # noqa: PLC0415
+
+        entry = db.scalar(select(AmzActionLedger).where(AmzActionLedger.suggestion_id == row.id, AmzActionLedger.status.in_(("countdown", "waiting_api", "queued"))))
+        if entry is not None:
+            entry.status, entry.blocked_reason = "cancelled", f"人驳回:{row.reject_reason}"
+            db.add(entry)
+            db.flush()
     create_operation_log(
         db,
         actor_type="user",

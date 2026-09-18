@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { AmzOverview } from "./AmzOverview";
 import { AmzWorkspace } from "./AmzWorkspace";
 import { CompetitorsPanel } from "./CompetitorsPanel";
+import { ControlPanel } from "./ControlPanel";
 import { ImagesPanel } from "./ImagesPanel";
 import { LaunchPanel } from "./LaunchPanel";
 import { PortfolioPanel } from "./PortfolioPanel";
@@ -16,6 +17,7 @@ import styles from "./AmzOverview.module.css";
 const TABS = [
   { key: "overview", label: "总览", href: "/amz" },
   { key: "cross", label: "跨店 · 主场词 / 需求 / 库存", href: "/amz?tab=cross" },
+  { key: "control", label: "总闸 · 梯子 / 护栏 / 台账", href: "/amz?tab=control" },
   { key: "competitors", label: "竞品 · 殷长辰盯盘", href: "/amz?tab=competitors" },
   { key: "launch", label: "推新 · 六步", href: "/amz?tab=launch" },
   { key: "images", label: "图片 · 殷熊的 brief", href: "/amz?tab=images" },
@@ -54,6 +56,8 @@ export function AmzPage() {
       </div>
       {tab === "manage" ? (
         <AmzWorkspace />
+      ) : tab === "control" ? (
+        <ControlPanel />
       ) : tab === "cross" ? (
         <PortfolioPanel />
       ) : tab === "competitors" ? (
@@ -76,8 +80,8 @@ export function AmzPage() {
         <Link className={styles.tab} href="/amz?tab=cross">
           跨店
         </Link>
-        <Link className={styles.tab} href="/amz?tab=competitors">
-          竞品
+        <Link className={styles.tab} href="/amz?tab=control">
+          总闸
         </Link>
         <Link className={styles.tab} href="/amz?tab=manage">
           管理

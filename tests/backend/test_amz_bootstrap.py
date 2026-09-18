@@ -30,7 +30,7 @@ from backend.app.services.data_isolation import without_org_data_isolation
 
 pytestmark = pytest.mark.integration
 
-USERNAMES = ("amz_t_owner", "amz_t_manager", *EMPLOYEE_USERNAMES.values())
+USERNAMES = ("amz_t_owner", "amz_t_manager", "amz_t_operator", *EMPLOYEE_USERNAMES.values())
 
 
 @pytest.fixture
@@ -42,6 +42,11 @@ def db():
 
 
 def _cleanup(session) -> None:
+    from backend.app.modules.amz_series.models import AmzActionLedger, AmzGuardrail, AmzLadder
+
+    session.execute(delete(AmzActionLedger))
+    session.execute(delete(AmzLadder))
+    session.execute(delete(AmzGuardrail))
     from backend.app.modules.amz_series.models import AmzBaTopClick
 
     session.execute(delete(AmzBaTopClick))
@@ -666,11 +671,160 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     db.execute(delete(_Out).where(_Out.source == "backtest", _Out.as_of == date(2026, 7, 25)))
     db.commit()
 
+    # ---- A3 管控骨架:梯子 / 护栏 / 总闸 / 熔断 / 台账 / 回读 / 回看 / 自动降级 / 升级提议(假执行器;Ads API 未接入)
+    from backend.app.modules.amz_series import control as _ctl, executor as _ex, ladder as _lad
+    from backend.app.modules.amz_series.models import AmzActionLedger as _Led, AmzLadder as _LadRow, AmzSuggestion as _Sug, AmzStoreGrant as _Grant
+
+    after_shadow = datetime(2026, 10, 20, 9, tzinfo=UTC)
+    assert _lad.effective_level(db, "03us", "negative", today=date(2026, 9, 20)) == "L0"  # 影子期一律 L0
+    assert _lad.effective_level(db, "03us", "loss_line", today=after_shadow.date()) == "L0"  # 不可执行的动作永远不执行
+    _lad.set_level(db, "03us", "negative", to="L1", why="测试", by=owner.id)
+    _lad.set_level(db, "03us", "harvest", to="L2", why="测试", by=owner.id)
+    with pytest.raises(ValueError):
+        _lad.set_level(db, "03us", "spend_without_sales", to="L2", why="封顶 L1", by=owner.id)
+    assert _lad.effective_level(db, "03us", "negative", today=after_shadow.date()) == "L1"
+    db.commit()
+
+    def _sug(action, level, status, evidence, title):
+        row = _Sug(employee="D", store_code="03us", action_type=action, severity="warn", title=title, why="测试原因", prediction="测试预测", evidence_json=evidence, level=level, status=status, dedupe_key=__import__("hashlib").sha256(title.encode()).hexdigest(), as_of=date(2026, 8, 10), decided_by_user_id=owner.id if status == "approved" else None)
+        db.add(row)
+        db.flush()
+        return row
+
+    class _FakeAds:
+        def __init__(self, readback_ok=True):
+            self.calls = []
+            self.readback_ok = readback_ok
+
+        def apply(self, store, op):
+            self.calls.append(op)
+            return {"state": "before"}, {"state": "after", **{k: v for k, v in op.items() if k != "campaigns"}}
+
+        def readback(self, store, op, after):
+            return self.readback_ok
+
+    neg = _sug("negative", "L1", "approved", {"term": "hot water heater", "campaigns": ["PSPE auto"]}, "否 hot water heater")
+    harv = _sug("harvest", "L2", "open", {"term": "camping shower pump", "campaigns": ["PSPE auto"]}, "收割 camping shower pump")
+    vague = _sug("bid_down", "L1", "approved", {"campaign": "x"}, "降价但没写目标")
+    shadowed = _sug("negative", "L0", "approved", {"term": "bucket"}, "影子期放行的")
+    db.commit()
+    fake_ads = _FakeAds()
+    quiet = pytest.MonkeyPatch()
+    quiet.setattr(_ctl, "spend_ratio", lambda db, store_code: (1.0, date(2026, 8, 10)))  # 熔断单独在 04us 上测
+    out1 = _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow, executor=fake_ads)
+    db.commit()
+    assert out1["executed"] == 1 and out1["countdown"] == 1 and out1["skipped_no_detail"] == 1
+    neg_entry = db.scalar(select(_Led).where(_Led.suggestion_id == neg.id))
+    assert neg_entry.status == "executed" and neg_entry.readback_ok is True and neg_entry.op_json["op"] == "add_negative_exact" and neg_entry.approved_by_user_id == owner.id
+    assert db.get(_Sug, neg.id).status == "executed" and db.scalar(select(_Led).where(_Led.suggestion_id == shadowed.id)) is None  # 影子期的放行永远只是记录
+    assert db.scalar(select(_Led).where(_Led.suggestion_id == harv.id)).status == "countdown" and len(fake_ads.calls) == 1
+    # L2:倒计时里驳回 → 当场取消
+    sug.decide_suggestion(db, suggestion_id=harv.id, decision="reject", reason="旺季别收", actor=owner, allowed_store_codes=None)
+    db.commit()
+    assert db.scalar(select(_Led).where(_Led.suggestion_id == harv.id)).status == "cancelled"
+    # L2:没人拦 → 24 小时后执行
+    harv2 = _sug("harvest", "L2", "open", {"term": "portable shower pump"}, "收割 portable shower pump")
+    db.commit()
+    _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow, executor=fake_ads)
+    assert _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow + timedelta(hours=2), executor=fake_ads)["executed"] == 0
+    assert _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow + timedelta(hours=25), executor=fake_ads)["executed"] == 1
+    db.commit()
+    assert db.scalar(select(_Led).where(_Led.suggestion_id == harv2.id)).status == "executed"
+    # 护栏:每天条数上限
+    _ctl.update_guardrails(db, "03us", {"actions_per_day": 1})
+    neg2 = _sug("negative", "L1", "approved", {"term": "shower tent"}, "否 shower tent")
+    db.commit()
+    _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow + timedelta(hours=25), executor=fake_ads)
+    db.commit()
+    blocked = db.scalar(select(_Led).where(_Led.suggestion_id == neg2.id))
+    assert blocked.status == "blocked" and "每天上限" in blocked.blocked_reason
+    assert _lad.upgrade_stats(db, "03us", "negative", today=datetime.now(UTC).date())["guard_hits_30d"] == 1  # 台账时间是真实的写入时间
+    with pytest.raises(ValueError):
+        _ctl.update_guardrails(db, "03us", {"bid_max_change_pct": 90})  # 护栏不能调成没有护栏
+    _ctl.update_guardrails(db, "03us", {"actions_per_day": 20})
+    # Ads API 未接入(默认执行器 None)→ 过了护栏停在 waiting_api
+    neg3 = _sug("negative", "L1", "approved", {"term": "solar shower bag"}, "否 solar shower bag")
+    db.commit()
+    assert _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow + timedelta(hours=26))["waiting_api"] == 1
+    db.commit()
+    assert db.scalar(select(_Led).where(_Led.suggestion_id == neg3.id)).status == "waiting_api"
+    # 总闸:拉下 → 有效级别 L0、等待中的取消、新的不执行;开闸只有老板(在路由层)
+    _ctl.set_kill_switch(db, "03us", on=True, user_id=manager.id, reason="测试")
+    db.commit()
+    assert db.scalar(select(_Led).where(_Led.suggestion_id == neg3.id)).status == "cancelled"
+    assert _lad.effective_level(db, "03us", "negative", today=after_shadow.date()) == "L0"
+    neg4 = _sug("negative", "L1", "approved", {"term": "shower curtain"}, "否 shower curtain")
+    db.commit()
+    _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow + timedelta(hours=27), executor=fake_ads)
+    db.commit()
+    assert db.scalar(select(_Led).where(_Led.suggestion_id == neg4.id)).status == "cancelled" and len(fake_ads.calls) == 2
+    _ctl.set_kill_switch(db, "03us", on=False, user_id=owner.id)
+    db.commit()
+    quiet.undo()
+    # 熔断:最近一天花费是前 7 天日均的 5 倍 → 自动拉闸
+    for i in range(8):
+        db.add(AmzAdSearchTerm(store_code="04us", report_date=date(2026, 8, 20) - timedelta(days=i), campaign_name="c", adgroup_name="a", search_term=f"t{i}", clicks=1, spend=_Dec("50" if i == 0 else "10"), sales_7d=_Dec("0"), orders_7d=0, units_7d=0, currency="USD", source="test", row_key=f"brk-{i}"))
+    db.commit()
+    trip = _ctl.check_breaker(db, "04us")
+    db.commit()
+    assert trip["tripped"] is True and trip["ratio"] == 5.0 and _ctl.guardrail(db, "04us").kill_switch is True
+    _ctl.set_kill_switch(db, "04us", on=False, user_id=owner.id)
+    # 自动降级:回读对不上 → 直接降到 L1
+    _lad.set_level(db, "03us", "harvest", to="L2", why="测试", by=owner.id)
+    quiet.setattr(_ctl, "spend_ratio", lambda db, store_code: (1.0, date(2026, 8, 10)))
+    bad_ads = _FakeAds(readback_ok=False)
+    harv3 = _sug("harvest", "L2", "open", {"term": "rv shower pump"}, "收割 rv shower pump")
+    db.commit()
+    _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow + timedelta(hours=30), executor=bad_ads)
+    _ex.process_store(db, db.get(AmzStore, "03us"), now=after_shadow + timedelta(hours=55), executor=bad_ads)
+    db.commit()
+    assert db.scalar(select(_Led).where(_Led.suggestion_id == harv3.id)).readback_ok is False
+    down = _lad.auto_downgrade(db, "03us", today=(after_shadow + timedelta(days=3)).date())
+    db.commit()
+    assert {"action_type": "harvest", "to": "L1"} == {k: down[0][k] for k in ("action_type", "to")} and db.get(_LadRow, ("03us", "harvest")).level == "L1"
+    quiet.undo()
+    # 回看:执行过的动作到期就判
+    assert _ex.run_lookbacks(db, "03us") >= 0
+    # 升级提议:够条件 → 出一条 ladder_upgrade;只有老板 / 授权角色能放行
+    lad_row = db.get(_LadRow, ("03us", "negative"))
+    lad_row.history_json = [{"from": "L0", "to": "L1", "at": "2026-09-01T00:00:00+00:00"}]
+    db.add(lad_row)
+    for i in range(10):
+        r = _sug("negative", "L0", "approved", {"term": f"old neg {i}"}, f"旧否词 {i}")
+        r.decided_at = after_shadow - timedelta(days=5)
+    db.execute(delete(_Out).where(_Out.store_code == "03us", _Out.action_type == "negative"))
+    for i in range(6):
+        db.add(_Out(store_code="03us", action_type="negative", subject=f"lad-{i}", as_of=date(2026, 8, 1), horizon_days=28, source="live", verdict="right", metrics_json={}))
+    db.execute(delete(_Led).where(_Led.store_code == "03us", _Led.status == "blocked"))
+    db.commit()
+    assert _lad.propose_upgrades(db, "03us", today=date(2026, 9, 20)) == 0  # 影子期不提
+    assert _lad.propose_upgrades(db, "03us", today=after_shadow.date()) == 1
+    db.commit()
+    proposal = db.scalar(select(_Sug).where(_Sug.action_type == "ladder_upgrade", _Sug.store_code == "03us"))
+    assert proposal.evidence_json["from"] == "L1" and proposal.evidence_json["to"] == "L2"
+    operator = _mk_user(db, "amz_t_operator", "operator")
+    db.add(_Grant(user_id=operator.id, store_code="03us", role="operate", granted_by_user_id=owner.id))
+    db.commit()
+    with pytest.raises(Exception):
+        sug.decide_suggestion(db, suggestion_id=proposal.id, decision="approve", reason=None, actor=operator, allowed_store_codes=["03us"])
+    db.rollback()
+    sug.decide_suggestion(db, suggestion_id=proposal.id, decision="approve", reason=None, actor=manager, allowed_store_codes=None)
+    db.commit()
+    assert db.get(_LadRow, ("03us", "negative")).level == "L2" and db.get(_LadRow, ("03us", "negative")).history_json[-1]["by_user_id"] == manager.id
+    view = {r["action_type"]: r for r in _lad.ladder_view(db, "03us", today=after_shadow.date())}
+    assert view["negative"]["level"] == "L2" and view["negative"]["max_level"] == "L3" and view["spend_without_sales"]["max_level"] == "L1"
+    # 收尾:测试造的梯子 / 台账 / 护栏清掉,不影响后面的作业断言
+    db.execute(delete(_Led))
+    db.execute(delete(_LadRow))
+    db.execute(delete(__import__("backend.app.modules.amz_series.models", fromlist=["AmzGuardrail"]).AmzGuardrail))
+    db.execute(delete(AmzAdSearchTerm).where(AmzAdSearchTerm.source == "test", AmzAdSearchTerm.row_key.like("brk-%")))
+    db.commit()
+
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
-    assert created == 21  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily;fx_daily 只给欧元店 01de;出网作业因无凭据一条不排
+    assert created == 26  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily + control_hourly;fx_daily 只给欧元店 01de;出网作业因无凭据一条不排
     jobs = claim(db, 30)
-    assert len(jobs) == 21 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly", "launch_daily", "fx_daily"}
+    assert len(jobs) == 26 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly", "launch_daily", "fx_daily", "control_hourly"}
     assert [j["store_code"] for j in jobs if j["job_type"] == "fx_daily"] == ["01de"]
     from backend.app.modules.amz_series import fx as _fx
 

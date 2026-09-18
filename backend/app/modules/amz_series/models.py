@@ -681,6 +681,35 @@ class AmzSolicitation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class AmzActionLedger(Base):
+    """执行台账:一条放行(或 L2 倒计时 / L3 自动)的建议 = 一行。改前 / 改后 / 原因 / 预测 / 谁批 / 护栏 / 回读 / 7-14-28 天回看。"""
+
+    __tablename__ = "amz_actions_ledger"
+    __table_args__ = (UniqueConstraint("suggestion_id", name="uq_amz_actions_ledger_suggestion"), Index("ix_amz_actions_ledger_store_status", "store_code", "status"))
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    suggestion_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    action_type: Mapped[str] = mapped_column(String(48), nullable=False)
+    level: Mapped[str] = mapped_column(String(4), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    op_json: Mapped[dict[str, Any]] = mapped_column("op", json_type(), nullable=False, default=dict)
+    before_json: Mapped[dict[str, Any]] = mapped_column("before", json_type(), nullable=False, default=dict)
+    after_json: Mapped[dict[str, Any]] = mapped_column("after", json_type(), nullable=False, default=dict)
+    why: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    prediction: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    approved_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    guard_json: Mapped[dict[str, Any]] = mapped_column("guard", json_type(), nullable=False, default=dict)
+    blocked_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    countdown_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    readback_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    lookback_json: Mapped[dict[str, Any]] = mapped_column("lookback", json_type(), nullable=False, default=dict)
+    outcome: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 

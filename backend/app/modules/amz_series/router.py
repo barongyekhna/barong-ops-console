@@ -21,7 +21,7 @@ from ...db.session import get_db
 from ...models.user import User
 from ...repositories.operation_logs import create_operation_log
 from . import competitors, experience, fact_sheets, images, launches, reviews, service, suggestions
-from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_VIEW, STORE_ROLES
+from .constants import MODULE_KEY, STORE_ROLE_GRANT, STORE_ROLE_OPERATE, STORE_ROLE_VIEW, STORE_ROLES
 from .deps import StoreAccess, granted_store_codes, require_amz_access, require_store
 
 router = APIRouter(prefix="/amz", tags=["amz-ops"], dependencies=[Depends(require_amz_access)])
@@ -506,6 +506,87 @@ class CompetitorAdd(BaseModel):
     product_line: str = Field(min_length=1, max_length=32)
     whose: str = Field(default="competitor", pattern="^(competitor|ours)$")
     label: str | None = Field(default=None, max_length=120)
+
+
+class KillSwitchBody(BaseModel):
+    on: bool
+    reason: str | None = Field(default=None, max_length=300)
+
+
+class LadderLowerBody(BaseModel):
+    action_type: str = Field(min_length=1, max_length=48)
+    level: str = Field(pattern="^L[0-3]$")
+
+
+@router.get("/stores/{store_code}/control")
+def store_control(access: StoreAccess = Depends(require_store(STORE_ROLE_VIEW)), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """A3 管控面:总闸、五道护栏、每个动作的梯子级别(和离升级还差什么)、执行台账。"""
+    from . import control, executor, ladder  # noqa: PLC0415
+
+    code = access.store.store_code
+    guard = control.guardrail(db, code)
+    ratio, day = control.spend_ratio(db, code)
+    payload = {
+        "store_code": code,
+        "shadow": ladder.in_shadow(),
+        "shadow_until": ladder.SHADOW_UNTIL.isoformat(),
+        "guardrails": control.guard_view(guard),
+        "editable": {k: list(v) for k, v in control.EDITABLE.items()},
+        "spend_ratio": {"ratio": ratio, "day": day.isoformat() if day else None},
+        "executed_today": control.executed_today(db, code),
+        "ladder": ladder.ladder_view(db, code),
+        "ledger": executor.recent_ledger(db, code),
+        "can_release": is_owner_role(access.user.role),
+    }
+    db.commit()
+    return payload
+
+
+@router.post("/stores/{store_code}/kill-switch")
+def store_kill_switch(payload: KillSwitchBody, request: Request, access: StoreAccess = Depends(require_store(STORE_ROLE_OPERATE)), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """拉闸:有「操作」角色就能拉,立刻生效;开闸只有老板。"""
+    from . import control, work_log as _wl  # noqa: PLC0415
+
+    if not payload.on and not is_owner_role(access.user.role):
+        raise HTTPException(status_code=403, detail="开闸只有老板能开")
+    code = access.store.store_code
+    guard = control.set_kill_switch(db, code, on=payload.on, user_id=int(access.user.id), reason=(payload.reason or "").strip())
+    _wl.record(db, employee="D", kind="note", title=f"{code} 总闸{'拉下' if payload.on else '打开'}", why=(payload.reason or "").strip(), store_code=code, subject="kill_switch", source="human", actor_user_id=int(access.user.id))
+    create_operation_log(db, actor_type="user", actor_id=str(access.user.id), action="amz.kill_switch." + ("on" if payload.on else "off"), target_type="amz_store", target_id=code, result="success", request_id=_request_id(request), details={"reason": payload.reason})
+    db.commit()
+    return {"store_code": code, "guardrails": control.guard_view(guard)}
+
+
+@router.post("/stores/{store_code}/guardrails")
+def store_guardrails(payload: dict[str, Any], request: Request, access: StoreAccess = Depends(require_store(STORE_ROLE_GRANT)), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """改护栏数值:只有老板;每个字段有上下限,护栏不能被调成没有护栏。"""
+    from . import control  # noqa: PLC0415
+
+    if not is_owner_role(access.user.role):
+        raise HTTPException(status_code=403, detail="护栏只有老板能改")
+    try:
+        guard = control.update_guardrails(db, access.store.store_code, payload)
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    create_operation_log(db, actor_type="user", actor_id=str(access.user.id), action="amz.guardrails.update", target_type="amz_store", target_id=access.store.store_code, result="success", request_id=_request_id(request), details={k: payload.get(k) for k in control.EDITABLE if k in payload})
+    db.commit()
+    return {"store_code": access.store.store_code, "guardrails": control.guard_view(guard)}
+
+
+@router.post("/stores/{store_code}/ladder")
+def store_ladder_lower(payload: LadderLowerBody, request: Request, access: StoreAccess = Depends(require_store(STORE_ROLE_OPERATE)), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """手动降级(随时可以,不用批);升级只能走「升级提议」那条建议。"""
+    from . import ladder  # noqa: PLC0415
+
+    row = ladder.ladder_row(db, access.store.store_code, payload.action_type)
+    if row is None:
+        raise HTTPException(status_code=422, detail="这个动作系统不执行,没有梯子")
+    if ladder.rank(payload.level) > ladder.rank(row.level):
+        raise HTTPException(status_code=422, detail="这里只能降;升级要等系统提议、你在建议里放行")
+    ladder.set_level(db, access.store.store_code, payload.action_type, to=payload.level, why="人手动降级", by=int(access.user.id))
+    create_operation_log(db, actor_type="user", actor_id=str(access.user.id), action="amz.ladder.lower", target_type="amz_store", target_id=access.store.store_code, result="success", request_id=_request_id(request), details=payload.model_dump())
+    db.commit()
+    return {"store_code": access.store.store_code, "ladder": ladder.ladder_view(db, access.store.store_code)}
 
 
 @router.get("/portfolio")

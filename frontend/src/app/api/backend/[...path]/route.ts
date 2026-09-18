@@ -1630,8 +1630,11 @@ function isAllowedAmzPath(method: string, path: string[]) {
   if (path.length === 4 && path[1] === "suggestions" && isUuidPathSegment(path[2]) && path[3] === "decide") {
     return method === "POST";
   }
-  if (path.length === 4 && store && path[3] === "inventory") {
+  if (path.length === 4 && store && (path[3] === "inventory" || path[3] === "control")) {
     return method === "GET";
+  }
+  if (path.length === 4 && store && ["kill-switch", "guardrails", "ladder"].includes(path[3])) {
+    return method === "POST";
   }
   if (path.length === 4 && store && path[3] === "solicitations") {
     return method === "POST";

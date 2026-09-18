@@ -439,6 +439,21 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
         if key not in advice_cache:
             advice_cache[key] = experience.consult(db, store_code=store_code, action_type=draft.action_type, product_line=line, season_phase=phase)
         experience.apply_to_draft(draft, advice_cache[key])
+    return upsert_drafts(db, drafts, as_of=as_of)
+
+
+def upsert_drafts(db: Session, drafts: list[SuggestionDraft], *, as_of: date) -> dict[str, int]:
+    """草稿 → amz_suggestions。新建议带上这一刻的有效级别(影子期 / 总闸 / 不可执行 → L0);已拍板的不动。"""
+    from .ladder import effective_level  # noqa: PLC0415
+
+    level_cache: dict[tuple[str, str], str] = {}
+
+    def level_of(d: SuggestionDraft) -> str:
+        key = (d.store_code, d.action_type)
+        if key not in level_cache:
+            level_cache[key] = effective_level(db, d.store_code, d.action_type)
+        return level_cache[key]
+
     keys = [d.dedupe_key for d in drafts]
     existing = {
         row.dedupe_key: row
@@ -457,7 +472,7 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
                     why=draft.why,
                     prediction=draft.prediction,
                     evidence_json=draft.evidence,
-                    level="L0",
+                    level=level_of(draft),
                     status="open",
                     dedupe_key=draft.dedupe_key,
                     as_of=as_of,
@@ -484,6 +499,7 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
             row.prediction = draft.prediction
             row.evidence_json = draft.evidence
             row.severity = draft.severity
+            row.level = level_of(draft)
             row.as_of = as_of
             db.add(row)
             updated += 1
@@ -493,4 +509,4 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
     return {"drafts": len(drafts), "created": created, "updated": updated, "skipped_decided": skipped}
 
 
-__all__ = ["SEASON_PHASE_LABELS", "season_phase_of", "RULES", "SuggestionDraft", "product_line_of", "run_rules_for_store", "store_as_of", "PRODUCT_LINE_LABELS", "SEASON_CALENDAR"]
+__all__ = ["SEASON_PHASE_LABELS", "season_phase_of", "RULES", "SuggestionDraft", "product_line_of", "run_rules_for_store", "store_as_of", "upsert_drafts", "PRODUCT_LINE_LABELS", "SEASON_CALENDAR"]
