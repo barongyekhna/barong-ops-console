@@ -35,10 +35,14 @@ JOB_LAUNCH_DAILY = "launch_daily"
 JOB_FX_DAILY = "fx_daily"
 JOB_COMPETITOR_DAILY = "competitor_daily"
 JOB_BA_COMPETITORS = "ba_competitors"
+JOB_INVENTORY_DAILY = "inventory_daily"
+JOB_LISTINGS_DAILY = "listings_daily"
+JOB_FINANCES_DAILY = "finances_daily"
+JOB_SOLICITATIONS_DAILY = "solicitations_daily"
 # 作业 → 期望间隔(秒)。心跳的 expected_interval 也用它;超过 3 倍没干成活 = stale。
-JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600, JOB_BA_COMPETITORS: 7 * 24 * 3600}
+JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600, JOB_BA_COMPETITORS: 7 * 24 * 3600, JOB_INVENTORY_DAILY: 24 * 3600, JOB_LISTINGS_DAILY: 24 * 3600, JOB_FINANCES_DAILY: 24 * 3600, JOB_SOLICITATIONS_DAILY: 24 * 3600}
 # 要出网的作业:只在店铺有 SP-API 凭据时才排。
-API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY, JOB_BA_COMPETITORS})
+API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY, JOB_BA_COMPETITORS, JOB_INVENTORY_DAILY, JOB_LISTINGS_DAILY, JOB_FINANCES_DAILY, JOB_SOLICITATIONS_DAILY})
 # 失败后的重试间隔:失败不等于「该再排一条」,否则一个坏凭据会每 15 秒失败一次刷满作业表。
 FAILED_RETRY_SECONDS = 3600
 _TABLE = "amz_jobs"
@@ -321,7 +325,36 @@ def run_ba_competitors(store_code: str) -> dict[str, Any]:
     return _with_client(store_code, lambda db, client, store: ba_competitors.run(db, client, store))
 
 
+def run_inventory_daily(store_code: str) -> dict[str, Any]:
+    from . import ops_sync  # noqa: PLC0415
+
+    return _with_client(store_code, lambda db, client, store: ops_sync.sync_inventory(db, client, store))
+
+
+def run_listings_daily(store_code: str) -> dict[str, Any]:
+    from . import ops_sync  # noqa: PLC0415
+
+    return _with_client(store_code, lambda db, client, store: ops_sync.sync_listings(db, client, store))
+
+
+def run_finances_daily(store_code: str) -> dict[str, Any]:
+    from . import ops_sync  # noqa: PLC0415
+
+    return _with_client(store_code, lambda db, client, store: ops_sync.sync_finances(db, client, store))
+
+
+def run_solicitations_daily(store_code: str) -> dict[str, Any]:
+    """请求留评:影子期只查资格记 would_request;店铺总闸开了才真发。"""
+    from . import ops_sync  # noqa: PLC0415
+
+    return _with_client(store_code, lambda db, client, store: ops_sync.run_solicitations(db, client, store))
+
+
 HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {
+    JOB_INVENTORY_DAILY: run_inventory_daily,
+    JOB_LISTINGS_DAILY: run_listings_daily,
+    JOB_FINANCES_DAILY: run_finances_daily,
+    JOB_SOLICITATIONS_DAILY: run_solicitations_daily,
     JOB_BA_COMPETITORS: run_ba_competitors,
     JOB_RULES_DAILY: run_rules_daily,
     JOB_COMPETITOR_DAILY: run_competitor_daily,

@@ -352,6 +352,22 @@ def _season_start(line: str, phase: str, year: int) -> date:
     return date(year, month, day)
 
 
+SEASON_PHASE_LABELS = {"pre": "预热期", "peak": "旺季", "tail": "尾季", "off": "淡季"}
+
+
+def season_phase_of(line: str, day: date) -> str:
+    """这条产品线在这一天处于哪个季节阶段(pre/peak/tail/off)。区间可以跨年(热水棒旺季 11 月到 2 月)。"""
+    phases = SEASON_CALENDAR.get(line)
+    if not phases:
+        return "off"
+    md = (day.month, day.day)
+    for phase, (start, end) in phases.items():
+        inside = start <= md <= end if start <= end else (md >= start or md <= end)
+        if inside:
+            return phase
+    return "off"
+
+
 def rule_season_countdown(db: Session, store_code: str, currency: str, as_of: date) -> list[SuggestionDraft]:
     """预热期开始前 45 天内提醒:旺季前 4–6 周就要低价占位。按店里有哪些产品线判。"""
     T = AmzAdSearchTerm
@@ -403,20 +419,26 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
     if as_of is None:
         return {"drafts": 0, "created": 0, "updated": 0, "skipped_decided": 0}
     from .competitors import rule_competitor_changes  # noqa: PLC0415
+    from .portfolio import rule_term_owner  # noqa: PLC0415
+    from .rules_stock import rule_stock  # noqa: PLC0415
     from .rules_c import C_RULES  # noqa: PLC0415 — 依赖本模块的 Draft,放这里避免循环导入
     from .rules_cross import CROSS_RULES  # noqa: PLC0415
 
     from . import experience  # noqa: PLC0415
 
     drafts: list[SuggestionDraft] = []
-    for rule in (*RULES, *CROSS_RULES, *C_RULES, rule_competitor_changes):
+    for rule in (*RULES, rule_stock, *CROSS_RULES, rule_term_owner, *C_RULES, rule_competitor_changes):
         drafts.extend(rule(db, store_code, currency, as_of))
     # 生成前查经验库:相关经验附在建议上;被反复驳回 / 命中率太低的那类降一档。
-    advice_cache: dict[str, dict[str, Any]] = {}
+    # 跨店抽象层按「产品线 × 季节阶段」查:别的店在同一季节同一条线上吃过的亏,这家店不用再吃一遍。
+    advice_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
     for draft in drafts:
-        if draft.action_type not in advice_cache:
-            advice_cache[draft.action_type] = experience.consult(db, store_code=store_code, action_type=draft.action_type)
-        experience.apply_to_draft(draft, advice_cache[draft.action_type])
+        line = experience.line_of_subject(draft)
+        phase = season_phase_of(line, as_of)
+        key = (draft.action_type, line, phase)
+        if key not in advice_cache:
+            advice_cache[key] = experience.consult(db, store_code=store_code, action_type=draft.action_type, product_line=line, season_phase=phase)
+        experience.apply_to_draft(draft, advice_cache[key])
     keys = [d.dedupe_key for d in drafts]
     existing = {
         row.dedupe_key: row
@@ -471,4 +493,4 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
     return {"drafts": len(drafts), "created": created, "updated": updated, "skipped_decided": skipped}
 
 
-__all__ = ["RULES", "SuggestionDraft", "product_line_of", "run_rules_for_store", "store_as_of", "PRODUCT_LINE_LABELS", "SEASON_CALENDAR"]
+__all__ = ["SEASON_PHASE_LABELS", "season_phase_of", "RULES", "SuggestionDraft", "product_line_of", "run_rules_for_store", "store_as_of", "PRODUCT_LINE_LABELS", "SEASON_CALENDAR"]

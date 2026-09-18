@@ -92,7 +92,7 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
     assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
-    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors" and order[i + 10] == "20260917_05_amz_ba_top_clicks"
+    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors" and order[i + 10] == "20260917_05_amz_ba_top_clicks" and order[i + 11] == "20260918_01_amz_inventory_listings"
     comp_mig = (versions / "20260917_04_amz_competitors.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260917_03_amz_launches"' in comp_mig and 'sa.Column("org_id"' not in comp_mig
     launch_mig = (versions / "20260917_03_amz_launches.py").read_text(encoding="utf-8")
@@ -406,8 +406,8 @@ def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400, "ba_competitors": 7 * 86400}
-    assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly", "ba_competitors"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400, "ba_competitors": 7 * 86400, "inventory_daily": 86400, "listings_daily": 86400, "finances_daily": 86400, "solicitations_daily": 86400}
+    assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly", "ba_competitors", "inventory_daily", "listings_daily", "finances_daily", "solicitations_daily"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
     assert "backend.app.modules.amz_series.worker_main" in compose and "container_name: amz-worker" in compose
@@ -691,3 +691,41 @@ def test_ba_report_stream_parser_and_picks() -> None:
 
     assert ba.target_week(_date(2026, 9, 17)) == (_date(2026, 9, 6), _date(2026, 9, 12))  # 周四:上周六结束已 5 天
     assert ba.target_week(_date(2026, 9, 15)) == (_date(2026, 8, 30), _date(2026, 9, 5))  # 周二:上周六才过 3 天,再往前一周
+
+
+# ---------------------------------------------------------------- 补齐:季节阶段 / 主场词 / 库存 / listing / 评论日期(纯函数)
+
+
+def test_season_owner_inventory_listing_review_helpers() -> None:
+    from datetime import date as _date
+    from decimal import Decimal as _D
+    from types import SimpleNamespace as _N
+
+    from backend.app.modules.amz_series import ops_sync, portfolio, reviews as rv, rules, rules_stock
+
+    assert rules.season_phase_of("pump", _date(2026, 8, 1)) == "peak" and rules.season_phase_of("pump", _date(2026, 12, 1)) == "off"
+    assert rules.season_phase_of("heater", _date(2027, 1, 10)) == "peak" and rules.season_phase_of("heater", _date(2026, 10, 20)) == "pre"  # 跨年区间
+    assert rules.season_phase_of("nail", _date(2026, 8, 1)) == "off"
+
+    def s(clicks, orders, spend, sales):
+        return {"clicks": clicks, "orders": orders, "spend": _D(spend), "sales": _D(sales), "campaign": "pump"}
+
+    assert portfolio.pick_owner({"01us": s(80, 10, "50", "300"), "03us": s(60, 3, "60", "90"), "04us": s(10, 0, "9", "0")}) == ("01us", ["03us"])  # 04us 点击不够不参与
+    assert portfolio.pick_owner({"01us": s(80, 10, "50", "300"), "03us": s(60, 8, "50", "250")}) == ("01us", [])  # 差不多就不让
+    assert portfolio.pick_owner({"01us": s(80, 2, "50", "60"), "03us": s(60, 1, "50", "30")}) == (None, [])  # 主场都没几单,不分
+
+    inv = ops_sync.parse_inventory([{"sellerSku": "PSPE-001", "asin": "B0H7S228S8", "fnSku": "X001", "inventoryDetails": {"fulfillableQuantity": 40, "inboundWorkingQuantity": 5, "inboundShippedQuantity": 100, "inboundReceivingQuantity": 3, "reservedQuantity": {"totalReservedQuantity": 7}, "unfulfillableQuantity": {"totalUnfulfillableQuantity": 1}}}, {"asin": "nosku"}])
+    assert inv == [{"sku": "PSPE-001", "asin": "B0H7S228S8", "fnsku": "X001", "fulfillable": 40, "inbound": 108, "reserved": 7, "unfulfillable": 1, "raw_json": {"total": None, "condition": None}}]
+    assert rules_stock.cover_days(148, 10.0) == 14.8 and rules_stock.cover_days(10, 0) is None
+
+    cat = ops_sync.parse_catalog({"attributes": {"item_name": [{"value": "Camping Shower"}], "bullet_point": [{"value": "A"}, {"value": "B"}], "product_description": [{"value": "desc"}]}})
+    assert cat == {"title": "Camping Shower", "bullets": ["A", "B"], "description": "desc"}
+    prev = _N(title="Camping Shower", bullets_json=["A", "B"], description="desc", price=_D("25.64"), status="Active")
+    assert ops_sync.listing_changes(prev, {"title": "Camping Shower 7800mAh", "bullets": ["A", "B2", "C"], "description": "desc", "price": _D("24.99"), "status": "Active"}) == ["标题", "五点第 2、3 条", "价格 25.64 → 24.99"]
+    assert ops_sync.listing_changes(prev, {**cat, "price": _D("25.64"), "status": "Active"}) == []
+    assert ops_sync.content_hash("t", ["a"], None, None) != ops_sync.content_hash("t", ["b"], None, None)
+
+    assert rv.review_date("1.0 out of 5 stars Doesn't heat. Reviewed in the United States on August 3, 2026") == _date(2026, 8, 3)
+    assert rv.review_date("Rezension aus Deutschland vom 3. August 2026") == _date(2026, 8, 3)
+    assert rv.review_date("2026-07-15 leaked") == _date(2026, 7, 15) and rv.review_date("no date here") is None
+    assert rv.split_paste("1.0 out of 5 stars Doesn't heat at all") == [(1, "Doesn't heat at all")]

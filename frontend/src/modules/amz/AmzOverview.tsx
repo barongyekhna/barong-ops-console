@@ -288,16 +288,6 @@ export function AmzOverview() {
         </OverlayModal>
       ) : null}
 
-      <nav className={styles.tabs} aria-label="手机导航">
-        <a className={styles.tab} href="#amz-top">总览</a>
-        <a className={`${styles.tab} ${styles.tabMsg}`} href="#amz-crew">
-          {panel && panel.open_total > 0 ? <span className={styles.tabBadge}>{panel.open_total}</span> : null}
-          消息
-        </a>
-        <a className={styles.tab} href="#amz-stores">店铺</a>
-        <a className={styles.tab} href="#amz-ads">广告</a>
-        <a className={styles.tab} href="/amz?tab=manage">管理</a>
-      </nav>
       {isOwner ? null : null}
     </div>
   );

@@ -390,3 +390,10 @@
   font-size: 12.5px;
   color: var(--color-text);
 }
+
+/* 手机底栏是 fixed 的,内容底部要让出位置 */
+@media (max-width: 900px) {
+  .workspace {
+    padding-bottom: 88px;
+  }
+}

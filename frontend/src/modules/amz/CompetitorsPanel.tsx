@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import styles from "./AmzWorkspace.module.css";
 import { addCompetitor, getCompetitors, type AmzCompetitor, type AmzCompetitorSnap } from "./api";
+import { ReviewsTrend } from "./ReviewsTrend";
 
 const LINES: Record<string, string> = { pump: "沐浴泵", heater: "热水棒", flash: "太阳能手电", nail: "磨甲器", bundle: "套装", other: "其他" };
 
@@ -188,6 +189,7 @@ export function CompetitorsPanel() {
           </button>
         </div>
       </section>
+      <ReviewsTrend />
     </div>
   );
 }

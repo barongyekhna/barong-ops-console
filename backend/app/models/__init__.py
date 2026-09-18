@@ -182,6 +182,9 @@ from ..modules.amz_series.models import (
     AmzLaunch,
     AmzReview,
     AmzBaTopClick,
+    AmzInventoryDaily,
+    AmzListingSnapshot,
+    AmzSolicitation,
     AmzCompetitor,
     AmzCompetitorSnapshot,
 )

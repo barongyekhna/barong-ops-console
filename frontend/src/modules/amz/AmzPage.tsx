@@ -2,39 +2,87 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { AmzOverview } from "./AmzOverview";
 import { AmzWorkspace } from "./AmzWorkspace";
 import { CompetitorsPanel } from "./CompetitorsPanel";
 import { ImagesPanel } from "./ImagesPanel";
 import { LaunchPanel } from "./LaunchPanel";
+import { PortfolioPanel } from "./PortfolioPanel";
+import { getEmployeePanel } from "./api";
 import styles from "./AmzOverview.module.css";
 
-/** 默认是总览(设计稿);`?tab=manage` 是 A0 的管理面:店铺一表 / 授权 / 种子台账。 */
+const TABS = [
+  { key: "overview", label: "总览", href: "/amz" },
+  { key: "cross", label: "跨店 · 主场词 / 需求 / 库存", href: "/amz?tab=cross" },
+  { key: "competitors", label: "竞品 · 殷长辰盯盘", href: "/amz?tab=competitors" },
+  { key: "launch", label: "推新 · 六步", href: "/amz?tab=launch" },
+  { key: "images", label: "图片 · 殷熊的 brief", href: "/amz?tab=images" },
+  { key: "manage", label: "管理 · 店铺 / 授权 / 种子", href: "/amz?tab=manage" },
+] as const;
+
+type TabKey = (typeof TABS)[number]["key"];
+
+/** 默认是总览(设计稿);其余每块一个 tab。手机(<900px)底部固定一排导航,每个 tab 都在。 */
 export function AmzPage() {
   const params = useSearchParams();
   const raw = params.get("tab");
-  const tab = raw === "manage" ? "manage" : raw === "images" ? "images" : raw === "launch" ? "launch" : raw === "competitors" ? "competitors" : "overview";
+  const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : "overview";
+  const [openTotal, setOpenTotal] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    getEmployeePanel()
+      .then((panel) => {
+        if (alive) setOpenTotal(panel.open_total);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <>
       <div className={styles.filters} role="tablist" aria-label="页面">
-        <Link aria-selected={tab === "overview"} className={`${styles.chip} ${tab === "overview" ? styles.chipOn : ""}`} href="/amz" role="tab">
+        {TABS.map((t) => (
+          <Link aria-selected={tab === t.key} className={`${styles.chip} ${tab === t.key ? styles.chipOn : ""}`} href={t.href} key={t.key} role="tab">
+            {t.label}
+          </Link>
+        ))}
+      </div>
+      {tab === "manage" ? (
+        <AmzWorkspace />
+      ) : tab === "cross" ? (
+        <PortfolioPanel />
+      ) : tab === "competitors" ? (
+        <CompetitorsPanel />
+      ) : tab === "launch" ? (
+        <LaunchPanel />
+      ) : tab === "images" ? (
+        <ImagesPanel briefId={params.get("brief")} suggestionId={params.get("suggestion")} />
+      ) : (
+        <AmzOverview />
+      )}
+      <nav className={styles.tabs} aria-label="手机导航">
+        <Link className={styles.tab} href="/amz">
           总览
         </Link>
-        <Link aria-selected={tab === "launch"} className={`${styles.chip} ${tab === "launch" ? styles.chipOn : ""}`} href="/amz?tab=launch" role="tab">
-          推新 · 六步
+        <Link className={`${styles.tab} ${styles.tabMsg}`} href="/amz#amz-crew">
+          {openTotal > 0 ? <span className={styles.tabBadge}>{openTotal}</span> : null}
+          待拍板
         </Link>
-        <Link aria-selected={tab === "competitors"} className={`${styles.chip} ${tab === "competitors" ? styles.chipOn : ""}`} href="/amz?tab=competitors" role="tab">
-          竞品 · 殷长辰盯盘
+        <Link className={styles.tab} href="/amz?tab=cross">
+          跨店
         </Link>
-        <Link aria-selected={tab === "images"} className={`${styles.chip} ${tab === "images" ? styles.chipOn : ""}`} href="/amz?tab=images" role="tab">
-          图片 · 殷熊的 brief
+        <Link className={styles.tab} href="/amz?tab=competitors">
+          竞品
         </Link>
-        <Link aria-selected={tab === "manage"} className={`${styles.chip} ${tab === "manage" ? styles.chipOn : ""}`} href="/amz?tab=manage" role="tab">
-          管理 · 店铺 / 授权 / 种子
+        <Link className={styles.tab} href="/amz?tab=manage">
+          管理
         </Link>
-      </div>
-      {tab === "manage" ? <AmzWorkspace /> : tab === "launch" ? <LaunchPanel /> : tab === "competitors" ? <CompetitorsPanel /> : tab === "images" ? <ImagesPanel briefId={params.get("brief")} suggestionId={params.get("suggestion")} /> : <AmzOverview />}
+      </nav>
     </>
   );
 }

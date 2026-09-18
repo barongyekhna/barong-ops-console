@@ -1589,6 +1589,7 @@ function isAllowedAmzPath(method: string, path: string[]) {
     if (path[1] === "launches") return method === "GET" || method === "POST";
     if (path[1] === "reviews") return method === "POST";
     if (path[1] === "competitors") return method === "GET" || method === "POST";
+    if (path[1] === "portfolio") return method === "GET";
     return ["stores", "seed-imports", "employees", "suggestions", "experience", "work-log"].includes(path[1]) && method === "GET";
   }
   if (path.length === 4 && path[1] === "fact-sheets" && isUuidPathSegment(path[2]) && path[3] === "judge") {
@@ -1604,7 +1605,7 @@ function isAllowedAmzPath(method: string, path: string[]) {
   if (path.length === 4 && path[1] === "launches" && isUuidPathSegment(path[2]) && ["inputs", "tick", "advance", "close"].includes(path[3])) {
     return method === "POST";
   }
-  if (path.length === 3 && path[1] === "reviews" && path[2] === "clusters") {
+  if (path.length === 3 && path[1] === "reviews" && (path[2] === "clusters" || path[2] === "trend")) {
     return method === "GET";
   }
   // 图片通道(A5)
@@ -1627,6 +1628,12 @@ function isAllowedAmzPath(method: string, path: string[]) {
     return store && method === "GET";
   }
   if (path.length === 4 && path[1] === "suggestions" && isUuidPathSegment(path[2]) && path[3] === "decide") {
+    return method === "POST";
+  }
+  if (path.length === 4 && store && path[3] === "inventory") {
+    return method === "GET";
+  }
+  if (path.length === 4 && store && path[3] === "solicitations") {
     return method === "POST";
   }
   if (path.length === 4 && store && path[3] === "grants") {

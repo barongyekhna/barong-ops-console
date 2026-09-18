@@ -557,6 +557,7 @@ class AmzReview(AmzTimestampMixin, Base):
     family: Mapped[str | None] = mapped_column(String(16), nullable=True)
     cluster: Mapped[str | None] = mapped_column(String(120), nullable=True)
     clustered_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    posted_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
@@ -619,6 +620,64 @@ class AmzBaTopClick(Base):
     item_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
     click_share: Mapped[Decimal | None] = mapped_column(Numeric(7, 4), nullable=True)
     conversion_share: Mapped[Decimal | None] = mapped_column(Numeric(7, 4), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class AmzInventoryDaily(Base):
+    """FBA 库存每天一张(SP-API FBA Inventory summaries)。库存天数 / 断货规则和跨店需求合成的底数。"""
+
+    __tablename__ = "amz_inventory_daily"
+    __table_args__ = (UniqueConstraint("store_code", "snap_date", "sku", name="uq_amz_inventory_daily_store_day_sku"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    snap_date: Mapped[date] = mapped_column(Date, nullable=False)
+    sku: Mapped[str] = mapped_column(String(128), nullable=False)
+    asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    fnsku: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    fulfillable: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    inbound: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    reserved: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    unfulfillable: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0", default=0)
+    raw_json: Mapped[dict[str, Any]] = mapped_column("raw", json_type(), nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class AmzListingSnapshot(Base):
+    """自家 listing 每天一张(Listings Items API):标题 / 五点 / 描述 / 价格。内容变了 = 有人改了 listing,记进殷笑笑的工作日志。"""
+
+    __tablename__ = "amz_listing_snapshots"
+    __table_args__ = (UniqueConstraint("store_code", "sku", "snap_date", name="uq_amz_listing_snap_day"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    sku: Mapped[str] = mapped_column(String(128), nullable=False)
+    snap_date: Mapped[date] = mapped_column(Date, nullable=False)
+    asin: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bullets_json: Mapped[list[str]] = mapped_column("bullets", json_type(), nullable=False, default=list)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class AmzSolicitation(Base):
+    """请求留评(亚马逊官方 Solicitations「Request a Review」)。一单一行;影子期只记 would_request,总闸开了才真发。"""
+
+    __tablename__ = "amz_solicitations"
+    __table_args__ = (UniqueConstraint("store_code", "order_id", name="uq_amz_solicitations_store_order"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    order_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    ordered_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

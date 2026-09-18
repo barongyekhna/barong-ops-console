@@ -487,6 +487,11 @@ def reviews_paste(payload: ReviewsPaste, db: Session = Depends(get_db), user: Us
     return {"added": added, "clustered": clustered, "clusters": reviews.cluster_table(db, product_line=payload.product_line, whose=payload.whose)}
 
 
+@router.get("/reviews/trend")
+def reviews_trend(product_line: str = Query(...), whose: str | None = Query(default=None, pattern="^(ours|competitor)$"), months: int = Query(default=6, ge=1, le=24), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    return reviews.monthly_trend(db, product_line=product_line, whose=whose, months=months)
+
+
 @router.get("/reviews/clusters")
 def reviews_clusters(product_line: str = Query(...), whose: str | None = Query(default=None), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
     return {"clusters": reviews.cluster_table(db, product_line=product_line, whose=whose), "pits": reviews.top_pits(db, product_line=product_line), "families": reviews.FAMILY_LABELS}
@@ -501,6 +506,48 @@ class CompetitorAdd(BaseModel):
     product_line: str = Field(min_length=1, max_length=32)
     whose: str = Field(default="competitor", pattern="^(competitor|ours)$")
     label: str | None = Field(default=None, max_length=120)
+
+
+@router.get("/portfolio")
+def portfolio_board(marketplace: str = Query(default="US", pattern="^(US|DE)$"), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """跨店协调:同站点被几家店争的词(谁主场、谁该让)+ 同一批货的需求合成。只显示调用者被授权的店。"""
+    from . import portfolio  # noqa: PLC0415
+
+    codes = granted_store_codes(db, user)
+    owners = portfolio.owner_board(db, marketplace=marketplace)
+    demand = portfolio.demand_board(db, marketplace=marketplace)
+    if codes is not None:
+        allowed = set(codes)
+        owners = [{**r, "stores": {s: v for s, v in r["stores"].items() if s in allowed}, "yield_stores": [s for s in r["yield_stores"] if s in allowed], "home_store": r["home_store"] if r["home_store"] in allowed else None} for r in owners]
+        owners = [r for r in owners if len(r["stores"]) >= 1]
+        demand = [{**r, "units_28d": {s: v for s, v in r["units_28d"].items() if s in allowed}, "stock": {s: v for s, v in r["stock"].items() if s in allowed}} for r in demand]
+    return {"marketplace": marketplace, "owners": owners, "demand": demand, "lead_days_default": portfolio.LEAD_DAYS, "safety_days": portfolio.SAFETY_DAYS}
+
+
+class SolicitationSwitch(BaseModel):
+    enabled: bool
+
+
+@router.get("/stores/{store_code}/inventory")
+def store_inventory(access: StoreAccess = Depends(require_store(STORE_ROLE_VIEW)), db: Session = Depends(get_db)) -> dict[str, Any]:
+    from . import ops_sync, rules_stock  # noqa: PLC0415
+
+    return {"store_code": access.store.store_code, "items": rules_stock.cover_table(db, access.store.store_code), "solicitations": {"enabled": ops_sync.solicitations_enabled(access.store), "counts": ops_sync.solicitation_summary(db, access.store.store_code)}}
+
+
+@router.post("/stores/{store_code}/solicitations")
+def store_solicitations_switch(payload: SolicitationSwitch, access: StoreAccess = Depends(require_store(STORE_ROLE_GRANT)), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """请求留评的店铺总闸。只有 owner 能开(影子期规矩:对亚马逊的写要人点头)。"""
+    from . import ops_sync  # noqa: PLC0415
+
+    if not is_owner_role(access.user.role):
+        raise HTTPException(status_code=403, detail="只有老板能开关请求留评")
+    store = access.store
+    store.metadata_json = {**(store.metadata_json or {}), "solicitations_enabled": bool(payload.enabled)}
+    db.add(store)
+    create_operation_log(db, actor_type="user", actor_id=str(access.user.id), action="amz.solicitations.switch", target_type="amz_store", target_id=store.store_code, result="success", details={"enabled": bool(payload.enabled)})
+    db.commit()
+    return {"store_code": store.store_code, "enabled": ops_sync.solicitations_enabled(store)}
 
 
 @router.get("/competitors")

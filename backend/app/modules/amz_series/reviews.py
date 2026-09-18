@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import re
+from datetime import date
 from typing import Any
 
 from sqlalchemy import func, select
@@ -36,7 +37,15 @@ WHOSE = ("ours", "competitor")
 MAX_REVIEWS_PER_PASTE = 200
 MAX_REVIEW_CHARS = 2000
 
-_STAR_RE = re.compile(r"^\s*(?:(?P<n>[1-5])\s*(?:星|stars?|/\s*5|分)|(?P<s>[★⭐]{1,5}))\s*[:：|,，.、-]?\s*", re.IGNORECASE)
+_STAR_RE = re.compile(r"^\s*(?:(?P<o>[1-5])(?:[.,]0)?\s*(?:out of 5 stars|von 5 sternen)|(?P<n>[1-5])\s*(?:星|stars?|/\s*5|分)|(?P<s>[★⭐]{1,5}))\s*[:：|,，.、-]?\s*", re.IGNORECASE)
+
+MONTHS = {m: i for i, m in enumerate(("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"), start=1)}
+MONTHS.update({m: i for i, m in enumerate(("januar", "februar", "märz", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "dezember"), start=1)})
+_DATE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?P<y>20\d\d)[-/.年](?P<m>\d{1,2})[-/.月](?P<d>\d{1,2})"),
+    re.compile(r"\b(?P<mon>[A-Za-zä]+)\s+(?P<d>\d{1,2}),\s*(?P<y>20\d\d)"),  # August 3, 2026
+    re.compile(r"\b(?P<d>\d{1,2})\.?\s+(?P<mon>[A-Za-zä]+)\s+(?P<y>20\d\d)"),  # 3 August 2026 / 3. August 2026
+)
 
 KEYWORD_FALLBACK: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ("expectation", "以为能加热", re.compile(r"heat|hot water|warm|加热|热水|不热|cold water", re.I)),
@@ -60,7 +69,7 @@ def split_paste(raw: str) -> list[tuple[int | None, str]]:
         stars: int | None = None
         m = _STAR_RE.match(text)
         if m:
-            stars = int(m.group("n")) if m.group("n") else len(m.group("s"))
+            stars = int(m.group("o") or m.group("n")) if (m.group("o") or m.group("n")) else len(m.group("s"))
             text = text[m.end():].strip()
         if len(text) < 4:
             continue
@@ -68,6 +77,21 @@ def split_paste(raw: str) -> list[tuple[int | None, str]]:
         if len(items) >= MAX_REVIEWS_PER_PASTE:
             break
     return items
+
+
+def review_date(text: str) -> date | None:
+    """从贴进来的评论里认出评论日期(亚马逊页面上「Reviewed in the United States on August 3, 2026」那种)。认不出返回 None。"""
+    for pattern in _DATE_PATTERNS:
+        for m in pattern.finditer(text or ""):
+            groups = m.groupdict()
+            month = int(groups["m"]) if groups.get("m") else MONTHS.get((groups.get("mon") or "").lower())
+            if not month:
+                continue
+            try:
+                return date(int(groups["y"]), month, int(groups["d"]))
+            except ValueError:
+                continue
+    return None
 
 
 def fallback_cluster(text: str) -> tuple[str, str]:
@@ -92,6 +116,7 @@ def add_reviews(db: Session, *, product_line: str, whose: str, raw: str, actor_u
             "stars": stars,
             "text": text,
             "text_sha256": hashlib.sha256(text.lower().encode("utf-8")).hexdigest(),
+            "posted_on": review_date(text),
             "launch_id": launch_id,
             "created_by_user_id": actor_user_id,
         }
@@ -194,10 +219,43 @@ def cluster_table(db: Session, *, product_line: str, whose: str | None = None, m
     return out
 
 
+def monthly_trend(db: Session, *, product_line: str, whose: str | None = None, months: int = 6) -> dict[str, Any]:
+    """评论簇按月看占比:这个月差评里「预期落差」占多少,修了文案之后有没有掉下来。
+
+    月份按评论日期(贴的时候认出来的);认不出日期的按贴进来的那天算,并单独数出来。
+    """
+    R = AmzReview
+    month_expr = func.to_char(func.coalesce(R.posted_on, func.date(R.created_at)), "YYYY-MM")
+    q = select(month_expr, R.family, R.cluster, func.count(), func.count(R.posted_on)).where(R.product_line == product_line, R.cluster.is_not(None)).group_by(month_expr, R.family, R.cluster)
+    if whose:
+        q = q.where(R.whose == whose)
+    by_month: dict[str, dict[str, Any]] = {}
+    for month, family, cluster, count, dated in db.execute(q).all():
+        slot = by_month.setdefault(month, {"month": month, "total": 0, "undated": 0, "families": {f: 0 for f in FAMILIES}, "clusters": {}})
+        slot["total"] += int(count)
+        slot["undated"] += int(count) - int(dated)
+        slot["families"][family or "other"] = slot["families"].get(family or "other", 0) + int(count)
+        slot["clusters"][cluster] = slot["clusters"].get(cluster, 0) + int(count)
+    out = []
+    for month in sorted(by_month)[-months:]:
+        slot = by_month[month]
+        total = slot["total"] or 1
+        out.append(
+            {
+                "month": month,
+                "total": slot["total"],
+                "undated": slot["undated"],
+                "families": [{"family": f, "label": FAMILY_LABELS[f], "count": c, "share_pct": round(c / total * 100, 1)} for f, c in slot["families"].items()],
+                "top_clusters": [{"theme": t, "count": c, "share_pct": round(c / total * 100, 1)} for t, c in sorted(slot["clusters"].items(), key=lambda x: -x[1])[:3]],
+            }
+        )
+    return {"product_line": product_line, "whose": whose, "months": out}
+
+
 def top_pits(db: Session, *, product_line: str, limit: int = 3) -> list[dict[str, Any]]:
     """推新第 1 步:对手 1–3 星评论里前三个坑(不含物流——那不是页面能堵的)。"""
     rows = [r for r in cluster_table(db, product_line=product_line, whose="competitor", max_stars=3) if r["family"] in ("defect", "expectation")]
     return rows[:limit]
 
 
-__all__ = ["FAMILIES", "FAMILY_LABELS", "FAMILY_OWNER", "WHOSE", "add_reviews", "cluster_pending", "cluster_table", "fallback_cluster", "split_paste", "top_pits"]
+__all__ = ["FAMILIES", "FAMILY_LABELS", "FAMILY_OWNER", "WHOSE", "add_reviews", "cluster_pending", "cluster_table", "fallback_cluster", "monthly_trend", "review_date", "split_paste", "top_pits"]

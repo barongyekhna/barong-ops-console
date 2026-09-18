@@ -233,6 +233,74 @@ def learn_global(db: Session) -> int:
     return n
 
 
+ABSTRACT_MIN_SAMPLES = 6
+ABSTRACT_GAP_PCT = 15.0  # 比这类建议的全局命中率低/高这么多,才值得写成一条抽象经验
+
+
+def line_of_subject(draft_or_subject: Any) -> str:
+    """建议 / 结果 → 产品线。证据里写了就用;否则按搜索词认(买家的话);认不出再按 SKU/活动名认。"""
+    from .ba_competitors import line_of_term  # noqa: PLC0415
+    from .rules import product_line_of  # noqa: PLC0415
+
+    evidence = getattr(draft_or_subject, "evidence", None) or getattr(draft_or_subject, "metrics_json", None) or {}
+    line = evidence.get("product_line") if isinstance(evidence, dict) else None
+    if line:
+        return str(line)
+    subject = getattr(draft_or_subject, "subject", draft_or_subject)
+    text = str(subject or "")
+    term = text.split("|")[-1] if "|" in text else text
+    return line_of_term(term) or product_line_of(text)
+
+
+def learn_abstract(db: Session) -> int:
+    """跨店抽象层:把所有店的 28 天结果按(动作 × 产品线 × 季节阶段)归纳,和这类动作的全局命中率比。
+
+    只在「至少两家店、样本够、和全局差得明显」时写一条——那才是能搬到别的店用的规律,
+    比如「旺季里泵线的否词建议跨 3 店只成立 30%(全局 62%):旺季流量宽,别急着否」。
+    """
+    from .rules import PRODUCT_LINE_LABELS, SEASON_PHASE_LABELS, season_phase_of  # noqa: PLC0415
+
+    rows = db.scalars(select(AmzOutcome).where(AmzOutcome.horizon_days == 28, AmzOutcome.verdict.in_(("right", "wrong"))))
+    groups: dict[tuple[str, str, str], dict[str, Any]] = {}
+    overall: dict[str, list[int]] = {}
+    for o in rows:
+        line = line_of_subject(o)
+        phase = season_phase_of(line, o.as_of)
+        g = groups.setdefault((o.action_type, line, phase), {"right": 0, "wrong": 0, "stores": set()})
+        g["right" if o.verdict == "right" else "wrong"] += 1
+        g["stores"].add(o.store_code)
+        tally = overall.setdefault(o.action_type, [0, 0])
+        tally[0 if o.verdict == "right" else 1] += 1
+    n = 0
+    for (action, line, phase), g in groups.items():
+        total = g["right"] + g["wrong"]
+        if total < ABSTRACT_MIN_SAMPLES or len(g["stores"]) < 2 or line == "other":
+            continue
+        pct = round(g["right"] / total * 100, 1)
+        base_right, base_wrong = overall[action]
+        base = round(base_right / (base_right + base_wrong) * 100, 1)
+        if abs(pct - base) < ABSTRACT_GAP_PCT:
+            continue
+        label = ACTION_LABELS.get(action, action)
+        where = f"{SEASON_PHASE_LABELS.get(phase, phase)} · {PRODUCT_LINE_LABELS.get(line, line)}"
+        verdict = "明显更不靠谱,这个阶段先别急着做" if pct < base else "明显更靠谱,这个阶段可以更果断"
+        _upsert_entry(
+            db,
+            key=f"abstract|{action}|{line}|{phase}",
+            scope="abstract",
+            store_code=None,
+            action_type=action,
+            kind="precision",
+            statement=f"{where}:「{label}」跨 {len(g['stores'])} 家店 28 天后成立 {g['right']}/{total}({pct}%),全局 {base}%——{verdict}。",
+            evidence={"product_line": line, "season_phase": phase, "right": g["right"], "wrong": g["wrong"], "stores": sorted(g["stores"]), "global_pct": base},
+            samples=total,
+            hits=g["right"],
+            value=pct,
+        )
+        n += 1
+    return n
+
+
 def learn_from_decisions(db: Session, store_code: str) -> int:
     S = AmzSuggestion
     n = 0
@@ -269,7 +337,7 @@ def learn_from_images(db: Session, store_code: str) -> int:
 def refresh_store(db: Session, store: AmzStore) -> dict[str, int]:
     out = {"live_outcomes": evaluate_live(db, store.store_code), "backtest_outcomes": backtest(db, store)}
     db.flush()
-    out["entries"] = learn_precision_and_params(db, store.store_code) + learn_from_decisions(db, store.store_code) + learn_from_images(db, store.store_code) + learn_global(db)
+    out["entries"] = learn_precision_and_params(db, store.store_code) + learn_from_decisions(db, store.store_code) + learn_from_images(db, store.store_code) + learn_global(db) + learn_abstract(db)
     db.flush()
     return out
 
@@ -282,11 +350,22 @@ def param_for(db: Session, store_code: str, name: str, default: float) -> float:
     return float(row) if row is not None else float(default)
 
 
-def consult(db: Session, *, store_code: str, action_type: str) -> dict[str, Any]:
-    """生成建议前查一遍:相关经验的句子 + 是否该降一档严重度。"""
+def consult(db: Session, *, store_code: str, action_type: str, product_line: str | None = None, season_phase: str | None = None) -> dict[str, Any]:
+    """生成建议前查一遍:相关经验的句子 + 是否该降一档严重度。
+
+    顺序:本店 → 同产品线同季节阶段的跨店抽象经验 → 全局。抽象经验说「这个阶段明显不靠谱」也降一档。
+    """
     rows = list(db.scalars(select(AmzExperience).where(AmzExperience.status == "active", AmzExperience.action_type == action_type, (AmzExperience.store_code == store_code) | (AmzExperience.scope == "global")).order_by(AmzExperience.scope.desc())))
-    notes = [r.statement for r in rows][:3]
+    abstract = None
+    if product_line and season_phase:
+        abstract = db.scalar(select(AmzExperience).where(AmzExperience.status == "active", AmzExperience.entry_key == f"abstract|{action_type}|{product_line}|{season_phase}"))
+    store_rows = [r for r in rows if r.scope != "global"]
+    global_rows = [r for r in rows if r.scope == "global"]
+    ordered = store_rows + ([abstract] if abstract is not None else []) + global_rows
+    notes = [r.statement for r in ordered][:3]
     downgrade = any(r.kind == "rejection" for r in rows) or any(r.kind == "precision" and r.scope == "store" and r.value is not None and float(r.value) < 40.0 for r in rows)
+    if abstract is not None and abstract.value is not None and float(abstract.value) < float((abstract.evidence_json or {}).get("global_pct") or 0):
+        downgrade = True
     return {"notes": notes, "downgrade": downgrade}
 
 
@@ -329,4 +408,4 @@ def view(row: AmzExperience) -> dict[str, Any]:
     }
 
 
-__all__ = ["ACTION_LABELS", "HORIZONS", "MIN_SAMPLES", "PARAMS", "Window", "apply_to_draft", "backtest", "consult", "data_range", "drift_value", "evaluate_live", "judge", "learn_from_decisions", "learn_from_images", "learn_global", "learn_precision_and_params", "list_entries", "param_for", "precision_rows", "refresh_store", "view"]
+__all__ = ["ACTION_LABELS", "learn_abstract", "line_of_subject", "HORIZONS", "MIN_SAMPLES", "PARAMS", "Window", "apply_to_draft", "backtest", "consult", "data_range", "drift_value", "evaluate_live", "judge", "learn_from_decisions", "learn_from_images", "learn_global", "learn_precision_and_params", "list_entries", "param_for", "precision_rows", "refresh_store", "view"]

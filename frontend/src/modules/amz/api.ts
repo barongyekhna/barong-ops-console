@@ -401,3 +401,54 @@ export function getCompetitors(marketplace?: string) {
 export function addCompetitor(payload: { marketplace: string; asin: string; product_line: string; whose: "competitor" | "ours"; label?: string }) {
   return amzRequest<{ added: boolean; items: AmzCompetitor[] }>(`${BASE}/competitors`, "加竞品失败", { body: payload, method: "POST" });
 }
+
+// ---------------------------------------------------------------- 跨店协调 / 库存 / 请求留评 / 评论按月
+
+export type AmzOwnerRow = {
+  term: string;
+  home_store: string | null;
+  yield_stores: string[];
+  spend_total: number;
+  stores: Record<string, { clicks: number; orders: number; spend: number; sales: number }>;
+};
+
+export type AmzDemandRow = {
+  product_line: string;
+  label: string;
+  units_28d: Record<string, number>;
+  units_28d_total: number;
+  daily: number;
+  stock: Record<string, { fulfillable: number; inbound: number; as_of: string }>;
+  stock_complete: boolean;
+  stock_missing_stores: string[];
+  days_cover: number | null;
+  lead_days: number;
+  reorder_units: number | null;
+  note: string;
+};
+
+export type AmzPortfolio = { marketplace: string; owners: AmzOwnerRow[]; demand: AmzDemandRow[]; lead_days_default: number; safety_days: number };
+
+export type AmzCoverRow = { sku: string; asin: string | null; fulfillable: number; inbound: number; reserved: number; daily_rate: number; days_cover: number | null; snap_date: string };
+
+export type AmzStoreInventory = { store_code: string; items: AmzCoverRow[]; solicitations: { enabled: boolean; counts: Record<string, number> } };
+
+export type AmzReviewTrend = {
+  product_line: string;
+  whose: string | null;
+  months: { month: string; total: number; undated: number; families: { family: string; label: string; count: number; share_pct: number }[]; top_clusters: { theme: string; count: number; share_pct: number }[] }[];
+};
+
+export function getPortfolio(marketplace = "US") {
+  return amzRequest<AmzPortfolio>(`${BASE}/portfolio?marketplace=${encodeURIComponent(marketplace)}`, "跨店协调加载失败");
+}
+export function getStoreInventory(storeCode: string) {
+  return amzRequest<AmzStoreInventory>(`${BASE}/stores/${storeCode}/inventory`, "库存加载失败");
+}
+export function setSolicitations(storeCode: string, enabled: boolean) {
+  return amzRequest<{ store_code: string; enabled: boolean }>(`${BASE}/stores/${storeCode}/solicitations`, "请求留评开关失败", { body: { enabled }, method: "POST" });
+}
+export function getReviewTrend(productLine: string, whose?: string) {
+  const query = `?product_line=${encodeURIComponent(productLine)}${whose ? `&whose=${whose}` : ""}`;
+  return amzRequest<AmzReviewTrend>(`${BASE}/reviews/trend${query}`, "评论趋势加载失败");
+}

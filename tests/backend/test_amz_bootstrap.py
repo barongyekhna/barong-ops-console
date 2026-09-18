@@ -45,6 +45,11 @@ def _cleanup(session) -> None:
     from backend.app.modules.amz_series.models import AmzBaTopClick
 
     session.execute(delete(AmzBaTopClick))
+    from backend.app.modules.amz_series.models import AmzInventoryDaily, AmzListingSnapshot, AmzSolicitation
+
+    session.execute(delete(AmzInventoryDaily))
+    session.execute(delete(AmzListingSnapshot))
+    session.execute(delete(AmzSolicitation))
     session.execute(delete(AmzCompetitorSnapshot))
     session.execute(delete(AmzCompetitor))
     session.execute(delete(AmzReview))
@@ -543,6 +548,108 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     assert moved["added"] == 1 and moved["retired"] == 1 and db.get(AmzCompetitor, rival.id).active is False
     ba.store_week(db, marketplace="US", week_start=date(2026, 9, 6), rows=[newcomer, {**newcomer, "click_rank": 2, "asin": "B0RIVAL001", "item_name": "Rival Portable Shower", "click_share": 0.2}])
     assert ba.apply_watchlist(db, "US")["reactivated"] == 1
+    db.commit()
+
+    # ---- 补齐:主场词 / 库存规则 / 需求合成 / listing 变更进日志 / 财务交易 / 请求留评 / 评论按月 / 跨店抽象经验
+    from decimal import Decimal as _Dec
+    from types import SimpleNamespace as _SN
+
+    from backend.app.modules.amz_series import experience as _exp, ops_sync, portfolio, reviews as _rv, rules_stock
+    from backend.app.modules.amz_series.models import AmzInventoryDaily, AmzListingSnapshot, AmzOutcome as _Out, AmzSolicitation, AmzWorkLog as _WL
+
+    own_day = date(2026, 8, 10)
+    for store_code, clicks, orders, spend, sales in (("01us", 90, 12, "60", "380"), ("03us", 70, 2, "70", "50")):
+        db.add(AmzAdSearchTerm(store_code=store_code, report_date=own_day, campaign_name="PSPE pump exact", adgroup_name="ag", targeting="shower pump", match_type="EXACT", search_term="shower pump", impressions=5000, clicks=clicks, spend=_Dec(spend), sales_7d=_Dec(sales), orders_7d=orders, units_7d=orders, currency="USD", source="test", row_key=f"own-{store_code}"))
+    db.commit()
+    yield_drafts = portfolio.rule_term_owner(db, "03us", "USD", own_day)
+    assert [d.evidence["home_store"] for d in yield_drafts if d.evidence["term"] == "shower pump"] == ["01us"] and yield_drafts[0].action_type == "portfolio_yield" and yield_drafts[0].severity == "warn"
+    assert portfolio.rule_term_owner(db, "01us", "USD", own_day) == []  # 主场店自己不出让位
+    assert any(r["term"] == "shower pump" and r["home_store"] == "01us" and r["yield_stores"] == ["03us"] for r in portfolio.owner_board(db, marketplace="US", as_of=own_day))
+
+    snap_day = date(2026, 9, 17)
+    for i in range(14):
+        db.add(AmzSalesDaily(store_code="01us", report_date=snap_day - timedelta(days=i), child_asin="B0STOCK001", parent_asin="", units_ordered=5, ordered_product_sales=_Dec("125"), currency="USD"))
+        db.add(AmzSalesDaily(store_code="01us", report_date=snap_day - timedelta(days=i), child_asin="B0STOCK002", parent_asin="", units_ordered=2, ordered_product_sales=_Dec("50"), currency="USD"))
+        db.add(AmzSalesDaily(store_code="01us", report_date=snap_day - timedelta(days=i), child_asin="B0STOCK003", parent_asin="", units_ordered=1, ordered_product_sales=_Dec("25"), currency="USD"))
+
+    class _FakeOps:
+        def __init__(self) -> None:
+            self.posts: list[str] = []
+            self.title = "Camping Shower Pump"
+
+        def request(self, method, path, *, params=None, json_body=None):
+            if path == "/fba/inventory/v1/summaries":
+                return {"payload": {"inventorySummaries": [
+                    {"sellerSku": "PSPE-A", "asin": "B0STOCK001", "inventoryDetails": {"fulfillableQuantity": 20}},
+                    {"sellerSku": "PSPE-B", "asin": "B0STOCK002", "inventoryDetails": {"fulfillableQuantity": 0, "inboundShippedQuantity": 50}},
+                    {"sellerSku": "PSPE-C", "asin": "B0STOCK003", "inventoryDetails": {"fulfillableQuantity": 300}},
+                ]}, "pagination": {}}
+            if path.startswith("/catalog/"):
+                return {"attributes": {"item_name": [{"value": self.title}], "bullet_point": [{"value": "7800mAh battery"}]}}
+            if path.startswith("/solicitations/"):
+                if method == "POST":
+                    self.posts.append(path)
+                    return {}
+                return {"_links": {"actions": [{"name": "productReviewAndSellerFeedback"}]}} if path.endswith("111-0000001-0000001") else {"_links": {"actions": []}}
+            raise AssertionError(path)
+
+        def run_report(self, report_type, *, start, end, options=None):
+            if report_type == ops_sync.REPORT_LISTINGS:
+                return "R", "item-name\tseller-sku\tprice\tasin1\tstatus\nCamping Shower Pump\tPSPE-A\t25.64\tB0STOCK001\tActive\n"
+            if report_type == ops_sync.REPORT_FINANCE:
+                return "F", (
+                    'Includes Amazon Marketplace, Fulfillment by Amazon (FBA), and Amazon Webstore transactions\n'
+                    '"date/time","settlement id","type","order id","sku","description","quantity","marketplace","fulfillment","product sales","product sales tax","shipping credits","promotional rebates","marketplace withheld tax","selling fees","fba fees","other transaction fees","other","total"\n'
+                    '"Sep 5, 2026 10:00:00 AM PDT","1","Order","111-0000001-0000001","PSPE-A","Camping Shower","1","amazon.com","Amazon","25.64","0","0","0","0","-3.85","-6.12","0","0","15.67"\n'
+                    '"Sep 6, 2026 10:00:00 AM PDT","1","Order","111-0000002-0000002","PSPE-A","Camping Shower","1","amazon.com","Amazon","25.64","0","0","0","0","-3.85","-6.12","0","0","15.67"\n'
+                )
+            raise AssertionError(report_type)
+
+    fake_ops = _FakeOps()
+    store01 = db.get(AmzStore, "01us")
+    assert ops_sync.sync_inventory(db, fake_ops, store01, today=snap_day) == {"skus": 3, "fulfillable": 320, "inbound": 50}
+    stock = {d.evidence["sku"]: d for d in rules_stock.rule_stock(db, "01us", "USD", own_day)}
+    assert stock["PSPE-A"].action_type == "stock_cover" and stock["PSPE-A"].severity == "bad" and stock["PSPE-A"].evidence["days_cover"] == 4.0
+    assert stock["PSPE-B"].action_type == "stockout" and "PSPE-C" not in stock  # 300 件 / 日均 1 件 = 300 天,不报
+    demand = {r["product_line"]: r for r in portfolio.demand_board(db, marketplace="US")}
+    assert all("stock_complete" in r for r in demand.values())
+
+    assert ops_sync.sync_listings(db, fake_ops, store01, today=date(2026, 9, 16)) == {"listings": 1, "changed": 0}
+    fake_ops.title = "Camping Shower Pump 7800mAh"
+    assert ops_sync.sync_listings(db, fake_ops, store01, today=snap_day) == {"listings": 1, "changed": 1}
+    log = db.scalar(select(_WL).where(_WL.employee == "A", _WL.subject == "listing|PSPE-A"))
+    assert log is not None and "标题" in log.title and log.detail_json["after"]["title"] == "Camping Shower Pump 7800mAh"
+    assert db.scalar(select(func.count()).select_from(AmzListingSnapshot)) == 2
+
+    fin = ops_sync.sync_finances(db, fake_ops, store01, today=snap_day)
+    assert fin["rows"] == 2 and fin["inserted"] == 2 and ops_sync.sync_finances(db, fake_ops, store01, today=snap_day)["inserted"] == 0  # 幂等
+
+    sol = ops_sync.run_solicitations(db, fake_ops, store01, today=date(2026, 9, 20))
+    assert sol["would_request"] == 1 and sol["not_eligible"] == 1 and sol["sent"] == 0 and fake_ops.posts == []  # 影子期不发
+    store01.metadata_json = {**(store01.metadata_json or {}), "solicitations_enabled": True}
+    db.add(AmzSolicitation(store_code="01us", order_id="111-0000003-0000003", status="not_eligible"))
+    db.commit()
+    assert ops_sync.run_solicitations(db, fake_ops, store01, today=date(2026, 9, 20))["checked"] == 1  # would_request 的不重查;not_eligible 的会再查
+    assert ops_sync.solicitation_summary(db, "01us")["would_request"] == 1
+    store01.metadata_json = {k: v for k, v in (store01.metadata_json or {}).items() if k != "solicitations_enabled"}
+    db.commit()
+
+    _rv.add_reviews(db, product_line="pump", whose="ours", raw="1 out of 5 stars no hot water. Reviewed in the United States on July 3, 2026\n\n2星 leaked, Reviewed on August 9, 2026", actor_user_id=owner.id)
+    _rv.cluster_pending(db, product_line="pump", call=lambda messages, *, org_id: (_ for _ in ()).throw(RuntimeError("offline")))
+    db.commit()
+    trend = _rv.monthly_trend(db, product_line="pump", whose="ours")
+    months = {m["month"]: m for m in trend["months"]}
+    assert months["2026-07"]["total"] == 1 and months["2026-08"]["total"] == 1 and next(f for f in months["2026-07"]["families"] if f["family"] == "expectation")["share_pct"] == 100.0
+
+    for i in range(4):
+        for store_code in ("01us", "03us"):
+            db.add(_Out(store_code=store_code, action_type="negative", subject=f"camping shower {i}", as_of=date(2026, 7, 25), horizon_days=28, source="backtest", verdict="wrong", metrics_json={}))
+            db.add(_Out(store_code=store_code, action_type="negative", subject=f"camping chair {i}", as_of=date(2026, 7, 25), horizon_days=28, source="backtest", verdict="right", metrics_json={}))
+    db.commit()
+    assert _exp.learn_abstract(db) >= 1
+    advice = _exp.consult(db, store_code="04us", action_type="negative", product_line="pump", season_phase="peak")
+    assert advice["downgrade"] is True and any("旺季 · 沐浴泵" in n for n in advice["notes"])
+    db.execute(delete(_Out).where(_Out.source == "backtest", _Out.as_of == date(2026, 7, 25)))
     db.commit()
 
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
