@@ -3,8 +3,8 @@
 - 库存(FBA Inventory summaries,直接接口不用等报表)→ amz_inventory_daily。库存天数 / 断货规则和跨店需求合成的底数。
 - listing(商家 listing 报表拿 SKU/价格/状态 + Catalog Items 拿买家看到的标题/五点/描述)→ amz_listing_snapshots;
   内容一变就写一条殷笑笑的工作日志(「谁在后台改了 listing」她必须知道,不允许失忆)。
-- 财务(GET_DATE_RANGE_FINANCIAL_TRANSACTION_DATA,就是后台「交易一览」那份)→ amz_transactions,
-  解析和种子导入共用;只收种子最后一天之后的行,免得和种子重复。
+- 财务(Finances API 财务事件;「交易一览」日期范围报表亚马逊不让 API 要)→ amz_transactions,
+  拆成和种子同形状的行;只收种子最后一刻之后的,免得和种子重复。
 - 请求留评(Solicitations「Request a Review」,亚马逊官方按钮)→ amz_solicitations。
   **影子期只查资格、记 would_request,不发**;店铺总闸 metadata.solicitations_enabled 由 owner 打开后才真发。
   绝不刷单、绝不激励评论——这是亚马逊自己的模板邮件,买家收到的内容我们改不了。
@@ -34,7 +34,6 @@ from .models import AmzInventoryDaily, AmzListingSnapshot, AmzProduct, AmzReport
 _LOGGER = logging.getLogger("amz.ops_sync")
 
 REPORT_LISTINGS = "GET_MERCHANT_LISTINGS_ALL_DATA"
-REPORT_FINANCE = "GET_DATE_RANGE_FINANCIAL_TRANSACTION_DATA"
 FINANCE_LOOKBACK_DAYS = 14
 SOLICIT_MIN_DAYS = 5
 SOLICIT_MAX_DAYS = 30
@@ -190,32 +189,118 @@ def sync_listings(db: Session, client: Any, store: AmzStore, *, today: date | No
 # ---------------------------------------------------------------- 财务交易
 
 
-def sync_finances(db: Session, client: Any, store: AmzStore, *, today: date | None = None) -> dict[str, Any]:
-    from .seed_import import _bulk_insert, _read_csv, _txn_rows  # noqa: PLC0415 — 与种子导入共用解析
+FEE_FBA_PREFIX = "FBA"
+PAGE_LIMIT = 40
 
-    today = today or datetime.now(UTC).date()
+
+def _amount(node: Any) -> Decimal:
+    try:
+        return Decimal(str((node or {}).get("CurrencyAmount") or 0))
+    except (InvalidOperation, ValueError):
+        return Decimal(0)
+
+
+def _posted(value: str | None) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")) if value else None
+    except ValueError:
+        return None
+
+
+def event_rows(events: dict[str, Any], *, store: AmzStore) -> list[dict[str, Any]]:
+    """Finances API 的 FinancialEvents → 与「交易一览」同形状的行(订单 / 退款按 SKU 一行,其余费用一行)。"""
+    rows: list[dict[str, Any]] = []
+
+    def item_row(kind: str, event: dict[str, Any], item: dict[str, Any], charges_key: str, fees_key: str, promos_key: str) -> dict[str, Any] | None:
+        posted = _posted(event.get("PostedDate"))
+        if posted is None:
+            return None
+        charges = {c.get("ChargeType"): _amount(c.get("ChargeAmount")) for c in item.get(charges_key) or []}
+        fees = [(f.get("FeeType") or "", _amount(f.get("FeeAmount"))) for f in item.get(fees_key) or []]
+        promos = sum((_amount(p.get("PromotionAmount")) for p in item.get(promos_key) or []), Decimal(0))
+        fba = sum((v for k, v in fees if k.startswith(FEE_FBA_PREFIX)), Decimal(0))
+        selling = sum((v for k, v in fees if not k.startswith(FEE_FBA_PREFIX)), Decimal(0))
+        principal = charges.get("Principal", Decimal(0))
+        tax = sum((v for k, v in charges.items() if k and "Tax" in k), Decimal(0))
+        shipping = charges.get("ShippingCharge", Decimal(0))
+        total = sum(charges.values(), Decimal(0)) + promos + fba + selling
+        qty = int(item.get("QuantityShipped") or 0)
+        return {"posted_at": posted, "txn_type": kind, "order_id": event.get("AmazonOrderId"), "sku": item.get("SellerSKU"), "quantity": qty if kind == "Order" else -qty, "product_sales": principal, "product_sales_tax": tax, "shipping_credits": shipping, "promotional_rebates": promos, "selling_fees": selling, "fba_fees": fba, "total": total, "description": kind}
+
+    for event in events.get("ShipmentEventList") or []:
+        for item in event.get("ShipmentItemList") or []:
+            row = item_row("Order", event, item, "ItemChargeList", "ItemFeeList", "PromotionList")
+            if row:
+                rows.append(row)
+    for event in events.get("RefundEventList") or []:
+        for item in event.get("ShipmentItemAdjustmentList") or []:
+            row = item_row("Refund", event, item, "ItemChargeAdjustmentList", "ItemFeeAdjustmentList", "PromotionAdjustmentList")
+            if row:
+                rows.append(row)
+    for event in events.get("ServiceFeeEventList") or []:
+        fees = sum((_amount(f.get("FeeAmount")) for f in event.get("FeeList") or []), Decimal(0))
+        if fees:
+            rows.append({"posted_at": None, "txn_type": "Service Fee", "order_id": event.get("AmazonOrderId"), "sku": event.get("SellerSKU"), "quantity": 0, "other_transaction_fees": fees, "total": fees, "description": event.get("FeeReason") or "Service Fee"})
+    for event in events.get("AdjustmentEventList") or []:
+        amount = _amount(event.get("AdjustmentAmount"))
+        posted = _posted(event.get("PostedDate"))
+        if amount and posted:
+            rows.append({"posted_at": posted, "txn_type": "Adjustment", "order_id": None, "sku": None, "quantity": 0, "other": amount, "total": amount, "description": event.get("AdjustmentType") or "Adjustment"})
+    out = []
+    for r in rows:
+        if r["posted_at"] is None:
+            continue  # 服务费事件没有日期,等它进结算再说
+        r.setdefault("other", Decimal(0))
+        r.setdefault("other_transaction_fees", Decimal(0))
+        for key in ("product_sales", "product_sales_tax", "shipping_credits", "promotional_rebates", "selling_fees", "fba_fees"):
+            r.setdefault(key, Decimal(0))
+        r["store_code"] = store.store_code
+        r["currency"] = store.currency
+        r["order_id"] = (r["order_id"] or "")[:32] or None
+        r["sku"] = (r["sku"] or "")[:128] or None
+        r["row_key"] = hashlib.sha256("|".join(str(x) for x in ("fin", store.store_code, r["posted_at"].isoformat(), r["txn_type"], r["order_id"], r["sku"], r["quantity"], r["total"])).encode("utf-8")).hexdigest()
+        out.append(r)
+    return out
+
+
+def sync_finances(db: Session, client: Any, store: AmzStore, *, today: date | None = None, now: datetime | None = None) -> dict[str, Any]:
+    """Finances API(listFinancialEvents)→ amz_transactions。只收种子最后一刻之后的事件,免得和种子重复。
+
+    「交易一览」那份日期范围报表亚马逊不让用 API 要(report type 1202 not allowed),所以走财务事件接口,
+    拆成和种子同形状的行:订单 / 退款按 SKU 一行(销售额、佣金、FBA 费、促销分列),服务费 / 调整各一行。
+    """
+    from .fx import usd_factor  # noqa: PLC0415
+    from .seed_import import _bulk_insert  # noqa: PLC0415
+
+    now = now or datetime.now(UTC)
     seed_last = db.scalar(select(func.max(AmzTransaction.posted_at)).where(AmzTransaction.store_code == store.store_code, AmzTransaction.source == "seed"))
-    start = today - timedelta(days=FINANCE_LOOKBACK_DAYS)
+    after = max(seed_last or datetime.min.replace(tzinfo=UTC), now - timedelta(days=FINANCE_LOOKBACK_DAYS))
+    factor = usd_factor(db, store.currency)
     db.commit()
-    _report_id, raw = client.run_report(REPORT_FINANCE, start=start, end=today)
-    raw_bytes = raw if isinstance(raw, (bytes, bytearray)) else str(raw).encode("utf-8")
-    headers, rows = _read_csv(raw_bytes)
-    if not rows and b"\t" in raw_bytes[:4000]:
-        headers, rows = _read_tsv_with_preamble(raw_bytes)
-    payloads = [p for p in _txn_rows(db, store, rows, headers=headers) if seed_last is None or p["posted_at"] > seed_last]
-    for p in payloads:
-        p["source"] = "sp_api"
-    inserted = _bulk_insert(db, AmzTransaction, payloads)
+    events_all: dict[str, list[Any]] = {}
+    params: dict[str, Any] = {"PostedAfter": after.strftime("%Y-%m-%dT%H:%M:%SZ"), "PostedBefore": (now - timedelta(minutes=5)).strftime("%Y-%m-%dT%H:%M:%SZ"), "MaxResultsPerPage": 100}
+    pages = 0
+    while pages < PAGE_LIMIT:
+        body = client.request("GET", "/finances/v0/financialEvents", params=params)
+        payload = body.get("payload") or {}
+        for key, value in (payload.get("FinancialEvents") or {}).items():
+            if isinstance(value, list):
+                events_all.setdefault(key, []).extend(value)
+        pages += 1
+        token = payload.get("NextToken")
+        if not token:
+            break
+        params = {"NextToken": token}
+    rows = [r for r in event_rows(events_all, store=store) if seed_last is None or r["posted_at"] > seed_last]
+    for r in rows:
+        rate = factor(r["posted_at"].date())
+        r["fx_rate"] = rate
+        r["fx_source"] = "native" if store.currency == "USD" else "ecb"
+        r["total_usd"] = (Decimal(r["total"]) * rate).quantize(Decimal("0.01"))
+        r["source"] = "sp_api"
+    inserted = _bulk_insert(db, AmzTransaction, rows)
     db.commit()
-    return {"rows": len(rows), "new_after_seed": len(payloads), "inserted": inserted}
-
-
-def _read_tsv_with_preamble(raw: bytes) -> tuple[list[str], list[dict[str, str]]]:
-    lines = raw.decode("utf-8-sig", errors="replace").splitlines()
-    start = next((i for i, line in enumerate(lines[:20]) if line.lower().startswith("date/time") or line.startswith("Datum/Uhrzeit")), 0)
-    reader = csv.DictReader(io.StringIO("\n".join(lines[start:])), delimiter="\t")
-    rows = [dict(r) for r in reader]
-    return list(reader.fieldnames or []), rows
+    return {"pages": pages, "event_types": {k: len(v) for k, v in events_all.items() if v}, "rows": len(rows), "inserted": inserted}
 
 
 # ---------------------------------------------------------------- 请求留评
@@ -274,9 +359,9 @@ def solicitation_summary(db: Session, store_code: str) -> dict[str, Any]:
 
 
 __all__ = [
-    "REPORT_FINANCE",
     "REPORT_LISTINGS",
     "content_hash",
+    "event_rows",
     "eligible_orders",
     "listing_changes",
     "parse_catalog",

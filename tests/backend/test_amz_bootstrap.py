@@ -586,6 +586,11 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
                 ]}, "pagination": {}}
             if path.startswith("/catalog/"):
                 return {"attributes": {"item_name": [{"value": self.title}], "bullet_point": [{"value": "7800mAh battery"}]}}
+            if path == "/finances/v0/financialEvents":
+                if params and params.get("NextToken") == "p2":
+                    return {"payload": {"FinancialEvents": {"RefundEventList": [{"AmazonOrderId": "111-0000002-0000002", "PostedDate": "2026-09-10T18:00:00Z", "ShipmentItemAdjustmentList": [{"SellerSKU": "PSPE-A", "QuantityShipped": 1, "ItemChargeAdjustmentList": [{"ChargeType": "Principal", "ChargeAmount": {"CurrencyAmount": -25.64}}], "ItemFeeAdjustmentList": [{"FeeType": "Commission", "FeeAmount": {"CurrencyAmount": 3.08}}]}]}]}}}
+                ship = lambda oid, day: {"AmazonOrderId": oid, "PostedDate": f"2026-09-0{day}T17:00:00Z", "ShipmentItemList": [{"SellerSKU": "PSPE-A", "QuantityShipped": 1, "ItemChargeList": [{"ChargeType": "Principal", "ChargeAmount": {"CurrencyAmount": 25.64}}, {"ChargeType": "Tax", "ChargeAmount": {"CurrencyAmount": 2.0}}], "ItemFeeList": [{"FeeType": "Commission", "FeeAmount": {"CurrencyAmount": -3.85}}, {"FeeType": "FBAPerUnitFulfillmentFee", "FeeAmount": {"CurrencyAmount": -6.12}}], "PromotionList": []}]}  # noqa: E731
+                return {"payload": {"FinancialEvents": {"ShipmentEventList": [ship("111-0000001-0000001", 5), ship("111-0000002-0000002", 6)]}, "NextToken": "p2"}}
             if path.startswith("/solicitations/"):
                 if method == "POST":
                     self.posts.append(path)
@@ -596,13 +601,6 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
         def run_report(self, report_type, *, start, end, options=None):
             if report_type == ops_sync.REPORT_LISTINGS:
                 return "R", "item-name\tseller-sku\tprice\tasin1\tstatus\nCamping Shower Pump\tPSPE-A\t25.64\tB0STOCK001\tActive\n"
-            if report_type == ops_sync.REPORT_FINANCE:
-                return "F", (
-                    'Includes Amazon Marketplace, Fulfillment by Amazon (FBA), and Amazon Webstore transactions\n'
-                    '"date/time","settlement id","type","order id","sku","description","quantity","marketplace","fulfillment","product sales","product sales tax","shipping credits","promotional rebates","marketplace withheld tax","selling fees","fba fees","other transaction fees","other","total"\n'
-                    '"Sep 5, 2026 10:00:00 AM PDT","1","Order","111-0000001-0000001","PSPE-A","Camping Shower","1","amazon.com","Amazon","25.64","0","0","0","0","-3.85","-6.12","0","0","15.67"\n'
-                    '"Sep 6, 2026 10:00:00 AM PDT","1","Order","111-0000002-0000002","PSPE-A","Camping Shower","1","amazon.com","Amazon","25.64","0","0","0","0","-3.85","-6.12","0","0","15.67"\n'
-                )
             raise AssertionError(report_type)
 
     fake_ops = _FakeOps()
@@ -621,8 +619,13 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     assert log is not None and "标题" in log.title and log.detail_json["after"]["title"] == "Camping Shower Pump 7800mAh"
     assert db.scalar(select(func.count()).select_from(AmzListingSnapshot)) == 2
 
-    fin = ops_sync.sync_finances(db, fake_ops, store01, today=snap_day)
-    assert fin["rows"] == 2 and fin["inserted"] == 2 and ops_sync.sync_finances(db, fake_ops, store01, today=snap_day)["inserted"] == 0  # 幂等
+    fin_now = datetime(2026, 9, 17, 12, tzinfo=UTC)
+    fin = ops_sync.sync_finances(db, fake_ops, store01, now=fin_now)
+    assert fin["pages"] == 2 and fin["rows"] == 3 and fin["inserted"] == 3 and ops_sync.sync_finances(db, fake_ops, store01, now=fin_now)["inserted"] == 0  # 翻页 + 幂等
+    order_row = db.scalar(select(AmzTransaction).where(AmzTransaction.order_id == "111-0000001-0000001", AmzTransaction.source == "sp_api"))
+    assert order_row.txn_type == "Order" and order_row.quantity == 1 and order_row.product_sales == _Dec("25.64") and order_row.fba_fees == _Dec("-6.12") and order_row.selling_fees == _Dec("-3.85") and order_row.total == _Dec("17.67")
+    refund_row = db.scalar(select(AmzTransaction).where(AmzTransaction.txn_type == "Refund", AmzTransaction.source == "sp_api"))
+    assert refund_row.quantity == -1 and refund_row.total == _Dec("-22.56")
 
     sol = ops_sync.run_solicitations(db, fake_ops, store01, today=date(2026, 9, 20))
     assert sol["would_request"] == 1 and sol["not_eligible"] == 1 and sol["sent"] == 0 and fake_ops.posts == []  # 影子期不发
