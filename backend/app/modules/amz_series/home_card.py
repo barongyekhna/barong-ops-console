@@ -13,7 +13,7 @@ from ...models.user import User
 from ...services.worker_heartbeat import list_heartbeats
 from ..home.schemas import HomeCardItem, HomeCardRead
 from . import service
-from .constants import AGENTS_WORKER_NAME, EMPLOYEE_USERNAMES, EMPLOYEES, MODULE_KEY
+from .constants import AGENTS_WORKER_NAME, EMPLOYEE_ROLE_LABELS, EMPLOYEE_USERNAMES, EMPLOYEES, MODULE_KEY
 from .persona import display_name
 from .models import AmzStoreGrant
 
@@ -76,7 +76,7 @@ def load_agents_card(db: Session, *, workspace_key: str, user: User, **_: Any) -
             HomeCardItem(
                 id=username,
                 title=display_name(employee),
-                subtitle="在岗" if alive else "未上岗(A2 开工后上线)",
+                subtitle="在岗" if alive else "未上岗",
                 at=beat.get("last_success_at") if beat else None,
                 href=C19_HREF,
             )
@@ -88,7 +88,7 @@ def load_agents_card(db: Session, *, workspace_key: str, user: User, **_: Any) -
         items=items,
         freshness=datetime.now(UTC),
         actions=[],
-        extra={"workspace_key": workspace_key, "stale": stale},
+        extra={"workspace_key": workspace_key, "stale": stale, "total": len(EMPLOYEES), "roles": [EMPLOYEE_ROLE_LABELS[e] for e in EMPLOYEES]},
         severity="ok" if stale == 0 else "warn",
     )
 

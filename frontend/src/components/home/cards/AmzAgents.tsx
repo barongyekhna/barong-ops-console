@@ -6,13 +6,15 @@ import type { HomeCardProps, HomeDrawerProps } from "../home-types";
 
 export function AmzAgentsCard({ card, onOpen }: HomeCardProps) {
   const stale = Number(card.extra.stale ?? 0);
+  const total = Number(card.extra.total ?? card.items.length);
+  const roles = Array.isArray(card.extra.roles) ? (card.extra.roles as string[]) : [];
   return (
-    <HomeCardShell card={card} onOpen={onOpen} tag="数字员工 · A/B/C/D" title="运营员工">
+    <HomeCardShell card={card} onOpen={onOpen} tag="数字员工" title="运营员工">
       <div className="hs-inline">
         <span className={stale === 0 ? "hs-pill hs-pill-ok" : "hs-pill hs-pill-warn"}>
-          {stale === 0 ? "四人在岗" : `${4 - stale} 人在岗`}
+          {stale === 0 ? `${total} 人全在岗` : `${total - stale} / ${total} 人在岗`}
         </span>
-        <span className="hs-muted">文案 · 图片 · 竞品 · 广告</span>
+        <span className="hs-muted">{roles.join(" · ")}</span>
       </div>
       <HomeItemList card={card} empty="员工还没上岗。" />
     </HomeCardShell>
@@ -23,7 +25,7 @@ export function AmzAgentsDrawer({ card }: HomeDrawerProps) {
   return (
     <div className="hs-drawer-body">
       <section className="hs-block">
-        <div className="hs-block-head"><span>四名数字员工</span><span className="hs-muted">名字以后起</span></div>
+        <div className="hs-block-head"><span>{card.items.length} 名数字员工</span></div>
         {card.items.map((item) => (
           <div className="hs-item" key={item.id}>
             <div className="hs-item-head">

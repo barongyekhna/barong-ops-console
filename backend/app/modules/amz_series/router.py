@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from uuid import UUID
@@ -13,6 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
@@ -192,7 +194,7 @@ def employees_list(
 
 @router.get("/suggestions")
 def suggestions_list(
-    employee: str | None = Query(default=None, pattern="^[A-Da-d]$"),
+    employee: str | None = Query(default=None, pattern="^[A-Ea-e]$"),
     store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),
     status: str = Query(default="open", pattern="^(open|approved|rejected|later|expired|executed|all)$"),
     db: Session = Depends(get_db),
@@ -209,7 +211,7 @@ def suggestions_list(
 
 @router.get("/work-log")
 def work_log_list(
-    employee: str = Query(pattern="^[A-Da-d]$"),
+    employee: str = Query(pattern="^[A-Ea-e]$"),
     store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),
     q: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=40, ge=1, le=200),
@@ -506,6 +508,75 @@ class CompetitorAdd(BaseModel):
     product_line: str = Field(min_length=1, max_length=32)
     whose: str = Field(default="competitor", pattern="^(competitor|ours)$")
     label: str | None = Field(default=None, max_length=120)
+
+
+class CostBody(BaseModel):
+    store_code: str = Field(pattern="^0\\d(?:us|de)$")
+    sku: str = Field(min_length=1, max_length=128)
+    factory_cny: float = Field(gt=0, le=100000)
+    freight_cny: float = Field(ge=0, le=100000)
+    effective_from: date
+    note: str | None = Field(default=None, max_length=255)
+
+
+def _finance_codes(db: Session, user: User, store: str | None, stores: str | None) -> list[str]:
+    from .models import AmzStore as _Store  # noqa: PLC0415
+
+    codes = granted_store_codes(db, user)
+    wanted = [store] if store else (stores.split(",") if stores else None)
+    if wanted:
+        if codes is not None and any(code not in codes for code in wanted):
+            raise HTTPException(status_code=403, detail="no access to one of the stores")
+        return wanted
+    if codes is not None:
+        return list(codes)
+    return [s.store_code for s in db.scalars(select(_Store).order_by(_Store.store_code))]
+
+
+@router.get("/finance/report")
+def finance_report(
+    store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),
+    stores: str | None = Query(default=None, pattern="^0\\d(?:us|de)(?:,0\\d(?:us|de)){0,9}$"),
+    days: int = Query(default=30, ge=7, le=120),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """殷乐乐的账:每家店近 N 天(按这家店交易数据的最后一天往前)的逐日利润、合计、按产品线的广告盈亏。"""
+    from . import finance  # noqa: PLC0415
+
+    codes = _finance_codes(db, user, store, stores)
+    return {"items": [finance.store_report(db, code, days=days) for code in codes]}
+
+
+@router.get("/finance/costs")
+def finance_costs(store: str = Query(pattern="^0\\d(?:us|de)$"), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    from . import finance  # noqa: PLC0415
+
+    _finance_codes(db, user, store, None)
+    since = finance.data_since(db, store)
+    return {"store_code": store, "default_effective_from": since.isoformat() if since else None, "items": finance.sku_catalog(db, store)}
+
+
+@router.post("/finance/costs")
+def finance_cost_save(payload: CostBody, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """填成本:这家店要有「操作」角色。同一 SKU 同一生效日期再填 = 更正;新日期 = 新一段成本。"""
+    from decimal import Decimal as _D  # noqa: PLC0415
+
+    from . import finance  # noqa: PLC0415
+    from .constants import STORE_ROLE_RANK  # noqa: PLC0415
+
+    if not is_owner_role(user.role) and STORE_ROLE_RANK.get(service.grant_role_for(db, user=user, store_code=payload.store_code, is_owner=False), 0) < STORE_ROLE_RANK[STORE_ROLE_OPERATE]:
+        raise HTTPException(status_code=403, detail="填成本要这家店的「操作」角色")
+    try:
+        row = finance.save_cost(db, store_code=payload.store_code, sku=payload.sku, factory_cny=_D(str(payload.factory_cny)), freight_cny=_D(str(payload.freight_cny)), effective_from=payload.effective_from, note=payload.note, user_id=int(user.id))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    create_operation_log(db, actor_type="user", actor_id=str(user.id), action="amz.finance.cost", target_type="amz_store", target_id=payload.store_code, result="success", request_id=_request_id(request), details={"sku": row.sku, "factory_cny": float(row.factory_cny), "freight_cny": float(row.freight_cny), "effective_from": row.effective_from.isoformat()})
+    from . import work_log  # noqa: PLC0415
+
+    work_log.record(db, employee="E", kind="note", title=f"{payload.store_code} {row.sku} 成本:出厂 ¥{row.factory_cny} + 头程 ¥{row.freight_cny},{row.effective_from} 起", why="人在财务页填的", store_code=payload.store_code, subject=f"cost|{row.sku}", sku=row.sku, source="human", actor_user_id=int(user.id))
+    db.commit()
+    return {"store_code": payload.store_code, "items": finance.sku_catalog(db, payload.store_code)}
 
 
 class KillSwitchBody(BaseModel):

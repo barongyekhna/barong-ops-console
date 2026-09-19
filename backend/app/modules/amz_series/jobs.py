@@ -40,8 +40,9 @@ JOB_LISTINGS_DAILY = "listings_daily"
 JOB_FINANCES_DAILY = "finances_daily"
 JOB_SOLICITATIONS_DAILY = "solicitations_daily"
 JOB_CONTROL_HOURLY = "control_hourly"
+JOB_FINANCE_DAILY = "finance_daily"
 # 作业 → 期望间隔(秒)。心跳的 expected_interval 也用它;超过 3 倍没干成活 = stale。
-JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600, JOB_BA_COMPETITORS: 7 * 24 * 3600, JOB_INVENTORY_DAILY: 24 * 3600, JOB_LISTINGS_DAILY: 24 * 3600, JOB_FINANCES_DAILY: 24 * 3600, JOB_SOLICITATIONS_DAILY: 24 * 3600, JOB_CONTROL_HOURLY: 3600}
+JOB_INTERVALS: dict[str, int] = {JOB_RULES_DAILY: 24 * 3600, JOB_SALES_TRAFFIC: 24 * 3600, JOB_SQP_WEEKLY: 7 * 24 * 3600, JOB_IMAGE_LOOKBACK: 24 * 3600, JOB_EXPERIENCE_WEEKLY: 7 * 24 * 3600, JOB_LAUNCH_DAILY: 24 * 3600, JOB_FX_DAILY: 24 * 3600, JOB_COMPETITOR_DAILY: 24 * 3600, JOB_BA_COMPETITORS: 7 * 24 * 3600, JOB_INVENTORY_DAILY: 24 * 3600, JOB_LISTINGS_DAILY: 24 * 3600, JOB_FINANCES_DAILY: 24 * 3600, JOB_SOLICITATIONS_DAILY: 24 * 3600, JOB_CONTROL_HOURLY: 3600, JOB_FINANCE_DAILY: 24 * 3600}
 # 要出网的作业:只在店铺有 SP-API 凭据时才排。
 API_JOBS: frozenset[str] = frozenset({JOB_SALES_TRAFFIC, JOB_SQP_WEEKLY, JOB_BA_COMPETITORS, JOB_INVENTORY_DAILY, JOB_LISTINGS_DAILY, JOB_FINANCES_DAILY, JOB_SOLICITATIONS_DAILY})
 # 失败后的重试间隔:失败不等于「该再排一条」,否则一个坏凭据会每 15 秒失败一次刷满作业表。
@@ -369,7 +370,21 @@ def run_control_hourly(store_code: str) -> dict[str, Any]:
         return out
 
 
+def run_finance_daily(store_code: str) -> dict[str, Any]:
+    """殷乐乐每天一轮:补人民币汇率(免费接口,出网前收事务)→ 算这家店最近 30 天的账(规则跟 rules_daily 出)。"""
+    from . import finance  # noqa: PLC0415
+
+    with SessionLocal() as db:
+        out = finance.sync_cny(db)
+        db.commit()
+        report = finance.store_report(db, store_code, days=30)
+        totals = report.get("totals") or {}
+        db.commit()
+        return {**out, "until": report.get("until"), "profit_30d": totals.get("profit"), "missing_cost_units": totals.get("missing_cost_units"), "ads_missing": totals.get("ads_missing")}
+
+
 HANDLERS: dict[str, Callable[[str], dict[str, Any]]] = {
+    JOB_FINANCE_DAILY: run_finance_daily,
     JOB_CONTROL_HOURLY: run_control_hourly,
     JOB_INVENTORY_DAILY: run_inventory_daily,
     JOB_LISTINGS_DAILY: run_listings_daily,

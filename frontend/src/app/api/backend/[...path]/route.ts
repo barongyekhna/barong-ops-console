@@ -1594,6 +1594,13 @@ function isAllowedAmzPath(method: string, path: string[]) {
     if (path[1] === "reviews") return method === "POST";
     if (path[1] === "competitors") return method === "GET" || method === "POST";
     if (path[1] === "portfolio") return method === "GET";
+  }
+  if (path.length === 3 && path[1] === "finance") {
+    if (path[2] === "report") return method === "GET";
+    if (path[2] === "costs") return method === "GET" || method === "POST";
+    return false;
+  }
+  if (path.length === 2) {
     return ["stores", "seed-imports", "employees", "suggestions", "experience", "work-log"].includes(path[1]) && method === "GET";
   }
   if (path.length === 4 && path[1] === "fact-sheets" && isUuidPathSegment(path[2]) && path[3] === "judge") {

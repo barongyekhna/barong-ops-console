@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from ...models.user import User
 from . import fact_sheets, reviews, work_log
-from .constants import EMPLOYEE_A, EMPLOYEE_C, EMPLOYEE_D
+from .constants import EMPLOYEE_A, EMPLOYEE_C, EMPLOYEE_D, EMPLOYEE_E
 from .models import AmzExperience, AmzImageBrief, AmzLaunch, AmzProduct, AmzSalesDaily, AmzSqp, AmzStore, AmzSuggestion
 from .rules import PRODUCT_LINE_LABELS, SuggestionDraft
 from .service import AmzServiceError
@@ -334,7 +334,7 @@ def close(db: Session, *, launch: AmzLaunch, outcome: str, retro: dict[str, Any]
 
     stmt = pg_insert(AmzExperience).values(entry_key=f"store|{launch.store_code}|launch|{launch.id}", scope="store", store_code=launch.store_code, action_type="launch", kind="launch", employee=EMPLOYEE_D, statement=f"推新「{launch.title}」{'进了成长期' if outcome == 'growth' else '砍了'}。教训:{';'.join(lessons)}", evidence_json={"launch_id": str(launch.id), "verdict": launch.verdict_json, "pnl": launch.pnl_json}, samples=1, hits=1 if outcome == "growth" else 0, value=None, status="active")
     db.execute(stmt.on_conflict_do_nothing(constraint="uq_amz_experience_key"))
-    for employee in (EMPLOYEE_A, EMPLOYEE_C, EMPLOYEE_D):
+    for employee in (EMPLOYEE_A, EMPLOYEE_C, EMPLOYEE_D, EMPLOYEE_E):
         work_log.record(db, employee=employee, kind="note", title=f"推新复盘:{launch.title} → {'成长期' if outcome == 'growth' else '砍'}", why=";".join(lessons), store_code=launch.store_code, subject=f"launch|{launch.id}", sku=launch.sku, asin=launch.asin, detail={"launch_id": str(launch.id)}, source="human", actor_user_id=int(actor.id))
     db.flush()
     return launch

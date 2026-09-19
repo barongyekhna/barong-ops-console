@@ -25,7 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from .constants import EMPLOYEE_A, EMPLOYEE_B, EMPLOYEE_C, EMPLOYEE_D
+from .constants import EMPLOYEE_A, EMPLOYEE_B, EMPLOYEE_C, EMPLOYEE_D, EMPLOYEE_E
 from .models import AmzAdSearchTerm, AmzExperience, AmzImageBrief, AmzOutcome, AmzStore, AmzSuggestion
 
 _LOGGER = logging.getLogger("amz.experience")
@@ -36,7 +36,7 @@ BACKTEST_POINTS = 3
 BACKTEST_STEP_DAYS = 14
 
 ACTION_LABELS = {"harvest": "收割赢家词", "negative": "否词", "bid_down": "精准倒挂降价", "screen_ctr_gap": "同屏输了", "listing_cvr_gap": "页面接不住词"}
-ACTION_EMPLOYEE = {"harvest": EMPLOYEE_D, "negative": EMPLOYEE_D, "bid_down": EMPLOYEE_D, "screen_ctr_gap": EMPLOYEE_B, "listing_cvr_gap": EMPLOYEE_A, "image": EMPLOYEE_B}
+ACTION_EMPLOYEE = {"harvest": EMPLOYEE_D, "negative": EMPLOYEE_D, "bid_down": EMPLOYEE_D, "screen_ctr_gap": EMPLOYEE_B, "listing_cvr_gap": EMPLOYEE_A, "image": EMPLOYEE_B, "line_loss": EMPLOYEE_E, "margin_floor": EMPLOYEE_E, "refund_spike": EMPLOYEE_E, "fee_change": EMPLOYEE_E, "missing_cost": EMPLOYEE_E}
 
 # 参数漂移:名字 → (出厂值, 每档步长, 上限, 由哪个 action 的命中率驱动, 低于多少抬, 高于多少放)
 PARAMS: dict[str, tuple[float, float, float, str, float, float]] = {

@@ -6,7 +6,7 @@ import styles from "./AmzWorkspace.module.css";
 import { getExperience, type AmzExperienceEntry } from "./api";
 
 const KIND_LABEL: Record<string, string> = { precision: "命中率", param: "门槛漂移", rejection: "驳回规律", image: "换图回看" };
-const EMPLOYEE_NAME: Record<string, string> = { A: "殷笑笑", B: "殷熊", C: "殷长辰", D: "殷素素" };
+const EMPLOYEE_NAME: Record<string, string> = { A: "殷笑笑", B: "殷熊", C: "殷长辰", D: "殷素素", E: "殷乐乐" };
 
 /** 经验库:建议 28 天后对不对、老板驳回的规律、门槛怎么漂的、换图前后。每周自动刷新,规则生成建议前会先查这里。 */
 export function ExperiencePanel() {

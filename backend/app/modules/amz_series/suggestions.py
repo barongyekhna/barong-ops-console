@@ -159,8 +159,7 @@ def employee_panel(db: Session, *, store_codes: list[str] | None) -> dict[str, A
                 "username": EMPLOYEE_USERNAMES[employee],
                 "role_label": EMPLOYEE_ROLE_LABELS[employee],
                 "name": persona.name,
-                "gender": persona.gender,
-                "character": persona.character,
+                # 性格不上前端(用户 2026-09-19 拍板):只给名字和职位
                 "open": len(mine),
                 "urgent": len(urgent),
                 "latest": suggestion_view(latest) if latest else None,

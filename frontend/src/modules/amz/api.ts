@@ -73,8 +73,6 @@ export type AmzEmployee = {
   username: string;
   role_label: string;
   name?: string;
-  gender?: string;
-  character?: string;
 };
 
 export function getStores() {
@@ -135,8 +133,6 @@ export type AmzEmployeePanelItem = {
   username: string;
   role_label: string;
   name: string;
-  gender: string;
-  character: string;
   open: number;
   urgent: number;
   latest: AmzSuggestion | null;
@@ -521,4 +517,73 @@ export function saveGuardrails(storeCode: string, values: Record<string, number 
 }
 export function lowerLadder(storeCode: string, actionType: string, level: string) {
   return amzRequest<{ store_code: string; ladder: AmzLadderRow[] }>(`${BASE}/stores/${storeCode}/ladder`, "降级失败", { body: { action_type: actionType, level }, method: "POST" });
+}
+
+// ---------------------------------------------------------------- 殷乐乐(财务):每日账 / 成本表
+
+export type AmzPnlDay = {
+  date: string;
+  sales: number;
+  fees: number;
+  refunds: number;
+  other: number;
+  accrued: number;
+  cogs: number;
+  ads: number;
+  profit: number;
+  units: number;
+  profit_per_unit: number | null;
+  missing_cost_units: number;
+  missing_skus: string[];
+  ads_missing: boolean;
+  complete: boolean;
+};
+
+export type AmzPnlLine = {
+  product_line: string;
+  label: string;
+  units: number;
+  sales: number;
+  gross_before_ads: number | null;
+  ad_spend: number;
+  ad_sales: number;
+  profit_after_ads: number | null;
+  margin_pct: number | null;
+  ad_pnl: number | null;
+  missing_cost_units: number;
+};
+
+export type AmzStorePnl = {
+  store_code: string;
+  since?: string;
+  until: string | null;
+  last_ads?: string | null;
+  days: AmzPnlDay[];
+  totals: Omit<AmzPnlDay, "date"> | null;
+  lines: AmzPnlLine[];
+};
+
+export type AmzCostItem = {
+  sku: string;
+  title: string | null;
+  product_line: string;
+  units_30d: number;
+  units_90d: number;
+  in_stock: boolean;
+  cost: { factory_cny: number; freight_cny: number; effective_from: string } | null;
+  history: { factory_cny: number; freight_cny: number; effective_from: string; note: string | null }[];
+};
+
+export function getFinanceReport(params: { store?: string; stores?: string; days?: number } = {}) {
+  const query = new URLSearchParams();
+  if (params.store) query.set("store", params.store);
+  else if (params.stores) query.set("stores", params.stores);
+  query.set("days", String(params.days ?? 30));
+  return amzRequest<{ items: AmzStorePnl[] }>(`${BASE}/finance/report?${query.toString()}`, "账加载失败");
+}
+export function getCosts(store: string) {
+  return amzRequest<{ store_code: string; default_effective_from: string | null; items: AmzCostItem[] }>(`${BASE}/finance/costs?store=${encodeURIComponent(store)}`, "成本表加载失败");
+}
+export function saveCost(payload: { store_code: string; sku: string; factory_cny: number; freight_cny: number; effective_from: string; note?: string }) {
+  return amzRequest<{ store_code: string; items: AmzCostItem[] }>(`${BASE}/finance/costs`, "成本保存失败", { body: payload, method: "POST" });
 }

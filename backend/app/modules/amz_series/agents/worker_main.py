@@ -1,4 +1,4 @@
-"""amz-agents-worker:一个进程、四个 C19 身份。
+"""amz-agents-worker:一个进程、每位员工一个 C19 身份(现在五位)。
 
     python -m backend.app.modules.amz_series.agents.worker_main
 
@@ -8,7 +8,7 @@
 护栏全在代码里:
 - 说话人不是 owner、也没有任何店铺授权 → 只回一句「我只跟被授权的人聊店铺」,快照一个字不给;
 - 影子期没有任何写端点:C19Client 只有听和说两根指头,数据库这边只读;
-- 一个身份登不上(密码没配 / 后端没起)不拖累其余三位,各自退避;
+- 一个身份登不上(密码没配 / 后端没起)不拖累其余几位,各自退避;
 - 心跳按身份分开:amz-agents-worker:{username},一轮走完没抛异常才写。
 """
 
@@ -100,7 +100,7 @@ def _styled(employee: str, template: str) -> str:
 
 @dataclass
 class EmployeeRuntime:
-    """一个身份的全部运行态。四份互不共享。"""
+    """一个身份的全部运行态。各份互不共享。"""
 
     employee: str
     client: Any
@@ -391,7 +391,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _handle_stop)
     signal.signal(signal.SIGINT, _handle_stop)
     AmzAgentsWorker().run_forever(should_stop=lambda: not _RUNNING)
-    _LOGGER.info("四名员工下线")
+    _LOGGER.info("亚马逊员工下线")
 
 
 if __name__ == "__main__":

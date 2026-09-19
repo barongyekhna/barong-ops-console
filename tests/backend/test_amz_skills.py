@@ -19,6 +19,7 @@ REQUIRED_SECTIONS = {
     "a/listing-copy.md": ("字符上限", "标题", "五点", "后台搜索词", "8 维审计", "它不是什么"),
     "b/listing-images.md": ("七图职责", "信息图设计", "移动端", "同屏", "核过:"),
     "c/competitors-and-sqp.md": ("SQP", "点击份额 > 购买份额", "评论合规", "季节日历", "只报变化"),
+    "e/finance-pnl.md": ("利润表口径", "不算利润的行", "摊销与不完整", "广告盈亏", "预警门槛"),
     "shared/pnl-and-inventory.md": ("利润瀑布", "FBA 尺寸层级", "到岸成本", "补货点", "变体"),
 }
 

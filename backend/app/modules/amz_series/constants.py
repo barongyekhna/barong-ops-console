@@ -23,17 +23,19 @@ REGION_EU = "eu"
 REGION_FE = "fe"
 REGIONS: tuple[str, ...] = (REGION_NA, REGION_EU, REGION_FE)
 
-# 数字员工 A/B/C/D(名字用户以后起;先用字母)。
+# 数字员工 A/B/C/D/E。E(财务,殷乐乐)2026-09-19 加入。
 EMPLOYEE_A = "A"
 EMPLOYEE_B = "B"
 EMPLOYEE_C = "C"
 EMPLOYEE_D = "D"
-EMPLOYEES: tuple[str, ...] = (EMPLOYEE_A, EMPLOYEE_B, EMPLOYEE_C, EMPLOYEE_D)
+EMPLOYEE_E = "E"
+EMPLOYEES: tuple[str, ...] = (EMPLOYEE_A, EMPLOYEE_B, EMPLOYEE_C, EMPLOYEE_D, EMPLOYEE_E)
 EMPLOYEE_ROLE_LABELS: dict[str, str] = {
     EMPLOYEE_A: "Listing 文案",
     EMPLOYEE_B: "图片",
     EMPLOYEE_C: "竞品",
     EMPLOYEE_D: "广告",
+    EMPLOYEE_E: "财务",
 }
 # 2026-09-16 用户定名(性格档案在 persona.py,焊死在代码里)。
 EMPLOYEE_NAMES: dict[str, str] = {
@@ -41,19 +43,22 @@ EMPLOYEE_NAMES: dict[str, str] = {
     EMPLOYEE_B: "殷熊",
     EMPLOYEE_C: "殷长辰",
     EMPLOYEE_D: "殷素素",
+    EMPLOYEE_E: "殷乐乐",
 }
-EMPLOYEE_GENDERS: dict[str, str] = {EMPLOYEE_A: "女", EMPLOYEE_B: "男", EMPLOYEE_C: "男", EMPLOYEE_D: "女"}
+EMPLOYEE_GENDERS: dict[str, str] = {EMPLOYEE_A: "女", EMPLOYEE_B: "男", EMPLOYEE_C: "男", EMPLOYEE_D: "女", EMPLOYEE_E: "女"}
 EMPLOYEE_USERNAMES: dict[str, str] = {
     EMPLOYEE_A: "amz_a",
     EMPLOYEE_B: "amz_b",
     EMPLOYEE_C: "amz_c",
     EMPLOYEE_D: "amz_d",
+    EMPLOYEE_E: "amz_e",
 }
 EMPLOYEE_PASSWORD_ENVS: dict[str, str] = {
     EMPLOYEE_A: "AMZ_AGENT_A_PASSWORD",
     EMPLOYEE_B: "AMZ_AGENT_B_PASSWORD",
     EMPLOYEE_C: "AMZ_AGENT_C_PASSWORD",
     EMPLOYEE_D: "AMZ_AGENT_D_PASSWORD",
+    EMPLOYEE_E: "AMZ_AGENT_E_PASSWORD",
 }
 EMPLOYEE_AGENT_ID_PREFIX = "amz."
 

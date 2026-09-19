@@ -277,7 +277,8 @@ def rule_campaign_churn(db: Session, store_code: str, currency: str, as_of: date
 
 
 def rule_loss_line(db: Session, store_code: str, currency: str, as_of: date) -> list[SuggestionDraft]:
-    """按产品线看广告账:ACOS ≥70% 且花费 ≥500 → 亏卖线,需要人决定(永远 L1)。"""
+    """(已退役 2026-09-19:亏卖线交给殷乐乐的 rules_finance.rule_line_loss——扣完广告算真实利润,
+    不再只看广告 ACOS。留着函数只为经验库回测旧数据时还能引用;不在 RULES 里。)"""
     since = as_of - timedelta(days=WINDOW_DAYS)
     T = AmzAdSearchTerm
     rows = db.execute(
@@ -404,7 +405,6 @@ RULES = (
     rule_negatives_and_demand_reserve,
     rule_exact_inversion,
     rule_campaign_churn,
-    rule_loss_line,
     rule_week_spend_up_sales_down,
     rule_season_countdown,
 )
@@ -420,6 +420,7 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
         return {"drafts": 0, "created": 0, "updated": 0, "skipped_decided": 0}
     from .competitors import rule_competitor_changes  # noqa: PLC0415
     from .portfolio import rule_term_owner  # noqa: PLC0415
+    from .rules_finance import FINANCE_RULES  # noqa: PLC0415
     from .rules_stock import rule_stock  # noqa: PLC0415
     from .rules_c import C_RULES  # noqa: PLC0415 — 依赖本模块的 Draft,放这里避免循环导入
     from .rules_cross import CROSS_RULES  # noqa: PLC0415
@@ -427,7 +428,7 @@ def run_rules_for_store(db: Session, *, store_code: str, currency: str, as_of: d
     from . import experience  # noqa: PLC0415
 
     drafts: list[SuggestionDraft] = []
-    for rule in (*RULES, rule_stock, *CROSS_RULES, rule_term_owner, *C_RULES, rule_competitor_changes):
+    for rule in (*RULES, rule_stock, *CROSS_RULES, rule_term_owner, *C_RULES, rule_competitor_changes, *FINANCE_RULES):
         drafts.extend(rule(db, store_code, currency, as_of))
     # 生成前查经验库:相关经验附在建议上;被反复驳回 / 命中率太低的那类降一档。
     # 跨店抽象层按「产品线 × 季节阶段」查:别的店在同一季节同一条线上吃过的亏,这家店不用再吃一遍。

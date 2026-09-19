@@ -20,7 +20,7 @@ import {
 } from "./api";
 
 const ROLE_LABEL: Record<string, string> = { view: "查看", operate: "操作", grant: "授权" };
-const EMPLOYEE_TONE: Record<string, string> = { A: "toneA", B: "toneB", C: "toneC", D: "toneD" };
+const EMPLOYEE_TONE: Record<string, string> = { A: "toneA", B: "toneB", C: "toneC", D: "toneD", E: "toneE" };
 
 function money(value: number, currency: string) {
   const symbol = currency === "EUR" ? "€" : "$";
@@ -179,7 +179,7 @@ export function AmzWorkspace() {
       <section className={styles.panel} aria-label="数字员工">
         <div className={styles.panelHead}>
           <h2>数字员工</h2>
-          <span className={styles.muted}>四名 · 各管一块 · A2 起上岗,消息与浮窗随之而来</span>
+          <span className={styles.muted}>各管一块 · 都在用户管理登记 · C19 可私聊</span>
         </div>
         <div className={styles.crew}>
           {employees.map((item) => (
@@ -187,7 +187,7 @@ export function AmzWorkspace() {
               <span className={`${styles.avatar} ${styles[EMPLOYEE_TONE[item.employee] ?? "toneA"]}`}>{item.employee}</span>
               <div>
                 <div className={styles.empRole}>{item.name ?? item.employee} · {item.role_label}</div>
-                <div className={styles.muted}>{item.character ?? item.username}</div>
+                <div className={styles.muted}>{item.username}</div>
               </div>
             </div>
           ))}

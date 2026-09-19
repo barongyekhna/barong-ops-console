@@ -183,6 +183,7 @@ from ..modules.amz_series.models import (
     AmzReview,
     AmzActionLedger,
     AmzBaTopClick,
+    AmzCost,
     AmzInventoryDaily,
     AmzListingSnapshot,
     AmzSolicitation,

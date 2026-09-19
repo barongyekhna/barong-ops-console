@@ -42,8 +42,9 @@ def db():
 
 
 def _cleanup(session) -> None:
-    from backend.app.modules.amz_series.models import AmzActionLedger, AmzGuardrail, AmzLadder
+    from backend.app.modules.amz_series.models import AmzActionLedger, AmzCost, AmzGuardrail, AmzLadder
 
+    session.execute(delete(AmzCost))
     session.execute(delete(AmzActionLedger))
     session.execute(delete(AmzLadder))
     session.execute(delete(AmzGuardrail))
@@ -130,7 +131,7 @@ def test_bootstrap_is_idempotent_and_wires_orgs_stores_grants_and_bots(db) -> No
         assert db.scalar(select(func.count()).select_from(OrgMembershipRecord).where(OrgMembershipRecord.user_id == str(bot.id))) == 4
         assert db.scalar(select(func.count()).select_from(C19AffiliationRecord).where(C19AffiliationRecord.user_id == bot.id)) == 4
         assert db.scalar(select(func.count()).select_from(AmzStoreGrant).where(AmzStoreGrant.user_id == bot.id)) == 0
-    assert db.scalar(select(func.count()).select_from(AgentRegistry).where(AgentRegistry.agent_id.like("amz.%"))) == 4
+    assert db.scalar(select(func.count()).select_from(AgentRegistry).where(AgentRegistry.agent_id.like("amz.%"))) == 5
 
 
 def test_seed_import_is_file_idempotent_and_row_idempotent(db, tmp_path: Path) -> None:
@@ -671,6 +672,49 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
     db.execute(delete(_Out).where(_Out.source == "backtest", _Out.as_of == date(2026, 7, 25)))
     db.commit()
 
+    # ---- 殷乐乐(财务):成本手填、逐日账口径(排除转账 / 广告扣费、摊月费、缺成本标不完整)、规则
+    from backend.app.modules.amz_series import finance as _fin, rules_finance as _rf
+    from backend.app.modules.amz_series.models import AmzCost as _Cost, AmzFxRate as _Fx
+
+    fin_store = "05us"
+    fday = date(2026, 7, 10)
+
+    def _tx(i, txn_type, total, *, sku=None, qty=0, sales="0", desc=None, day=fday):
+        db.add(AmzTransaction(store_code=fin_store, posted_at=datetime(day.year, day.month, day.day, 12, tzinfo=UTC), txn_type=txn_type, order_id=f"fin-{i}", sku=sku, description=desc, quantity=qty, product_sales=_Dec(sales), total=_Dec(total), currency="USD", fx_rate=_Dec("1"), fx_source="native", total_usd=_Dec(total), source="test", row_key=f"fin-{i}"))
+
+    _tx(1, "Order", "15.00", sku="FIN-A", qty=1, sales="25.00")           # 卖 25,费 10
+    _tx(2, "Order", "30.00", sku="FIN-A", qty=2, sales="50.00")
+    _tx(3, "Order", "8.00", sku="FIN-B", qty=1, sales="12.00")            # 没填成本
+    _tx(4, "Refund", "-20.00", sku="FIN-A")
+    _tx(5, "Transfer", "-5000.00", desc="To your account ending in: 274")  # 提现,不算
+    _tx(6, "Service Fee", "-300.00", desc="Cost of Advertising")          # 后台广告扣费,不重复扣
+    _tx(7, "FBA Transaction fees", "-60.00", desc="FBA Inventory Storage Fee", day=fday + timedelta(days=15))  # 摊到往前 30 天
+    for i in range(20):
+        db.add(_Fx(rate_date=fday - timedelta(days=10) + timedelta(days=i), base="CNY", quote="USD", rate=_Dec("0.14"), source="ecb"))
+    db.commit()
+    _fin.save_cost(db, store_code=fin_store, sku="FIN-A", factory_cny=_Dec("60"), freight_cny=_Dec("7"), effective_from=date(2026, 7, 1), note="测试", user_id=owner.id)
+    with pytest.raises(ValueError):
+        _fin.save_cost(db, store_code=fin_store, sku="FIN-A", factory_cny=_Dec("0"), freight_cny=_Dec("7"), effective_from=date(2026, 7, 1), note=None, user_id=owner.id)
+    db.commit()
+    hist = _fin.cost_rows(db, fin_store)["FIN-A"]
+    assert _fin.cost_on(hist, date(2026, 6, 30)) is None and _fin.cost_on(hist, fday) == _Dec("67")  # 生效日前没有成本,不往前套
+    book = _fin.ledger(db, fin_store, since=fday, until=fday)
+    day = _fin.day_view(fday, book["days"][fday])
+    assert day["sales"] == 87.0 and day["fees"] == -34.0 and day["refunds"] == -20.0 and day["other"] == 0.0  # 转账、广告扣费都没进来
+    assert day["accrued"] == 2.0 * -1  # 60 / 30 天
+    assert day["cogs"] == round(3 * 67 * 0.14, 2) and day["units"] == 4
+    assert day["missing_cost_units"] == 1 and day["missing_skus"] == ["FIN-B"] and day["complete"] is False
+    catalog = {r["sku"]: r for r in _fin.sku_catalog(db, fin_store, today=fday + timedelta(days=5))}
+    assert catalog["FIN-A"]["cost"]["factory_cny"] == 60.0 and catalog["FIN-B"]["cost"] is None
+    missing = [d for d in _rf.rule_missing_cost(db, fin_store, "USD", fday) if d.action_type == "missing_cost"]
+    assert missing and missing[0].employee == "E" and missing[0].severity == "bad" and "FIN-B" in missing[0].evidence["skus"]
+    report = _fin.store_report(db, fin_store, days=30)
+    assert report["totals"]["missing_cost_units"] >= 1 and report["days"]
+    db.execute(delete(AmzTransaction).where(AmzTransaction.source == "test", AmzTransaction.row_key.like("fin-%")))
+    db.execute(delete(_Cost))
+    db.execute(delete(_Fx).where(_Fx.base == "CNY"))
+    db.commit()
+
     # ---- A3 管控骨架:梯子 / 护栏 / 总闸 / 熔断 / 台账 / 回读 / 回看 / 自动降级 / 升级提议(假执行器;Ads API 未接入)
     from backend.app.modules.amz_series import control as _ctl, executor as _ex, ladder as _lad
     from backend.app.modules.amz_series.models import AmzActionLedger as _Led, AmzLadder as _LadRow, AmzSuggestion as _Sug, AmzStoreGrant as _Grant
@@ -823,9 +867,9 @@ def test_rules_engine_runs_on_seed_rows_and_jobs_write_heartbeat(db, tmp_path: P
 
     # 作业:排队 → 领取 → 执行 → 心跳(验收只认这个)。没有 SP-API 凭据的店不排出网作业。
     created = schedule_due_jobs(db)
-    assert created == 26  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily + control_hourly;fx_daily 只给欧元店 01de;出网作业因无凭据一条不排
-    jobs = claim(db, 30)
-    assert len(jobs) == 26 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly", "launch_daily", "fx_daily", "control_hourly"}
+    assert created == 31  # 五店各一条 rules_daily + image_lookback + experience_weekly + launch_daily + control_hourly + finance_daily;fx_daily 只给欧元店 01de;出网作业因无凭据一条不排
+    jobs = claim(db, 40)
+    assert len(jobs) == 31 and {j["job_type"] for j in jobs} == {"rules_daily", "image_lookback", "experience_weekly", "launch_daily", "fx_daily", "control_hourly", "finance_daily"}
     assert [j["store_code"] for j in jobs if j["job_type"] == "fx_daily"] == ["01de"]
     from backend.app.modules.amz_series import fx as _fx
 

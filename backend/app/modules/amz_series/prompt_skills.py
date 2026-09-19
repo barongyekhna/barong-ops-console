@@ -10,16 +10,17 @@ import hashlib
 from functools import lru_cache
 from pathlib import Path
 
-from .constants import EMPLOYEE_A, EMPLOYEE_B, EMPLOYEE_C, EMPLOYEE_D, EMPLOYEES
+from .constants import EMPLOYEE_A, EMPLOYEE_B, EMPLOYEE_C, EMPLOYEE_D, EMPLOYEE_E, EMPLOYEES
 
 SKILLS_DIR = Path(__file__).parent / "skills"
-SKILLS_VERSION = "2026-09-16.1"
+SKILLS_VERSION = "2026-09-19.1"
 
 EMPLOYEE_SKILLS: dict[str, tuple[str, ...]] = {
     EMPLOYEE_A: ("a/listing-copy.md", "shared/pnl-and-inventory.md"),
     EMPLOYEE_B: ("b/listing-images.md",),
     EMPLOYEE_C: ("c/competitors-and-sqp.md", "shared/pnl-and-inventory.md"),
     EMPLOYEE_D: ("d/ads-funnel-and-bids.md", "shared/pnl-and-inventory.md"),
+    EMPLOYEE_E: ("e/finance-pnl.md", "shared/pnl-and-inventory.md"),
 }
 ALL_SKILL_FILES: tuple[str, ...] = tuple(sorted({path for paths in EMPLOYEE_SKILLS.values() for path in paths}))
 REQUIRED_HEADER_MARKS = ("来源:", "MIT", "https://github.com/liangdabiao/Amazon-Skills-Liang")

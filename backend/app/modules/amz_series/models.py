@@ -710,6 +710,26 @@ class AmzActionLedger(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
 
 
+class AmzCost(Base):
+    """商品成本(殷乐乐算账用):人在财务页手填,一行 = 某店某 SKU 从某天起的出厂价 + 头程(元 / 件)。
+
+    成本变了填新行、旧行保留——算历史账用当时的成本。系统绝不自己猜成本。
+    """
+
+    __tablename__ = "amz_costs"
+    __table_args__ = (UniqueConstraint("store_code", "sku", "effective_from", name="uq_amz_costs_store_sku_from"), Index("ix_amz_costs_store_sku", "store_code", "sku"))
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    store_code: Mapped[str] = mapped_column(String(16), ForeignKey("amz_stores.store_code", ondelete="CASCADE"), nullable=False)
+    sku: Mapped[str] = mapped_column(String(128), nullable=False)
+    factory_cny: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    freight_cny: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class AmzLadder(Base):
     """(动作 × 店铺) → 级别。升要人批、降自动;history 记每次变化。"""
 

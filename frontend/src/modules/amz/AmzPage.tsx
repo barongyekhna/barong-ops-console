@@ -8,6 +8,7 @@ import { AmzOverview } from "./AmzOverview";
 import { AmzWorkspace } from "./AmzWorkspace";
 import { CompetitorsPanel } from "./CompetitorsPanel";
 import { ControlPanel } from "./ControlPanel";
+import { FinancePanel } from "./FinancePanel";
 import { ImagesPanel } from "./ImagesPanel";
 import { LaunchPanel } from "./LaunchPanel";
 import { PortfolioPanel } from "./PortfolioPanel";
@@ -16,6 +17,7 @@ import styles from "./AmzOverview.module.css";
 
 const TABS = [
   { key: "overview", label: "总览", href: "/amz" },
+  { key: "finance", label: "财务 · 殷乐乐", href: "/amz?tab=finance" },
   { key: "cross", label: "跨店 · 主场词 / 需求 / 库存", href: "/amz?tab=cross" },
   { key: "control", label: "总闸 · 梯子 / 护栏 / 台账", href: "/amz?tab=control" },
   { key: "competitors", label: "竞品 · 殷长辰盯盘", href: "/amz?tab=competitors" },
@@ -32,6 +34,7 @@ export function AmzPage() {
   const raw = params.get("tab");
   const tab: TabKey = TABS.some((t) => t.key === raw) ? (raw as TabKey) : "overview";
   const [openTotal, setOpenTotal] = useState(0);
+  const company = params.get("company"); // 从侧边栏某家公司进来:切 tab 时带着
 
   useEffect(() => {
     let alive = true;
@@ -49,13 +52,15 @@ export function AmzPage() {
     <>
       <div className={styles.filters} role="tablist" aria-label="页面">
         {TABS.map((t) => (
-          <Link aria-selected={tab === t.key} className={`${styles.chip} ${tab === t.key ? styles.chipOn : ""}`} href={t.href} key={t.key} role="tab">
+          <Link aria-selected={tab === t.key} className={`${styles.chip} ${tab === t.key ? styles.chipOn : ""}`} href={company ? `${t.href}${t.href.includes("?") ? "&" : "?"}company=${encodeURIComponent(company)}` : t.href} key={t.key} role="tab">
             {t.label}
           </Link>
         ))}
       </div>
       {tab === "manage" ? (
         <AmzWorkspace />
+      ) : tab === "finance" ? (
+        <FinancePanel companyOrgId={params.get("company")} />
       ) : tab === "control" ? (
         <ControlPanel />
       ) : tab === "cross" ? (

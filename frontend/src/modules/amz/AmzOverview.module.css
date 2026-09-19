@@ -386,6 +386,10 @@
   background: var(--color-success);
 }
 
+.toneE {
+  background: var(--color-warning);
+}
+
 .badge {
   position: absolute;
   top: 8px;
@@ -627,19 +631,62 @@
 }
 
 /* ---- 浮窗:员工消息 ---- */
+/* 抽屉外框是固定一屏高 + overflow:hidden(共享组件),内容区必须自己滚——否则多了只看得到前几条(09-19 bug) */
 .drawer {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 4px 2px 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .drawerHead {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-bottom: 10px;
+  padding: 6px 0 10px;
   border-bottom: 1px solid var(--color-line);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-panel-base);
+}
+
+.foldBar {
+  display: flex;
+  gap: 16px;
+  justify-content: flex-end;
+  font-size: 12.5px;
+}
+
+.storeGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.storeGroupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.storeGroupHead b {
+  font-family: var(--font-mono), ui-monospace, monospace;
 }
 
 .drawerHead b {

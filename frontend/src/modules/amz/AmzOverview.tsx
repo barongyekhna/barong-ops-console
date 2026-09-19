@@ -21,7 +21,16 @@ import {
   type AmzWorkLogEntry,
 } from "./api";
 
-const TONE: Record<string, string> = { A: styles.toneA, B: styles.toneB, C: styles.toneC, D: styles.toneD };
+const TONE: Record<string, string> = { A: styles.toneA, B: styles.toneB, C: styles.toneC, D: styles.toneD, E: styles.toneE };
+// 员工卡上的一行「管什么」(职责,不是性格——性格只在后端给模型用,不上前端)
+const DUTY: Record<string, string> = {
+  A: "标题 / 五点 / 描述 / 后台词",
+  B: "主图 / 副图 / A+ 图的 brief",
+  C: "对手名单、快照、搜索词份额",
+  D: "否词 / 收割 / 出价 / 预算 / 库存",
+  E: "每天的盈亏、成本、费用、广告账",
+};
+const SEV_RANK: Record<string, number> = { bad: 0, warn: 1, info: 2, good: 3 };
 const SEVERITY_LABEL: Record<string, string> = { bad: "紧急", warn: "要看", info: "提示", good: "好消息" };
 const ACTION_LABEL: Record<string, string> = {
   harvest: "收割",
@@ -30,6 +39,15 @@ const ACTION_LABEL: Record<string, string> = {
   bid_down: "精准倒挂",
   campaign_stability: "活动稳定性",
   loss_line: "亏卖线",
+  line_loss: "亏卖线",
+  missing_cost: "缺成本",
+  margin_floor: "毛利底线",
+  refund_spike: "退款突增",
+  fee_change: "费用变动",
+  stockout: "断货",
+  stock_cover: "库存天数",
+  portfolio_yield: "主场词让位",
+  ladder_upgrade: "升级提议",
   spend_without_sales: "花费涨销量跌",
   season_countdown: "季节倒计时",
 };
@@ -214,13 +232,13 @@ export function AmzOverview({ companyOrgId = null }: { companyOrgId?: string | n
         <section className={styles.panel} id="amz-crew" aria-label="数字员工">
           <header className={styles.panelHead}>
             <h2>数字员工</h2>
-            <span className={styles.cnt}>4 名 · 各管一块</span>
+            <span className={styles.cnt}>{panel?.items.length ?? 0} 名 · 各管一块</span>
             <span className={styles.right}>都在用户管理登记 · C19 可私聊</span>
           </header>
           {panel ? (
             <div className={styles.notif}>
               <span className={styles.bell}>🔔</span>
-              <b>今天 4 名员工发来 {panel.open_total} 条消息</b>
+              <b>今天 {panel.items.length} 名员工发来 {panel.open_total} 条消息</b>
               {panel.urgent_total > 0 ? (
                 <span className={styles.urgent}>
                   {panel.urgent_total} 条紧急 · {panel.items.find((i) => i.urgent > 0)?.latest?.title.slice(0, 40) ?? ""}
@@ -242,10 +260,10 @@ export function AmzOverview({ companyOrgId = null }: { companyOrgId?: string | n
                 <span className={`${styles.avatar} ${TONE[item.employee] ?? styles.toneA}`}>{item.employee}</span>
                 {item.open > 0 ? <span className={styles.badge}>{item.open}</span> : null}
                 <span className={styles.role}>{item.name} · {item.role_label}</span>
-                <span className={styles.duty}>{item.character}</span>
+                <span className={styles.duty}>{DUTY[item.employee] ?? ""}</span>
                 <span className={styles.mline}>
                   <i className={`${styles.pip} ${item.urgent > 0 ? styles.pipBad : item.open > 0 ? styles.pipWarn : styles.pipGood}`} />
-                  {item.latest ? item.latest.title : item.employee === "D" ? "今天没有新消息" : "A2 后半段上岗,现在还没有消息"}
+                  {item.latest ? item.latest.title : "今天没有新消息"}
                 </span>
               </button>
             ))}
@@ -295,7 +313,7 @@ export function AmzOverview({ companyOrgId = null }: { companyOrgId?: string | n
 
       {openItem ? (
         <OverlayModal label={`${openItem.name} · ${openItem.role_label}`} onClose={closeDrawer} placement="drawer" width="min(760px, 100%)">
-          <EmployeeDrawer item={openItem} onChanged={load} storeFilter={storeFilter} />
+          <EmployeeDrawer item={openItem} onChanged={load} storeFilter={storeFilter} stores={stores} />
         </OverlayModal>
       ) : null}
 
@@ -393,25 +411,64 @@ function WorkLogSection({ employee, storeFilter }: { employee: string; storeFilt
   );
 }
 
-function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePanelItem; onChanged: () => Promise<void>; storeFilter: string }) {
+function readFolds(employee: string): Record<string, boolean> {
+  try {
+    return JSON.parse(window.localStorage.getItem(`amz-drawer-folds:${employee}`) ?? "{}") as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+function EmployeeDrawer({ item, onChanged, storeFilter, stores }: { item: AmzEmployeePanelItem; onChanged: () => Promise<void>; storeFilter: string; stores: AmzStore[] }) {
+  // 浮窗按店铺分栏(用户 2026-09-19):默认展开有红 / 黄的店;折叠状态记在这台浏览器里
+  const [folds, setFolds] = useState<Record<string, boolean>>(() => (typeof window === "undefined" ? {} : readFolds(item.employee)));
+  const saveFolds = useCallback(
+    (next: Record<string, boolean>) => {
+      setFolds(next);
+      try {
+        window.localStorage.setItem(`amz-drawer-folds:${item.employee}`, JSON.stringify(next));
+      } catch {
+        /* 私密窗口等拿不到 localStorage:只在这次打开里记 */
+      }
+    },
+    [item.employee],
+  );
   const [rows, setRows] = useState<AmzSuggestion[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [showDecided, setShowDecided] = useState(false);
 
+  const storeCodes = useMemo(() => new Set(stores.map((s) => s.store_code)), [stores]);
   const load = useCallback(async () => {
     try {
       const payload = await getSuggestions({ employee: item.employee, store: storeFilter || undefined, status: showDecided ? "all" : "open" });
-      setRows(payload.items);
+      // 从侧边栏某家公司进来时,只留这家公司的店
+      setRows(payload.items.filter((row) => !row.store_code || storeCodes.size === 0 || storeCodes.has(row.store_code)));
     } catch (err) {
       setStatus(err instanceof Error ? err.message : String(err));
     }
-  }, [item.employee, showDecided, storeFilter]);
+  }, [item.employee, showDecided, storeFilter, storeCodes]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const groups = useMemo(() => {
+    const byStore = new Map<string, AmzSuggestion[]>();
+    for (const row of rows) {
+      const key = row.store_code || "跨店";
+      byStore.set(key, [...(byStore.get(key) ?? []), row]);
+    }
+    return [...byStore.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([code, list]) => {
+        const worst = list.reduce((w, r) => Math.min(w, SEV_RANK[r.severity] ?? 3), 3);
+        const store = stores.find((s) => s.store_code === code);
+        return { code, list, worst, name: store ? store.company_name.replace(/^广州/, "").replace(/电子商务有限公司$/, "") : "" };
+      });
+  }, [rows, stores]);
+  const isOpen = (code: string, worst: number) => folds[code] ?? worst <= 1;
 
   async function decide(row: AmzSuggestion, decision: "approve" | "reject" | "later") {
     const reason = (reasons[row.id] ?? "").trim();
@@ -439,9 +496,6 @@ function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePan
         <div>
           <b>{item.name} · {item.role_label}</b>
           <div className={styles.muted}>
-            {item.character}
-          </div>
-          <div className={styles.muted}>
             {item.open} 条待看 · {item.urgent} 条紧急 · 影子模式:点「放行」只记录你的判断
           </div>
         </div>
@@ -453,10 +507,30 @@ function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePan
       {status ? <div className={styles.status}>{status}</div> : null}
       {rows.length === 0 ? (
         <div className={styles.empty}>
-          {item.employee === "D" ? "没有消息。规则每天跑一次;种子数据停在 9 月中,新数据要等 A1 接上 API。" : "这名员工 A2 后半段上岗,现在还没有消息。"}
+          没有消息。规则每天跑一次;有事她 / 他会在这里说。
         </div>
       ) : (
-        rows.map((row) => (
+        <>
+          {groups.length > 1 ? (
+            <div className={styles.foldBar}>
+              <button className={styles.linkish} onClick={() => saveFolds(Object.fromEntries(groups.map((g) => [g.code, true])))} type="button">
+                全部展开
+              </button>
+              <button className={styles.linkish} onClick={() => saveFolds(Object.fromEntries(groups.map((g) => [g.code, false])))} type="button">
+                全部收起
+              </button>
+            </div>
+          ) : null}
+          {groups.map((group) => (
+            <section className={styles.storeGroup} key={group.code}>
+              <button aria-expanded={isOpen(group.code, group.worst)} className={styles.storeGroupHead} onClick={() => saveFolds({ ...folds, [group.code]: !isOpen(group.code, group.worst) })} type="button">
+                <span aria-hidden="true">{isOpen(group.code, group.worst) ? "▾" : "▸"}</span>
+                <i className={`${styles.pip} ${group.worst === 0 ? styles.pipBad : group.worst === 1 ? styles.pipWarn : styles.pipGood}`} />
+                <b>{group.code}</b>
+                {group.name ? <span className={styles.muted}>{group.name}</span> : null}
+                <span className={styles.muted}>· {group.list.length} 条</span>
+              </button>
+              {isOpen(group.code, group.worst) ? group.list.map((row) => (
           <article className={`${styles.msg} ${styles[`sev_${row.severity}`] ?? ""}`} key={row.id}>
             <div className={styles.stripe} />
             <div>
@@ -506,7 +580,10 @@ function EmployeeDrawer({ item, onChanged, storeFilter }: { item: AmzEmployeePan
               ) : null}
             </div>
           </article>
-        ))
+              )) : null}
+            </section>
+          ))}
+        </>
       )}
       <WorkLogSection employee={item.employee} storeFilter={storeFilter} />
     </div>

@@ -92,7 +92,7 @@ def test_migrations_exist_chain_and_are_in_manifest() -> None:
     order = manifest["migration_order"]
     i = order.index("20260915_01_amz_tables")
     assert order[i : i + 7] == ["20260915_01_amz_tables", "20260915_02_amz_permissions", "20260916_01_amz_suggestions", "20260916_02_amz_work_log", "20260916_03_amz_reports", "20260916_04_amz_fact_sheets", "20260917_01_amz_images"]
-    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors" and order[i + 10] == "20260917_05_amz_ba_top_clicks" and order[i + 11] == "20260918_01_amz_inventory_listings" and order[i + 12] == "20260918_02_amz_actions_ledger"
+    assert order[i + 7] == "20260917_02_amz_experience" and order[i + 8] == "20260917_03_amz_launches" and order[i + 9] == "20260917_04_amz_competitors" and order[i + 10] == "20260917_05_amz_ba_top_clicks" and order[i + 11] == "20260918_01_amz_inventory_listings" and order[i + 12] == "20260918_02_amz_actions_ledger" and order[i + 13] == "20260918_03_rd_client_traces" and order[i + 14] == "20260919_01_amz_finance"
     comp_mig = (versions / "20260917_04_amz_competitors.py").read_text(encoding="utf-8")
     assert 'down_revision = "20260917_03_amz_launches"' in comp_mig and 'sa.Column("org_id"' not in comp_mig
     launch_mig = (versions / "20260917_03_amz_launches.py").read_text(encoding="utf-8")
@@ -399,14 +399,17 @@ def test_suggestion_draft_dedupe_key_is_stable_per_store_action_subject() -> Non
 def test_rules_and_jobs_are_registered() -> None:
     from backend.app.modules.amz_series import jobs, rules
 
-    assert len(rules.RULES) == 7
+    assert len(rules.RULES) == 6 and "rule_loss_line" not in [r.__name__ for r in rules.RULES]  # 亏卖线 2026-09-19 交给殷乐乐
+    from backend.app.modules.amz_series import rules_finance
+
+    assert [r.__name__ for r in rules_finance.FINANCE_RULES] == ["rule_missing_cost", "rule_line_loss", "rule_sku_health"]
     from backend.app.modules.amz_series import rules_cross
 
     assert [r.__name__ for r in rules_cross.CROSS_RULES] == ["rule_listing_cvr_gap", "rule_screen_ctr_gap"]
     from backend.app.modules.amz_series import rules_c
 
     assert [r.__name__ for r in rules_c.C_RULES] == ["rule_detail_page_leak", "rule_share_drop", "rule_weekly_brief"]
-    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400, "ba_competitors": 7 * 86400, "inventory_daily": 86400, "listings_daily": 86400, "finances_daily": 86400, "solicitations_daily": 86400, "control_hourly": 3600}
+    assert jobs.JOB_INTERVALS == {"rules_daily": 86400, "sales_traffic": 86400, "sqp_weekly": 7 * 86400, "image_lookback": 86400, "experience_weekly": 7 * 86400, "launch_daily": 86400, "fx_daily": 86400, "competitor_daily": 86400, "ba_competitors": 7 * 86400, "inventory_daily": 86400, "listings_daily": 86400, "finances_daily": 86400, "solicitations_daily": 86400, "control_hourly": 3600, "finance_daily": 86400}
     assert jobs.API_JOBS == {"sales_traffic", "sqp_weekly", "ba_competitors", "inventory_daily", "listings_daily", "finances_daily", "solicitations_daily"} and set(jobs.HANDLERS) == set(jobs.JOB_INTERVALS)
     assert jobs.heartbeat_name("01de", "rules_daily") == "amz-worker:01de:rules_daily"
     compose = (REPO / "docker-compose.production.yml").read_text(encoding="utf-8")
@@ -424,8 +427,8 @@ def test_personas_are_named_and_hard_gated() -> None:
     from backend.app.modules.amz_series.constants import EMPLOYEE_GENDERS, EMPLOYEE_NAMES
     from backend.app.modules.amz_series.persona import PERSONAS, display_name, enforce_style, system_prompt
 
-    assert EMPLOYEE_NAMES == {"A": "殷笑笑", "B": "殷熊", "C": "殷长辰", "D": "殷素素"}
-    assert EMPLOYEE_GENDERS == {"A": "女", "B": "男", "C": "男", "D": "女"}
+    assert EMPLOYEE_NAMES == {"A": "殷笑笑", "B": "殷熊", "C": "殷长辰", "D": "殷素素", "E": "殷乐乐"}
+    assert EMPLOYEE_GENDERS == {"A": "女", "B": "男", "C": "男", "D": "女", "E": "女"}
     for key, persona in PERSONAS.items():
         assert persona.name == EMPLOYEE_NAMES[key] and persona.gender == EMPLOYEE_GENDERS[key]
         prompt = system_prompt(key, extra_context="店铺:03us · 数据截至 2026-09-14")
@@ -441,6 +444,13 @@ def test_personas_are_named_and_hard_gated() -> None:
     # 殷素素:禁语被拿掉,最多一个温柔表情
     out = enforce_style("D", "老板,必须马上改,完蛋了 🌷🌷")
     assert "必须" not in out and "马上" not in out and "完蛋" not in out and out.count("🌷") == 1
+    # 殷乐乐:不说「大概赚了」,最多一个表情;团队名单里有她
+    out = enforce_style("E", "老板,大概赚了 200 🧮🧮 🍔")
+    assert "大概赚了" not in out and out.count("🧮") == 1 and "🍔" not in out
+    assert "殷乐乐(财务)" in system_prompt("A")
+    # 性格不上前端:C19 签名只写职位
+    for persona in PERSONAS.values():
+        assert persona.bio == f"亚马逊运营 · {persona.role}" and persona.character not in persona.bio
     # 长度硬顶
     assert len(enforce_style("C", "长" * 5000)) <= 900
 
