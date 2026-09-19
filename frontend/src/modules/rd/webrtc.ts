@@ -2,6 +2,7 @@
 
 import { getRdIceConfig, pushRdSignal, withRdRetry } from "./api";
 import { rdTrace, rdTraceError, requestQueueSnapshot } from "./diagnostics";
+import { RD_STATS_INTERVAL_MS, collectRdStats } from "./stats";
 import { encodeInputEvent, type RdInputEvent } from "./input-protocol";
 import { toIceServers } from "./types";
 
@@ -49,6 +50,7 @@ export class RdController {
   private remoteDescriptionSet = false;
   private answered = false;
   private watchdog: number | null = null;
+  private statsTimer: number | null = null;
 
   constructor(sessionId: string, handlers: RdControllerHandlers) {
     this.sessionId = sessionId;
@@ -112,6 +114,21 @@ export class RdController {
     this.input = input;
 
     pc.ontrack = (event) => {
+      // 控制端要的是「跟手」:浏览器默认会攒一段画面再播放求平滑,这里要它尽量不攒。
+      // 远程桌面宁可偶尔掉一帧,也不能整体慢半拍
+      const receiver = event.receiver as unknown as {
+        jitterBufferTarget?: number | null;
+        playoutDelayHint?: number | null;
+      };
+      try {
+        if ("jitterBufferTarget" in receiver) {
+          receiver.jitterBufferTarget = 0;
+        } else {
+          receiver.playoutDelayHint = 0;
+        }
+      } catch (error) {
+        rdTraceError("ctl.jitter_target_fail", error, {}, this.sessionId);
+      }
       const [stream] = event.streams;
       if (stream) {
         this.handlers.onStream(stream);
@@ -148,6 +165,7 @@ export class RdController {
       this.trace("conn_state", { state });
       if (state === "connected") {
         this.clearWatchdog();
+        this.startStats(pc);
         this.handlers.onPhase("connected");
       } else if (state === "failed") {
         this.fail("ice");
@@ -181,6 +199,24 @@ export class RdController {
     } catch {
       this.fail("signal");
     }
+  }
+
+  private startStats(pc: RTCPeerConnection): void {
+    if (this.statsTimer !== null) {
+      return;
+    }
+    let counters: Awaited<ReturnType<typeof collectRdStats>>["counters"] = null;
+    this.statsTimer = window.setInterval(() => {
+      if (this.closed) {
+        return;
+      }
+      void collectRdStats(pc, "controller", counters)
+        .then((result) => {
+          counters = result.counters;
+          this.trace("stats", result.detail);
+        })
+        .catch(() => undefined);
+    }, RD_STATS_INTERVAL_MS);
   }
 
   private fail(stage: RdFailureStage): void {
@@ -262,6 +298,10 @@ export class RdController {
     this.trace("close", { conn: this.pc?.connectionState ?? null });
     this.closed = true;
     this.clearWatchdog();
+    if (this.statsTimer !== null) {
+      window.clearInterval(this.statsTimer);
+      this.statsTimer = null;
+    }
     try {
       this.input?.close();
     } catch {

@@ -466,3 +466,26 @@ test("the viewer maps pointers on the picture and coalesces moves per frame", ()
 test("the controlled side never queues more than one pending pointer move", () => {
   assert.match(agentSource, /pendingMove/);
 });
+
+// ---------------------------------------------------------------------------
+// 画面:跟手优先 + 质量快照进黑匣子(2026-09-19 真机:画面延迟高、指针一跳一跳)
+// ---------------------------------------------------------------------------
+const statsSource = readFileSync("frontend/src/modules/rd/stats.ts", "utf8");
+
+test("the controlled side favours frame rate over resolution and caps at 30fps", () => {
+  assert.match(agentSource, /degradationPreference = "maintain-framerate"/);
+  assert.match(agentSource, /frameRate: \{ ideal: 30, max: 30 \}/);
+});
+
+test("the controller asks for minimal playout buffering", () => {
+  assert.match(controllerSource, /jitterBufferTarget = 0/);
+});
+
+test("both sides record path, rtt, fps and what limits quality — never addresses", () => {
+  assert.match(statsSource, /path:/);
+  assert.match(statsSource, /rtt_ms:/);
+  assert.match(statsSource, /limited_by = rtp\.qualityLimitationReason/);
+  assert.doesNotMatch(statsSource, /\.address|\.ip\b/);
+  assert.match(controllerSource, /collectRdStats\(pc, "controller"/);
+  assert.match(agentSource, /collectRdStats\(pc, "agent"/);
+});

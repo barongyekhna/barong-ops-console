@@ -2,6 +2,7 @@
 
 import { getRdIceConfig, pushRdSignal, withRdRetry } from "./api";
 import { rdTrace, rdTraceError } from "./diagnostics";
+import { RD_STATS_INTERVAL_MS, collectRdStats } from "./stats";
 import { parseInputEvent, type RdInputEvent } from "./input-protocol";
 import type { RdNativeBridge } from "./native";
 import { toIceServers } from "./types";
@@ -32,6 +33,7 @@ export class RdAgent {
   private remoteDescriptionSet = false;
   private droppedInputs = 0;
   private offerTaken = false;
+  private statsTimer: number | null = null;
   // 鼠标移动:上一条还没注入完时只留最新的一条,不排队。排队就是「指针在后面追」
   private pendingMove: RdInputEvent | null = null;
   private moveInFlight = false;
@@ -136,6 +138,7 @@ export class RdAgent {
       }
       this.trace("conn_state", { state: pc.connectionState });
       if (pc.connectionState === "connected") {
+        this.startStats(pc);
         this.handlers.onLive();
       } else if (
         pc.connectionState === "failed" ||
@@ -147,16 +150,19 @@ export class RdAgent {
 
     // 屏幕由主进程决定给不给,这里拿不到就直接收摊
     this.trace("capture_start");
+    // 帧率上限 30:远程桌面要的是指针跟手,不需要更高;不设的话有的机器会按显示器
+    // 刷新率去抓,白白占编码和带宽
     const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: false,
-      video: true,
+      video: { frameRate: { ideal: 30, max: 30 } },
     });
     this.trace("capture_ok", { tracks: stream.getTracks().length });
     this.stream = stream;
     for (const track of stream.getTracks()) {
       // 被控的人从系统里自己停掉共享,也要当成挂断
       track.addEventListener("ended", () => this.handlers.onEnded("agent_kicked"));
-      pc.addTrack(track, stream);
+      const sender = pc.addTrack(track, stream);
+      void this.tuneSender(sender);
     }
 
     await pc.setRemoteDescription(offer);
@@ -206,6 +212,46 @@ export class RdAgent {
       });
   }
 
+  /** 抓屏默认「保清晰、掉帧率」:网一紧就掉到每秒几帧,对面看到的指针一跳一跳。
+   * 远程操作要的是跟手,改成优先保帧率(网紧时先降分辨率)。 */
+  private async tuneSender(sender: RTCRtpSender): Promise<void> {
+    try {
+      const params = sender.getParameters() as RTCRtpSendParameters & {
+        degradationPreference?: string;
+      };
+      params.degradationPreference = "maintain-framerate";
+      if (params.encodings && params.encodings.length > 0) {
+        params.encodings = params.encodings.map((encoding) => ({
+          ...encoding,
+          maxBitrate: 8_000_000,
+          maxFramerate: 30,
+        }));
+      }
+      await sender.setParameters(params);
+      this.trace("sender_tuned", { encodings: params.encodings?.length ?? 0 });
+    } catch (error) {
+      rdTraceError("agt.sender_tune_fail", error, {}, this.sessionId);
+    }
+  }
+
+  private startStats(pc: RTCPeerConnection): void {
+    if (this.statsTimer !== null) {
+      return;
+    }
+    let counters: Awaited<ReturnType<typeof collectRdStats>>["counters"] = null;
+    this.statsTimer = window.setInterval(() => {
+      if (this.closed) {
+        return;
+      }
+      void collectRdStats(pc, "agent", counters)
+        .then((result) => {
+          counters = result.counters;
+          this.trace("stats", result.detail);
+        })
+        .catch(() => undefined);
+    }, RD_STATS_INTERVAL_MS);
+  }
+
   /** 对方的 offer 到过没有。被控端的看门狗靠它判断「同意之后对方到底来没来」。 */
   get hasOffer(): boolean {
     return this.offerTaken;
@@ -221,6 +267,10 @@ export class RdAgent {
     }
     this.trace("close", { conn: this.pc?.connectionState ?? null });
     this.closed = true;
+    if (this.statsTimer !== null) {
+      window.clearInterval(this.statsTimer);
+      this.statsTimer = null;
+    }
     for (const track of this.stream?.getTracks() ?? []) {
       try {
         track.stop();
