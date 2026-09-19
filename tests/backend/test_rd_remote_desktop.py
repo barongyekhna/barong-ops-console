@@ -22,12 +22,15 @@ from backend.app.modules.rd_series.models import (
     CONSENT_PROMPT,
     CONSENT_UNATTENDED,
     CONSENT_TIMEOUT_SECONDS,
+    HANDSHAKE_TIMEOUT_SECONDS,
     MAX_UNATTENDED_GRANTS,
     STATE_ACTIVE,
     STATE_CONSENTED,
     STATE_DENIED,
+    STATE_ENDED,
     STATE_EXPIRED,
     STATE_REQUESTED,
+    RdClientTrace,
     RdDevice,
     RdSession,
     RdSignal,
@@ -40,7 +43,7 @@ USERNAMES = ("rd_alice", "rd_bob", "rd_carol")
 
 
 def _clear(session) -> None:
-    for model in (RdSignal, RdSession, RdUnattendedGrant, RdDevice):
+    for model in (RdClientTrace, RdSignal, RdSession, RdUnattendedGrant, RdDevice):
         session.execute(delete(model))
     session.execute(delete(User).where(User.username.in_(USERNAMES)))
     session.commit()
@@ -316,6 +319,47 @@ def test_unanswered_request_expires_and_frees_the_device(db, alice, bob, carol):
     assert service.request_session(db, user=carol, device_id=device.id) is not None
 
 
+def test_consented_but_never_connected_is_released(db, alice, bob, carol):
+    """2026-09-18 真机首测:同意了但 offer 没送到,会话以「已同意」占住被控机。
+    握手超时后必须自动收场,机器重新可用。"""
+    device = _register(db, alice)
+    session = service.request_session(db, user=bob, device_id=device.id)
+    service.respond_session(db, user=alice, session_id=session.id, approve=True)
+    session.responded_at = service._now() - timedelta(
+        seconds=HANDSHAKE_TIMEOUT_SECONDS + 5
+    )
+    db.flush()
+    service.sweep_stale(db)
+    db.refresh(session)
+    assert session.state == STATE_ENDED
+    assert session.end_reason == "handshake_failed"
+    assert service.request_session(db, user=carol, device_id=device.id) is not None
+
+
+def test_handshake_timeout_never_touches_a_live_picture(db, alice, bob):
+    """画面已经通了的会话(started_at 有值)不归握手超时管。"""
+    device = _register(db, alice)
+    session = service.request_session(db, user=bob, device_id=device.id)
+    service.respond_session(db, user=alice, session_id=session.id, approve=True)
+    service.activate_session(db, user=bob, session_id=session.id)
+    session.responded_at = service._now() - timedelta(
+        seconds=HANDSHAKE_TIMEOUT_SECONDS + 5
+    )
+    db.flush()
+    service.sweep_stale(db)
+    db.refresh(session)
+    assert session.state == STATE_ACTIVE
+
+
+def test_handshake_in_progress_is_left_alone(db, alice, bob):
+    device = _register(db, alice)
+    session = service.request_session(db, user=bob, device_id=device.id)
+    service.respond_session(db, user=alice, session_id=session.id, approve=True)
+    service.sweep_stale(db)
+    db.refresh(session)
+    assert session.state == STATE_CONSENTED
+
+
 # ---------------------------------------------------------------------------
 # 信令隔离
 # ---------------------------------------------------------------------------
@@ -412,3 +456,138 @@ def test_turn_credentials_are_short_lived_hmac(db, monkeypatch):
     assert creds["ttl"] == 600
     # 口令不是密钥本身
     assert creds["credential"] != "shared-secret"
+
+
+# ---------------------------------------------------------------------------
+# SSE 流:终态要推得出去,重开不重放
+# ---------------------------------------------------------------------------
+class _FakeRequest:
+    def __init__(self) -> None:
+        self.headers: dict[str, str] = {}
+        self.client = None
+
+    async def is_disconnected(self) -> bool:
+        return False
+
+
+def _collect_stream(monkeypatch, user, *, after=0, between=None):
+    """把一条(缩短了寿命的)流跑完,返回吐出来的 (event, data)。``between`` 在收到第一帧后执行。"""
+    import asyncio
+    import json as _json
+    from types import SimpleNamespace
+
+    from backend.app.modules.rd_series import stream as rd_stream_module
+
+    monkeypatch.setattr(rd_stream_module, "IDLE_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(rd_stream_module, "BUSY_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(rd_stream_module, "STREAM_LIFETIME_SECONDS", 0.5)
+    monkeypatch.setattr(
+        rd_stream_module,
+        "validate_session",
+        lambda _db, **_kw: SimpleNamespace(user=_db.get(User, user.id)),
+    )
+    monkeypatch.setattr(rd_stream_module, "get_audit_context", lambda _r: None)
+
+    async def run():
+        out = []
+        gen = rd_stream_module.rd_stream(
+            request=_FakeRequest(),
+            session_id="x",
+            actor_user_id=int(user.id),
+            resume_after_signal_id=after,
+        )
+        seen_first = False
+        async for chunk in gen:
+            if chunk.startswith("retry:"):
+                continue
+            event = chunk.split("\n")[0].removeprefix("event: ")
+            data = _json.loads(chunk.split("\n")[1].removeprefix("data: "))
+            out.append((event, data))
+            if not seen_first and between is not None:
+                seen_first = True
+                between()
+        return out
+
+    return asyncio.run(run())
+
+
+def test_stream_tells_the_controller_it_was_denied(db, alice, bob, monkeypatch):
+    """被拒 / 结束的会话已经不在「活会话」里,流必须补推一条,否则发起端永远在等。"""
+    device = _register(db, alice)
+    session = service.request_session(db, user=bob, device_id=device.id)
+    db.commit()
+
+    def deny():
+        with SessionLocal() as other:
+            service.respond_session(
+                other, user=other.get(User, alice.id), session_id=session.id,
+                approve=False,
+            )
+            other.commit()
+
+    frames = _collect_stream(monkeypatch, bob, between=deny)
+    states = [data["state"] for event, data in frames if event == "session"]
+    assert states == ["requested", "denied"]
+
+
+def test_reopened_stream_does_not_replay_delivered_signals(db, alice, bob, monkeypatch):
+    device = _register(db, alice)
+    session = service.request_session(db, user=bob, device_id=device.id)
+    service.respond_session(db, user=alice, session_id=session.id, approve=True)
+    offer = service.push_signal(
+        db, user=bob, session_id=session.id, kind="offer", payload="o"
+    )
+    db.commit()
+
+    fresh = _collect_stream(monkeypatch, alice)
+    assert [d["kind"] for e, d in fresh if e == "signal"] == ["offer"]
+
+    resumed = _collect_stream(monkeypatch, alice, after=offer.id)
+    assert [e for e, _d in resumed] == ["session"]
+
+
+# ---------------------------------------------------------------------------
+# 客户端黑匣子
+# ---------------------------------------------------------------------------
+def _trace_entries(client_id: str, seqs, session_id=None):
+    return [
+        {
+            "client_id": client_id,
+            "client_label": "client/0.3.0 chrome/150",
+            "seq": seq,
+            "at": service._now(),
+            "step": "ctl.offer_post_fail",
+            "session_id": session_id,
+            "detail": '{"attempt":1}',
+        }
+        for seq in seqs
+    ]
+
+
+def test_trace_resend_is_idempotent(db, alice):
+    """补传重试是常态:同一 (client_id, seq) 再来一次不能重复入库,但要告诉客户端可以删了。"""
+    cid = str(uuid4())
+    assert service.store_traces(db, user=alice, entries=_trace_entries(cid, [1, 2, 3])) == (3, 3)
+    assert service.store_traces(db, user=alice, entries=_trace_entries(cid, [2, 3, 4])) == (1, 3)
+    db.flush()
+    assert db.query(RdClientTrace).filter_by(client_id=cid).count() == 4
+
+
+def test_trace_hourly_cap_refuses_whole_batch(db, alice, monkeypatch):
+    monkeypatch.setattr(service, "TRACE_MAX_PER_USER_PER_HOUR", 5)
+    cid = str(uuid4())
+    assert service.store_traces(db, user=alice, entries=_trace_entries(cid, range(4))) == (4, 4)
+    # 再来 2 条就超了:整批拒收,客户端留着以后传
+    assert service.store_traces(db, user=alice, entries=_trace_entries(cid, [10, 11])) == (0, 0)
+
+
+def test_old_traces_are_pruned(db, alice):
+    cid = str(uuid4())
+    service.store_traces(db, user=alice, entries=_trace_entries(cid, [1]))
+    db.flush()
+    row = db.query(RdClientTrace).filter_by(client_id=cid).one()
+    row.received_at = service._now() - timedelta(days=30)
+    db.flush()
+    service.store_traces(db, user=alice, entries=_trace_entries(str(uuid4()), [1]))
+    db.flush()
+    assert db.query(RdClientTrace).filter_by(client_id=cid).count() == 0

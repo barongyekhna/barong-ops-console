@@ -304,6 +304,12 @@ function isTechnicalErrorMessage(message: string) {
   return false;
 }
 
+/** 绕开 apiRequest 自己发请求的地方(远程桌面的诊断补传)也要带上同一个会话头。 */
+export function sessionTokenHeaders(): Record<string, string> {
+  const token = storedSessionToken();
+  return token ? { [SESSION_TOKEN_HEADER]: token } : {};
+}
+
 function storedSessionToken() {
   if (typeof window === "undefined") {
     return null;

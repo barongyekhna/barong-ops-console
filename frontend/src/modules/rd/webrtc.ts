@@ -1,6 +1,7 @@
 "use client";
 
-import { getRdIceConfig, pushRdSignal } from "./api";
+import { getRdIceConfig, pushRdSignal, withRdRetry } from "./api";
+import { rdTrace, rdTraceError, requestQueueSnapshot } from "./diagnostics";
 import { encodeInputEvent, type RdInputEvent } from "./input-protocol";
 import { toIceServers } from "./types";
 
@@ -21,9 +22,20 @@ export type RdConnectionPhase =
   | "failed"
   | "closed";
 
+/** 点完同意之后,多久画面还没通就认定这次失败、主动收场。
+ *
+ * 不设这个,对方的 answer 一直不来时 RTCPeerConnection 会永远停在 new,页面就
+ * 永远挂着「连接中」。比后端的握手超时(90 秒)短,好让前端先把话说清楚。
+ */
+export const RD_HANDSHAKE_TIMEOUT_MS = 45_000;
+
+/** 失败时告诉人卡在哪一步,别只有一句「连接失败」。 */
+export type RdFailureStage = "local" | "signal" | "no_answer" | "ice";
+
 export type RdControllerHandlers = {
   onStream: (stream: MediaStream) => void;
   onPhase: (phase: RdConnectionPhase, detail?: string) => void;
+  onFailed: (stage: RdFailureStage) => void;
 };
 
 export class RdController {
@@ -35,16 +47,65 @@ export class RdController {
   /** 对方的 answer 还没来之前收到的 candidate 先存着,不能直接喂进去。 */
   private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
   private remoteDescriptionSet = false;
+  private answered = false;
+  private watchdog: number | null = null;
 
   constructor(sessionId: string, handlers: RdControllerHandlers) {
     this.sessionId = sessionId;
     this.handlers = handlers;
   }
 
+  private trace(step: string, detail: Record<string, unknown> = {}): void {
+    rdTrace(`ctl.${step}`, detail, this.sessionId);
+  }
+
   async start(): Promise<void> {
-    const config = await getRdIceConfig(this.sessionId);
-    const pc = new RTCPeerConnection({ iceServers: toIceServers(config) });
+    this.trace("start", requestQueueSnapshot());
+    this.watchdog = window.setTimeout(() => {
+      if (this.closed || this.pc?.connectionState === "connected") {
+        return;
+      }
+      this.trace("watchdog", {
+        answered: this.answered,
+        conn: this.pc?.connectionState ?? null,
+        ice: this.pc?.iceConnectionState ?? null,
+        ...requestQueueSnapshot(),
+      });
+      this.fail(this.answered ? "ice" : "no_answer");
+    }, RD_HANDSHAKE_TIMEOUT_MS);
+
+    let config;
+    try {
+      config = await withRdRetry(
+        () => getRdIceConfig(this.sessionId),
+        () => this.closed,
+        { sessionId: this.sessionId, step: "ctl.ice_config" },
+      );
+    } catch {
+      this.fail("signal");
+      return;
+    }
+    if (this.closed) {
+      return;
+    }
+    const iceServers = toIceServers(config);
+    this.trace("pc_create", {
+      servers: iceServers.map((server) =>
+        (Array.isArray(server.urls) ? server.urls : [server.urls])
+          .map((url) => url.split(":")[0])
+          .join(","),
+      ),
+    });
+    let pc: RTCPeerConnection;
+    try {
+      pc = new RTCPeerConnection({ iceServers });
+    } catch (error) {
+      rdTraceError("ctl.pc_create_fail", error, {}, this.sessionId);
+      this.fail("local");
+      return;
+    }
     this.pc = pc;
+    this.trace("pc_created");
 
     pc.addTransceiver("video", { direction: "recvonly" });
     const input = pc.createDataChannel("input", { ordered: true });
@@ -57,12 +118,22 @@ export class RdController {
       }
     };
 
+    pc.onicegatheringstatechange = () =>
+      this.trace("gathering", { state: pc.iceGatheringState });
+    pc.oniceconnectionstatechange = () =>
+      this.trace("ice_state", { state: pc.iceConnectionState });
     pc.onicecandidate = (event) => {
       if (event.candidate && !this.closed) {
-        void pushRdSignal(
-          this.sessionId,
-          "ice",
-          JSON.stringify(event.candidate.toJSON()),
+        // 只记类型和协议,不记地址
+        this.trace("cand_local", {
+          protocol: event.candidate.protocol,
+          type: event.candidate.type,
+        });
+        const candidate = JSON.stringify(event.candidate.toJSON());
+        void withRdRetry(
+          () => pushRdSignal(this.sessionId, "ice", candidate),
+          () => this.closed,
+          { sessionId: this.sessionId, step: "ctl.cand_post" },
         ).catch(() => {
           // 单条 candidate 发失败不该弄垮整条连接,ICE 本来就是尽力而为
         });
@@ -74,19 +145,58 @@ export class RdController {
         return;
       }
       const state = pc.connectionState;
+      this.trace("conn_state", { state });
       if (state === "connected") {
+        this.clearWatchdog();
         this.handlers.onPhase("connected");
       } else if (state === "failed") {
-        this.handlers.onPhase("failed", "通路没打通。");
+        this.fail("ice");
       } else if (state === "disconnected" || state === "closed") {
         this.handlers.onPhase("closed");
       }
     };
 
     this.handlers.onPhase("negotiating");
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await pushRdSignal(this.sessionId, "offer", JSON.stringify(offer));
+    let offer: RTCSessionDescriptionInit;
+    try {
+      const startedAt = Date.now();
+      offer = await pc.createOffer();
+      this.trace("offer_created", { ms: Date.now() - startedAt });
+      await pc.setLocalDescription(offer);
+      this.trace("local_set", { ms: Date.now() - startedAt });
+    } catch (error) {
+      rdTraceError("ctl.offer_create_fail", error, {}, this.sessionId);
+      this.fail("local");
+      return;
+    }
+    if (this.closed) {
+      return;
+    }
+    try {
+      await withRdRetry(
+        () => pushRdSignal(this.sessionId, "offer", JSON.stringify(offer)),
+        () => this.closed,
+        { sessionId: this.sessionId, step: "ctl.offer_post" },
+      );
+    } catch {
+      this.fail("signal");
+    }
+  }
+
+  private fail(stage: RdFailureStage): void {
+    if (this.closed) {
+      return;
+    }
+    this.clearWatchdog();
+    this.trace("fail", { stage, ...requestQueueSnapshot() });
+    this.handlers.onFailed(stage);
+  }
+
+  private clearWatchdog(): void {
+    if (this.watchdog !== null) {
+      window.clearTimeout(this.watchdog);
+      this.watchdog = null;
+    }
   }
 
   /** 收到对方递来的信封。SSE 那边收一条就喂一条进来。 */
@@ -96,8 +206,21 @@ export class RdController {
       return;
     }
     if (kind === "answer") {
+      // 同一场只认第一个 answer。重复的(流重开时重放、对方重试)再喂进去会把
+      // 已经稳定的连接状态打乱
+      if (this.answered) {
+        return;
+      }
+      this.answered = true;
+      this.trace("answer_received");
       const description = JSON.parse(payload) as RTCSessionDescriptionInit;
-      await pc.setRemoteDescription(description);
+      try {
+        await pc.setRemoteDescription(description);
+      } catch (error) {
+        rdTraceError("ctl.remote_set_fail", error, {}, this.sessionId);
+        throw error;
+      }
+      this.trace("remote_set");
       this.remoteDescriptionSet = true;
       // answer 到了才能把之前攒着的 candidate 喂进去
       for (const candidate of this.pendingRemoteCandidates) {
@@ -136,7 +259,9 @@ export class RdController {
     if (this.closed) {
       return;
     }
+    this.trace("close", { conn: this.pc?.connectionState ?? null });
     this.closed = true;
+    this.clearWatchdog();
     try {
       this.input?.close();
     } catch {

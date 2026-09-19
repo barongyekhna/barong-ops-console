@@ -19,6 +19,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from time import monotonic
+from uuid import UUID
 
 from fastapi import Request
 
@@ -52,12 +53,22 @@ def _session_payload(session) -> dict[str, object]:
 
 
 async def rd_stream(
-    *, request: Request, session_id: str, actor_user_id: int
+    *,
+    request: Request,
+    session_id: str,
+    actor_user_id: int,
+    resume_after_signal_id: int = 0,
 ) -> AsyncIterator[str]:
+    """``resume_after_signal_id``:上一条流已经递到的最后一条信令 id。
+
+    流 55 秒就重开一次,新流要是从 0 开始,会把 offer/answer 整套重放一遍——被控端
+    收到第二个 offer 就会再抓一次屏、再答一次,把已经通了的连接搅乱。信令 id 是全局
+    自增的,一个游标就够。
+    """
     deadline = monotonic() + STREAM_LIFETIME_SECONDS
-    # 已经推过的:会话按「id → 上次推的状态」,信令按游标
+    # 已经推过的:会话按「id → 上次推的状态」
     seen_states: dict[str, str] = {}
-    signal_cursor: dict[str, int] = {}
+    signal_cursor = max(int(resume_after_signal_id), 0)
     announced_requests: set[str] = set()
     poll = IDLE_POLL_SECONDS
 
@@ -76,6 +87,7 @@ async def rd_stream(
                     return
 
                 busy = False
+                frames: list[str] = []
 
                 # 1) 要在我的机器上弹框的请求
                 for pending in service.pending_requests_for_owner(live_db, user=user):
@@ -83,31 +95,50 @@ async def rd_stream(
                     key = str(pending.id)
                     if key not in announced_requests:
                         announced_requests.add(key)
-                        yield _frame("request", _session_payload(pending))
+                        frames.append(_frame("request", _session_payload(pending)))
 
                 # 2) 我参与的会话的状态变化 + 3) 对方递来的信令
+                live_keys: set[str] = set()
+                signals = []
                 for sess in service.sessions_for_party(live_db, user=user):
                     key = str(sess.id)
-                    if sess.state in (STATE_REQUESTED, STATE_CONSENTED, STATE_ACTIVE):
-                        busy = True
+                    live_keys.add(key)
+                    busy = True
                     if seen_states.get(key) != sess.state:
                         seen_states[key] = sess.state
-                        yield _frame("session", _session_payload(sess))
+                        frames.append(_frame("session", _session_payload(sess)))
                     if sess.state in (STATE_CONSENTED, STATE_ACTIVE):
-                        after = signal_cursor.get(key, 0)
-                        for sig in service.pull_signals(
-                            live_db, user=user, session_id=sess.id, after_id=after
-                        ):
-                            signal_cursor[key] = sig.id
-                            yield _frame(
-                                "signal",
-                                {
-                                    "session_id": key,
-                                    "id": sig.id,
-                                    "kind": sig.kind,
-                                    "payload": sig.payload,
-                                },
+                        signals.extend(
+                            service.pull_signals(
+                                live_db,
+                                user=user,
+                                session_id=sess.id,
+                                after_id=signal_cursor,
                             )
+                        )
+
+                # 刚掉出活状态的会话(被拒/超时/挂断)也要告诉对方一声。
+                # 上面那个查询只拿活会话,不补这一步,两端都永远等不到「结束了」。
+                for key in [k for k in seen_states if k not in live_keys]:
+                    del seen_states[key]
+                    gone = service.find_session(live_db, UUID(key))
+                    if gone is not None:
+                        frames.append(_frame("session", _session_payload(gone)))
+
+                # 多个会话的信令按全局 id 排好再发,游标才能只记一个数
+                for sig in sorted(signals, key=lambda item: item.id):
+                    signal_cursor = max(signal_cursor, sig.id)
+                    frames.append(
+                        _frame(
+                            "signal",
+                            {
+                                "session_id": str(sig.session_id),
+                                "id": sig.id,
+                                "kind": sig.kind,
+                                "payload": sig.payload,
+                            },
+                        )
+                    )
 
                 poll = BUSY_POLL_SECONDS if busy else IDLE_POLL_SECONDS
         except InvalidSessionError:
@@ -115,3 +146,6 @@ async def rd_stream(
         except Exception:
             # 流里出任何岔子都直接关,让客户端重连重来,绝不把半截状态喂下去
             return
+        # 读库的会话关掉之后再往外吐:客户端收得慢也不会把一条库连接挂着
+        for frame in frames:
+            yield frame

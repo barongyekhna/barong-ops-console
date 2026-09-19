@@ -190,6 +190,7 @@ from ..modules.amz_series.models import (
     AmzCompetitorSnapshot,
 )
 from ..modules.rd_series.models import (
+    RdClientTrace,
     RdDevice,
     RdSession,
     RdSignal,
@@ -339,6 +340,7 @@ __all__ = [
     "AmzStoreGrant",
     "AmzSuggestion",
     "AmzTransaction",
+    "RdClientTrace",
     "RdDevice",
     "RdSession",
     "RdSignal",

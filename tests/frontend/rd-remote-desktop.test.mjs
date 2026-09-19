@@ -353,3 +353,79 @@ test("CSP lets WebRTC reach the ICE servers at all", () => {
   // 换节点时必须两处一起改,注释里要留着这条提醒
   assert.match(config, /RD_TURN_URLS/);
 });
+
+// ---------------------------------------------------------------------------
+// 2026-09-18 真机首测:点完同意,发起端的请求再也没到服务器,offer 一条没送出去,整场作废,
+// 连「结束」都没报上去,被控机被一条死会话占住。下面几条防这一类回潮。
+// ---------------------------------------------------------------------------
+const controllerSource = readFileSync("frontend/src/modules/rd/webrtc.ts", "utf8");
+const apiSource = readFileSync("frontend/src/modules/rd/api.ts", "utf8");
+
+test("offer and answer survive a network blip instead of dying on one try", () => {
+  assert.match(apiSource, /export async function withRdRetry/);
+  assert.match(
+    controllerSource,
+    /withRdRetry\(\s*\n?\s*\(\) => pushRdSignal\(this\.sessionId, "offer"/,
+  );
+  assert.match(agentSource, /withRdRetry\(\s*\n?\s*\(\) => pushRdSignal\(this\.sessionId, "answer"/);
+});
+
+test("the controller gives up on a dead handshake instead of spinning forever", () => {
+  assert.match(controllerSource, /export const RD_HANDSHAKE_TIMEOUT_MS/);
+  assert.match(controllerSource, /this\.fail\(this\.answered \? "ice" : "no_answer"\)/);
+});
+
+test("ending a session is reported with retries so the target is never left occupied", () => {
+  assert.match(dashboard, /withRdRetry\(\(\) => endRdSession\(sessionId, reason\)/);
+  assert.doesNotMatch(dashboard, /await endRdSession\(/);
+});
+
+test("each side answers a given session only once", () => {
+  // 流重开会重放,对方也会重试;第二个 offer 要是也答,就会再抓一次屏把连接挤掉
+  assert.match(agentSource, /if \(this\.offerTaken\) \{\s*\n\s*return;/);
+  assert.match(controllerSource, /if \(this\.answered\) \{\s*\n\s*return;/);
+  assert.match(dashboard, /seenSignalIdsRef\.current\.has\(data\.id\)/);
+});
+
+test("a reopened signalling stream resumes after the last signal it delivered", () => {
+  assert.match(apiSource, /\?after=/);
+  assert.match(dashboard, /rdStreamUrl\(lastSignalIdRef\.current\)/);
+});
+
+test("a pending request never pops the native consent dialog twice", () => {
+  assert.match(dashboard, /promptedRef\.current\.has\(parsed\.id\)/);
+});
+
+test("the controlled side tears down (and drops the red bar) when the session ends", () => {
+  assert.match(dashboard, /agentSessionIdRef\.current === item\.id/);
+  assert.match(dashboard, /await bridge\?\.stop\(\)/);
+  // 同意之后对方一直没来,也要自己收摊
+  assert.match(dashboard, /RD_HANDSHAKE_TIMEOUT_MS \+ 15_000/);
+});
+
+// ---------------------------------------------------------------------------
+// 黑匣子:本机侧先记、事后补传,且不能被页面自己卡住的请求层连累
+// ---------------------------------------------------------------------------
+const diagnosticsSource = readFileSync("frontend/src/modules/rd/diagnostics.ts", "utf8");
+const proxySource = readFileSync("frontend/src/app/api/backend/[...path]/route.ts", "utf8");
+
+test("the black box uploads with plain fetch, never through the shared request queue", () => {
+  assert.match(diagnosticsSource, /await fetch\(DIAGNOSTICS_URL/);
+  assert.doesNotMatch(diagnosticsSource, /import \{[^}]*apiRequest/);
+  assert.doesNotMatch(diagnosticsSource, /apiRequest\(/);
+});
+
+test("the black box writes locally before it tries the network", () => {
+  assert.match(diagnosticsSource, /localStorage\.setItem\(STORAGE_KEY/);
+  assert.match(diagnosticsSource, /addEventListener\("online"/);
+});
+
+test("the black box never records SDP or candidate addresses", () => {
+  for (const source of [controllerSource, agentSource]) {
+    assert.doesNotMatch(source, /trace\([^)]*(sdp|\.address|candidate\.candidate)/i);
+  }
+});
+
+test("the proxy lets the diagnostics endpoint through (POST only)", () => {
+  assert.match(proxySource, /path\[1\] === "diagnostics"\) \{\s*\n\s*return method === "POST";/);
+});

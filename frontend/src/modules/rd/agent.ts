@@ -1,6 +1,7 @@
 "use client";
 
-import { getRdIceConfig, pushRdSignal } from "./api";
+import { getRdIceConfig, pushRdSignal, withRdRetry } from "./api";
+import { rdTrace, rdTraceError } from "./diagnostics";
 import { parseInputEvent } from "./input-protocol";
 import type { RdNativeBridge } from "./native";
 import { toIceServers } from "./types";
@@ -30,6 +31,7 @@ export class RdAgent {
   private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
   private remoteDescriptionSet = false;
   private droppedInputs = 0;
+  private offerTaken = false;
 
   constructor(
     sessionId: string,
@@ -41,13 +43,33 @@ export class RdAgent {
     this.handlers = handlers;
   }
 
+  private trace(step: string, detail: Record<string, unknown> = {}): void {
+    rdTrace(`agt.${step}`, detail, this.sessionId);
+  }
+
   /** 收到对方递来的信封。offer 到了才真正开始抓屏。 */
   async accept(kind: string, payload: string): Promise<void> {
     if (this.closed) {
       return;
     }
     if (kind === "offer") {
-      await this.answer(JSON.parse(payload) as RTCSessionDescriptionInit);
+      // 一场只答一次。第二个 offer(流重开重放 / 对方重试)要是也答,就会再抓一次
+      // 屏、再建一条连接,把正在用的那条挤掉
+      if (this.offerTaken) {
+        return;
+      }
+      this.offerTaken = true;
+      this.trace("offer_received");
+      try {
+        await this.answer(JSON.parse(payload) as RTCSessionDescriptionInit);
+      } catch (error) {
+        rdTraceError("agt.answer_fail", error, {}, this.sessionId);
+        // 抓屏被拒 / answer 送不出去:这场就算失败,收摊并把红条撤掉,
+        // 不能让被控机顶着「正在被远程」一直挂着
+        if (!this.closed) {
+          this.handlers.onEnded("connection_lost");
+        }
+      }
       return;
     }
     if (kind === "ice") {
@@ -61,16 +83,30 @@ export class RdAgent {
   }
 
   private async answer(offer: RTCSessionDescriptionInit): Promise<void> {
-    const config = await getRdIceConfig(this.sessionId);
+    const config = await withRdRetry(
+      () => getRdIceConfig(this.sessionId),
+      () => this.closed,
+      { sessionId: this.sessionId, step: "agt.ice_config" },
+    );
     const pc = new RTCPeerConnection({ iceServers: toIceServers(config) });
     this.pc = pc;
+    this.trace("pc_created");
+    pc.onicegatheringstatechange = () =>
+      this.trace("gathering", { state: pc.iceGatheringState });
+    pc.oniceconnectionstatechange = () =>
+      this.trace("ice_state", { state: pc.iceConnectionState });
 
     pc.onicecandidate = (event) => {
       if (event.candidate && !this.closed) {
-        void pushRdSignal(
-          this.sessionId,
-          "ice",
-          JSON.stringify(event.candidate.toJSON()),
+        this.trace("cand_local", {
+          protocol: event.candidate.protocol,
+          type: event.candidate.type,
+        });
+        const candidate = JSON.stringify(event.candidate.toJSON());
+        void withRdRetry(
+          () => pushRdSignal(this.sessionId, "ice", candidate),
+          () => this.closed,
+          { sessionId: this.sessionId, step: "agt.cand_post" },
         ).catch(() => undefined);
       }
     };
@@ -95,6 +131,7 @@ export class RdAgent {
       if (this.closed) {
         return;
       }
+      this.trace("conn_state", { state: pc.connectionState });
       if (pc.connectionState === "connected") {
         this.handlers.onLive();
       } else if (
@@ -106,10 +143,12 @@ export class RdAgent {
     };
 
     // 屏幕由主进程决定给不给,这里拿不到就直接收摊
+    this.trace("capture_start");
     const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: false,
       video: true,
     });
+    this.trace("capture_ok", { tracks: stream.getTracks().length });
     this.stream = stream;
     for (const track of stream.getTracks()) {
       // 被控的人从系统里自己停掉共享,也要当成挂断
@@ -126,7 +165,18 @@ export class RdAgent {
 
     const description = await pc.createAnswer();
     await pc.setLocalDescription(description);
-    await pushRdSignal(this.sessionId, "answer", JSON.stringify(description));
+    this.trace("answer_created");
+    const answer = JSON.stringify(description);
+    await withRdRetry(
+      () => pushRdSignal(this.sessionId, "answer", answer),
+      () => this.closed,
+      { sessionId: this.sessionId, step: "agt.answer_post" },
+    );
+  }
+
+  /** 对方的 offer 到过没有。被控端的看门狗靠它判断「同意之后对方到底来没来」。 */
+  get hasOffer(): boolean {
+    return this.offerTaken;
   }
 
   get droppedInputCount(): number {
@@ -137,6 +187,7 @@ export class RdAgent {
     if (this.closed) {
       return;
     }
+    this.trace("close", { conn: this.pc?.connectionState ?? null });
     this.closed = true;
     for (const track of this.stream?.getTracks() ?? []) {
       try {

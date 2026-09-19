@@ -8,7 +8,14 @@ import { c19SseReconnectDelay } from "@/modules/c19/C19EventStreamRecovery";
 
 import { RdAgent } from "./agent";
 import {
-  RD_STREAM_PATH,
+  installRdDiagnostics,
+  rdTrace,
+  rdTraceError,
+  requestQueueSnapshot,
+  startRdTicks,
+  stopRdTicks,
+} from "./diagnostics";
+import {
   activateRdSession,
   endRdSession,
   heartbeatRdDevice,
@@ -16,8 +23,9 @@ import {
   listRdSessions,
   registerRdDevice,
   requestRdSession,
+  rdStreamUrl,
   respondRdSession,
-  setRdUnattended,
+  withRdRetry,
 } from "./api";
 import { getRdNativeBridge, type RdNativeBridge } from "./native";
 import { RemoteViewer } from "./RemoteViewer";
@@ -28,7 +36,12 @@ import {
   type RdDevice,
   type RdSession,
 } from "./types";
-import { RdController, type RdConnectionPhase } from "./webrtc";
+import {
+  RD_HANDSHAKE_TIMEOUT_MS,
+  RdController,
+  type RdConnectionPhase,
+  type RdFailureStage,
+} from "./webrtc";
 
 /** RD 系列 · 远程桌面主面板。一个页面同时扮演两个角色。
  *
@@ -45,6 +58,32 @@ import { RdController, type RdConnectionPhase } from "./webrtc";
 
 const DEVICE_POLL_MS = 15_000;
 const HEARTBEAT_MS = 30_000;
+const TERMINAL_STATES: ReadonlySet<string> = new Set(["denied", "expired", "ended"]);
+
+/** 失败要说清楚卡在哪一步——「连接失败」四个字没法据此做任何事。 */
+function failureNotice(stage: RdFailureStage): string {
+  if (stage === "local") {
+    return "连接没建起来：这台电脑上的浏览器组件没能准备好连接。关掉客户端重开再试；反复不成请告诉管理员。";
+  }
+  if (stage === "signal") {
+    return "连接没建起来：这台电脑的请求没能送到服务器（网络中断或连接卡住）。直接再点一次；还不行就关掉客户端重开。";
+  }
+  if (stage === "no_answer") {
+    return "连接没建起来：对方同意了，但那台电脑一直没回应握手。请对方确认控制台客户端开着、网络正常，再点一次。";
+  }
+  return "连接没建起来：两台电脑之间的通路没打通（直连和中转都没成）。可以再试一次；反复不成请把这句话发给管理员。";
+}
+
+/** 结束的回报也要送到——送不到的话被控机会被一条死会话占住。 */
+function reportEnd(
+  sessionId: string,
+  reason: "controller_left" | "agent_kicked" | "connection_lost",
+): Promise<void> {
+  return withRdRetry(() => endRdSession(sessionId, reason), undefined, {
+    sessionId,
+    step: "end_post",
+  }).catch(() => undefined);
+}
 
 export function RemoteDesktopDashboard() {
   const { user } = useAuth();
@@ -61,10 +100,20 @@ export function RemoteDesktopDashboard() {
 
   const controllerRef = useRef<RdController | null>(null);
   const agentRef = useRef<RdAgent | null>(null);
+  /** 被控端这一侧正在服务的会话。和控制端的 session 分开记,两个身份可以同时成立。 */
+  const agentSessionIdRef = useRef<string | null>(null);
+  const agentWatchdogRef = useRef<number | null>(null);
+  /** 已经弹过原生同意框的会话。流 55 秒重开一次会把还没答的请求再推一遍,不能弹第二个框。 */
+  const promptedRef = useRef<Set<string>>(new Set());
+  /** 已经收到的最后一条信令 id:重开流时带上,后端就不重放。 */
+  const lastSignalIdRef = useRef(0);
+  const seenSignalIdsRef = useRef<Set<number>>(new Set());
   const bridgeRef = useRef<RdNativeBridge | null>(null);
   const selfDeviceIdRef = useRef<string | null>(null);
   const sessionRef = useRef<RdSession | null>(null);
   sessionRef.current = session;
+
+  const onTerminalRef = useRef<((item: RdSession) => void) | null>(null);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -74,14 +123,33 @@ export function RemoteDesktopDashboard() {
       ]);
       setDevices(nextDevices);
       setLedger(nextLedger);
+      // SSE 万一漏了「结束了」这一条,台账是兜底:自己正挂着的会话在台账上已经是终态,
+      // 就地收摊
+      const byId = new Map(nextLedger.map((item) => [item.id, item]));
+      const mine = sessionRef.current;
+      const mineNow = mine ? byId.get(mine.id) : undefined;
+      if (mineNow && TERMINAL_STATES.has(mineNow.state)) {
+        onTerminalRef.current?.(mineNow);
+      }
+      const agentId = agentSessionIdRef.current;
+      const agentNow = agentId ? byId.get(agentId) : undefined;
+      if (agentNow && TERMINAL_STATES.has(agentNow.state)) {
+        onTerminalRef.current?.(agentNow);
+      }
       const selfId = selfDeviceIdRef.current;
       if (selfId) {
         setSelfDevice(nextDevices.find((item) => item.id === selfId) ?? null);
       }
-    } catch {
+    } catch (error) {
       // 刷新失败保留上一份数据,不要把列表清空成一片白
+      if (!signal?.aborted) {
+        rdTraceError("refresh_fail", error, requestQueueSnapshot());
+      }
     }
   }, []);
+
+  // ---- 黑匣子:上次没传完的先补传,之后每一步都先记本地再传 ----
+  useEffect(() => installRdDiagnostics(), []);
 
   // ---- 这台机器自己登记上来(只有客户端里跑才有这一步) ----
   useEffect(() => {
@@ -113,12 +181,16 @@ export function RemoteDesktopDashboard() {
         }
         selfDeviceIdRef.current = registered.id;
         setSelfDevice(registered);
+        rdTrace("device_registered", { device_id: registered.id });
         const beat = () => {
-          void heartbeatRdDevice(registered.id, "0.4.0").catch(() => undefined);
+          void heartbeatRdDevice(registered.id, "0.4.0").catch((error) =>
+            rdTraceError("heartbeat_fail", error, requestQueueSnapshot()),
+          );
         };
         beat();
         timer = window.setInterval(beat, HEARTBEAT_MS);
-      } catch {
+      } catch (error) {
+        rdTraceError("device_register_fail", error);
         setNativeReason("这台机器没能登记到远程桌面，刷新页面再试一次。");
       }
     })();
@@ -142,6 +214,9 @@ export function RemoteDesktopDashboard() {
   }, [refresh]);
 
   const teardown = useCallback(() => {
+    if (!agentRef.current) {
+      stopRdTicks();
+    }
     controllerRef.current?.close();
     controllerRef.current = null;
     agentRef.current?.close();
@@ -154,13 +229,11 @@ export function RemoteDesktopDashboard() {
   const hangUp = useCallback(
     async (reason: "controller_left" | "connection_lost") => {
       const current = sessionRef.current;
+      rdTrace("hang_up", { reason }, current?.id ?? null);
       teardown();
       if (current) {
-        try {
-          await endRdSession(current.id, reason);
-        } catch {
-          // 台账那边收不收得到都不该拦着本地断开
-        }
+        // 台账那边收不收得到都不该拦着本地断开;但要尽力送到,否则对方机器被占住
+        await reportEnd(current.id, reason);
       }
       void refresh();
     },
@@ -169,6 +242,8 @@ export function RemoteDesktopDashboard() {
 
   const beginMedia = useCallback(
     async (target: RdSession) => {
+      rdTrace("begin_media", { state: target.state }, target.id);
+      startRdTicks(target.id);
       const controller = new RdController(target.id, {
         onPhase: (next, detail) => {
           setPhase(next);
@@ -176,24 +251,57 @@ export function RemoteDesktopDashboard() {
             setNotice(detail);
           }
           if (next === "connected") {
-            void activateRdSession(target.id).catch(() => undefined);
+            void withRdRetry(() => activateRdSession(target.id)).catch(
+              () => undefined,
+            );
             void refresh();
           }
-          if (next === "failed") {
-            void hangUp("connection_lost");
-          }
+        },
+        onFailed: (stage) => {
+          rdTrace("notice_failed", { stage }, target.id);
+          setNotice(failureNotice(stage));
+          void hangUp("connection_lost");
         },
         onStream: (incomingStream) => setStream(incomingStream),
       });
       controllerRef.current = controller;
       try {
         await controller.start();
-      } catch {
-        setNotice("建立连接失败。");
+      } catch (error) {
+        rdTraceError("begin_media_throw", error, {}, target.id);
+        setNotice(failureNotice("local"));
         void hangUp("connection_lost");
       }
     },
     [hangUp, refresh],
+  );
+
+  /** 被控端:收摊。先把结束原因报上去,再让主进程撤红条、收回屏幕和键鼠。 */
+  const stopAgent = useCallback(
+    (reason: "agent_kicked" | "connection_lost" | null) => {
+      const sessionId = agentSessionIdRef.current;
+      rdTrace("agent_stop", { reason }, sessionId);
+      if (!controllerRef.current) {
+        stopRdTicks();
+      }
+      if (agentWatchdogRef.current !== null) {
+        window.clearTimeout(agentWatchdogRef.current);
+        agentWatchdogRef.current = null;
+      }
+      agentRef.current?.close();
+      agentRef.current = null;
+      agentSessionIdRef.current = null;
+      const bridge = bridgeRef.current;
+      void (async () => {
+        if (sessionId && reason) {
+          await reportEnd(sessionId, reason);
+        }
+        // 主进程那边也会报一次「结束」,会话已经是终态时后端直接忽略
+        await bridge?.stop().catch(() => undefined);
+        void refresh();
+      })();
+    },
+    [refresh],
   );
 
   /** 被控端:开始交出屏幕。主进程已经批准(或已自行核实)过了才会走到这。 */
@@ -203,21 +311,57 @@ export function RemoteDesktopDashboard() {
       if (!bridge || agentRef.current) {
         return;
       }
-      agentRef.current = new RdAgent(sessionId, bridge, {
-        onEnded: () => {
-          agentRef.current?.close();
-          agentRef.current = null;
-          void bridge.stop().catch(() => undefined);
-          void refresh();
+      agentSessionIdRef.current = sessionId;
+      rdTrace("begin_agent", {}, sessionId);
+      startRdTicks(sessionId);
+      const agent = new RdAgent(sessionId, bridge, {
+        onEnded: (reason) => {
+          stopAgent(reason === "agent_kicked" ? "agent_kicked" : "connection_lost");
         },
         onLive: () => {
-          void activateRdSession(sessionId).catch(() => undefined);
+          if (agentWatchdogRef.current !== null) {
+            window.clearTimeout(agentWatchdogRef.current);
+            agentWatchdogRef.current = null;
+          }
+          void withRdRetry(() => activateRdSession(sessionId)).catch(
+            () => undefined,
+          );
           void refresh();
         },
       });
+      agentRef.current = agent;
+      // 同意了,对方却一直没来(发起端掉线 / 关了页面):不能让这台机器顶着红条干等
+      agentWatchdogRef.current = window.setTimeout(() => {
+        agentWatchdogRef.current = null;
+        if (agentRef.current === agent) {
+          rdTrace("agent_watchdog", { has_offer: agent.hasOffer }, sessionId);
+          stopAgent("connection_lost");
+        }
+      }, RD_HANDSHAKE_TIMEOUT_MS + 15_000);
     },
-    [refresh],
+    [refresh, stopAgent],
   );
+
+  // 会话进了终态:控制端收画面、被控端撤红条。SSE 和台账轮询两条路都走这里
+  onTerminalRef.current = (item: RdSession) => {
+    rdTrace("terminal", { reason: item.end_reason, state: item.state }, item.id);
+    if (agentSessionIdRef.current === item.id) {
+      stopAgent(null);
+    }
+    const current = sessionRef.current;
+    if (current && current.id === item.id) {
+      if (item.state === "denied") {
+        setNotice("对方拒绝了这次请求。");
+      } else if (item.state === "expired") {
+        setNotice("对方一直没有回应，请求已经超时。");
+      } else if (item.end_reason === "handshake_failed") {
+        setNotice(failureNotice("no_answer"));
+      } else if (controllerRef.current) {
+        setNotice("会话已经结束。");
+      }
+      teardown();
+    }
+  };
 
   // ---- SSE:有人要连我 / 会话状态变了 / 对方递来信令 ----
   useEffect(() => {
@@ -230,8 +374,11 @@ export function RemoteDesktopDashboard() {
       if (stopped) {
         return;
       }
-      source = new EventSource(RD_STREAM_PATH, { withCredentials: true });
+      source = new EventSource(rdStreamUrl(lastSignalIdRef.current), {
+        withCredentials: true,
+      });
       source.onopen = () => {
+        rdTrace("sse_open", { after: lastSignalIdRef.current, failures });
         failures = 0;
       };
 
@@ -242,8 +389,13 @@ export function RemoteDesktopDashboard() {
         if (!parsed) {
           return;
         }
+        rdTrace("sse_request", {}, parsed.id);
         const bridge = bridgeRef.current;
         if (bridge && parsed.device_id === selfDeviceIdRef.current) {
+          if (promptedRef.current.has(parsed.id)) {
+            return;
+          }
+          promptedRef.current.add(parsed.id);
           // 弹的是主进程的原生框。同意与否由主进程直接回报给控制台，网页
           // 不经手，也无从声称。
           void bridge
@@ -253,12 +405,13 @@ export function RemoteDesktopDashboard() {
               sessionId: parsed.id,
             })
             .then((result) => {
+              rdTrace("consent_result", { approved: result.approved }, parsed.id);
               if (result.approved) {
                 beginAgent(parsed.id);
               }
               void refresh();
             })
-            .catch(() => undefined);
+            .catch((error) => rdTraceError("consent_fail", error, {}, parsed.id));
           return;
         }
         // 不在被控机上：只能看见和拒绝
@@ -274,6 +427,7 @@ export function RemoteDesktopDashboard() {
         if (!parsed) {
           return;
         }
+        rdTrace("sse_session", { state: parsed.state }, parsed.id);
         setIncoming((prev) =>
           parsed.state === "requested"
             ? prev
@@ -300,22 +454,19 @@ export function RemoteDesktopDashboard() {
           return;
         }
 
+        if (TERMINAL_STATES.has(parsed.state)) {
+          onTerminalRef.current?.(parsed);
+          void refresh();
+          return;
+        }
+
         const current = sessionRef.current;
         if (!current || current.id !== parsed.id) {
           void refresh();
           return;
         }
         setSession(parsed);
-        if (parsed.state === "denied") {
-          setNotice("对方拒绝了这次请求。");
-          teardown();
-        } else if (parsed.state === "expired") {
-          setNotice("对方一直没有回应，请求已经超时。");
-          teardown();
-        } else if (parsed.state === "ended") {
-          setNotice("会话已经结束。");
-          teardown();
-        } else if (parsed.state === "consented" && !controllerRef.current) {
+        if (parsed.state === "consented" && !controllerRef.current) {
           void beginMedia(parsed);
         }
         void refresh();
@@ -324,11 +475,21 @@ export function RemoteDesktopDashboard() {
       source.addEventListener("signal", (event) => {
         const data = JSON.parse((event as MessageEvent<string>).data) as {
           session_id: string;
+          id?: number;
           kind: string;
           payload: string;
         };
+        rdTrace("sse_signal", { id: data.id ?? null, kind: data.kind }, data.session_id);
+        if (typeof data.id === "number") {
+          // 同一条信令只喂一次
+          if (seenSignalIdsRef.current.has(data.id)) {
+            return;
+          }
+          seenSignalIdsRef.current.add(data.id);
+          lastSignalIdRef.current = Math.max(lastSignalIdRef.current, data.id);
+        }
         const agent = agentRef.current;
-        if (agent) {
+        if (agent && agentSessionIdRef.current === data.session_id) {
           void agent.accept(data.kind, data.payload).catch(() => undefined);
           return;
         }
@@ -339,6 +500,11 @@ export function RemoteDesktopDashboard() {
       });
 
       source.onerror = () => {
+        rdTrace("sse_error", {
+          failures: failures + 1,
+          online: navigator.onLine,
+          state: source?.readyState ?? null,
+        });
         source?.close();
         source = null;
         if (stopped) {
@@ -367,7 +533,9 @@ export function RemoteDesktopDashboard() {
         return;
       }
       try {
+        rdTrace("connect_click", { device_id: device.id, ...requestQueueSnapshot() });
         const created = await requestRdSession(device.id);
+        rdTrace("session_requested", { state: created.state }, created.id);
         setSession(created);
         sessionRef.current = created;
         if (created.state === "consented") {
@@ -378,6 +546,7 @@ export function RemoteDesktopDashboard() {
         }
         void refresh();
       } catch (error) {
+        rdTraceError("connect_fail", error, requestQueueSnapshot());
         setNotice(error instanceof Error ? error.message : "发起失败。");
       }
     },

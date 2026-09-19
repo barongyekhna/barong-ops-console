@@ -397,9 +397,24 @@ def push_signal(
     return S.SignalRead.model_validate(signal)
 
 
+@router.post("/diagnostics", response_model=S.TraceAck)
+def push_diagnostics(
+    payload: S.TracePush,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> S.TraceAck:
+    """页面补传的建连步骤(黑匣子)。只收不给看,查问题直接查库。"""
+    accepted, stored = service.store_traces(
+        db, user=user, entries=[item.model_dump() for item in payload.entries]
+    )
+    db.commit()
+    return S.TraceAck(accepted=accepted, stored=stored)
+
+
 @router.get("/stream")
 def stream(
     request: Request,
+    after: Annotated[int, Query(ge=0)] = 0,
     user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """一条 SSE 喂完:有人要连我、会话状态变了、对方递来信令。"""
@@ -410,7 +425,10 @@ def stream(
         )
     return StreamingResponse(
         rd_stream(
-            request=request, session_id=session_id, actor_user_id=int(user.id)
+            request=request,
+            session_id=session_id,
+            actor_user_id=int(user.id),
+            resume_after_signal_id=after,
         ),
         media_type="text/event-stream",
         headers={

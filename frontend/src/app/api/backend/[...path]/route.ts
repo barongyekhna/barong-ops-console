@@ -1524,6 +1524,10 @@ function isAllowedRdPath(method: string, path: string[]) {
     if (path[1] === "devices" || path[1] === "stream") {
       return method === "GET";
     }
+    // POST /rd/diagnostics（页面补传的建连步骤）
+    if (path[1] === "diagnostics") {
+      return method === "POST";
+    }
     if (path[1] === "sessions") {
       return method === "GET" || method === "POST";
     }

@@ -122,3 +122,25 @@ class IceServers(BaseModel):
     turn_username: str | None = None
     turn_credential: str | None = None
     ttl: int = 0
+
+
+class TraceEntry(BaseModel):
+    """页面记下的一步。字段都截短限长:黑匣子不该变成能塞任意数据的口子。"""
+
+    client_id: str = Field(pattern=r"^[0-9a-f-]{8,36}$")
+    client_label: str = Field(default="", max_length=120)
+    seq: int = Field(ge=0, le=2_000_000_000)
+    at: datetime
+    step: str = Field(min_length=1, max_length=48, pattern=r"^[a-z0-9_.:-]+$")
+    session_id: UUID | None = None
+    detail: str = Field(default="", max_length=1000)
+
+
+class TracePush(BaseModel):
+    entries: list[TraceEntry] = Field(min_length=1, max_length=200)
+
+
+class TraceAck(BaseModel):
+    accepted: int
+    # 这批里客户端可以从本地删掉的(已入库或本来就重复的)
+    stored: int

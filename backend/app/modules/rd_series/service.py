@@ -25,7 +25,8 @@ import hmac
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from ...core.config import get_settings
@@ -35,6 +36,8 @@ from .models import (
     CONSENT_PROMPT,
     CONSENT_UNATTENDED,
     CONSENT_TIMEOUT_SECONDS,
+    END_HANDSHAKE_FAILED,
+    HANDSHAKE_TIMEOUT_SECONDS,
     DEVICE_ONLINE_WINDOW_SECONDS,
     END_MAX_DURATION,
     END_TIMEOUT,
@@ -50,7 +53,11 @@ from .models import (
     STATE_ENDED,
     STATE_EXPIRED,
     STATE_REQUESTED,
+    TRACE_MAX_ENTRIES_PER_POST,
+    TRACE_MAX_PER_USER_PER_HOUR,
+    TRACE_RETENTION_DAYS,
     TURN_CREDENTIAL_TTL_SECONDS,
+    RdClientTrace,
     RdDevice,
     RdSession,
     RdSignal,
@@ -306,6 +313,17 @@ def sweep_stale(db: Session) -> None:
         .values(state=STATE_EXPIRED, responded_at=now, ended_at=now,
                 end_reason=END_TIMEOUT)
     )
+    # 同意了但画面一直没通:判握手失败,别让一条死会话把被控机占住
+    db.execute(
+        update(RdSession)
+        .where(
+            RdSession.state == STATE_CONSENTED,
+            RdSession.started_at.is_(None),
+            RdSession.responded_at
+            < now - timedelta(seconds=HANDSHAKE_TIMEOUT_SECONDS),
+        )
+        .values(state=STATE_ENDED, ended_at=now, end_reason=END_HANDSHAKE_FAILED)
+    )
     db.execute(
         update(RdSession)
         .where(
@@ -370,6 +388,10 @@ def get_session(db: Session, session_id: UUID) -> RdSession:
     if session is None:
         raise RdError(404, "这个会话不存在。")
     return session
+
+
+def find_session(db: Session, session_id: UUID) -> RdSession | None:
+    return db.get(RdSession, session_id)
 
 
 def _assert_party(session: RdSession, user: User) -> str:
@@ -553,3 +575,52 @@ def turn_credentials(session_id: UUID) -> dict[str, object]:
         "credential": base64.b64encode(digest).decode("ascii"),
         "ttl": TURN_CREDENTIAL_TTL_SECONDS,
     }
+
+
+# ---------------------------------------------------------------------------
+# 客户端诊断黑匣子
+# ---------------------------------------------------------------------------
+def store_traces(db: Session, *, user: User, entries: list[dict]) -> tuple[int, int]:
+    """收一批页面补传的步骤。返回 (本次新入库条数, 客户端可以删掉的条数)。
+
+    ``(client_id, seq)`` 冲突直接跳过:补传重试是常态,不能重复入库。超过每人每小时
+    上限的整批拒收(返回 0, 0),客户端留着以后再传——宁可晚到,不能刷爆库。
+    """
+    now = _now()
+    db.execute(
+        delete(RdClientTrace).where(
+            RdClientTrace.received_at < now - timedelta(days=TRACE_RETENTION_DAYS)
+        )
+    )
+    recent = db.scalar(
+        select(func.count())
+        .select_from(RdClientTrace)
+        .where(
+            RdClientTrace.user_id == user.id,
+            RdClientTrace.received_at > now - timedelta(hours=1),
+        )
+    ) or 0
+    batch = entries[:TRACE_MAX_ENTRIES_PER_POST]
+    if recent + len(batch) > TRACE_MAX_PER_USER_PER_HOUR:
+        return 0, 0
+    rows = [
+        {
+            "user_id": user.id,
+            "client_id": item["client_id"],
+            "client_label": (item.get("client_label") or "")[:120],
+            "seq": item["seq"],
+            "session_id": item.get("session_id"),
+            "step": item["step"],
+            "detail": (item.get("detail") or "")[:1000],
+            "client_at": item["at"],
+        }
+        for item in batch
+    ]
+    # 多行插入时驱动的 rowcount 是 -1,新入库几条要靠 RETURNING 数
+    inserted = db.scalars(
+        pg_insert(RdClientTrace)
+        .values(rows)
+        .on_conflict_do_nothing(constraint="uq_rd_client_traces_client_seq")
+        .returning(RdClientTrace.id)
+    ).all()
+    return len(inserted), len(rows)

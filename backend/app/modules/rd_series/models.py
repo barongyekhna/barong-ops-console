@@ -81,6 +81,8 @@ END_AGENT_KICKED = "agent_kicked"
 END_TIMEOUT = "timeout"
 END_MAX_DURATION = "max_duration"
 END_CONNECTION_LOST = "connection_lost"
+# 同意了,但两端始终没把通路建起来(信令没送到 / 打洞和中转都不通)
+END_HANDSHAKE_FAILED = "handshake_failed"
 
 SIGNAL_FROM_CONTROLLER = "controller"
 SIGNAL_FROM_AGENT = "agent"
@@ -96,6 +98,9 @@ ALLOWED_SIGNAL_KINDS = (SIGNAL_OFFER, SIGNAL_ANSWER, SIGNAL_ICE)
 # ---------------------------------------------------------------------------
 # 同意框弹出后没人理,多久自动当拒绝处理
 CONSENT_TIMEOUT_SECONDS = 60
+# 同意之后多久画面还没通,就判握手失败、把被控机放出来。不收的话这条会话会以
+# 「已同意」占住被控机两个小时,期间谁都连不上它(2026-09-18 真机首测就卡在这)
+HANDSHAKE_TIMEOUT_SECONDS = 90
 # 单场会话最长时间,到点强制结束
 SESSION_MAX_SECONDS = 2 * 60 * 60
 # 一台公用机最多放行多少人免同意
@@ -259,5 +264,50 @@ class RdSignal(Base):
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     payload: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+# 客户端诊断:一次上报最多几条、留多久、一个人一小时最多收多少(防失控的页面刷爆库)
+TRACE_MAX_ENTRIES_PER_POST = 200
+TRACE_RETENTION_DAYS = 14
+TRACE_MAX_PER_USER_PER_HOUR = 3000
+
+
+class RdClientTrace(Base):
+    """两端页面逐步记下来的建连过程,事后补传。
+
+    2026-09-18 真机首测:发起端同意后再没有请求到达服务器,服务器侧看不到它卡在哪。
+    这张表就是本机那一侧的黑匣子——页面每走一步先记在本地,网络恢复/下次打开时再
+    传上来。``(client_id, seq)`` 唯一:补传重试不会重复入库。
+
+    只记步骤、耗时、错误名和状态,**不记 SDP、不记候选地址**。
+    """
+
+    __tablename__ = "rd_client_traces"
+    __table_args__ = (
+        UniqueConstraint("client_id", "seq", name="uq_rd_client_traces_client_seq"),
+        Index("ix_rd_client_traces_session", "session_id", "client_at"),
+        Index("ix_rd_client_traces_user_received", "user_id", "received_at"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # 每次打开页面随机生成一个;同一个人开两个窗口也分得开
+    client_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    client_label: Mapped[str] = mapped_column(String(120), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 不挂外键:会话被清掉了,黑匣子也得留着
+    session_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    step: Mapped[str] = mapped_column(String(48), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    client_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
