@@ -67,7 +67,7 @@ export function AmzPage() {
       ) : tab === "images" ? (
         <ImagesPanel briefId={params.get("brief")} suggestionId={params.get("suggestion")} />
       ) : (
-        <AmzOverview />
+        <AmzOverview companyOrgId={params.get("company")} />
       )}
       <nav className={styles.tabs} aria-label="手机导航">
         <Link className={styles.tab} href="/amz">

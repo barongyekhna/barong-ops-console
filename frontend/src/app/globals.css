@@ -749,6 +749,14 @@ textarea:focus-visible {
   margin-top: 4px;
 }
 
+/* 侧边栏「亚马逊运营」下公司后面的店铺代码(01us 01de) */
+.navigation-tree-sub {
+  margin-left: 4px;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
 .navigation-tree-link {
   min-height: 36px;
 }

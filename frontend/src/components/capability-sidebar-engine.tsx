@@ -8,7 +8,8 @@ import {
   MessageCircle,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { apiRequest } from "@/lib/api";
@@ -425,6 +426,72 @@ function SidebarLink({
   );
 }
 
+// ---- 亚马逊运营:四家公司在侧边栏合成一个组织节点(2026-09-19 用户拍板)----
+// 后端仍然是四个 org_type=amazon 的组织(法人 = 钥匙归属);侧边栏只是把它们收成一棵树:
+// 「亚马逊运营」→ 总览(所有店铺)+ 每家公司(只看这家的店)。认组织靠模块清单里有没有 amz.ops,不认名字。
+const AMAZON_MODULE_KEY = "amz.ops";
+const AMAZON_GROUP_KEY = "__amazon_ops__";
+
+function isAmazonOrganization(organization: ModuleControlOrgGroup) {
+  return organization.modules.some((module) => module.module_id.trim().toLowerCase() === AMAZON_MODULE_KEY);
+}
+
+function companyShortName(name: string) {
+  // 「广州龙杰电子商务有限公司」→「龙杰」;认不出套路就原样
+  const short = name.replace(/^广州/, "").replace(/(电子商务|贸易|科技)?有限公司$/, "");
+  return short || name;
+}
+
+type AmazonCompanyEntry = { org_id: string; name: string; stores: string[] };
+
+function AmazonOpsLinks({
+  companies,
+  onNavigate,
+  pathname,
+}: {
+  companies: AmazonCompanyEntry[];
+  onNavigate: () => void;
+  pathname: string;
+}) {
+  const params = useSearchParams();
+  return <AmazonOpsLinksView activeCompany={pathname === "/amz" ? params.get("company") ?? "" : null} companies={companies} onNavigate={onNavigate} />;
+}
+
+function AmazonOpsLinksView({
+  activeCompany,
+  companies,
+  onNavigate,
+}: {
+  activeCompany: string | null;
+  companies: AmazonCompanyEntry[];
+  onNavigate: () => void;
+}) {
+  return (
+    <>
+      <Link aria-current={activeCompany === "" ? "page" : undefined} className={`navigation-link navigation-tree-link ${activeCompany === "" ? "active" : ""}`} href="/amz" onClick={onNavigate}>
+        <Building2 aria-hidden="true" size={18} />
+        <span>总览 · 所有店铺</span>
+      </Link>
+      {companies.map((company) => (
+        <Link
+          aria-current={activeCompany === company.org_id ? "page" : undefined}
+          className={`navigation-link navigation-tree-link ${activeCompany === company.org_id ? "active" : ""}`}
+          href={`/amz?company=${encodeURIComponent(company.org_id)}`}
+          key={company.org_id}
+          onClick={onNavigate}
+          title={company.name}
+        >
+          <Building2 aria-hidden="true" size={18} />
+          <span>
+            {companyShortName(company.name)}
+            {company.stores.length ? <small className="navigation-tree-sub"> {company.stores.join(" ")}</small> : null}
+          </span>
+        </Link>
+      ))}
+    </>
+  );
+}
+
 function OrganizationModuleRow({
   module,
   item,
@@ -570,12 +637,42 @@ export function CapabilitySidebarEngine({
       }),
     [byModuleKey, moduleAccessByKey],
   );
-  const organizationGroups = organizations;
+  const organizationGroups = useMemo(() => organizations.filter((organization) => !isAmazonOrganization(organization)), [organizations]);
+  const amazonOrganizations = useMemo(() => organizations.filter(isAmazonOrganization), [organizations]);
+  const [amazonStores, setAmazonStores] = useState<Record<string, string[]>>({});
+  const hasAmazon = amazonOrganizations.length > 0;
+  useEffect(() => {
+    // 公司后面标上它的店铺代码(01us 01de),排序也按最小店铺代码走:龙杰(01)在前。拉不到就只显示公司名。
+    if (!hasAmazon) return;
+    let cancelled = false;
+    apiRequest<{ items?: { store_code: string; company_org_id: string }[] }>("/amz/stores")
+      .then((payload) => {
+        if (cancelled) return;
+        const map: Record<string, string[]> = {};
+        for (const store of payload.items ?? []) {
+          (map[store.company_org_id] ??= []).push(store.store_code);
+        }
+        for (const codes of Object.values(map)) codes.sort();
+        setAmazonStores(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasAmazon]);
+  const amazonCompanies = useMemo<AmazonCompanyEntry[]>(
+    () =>
+      amazonOrganizations
+        .map((organization) => ({ org_id: organization.org_id, name: organization.org_name, stores: amazonStores[organization.org_id] ?? [] }))
+        .sort((a, b) => (a.stores[0] ?? "zz").localeCompare(b.stores[0] ?? "zz") || a.name.localeCompare(b.name)),
+    [amazonOrganizations, amazonStores],
+  );
+  const amazonExpanded = !expandedOrgIds.has(`${AMAZON_GROUP_KEY}:collapsed`);
   const organizationModuleCount = organizationGroups.reduce(
     (count, organization) => count + organization.modules.length,
     0,
   );
-  const visibleSidebarCount = cSystemItems.length + organizationModuleCount + 1;
+  const visibleSidebarCount = cSystemItems.length + organizationModuleCount + (hasAmazon ? 1 : 0) + 1;
   // 三种状态说三句不同的话（2026-08-31）。
   // 以前「没权限」和「真降级」都渲染成「部分信息待刷新」，而那句话又因为
   // 4 个有意 deferred 的 bootstrap 项被折进降级判定，从登录第一秒起就永远亮着 ——
@@ -633,7 +730,7 @@ export function CapabilitySidebarEngine({
 
         <div className="navigation-group">
           <span className="navigation-label">组织</span>
-          {organizationGroups.length === 0 ? (
+          {organizationGroups.length === 0 && !hasAmazon ? (
             <div className="navigation-tree-empty" role="status">
               暂无组织
             </div>
@@ -700,6 +797,35 @@ export function CapabilitySidebarEngine({
               );
             })
           )}
+          {hasAmazon ? (
+            <div className="navigation-tree-node" key={AMAZON_GROUP_KEY}>
+              <button
+                aria-expanded={amazonExpanded}
+                className="navigation-tree-toggle"
+                onClick={() => {
+                  setExpandedOrgIds((current) => {
+                    const next = new Set(current);
+                    const flag = `${AMAZON_GROUP_KEY}:collapsed`;
+                    if (next.has(flag)) next.delete(flag);
+                    else next.add(flag);
+                    return next;
+                  });
+                }}
+                type="button"
+              >
+                {amazonExpanded ? <ChevronDown aria-hidden="true" size={15} /> : <ChevronRight aria-hidden="true" size={15} />}
+                <Building2 aria-hidden="true" size={17} />
+                <span>亚马逊运营</span>
+              </button>
+              {amazonExpanded ? (
+                <div className="navigation-tree-items">
+                  <Suspense fallback={<AmazonOpsLinksView activeCompany={null} companies={amazonCompanies} onNavigate={onNavigate} />}>
+                    <AmazonOpsLinks companies={amazonCompanies} onNavigate={onNavigate} pathname={pathname} />
+                  </Suspense>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </nav>
 

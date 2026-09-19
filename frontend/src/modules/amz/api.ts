@@ -179,9 +179,10 @@ export function decideSuggestion(id: string, decision: "approve" | "reject" | "l
   });
 }
 
-export function getOverviewSeries(params: { store?: string; days?: number } = {}) {
+export function getOverviewSeries(params: { store?: string; stores?: string; days?: number } = {}) {
   const query = new URLSearchParams();
   if (params.store) query.set("store", params.store);
+  else if (params.stores) query.set("stores", params.stores);
   query.set("days", String(params.days ?? 30));
   return amzRequest<AmzSeries>(`${BASE}/overview/series?${query.toString()}`, "曲线加载失败");
 }

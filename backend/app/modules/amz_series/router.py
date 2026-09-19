@@ -908,15 +908,18 @@ def ads_oauth_callback(
 @router.get("/overview/series")
 def overview_series(
     store: str | None = Query(default=None, pattern="^0\\d(?:us|de)$"),
+    stores: str | None = Query(default=None, pattern="^0\\d(?:us|de)(?:,0\\d(?:us|de)){0,9}$"),
     days: int = Query(default=30, ge=7, le=120),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
+    """store = 单店;stores = 一家公司的几家店(侧边栏按公司看);都不带 = 调用者能看的全部。"""
     codes = granted_store_codes(db, user)
-    if store:
-        if codes is not None and store not in codes:
-            raise HTTPException(status_code=403, detail=f"no access to store {store}")
-        codes = [store]
+    wanted = [store] if store else (stores.split(",") if stores else None)
+    if wanted:
+        if codes is not None and any(code not in codes for code in wanted):
+            raise HTTPException(status_code=403, detail="no access to one of the stores")
+        codes = wanted
     return suggestions.daily_series(db, store_codes=codes, days=days)
 
 

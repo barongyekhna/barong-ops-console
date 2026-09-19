@@ -57,24 +57,31 @@ function phaseOf(store: AmzStore): { label: string; cls: string } {
  * A 系列总览(设计稿第五版):五店+合计卡 → 员工面板(通知条/未读/最新消息)→ 两条线 → 季节相位;
  * 员工卡点开是浮窗,里面是他发来的消息,放行/驳回/稍后只记录(影子期)。<900px 单列 + 底部 tab。
  */
-export function AmzOverview() {
-  const [stores, setStores] = useState<AmzStore[]>([]);
+export function AmzOverview({ companyOrgId = null }: { companyOrgId?: string | null } = {}) {
+  // 侧边栏点某家公司 → ?company=<org_id>:只看这家公司的店;不带 = 所有店铺
+  const [allStores, setAllStores] = useState<AmzStore[]>([]);
+  const stores = useMemo(() => (companyOrgId ? allStores.filter((s) => s.company_org_id === companyOrgId) : allStores), [allStores, companyOrgId]);
+  const companyName = companyOrgId ? stores[0]?.company_name ?? null : null;
   const [isOwner, setIsOwner] = useState(false);
   const [panel, setPanel] = useState<AmzEmployeePanel | null>(null);
   const [series, setSeries] = useState<AmzSeries | null>(null);
   const [storeFilter, setStoreFilter] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [companyStoreCodes, setCompanyStoreCodes] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    setCompanyStoreCodes(companyOrgId && stores.length ? stores.map((s) => s.store_code).sort().join(",") : undefined);
+  }, [companyOrgId, stores]);
   const [openEmployee, setOpenEmployee] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const [s, p, c] = await Promise.allSettled([
       getStores(),
       getEmployeePanel(),
-      getOverviewSeries({ store: storeFilter || undefined, days: 30 }),
+      getOverviewSeries({ store: storeFilter || undefined, stores: !storeFilter && companyOrgId ? companyStoreCodes : undefined, days: 30 }),
     ]);
     const errors: string[] = [];
     if (s.status === "fulfilled") {
-      setStores(s.value.items);
+      setAllStores(s.value.items);
       setIsOwner(s.value.is_owner);
     } else errors.push(String(s.reason?.message ?? s.reason));
     if (p.status === "fulfilled") setPanel(p.value);
@@ -82,11 +89,15 @@ export function AmzOverview() {
     if (c.status === "fulfilled") setSeries(c.value);
     else errors.push(String(c.reason?.message ?? c.reason));
     setError(errors.length ? errors.join(" / ") : null);
-  }, [storeFilter]);
+  }, [storeFilter, companyOrgId, companyStoreCodes]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setStoreFilter(""); // 换公司时清掉单店筛选
+  }, [companyOrgId]);
 
   const visibleStores = useMemo(
     () => (storeFilter ? stores.filter((s) => s.store_code === storeFilter) : stores),
@@ -115,7 +126,7 @@ export function AmzOverview() {
         </div>
         <nav className={styles.filters} aria-label="店铺筛选">
           <button className={`${styles.chip} ${storeFilter === "" ? styles.chipOn : ""}`} onClick={() => setStoreFilter("")} type="button">
-            所有店铺
+            {companyName ? `${companyName} · 全部 ${stores.length} 家店` : "所有店铺"}
           </button>
           {stores.map((s) => (
             <button
@@ -245,7 +256,7 @@ export function AmzOverview() {
         <div className={styles.charts} id="amz-ads">
           <section className={`${styles.panel} ${styles.chart}`} aria-label="TACOS 走势">
             <div className={styles.chartTitle}>
-              <h3>TACOS · {storeFilter || "全部店铺"}</h3>
+              <h3>TACOS · {storeFilter || companyName || "全部店铺"}</h3>
               <span className={styles.example}>日粒度 · 种子期 · API 接上后换今天 vs 昨天按小时</span>
             </div>
             <AmzSeriesChart
@@ -263,7 +274,7 @@ export function AmzOverview() {
           </section>
           <section className={`${styles.panel} ${styles.chart}`} aria-label="总销售额走势">
             <div className={styles.chartTitle}>
-              <h3>总销售额 · {storeFilter || "全部店铺"}</h3>
+              <h3>总销售额 · {storeFilter || companyName || "全部店铺"}</h3>
               <span className={styles.example}>日粒度 · 已按当日汇率折美元</span>
             </div>
             <AmzSeriesChart days={series?.days ?? []} pick={(d) => d.sales_usd} unit="$" tone="good" />
