@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef } from "react";
 
-import { normalizePointer } from "./input-protocol";
+import { rdTrace } from "./diagnostics";
+import { normalizePointer, videoContentRect } from "./input-protocol";
 import type { RdController } from "./webrtc";
 
 /** RD 系列 · 画面窗口 + 键鼠捕获。
@@ -24,6 +25,10 @@ type Props = {
 export function RemoteViewer({ controller, deviceName, onEnd }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const engagedRef = useRef(false);
+  // 鼠标移动按屏幕刷新合并:一帧只发最后一个位置。高回报率鼠标一秒能报几百次,
+  // 全发出去只会在对面排队,指针越拖越远
+  const pendingMoveRef = useRef<{ x: number; y: number } | null>(null);
+  const frameRef = useRef<number | null>(null);
 
   const pointerFrom = useCallback(
     (event: { clientX: number; clientY: number }) => {
@@ -31,36 +36,88 @@ export function RemoteViewer({ controller, deviceName, onEnd }: Props) {
       if (!element) {
         return { x: 0, y: 0 };
       }
-      return normalizePointer(event, element.getBoundingClientRect());
+      // 按画面本身(去掉黑边)换算,不按整个 <video> 框
+      const rect = videoContentRect(
+        element.getBoundingClientRect(),
+        element.videoWidth,
+        element.videoHeight,
+      );
+      return normalizePointer(event, rect);
     },
     [],
   );
 
+  const flushMove = useCallback(() => {
+    frameRef.current = null;
+    const move = pendingMoveRef.current;
+    pendingMoveRef.current = null;
+    if (move) {
+      controller.send({ t: "m", x: move.x, y: move.y });
+    }
+  }, [controller]);
+
   const handlePointerMove = useCallback(
     (event: React.PointerEvent<HTMLVideoElement>) => {
-      const { x, y } = pointerFrom(event);
-      controller.send({ t: "m", x, y });
+      pendingMoveRef.current = pointerFrom(event);
+      if (frameRef.current === null) {
+        frameRef.current = window.requestAnimationFrame(flushMove);
+      }
     },
-    [controller, pointerFrom],
+    [flushMove, pointerFrom],
   );
+
+  /** 按键/松键前先把还没发的移动发掉,保证点击落在最新位置之后 */
+  const dropPendingMove = useCallback(() => {
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+    pendingMoveRef.current = null;
+  }, []);
 
   const handlePointerDown = useCallback(
     (event: React.PointerEvent<HTMLVideoElement>) => {
       event.preventDefault();
+      dropPendingMove();
       const { x, y } = pointerFrom(event);
       controller.send({ b: event.button, t: "d", x, y });
     },
-    [controller, pointerFrom],
+    [controller, dropPendingMove, pointerFrom],
   );
 
   const handlePointerUp = useCallback(
     (event: React.PointerEvent<HTMLVideoElement>) => {
       event.preventDefault();
+      dropPendingMove();
       const { x, y } = pointerFrom(event);
       controller.send({ b: event.button, t: "u", x, y });
     },
-    [controller, pointerFrom],
+    [controller, dropPendingMove, pointerFrom],
   );
+
+  useEffect(
+    () => () => {
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+      }
+    },
+    [],
+  );
+
+  // 画面尺寸一出来记一笔:下次复测能从黑匣子里看出框和画面比例差多少
+  const handleLoadedMetadata = useCallback(() => {
+    const element = videoRef.current;
+    if (!element) {
+      return;
+    }
+    const box = element.getBoundingClientRect();
+    const rect = videoContentRect(box, element.videoWidth, element.videoHeight);
+    rdTrace("viewer_geometry", {
+      box: [Math.round(box.width), Math.round(box.height)],
+      picture: [Math.round(rect.width), Math.round(rect.height)],
+      remote: [element.videoWidth, element.videoHeight],
+    });
+  }, []);
 
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLVideoElement>) => {
@@ -118,6 +175,7 @@ export function RemoteViewer({ controller, deviceName, onEnd }: Props) {
         className="cc-rd-video"
         muted
         onContextMenu={handleContextMenu}
+        onLoadedMetadata={handleLoadedMetadata}
         onPointerDown={handlePointerDown}
         onPointerEnter={() => {
           engagedRef.current = true;

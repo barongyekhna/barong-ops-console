@@ -2,7 +2,7 @@
 
 import { getRdIceConfig, pushRdSignal, withRdRetry } from "./api";
 import { rdTrace, rdTraceError } from "./diagnostics";
-import { parseInputEvent } from "./input-protocol";
+import { parseInputEvent, type RdInputEvent } from "./input-protocol";
 import type { RdNativeBridge } from "./native";
 import { toIceServers } from "./types";
 
@@ -32,6 +32,9 @@ export class RdAgent {
   private remoteDescriptionSet = false;
   private droppedInputs = 0;
   private offerTaken = false;
+  // 鼠标移动:上一条还没注入完时只留最新的一条,不排队。排队就是「指针在后面追」
+  private pendingMove: RdInputEvent | null = null;
+  private moveInFlight = false;
 
   constructor(
     sessionId: string,
@@ -123,7 +126,7 @@ export class RdAgent {
           this.droppedInputs += 1;
           return;
         }
-        void this.bridge.input(parsed).catch(() => undefined);
+        this.deliver(parsed);
       };
     };
 
@@ -172,6 +175,35 @@ export class RdAgent {
       () => this.closed,
       { sessionId: this.sessionId, step: "agt.answer_post" },
     );
+  }
+
+  private deliver(event: RdInputEvent): void {
+    if (event.t === "m") {
+      if (this.moveInFlight) {
+        this.pendingMove = event;
+        return;
+      }
+      this.sendMove(event);
+      return;
+    }
+    // 点击/按键/滚轮照原顺序直接送。点击自带坐标,压着的旧移动不用再补
+    this.pendingMove = null;
+    void this.bridge.input(event).catch(() => undefined);
+  }
+
+  private sendMove(event: RdInputEvent): void {
+    this.moveInFlight = true;
+    void this.bridge
+      .input(event)
+      .catch(() => undefined)
+      .finally(() => {
+        this.moveInFlight = false;
+        const next = this.pendingMove;
+        this.pendingMove = null;
+        if (next && !this.closed) {
+          this.sendMove(next);
+        }
+      });
   }
 
   /** 对方的 offer 到过没有。被控端的看门狗靠它判断「同意之后对方到底来没来」。 */

@@ -44,6 +44,36 @@ export function normalizePointer(
   };
 }
 
+/** 画面在 <video> 框里真正占的那一块(去掉黑边)。
+ *
+ * <video> 默认 object-fit: contain:框的比例和对面屏幕不一样时,画面居中、两侧或上下
+ * 留黑边。坐标要按画面本身算,按整个框算的话越靠边偏得越多——2026-09-19 真机:
+ * 「我鼠标放哪,对面鼠标并不在哪」。还没拿到画面尺寸时退回整个框。
+ */
+export function videoContentRect(
+  box: { left: number; top: number; width: number; height: number },
+  videoWidth: number,
+  videoHeight: number,
+): { left: number; top: number; width: number; height: number } {
+  if (
+    !(videoWidth > 0) ||
+    !(videoHeight > 0) ||
+    !(box.width > 0) ||
+    !(box.height > 0)
+  ) {
+    return box;
+  }
+  const scale = Math.min(box.width / videoWidth, box.height / videoHeight);
+  const width = videoWidth * scale;
+  const height = videoHeight * scale;
+  return {
+    height,
+    left: box.left + (box.width - width) / 2,
+    top: box.top + (box.height - height) / 2,
+    width,
+  };
+}
+
 /** 收到的事件必须逐个验形。被控端照着它注入键鼠,信错一条就是乱点别人电脑。 */
 export function parseInputEvent(raw: unknown): RdInputEvent | null {
   if (typeof raw !== "string") {

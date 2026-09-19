@@ -18,6 +18,7 @@ import {
   encodeInputEvent,
   normalizePointer,
   parseInputEvent,
+  videoContentRect,
 } from "../../frontend/src/modules/rd/input-protocol.ts";
 import { getRdNativeBridge } from "../../frontend/src/modules/rd/native.ts";
 
@@ -428,4 +429,40 @@ test("the black box never records SDP or candidate addresses", () => {
 
 test("the proxy lets the diagnostics endpoint through (POST only)", () => {
   assert.match(proxySource, /path\[1\] === "diagnostics"\) \{\s*\n\s*return method === "POST";/);
+});
+
+// ---------------------------------------------------------------------------
+// 坐标按画面本身算,不按带黑边的框算(2026-09-19 真机:鼠标位置对不上)
+// ---------------------------------------------------------------------------
+test("a 16:9 picture capped by max-height is pillarboxed and mapped on the picture", () => {
+  // 框 1400x576,画面 1920x1080 → 实际画面 1024x576,左右各 188 黑边
+  const box = { left: 100, top: 50, width: 1400, height: 576 };
+  const rect = videoContentRect(box, 1920, 1080);
+  assert.equal(rect.width, 1024);
+  assert.equal(rect.height, 576);
+  assert.equal(rect.left, 100 + 188);
+  // 指在画面正中间 → 对面屏幕正中间
+  assert.deepEqual(normalizePointer({ clientX: 100 + 700, clientY: 50 + 288 }, rect), { x: 0.5, y: 0.5 });
+  // 指在画面左边缘 → 0,而不是按整框算出来的 0.134
+  assert.equal(normalizePointer({ clientX: 288, clientY: 100 }, rect).x, 0);
+});
+
+test("a letterboxed picture (portrait box) is mapped on the picture", () => {
+  const rect = videoContentRect({ left: 0, top: 0, width: 800, height: 800 }, 1600, 900);
+  assert.equal(rect.height, 450);
+  assert.equal(rect.top, 175);
+});
+
+test("without picture dimensions the whole box is used", () => {
+  const box = { left: 1, top: 2, width: 3, height: 4 };
+  assert.deepEqual(videoContentRect(box, 0, 0), box);
+});
+
+test("the viewer maps pointers on the picture and coalesces moves per frame", () => {
+  assert.match(viewer, /videoContentRect\(/);
+  assert.match(viewer, /requestAnimationFrame/);
+});
+
+test("the controlled side never queues more than one pending pointer move", () => {
+  assert.match(agentSource, /pendingMove/);
 });
