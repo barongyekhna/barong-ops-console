@@ -164,7 +164,7 @@ export function RemoteViewer({ controller, deviceName, onEnd }: Props) {
       <div className="cc-rd-viewer-bar">
         <span className="cc-rd-viewer-name">{deviceName}</span>
         <span className="cc-rd-viewer-hint">
-          鼠标移进画面即可操作，按 Esc 松开键盘
+          鼠标移进画面即可操作——画面里那个就是对方的鼠标；按 Esc 松开键盘
         </span>
         <button className="cc-rd-danger" onClick={onEnd} type="button">
           断开

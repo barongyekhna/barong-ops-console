@@ -7442,7 +7442,9 @@ h4 {
 .cc-rd-viewer-bar > button { margin-left: auto; }
 .cc-rd-video {
   display: block; width: 100%; max-height: 72vh; background: var(--color-canvas);
-  cursor: crosshair; touch-action: none;
+  /* 本地指针藏起来:画面里对方那一个才是唯一的指针,像向日葵一样「直接控制对方鼠标」。
+     留着十字准星的话屏幕上永远有两个指针,而画面天生晚一点,人就分不清自己点在哪。 */
+  cursor: none; touch-action: none;
 }
 
 .cc-rd-ledger { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }

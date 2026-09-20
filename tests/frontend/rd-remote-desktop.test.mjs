@@ -489,3 +489,11 @@ test("both sides record path, rtt, fps and what limits quality — never address
   assert.match(controllerSource, /collectRdStats\(pc, "controller"/);
   assert.match(agentSource, /collectRdStats\(pc, "agent"/);
 });
+
+test("the viewer hides the local pointer so the remote one is the only cursor", () => {
+  // 用户 2026-09-20:「把十字准星去掉,直接控制对方鼠标,向日葵就是这样的」
+  const css = readFileSync("frontend/src/app/globals.css", "utf8");
+  const block = css.slice(css.indexOf(".cc-rd-video {"), css.indexOf("}", css.indexOf(".cc-rd-video {")));
+  assert.match(block, /cursor: none/);
+  assert.doesNotMatch(block, /cursor: crosshair/);
+});
