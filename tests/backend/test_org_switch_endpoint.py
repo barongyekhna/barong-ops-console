@@ -100,3 +100,41 @@ class TestRoutesAreRegisteredAndProxied:
         ).read_text(encoding="utf-8")
         assert '"auth/switch-organization"' in src
         assert '"auth/organizations"' in src
+
+
+class TestActiveOrgSurvivesIdentityRebuild:
+    """2026-10-04:owner 怎么切组织,顶栏都显示「广州会学」。
+
+    `/auth/organizations` 用 `_identity_auth_session` 从快速身份重建会话对象,
+    重建时漏了 active_org_id → 接口永远回 None → 前端退回列表第一个。
+    切换本身是生效的(页面换了皮),只有顶栏名字错,所以要钉住这个字段。
+    """
+
+    def test_rebuilt_session_keeps_active_org_id(self) -> None:
+        from datetime import datetime, timezone
+
+        from backend.app.api.routes.auth import _identity_auth_session
+        from backend.app.services.auth_service import AuthenticatedUserIdentity
+
+        org_id = "org_d7497212d213498cbf0513d75e486c20"
+        identity = AuthenticatedUserIdentity(
+            id=1,
+            username="owner",
+            role="owner",
+            organization_id=None,
+            must_change_password=False,
+            is_active=True,
+            last_login_at=None,
+            session_expires_at=datetime.now(timezone.utc),
+            session_id_hash="h" * 64,
+            active_org_id=org_id,
+        )
+        assert _identity_auth_session(identity).active_org_id == org_id
+
+    def test_switch_invalidates_the_session_identity_cache(self) -> None:
+        """快速身份缓存也带着 active_org_id,切换后不作废,立刻刷新会读到旧组织。"""
+        from backend.app.api.routes.auth import auth_switch_organization
+
+        assert "forget_cached_session_identity_hash" in inspect.getsource(
+            auth_switch_organization
+        )

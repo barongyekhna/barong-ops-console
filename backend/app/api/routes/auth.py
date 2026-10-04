@@ -118,6 +118,9 @@ def _identity_auth_session(identity: AuthenticatedUserIdentity) -> AuthSession:
         last_seen_at=None,
         ip_address=None,
         user_agent=None,
+        # 漏了它,/auth/organizations 永远回 active_org_id=None,顶栏切换器只能
+        # 退回列表第一个(按名字排是「广州会学」);/auth/context 也按无选定组织解析。
+        active_org_id=identity.active_org_id,
     )
     auth_session.id = 0
     return auth_session
@@ -358,6 +361,11 @@ def auth_switch_organization(
     from ...middleware.org_context import reset_org_context_cache_for_tests
 
     reset_org_context_cache_for_tests()
+    # 快速身份缓存里也带着 active_org_id(5 秒),一并作废,
+    # 否则切换后立刻刷新的那一次还会读到旧组织。
+    from ...services.auth_service import forget_cached_session_identity_hash
+
+    forget_cached_session_identity_hash(auth_session.session_id_hash)
 
     request_id = str(getattr(request.state, "context_id", "")) or "auth-switch-org"
     context, resolution_source = build_org_context(
