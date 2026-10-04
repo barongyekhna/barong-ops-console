@@ -402,16 +402,19 @@ def user_create(
         membership_role = (
             "admin" if normalize_role(user.role) == "super_admin" else "member"
         )
+        # 新号的组织可以不是操作者当前所在组织(owner 在 A 给 B 建号),
+        # 组织查找与成员关系写入都要绕开 C18G,否则误报「组织不存在」或跨组织写入被拒。
         try:
-            add_org_member(
-                db,
-                org_id=user.organization_id,
-                payload=OrgMemberAddRequest(
-                    user_id=str(user.id), role=membership_role
-                ),
-                actor=owner,
-                audit=get_audit_context(request),
-            )
+            with without_org_data_isolation():
+                add_org_member(
+                    db,
+                    org_id=user.organization_id,
+                    payload=OrgMemberAddRequest(
+                        user_id=str(user.id), role=membership_role
+                    ),
+                    actor=owner,
+                    audit=get_audit_context(request),
+                )
         except OrgMembershipConflictError:
             pass  # already a member — idempotent
     # 每个真人账号自动配一把 MCP 个人钥匙;明文与初始密码一起只回给创建者一次。

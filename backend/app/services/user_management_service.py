@@ -215,7 +215,7 @@ def create_managed_user(
         job_title = None
     elif (
         organization_id is None
-        or get_organization(db, organization_id) is None
+        or not _organization_exists(db, organization_id)
     ):
         raise UserOrganizationNotFoundError("Organization not found.")
 
@@ -259,6 +259,16 @@ def create_managed_user(
 
     db.refresh(user)
     return user, initial_password
+
+
+def _organization_exists(db: Session, org_id: str) -> bool:
+    """组织存在性检查要绕开 C18G:组织表自带 org_id 列,会被按「当前所在组织」过滤,
+    owner 人在 A 组织给 B 组织建号/挪人/注册机器人就会误报「组织不存在」(2026-10-04)。
+    这里只问这个 ID 在不在;谁能往哪个组织放人,由调用方的权限校验单独把关。"""
+    from .data_isolation import without_org_data_isolation
+
+    with without_org_data_isolation():
+        return get_organization(db, org_id) is not None
 
 
 def _ensure_membership(db: Session, *, user: User, org_id: str) -> None:
@@ -324,7 +334,7 @@ def update_managed_user(
     if payload.organization_id is not None:
         if not payload.organization_id:
             raise UserOrganizationNotFoundError("Organization not found.")
-        if get_organization(db, payload.organization_id) is None:
+        if not _organization_exists(db, payload.organization_id):
             raise UserOrganizationNotFoundError("Organization not found.")
         if not is_owner_role(actor.role) and (
             payload.organization_id != (actor.organization_id or "")
@@ -517,7 +527,7 @@ def create_bot_user(
     username = payload.username.strip()
     if get_user_by_username(db, username) is not None:
         raise DuplicateUsernameError("Username already exists.")
-    if get_organization(db, payload.organization_id) is None:
+    if not _organization_exists(db, payload.organization_id):
         raise UserOrganizationNotFoundError("Organization not found.")
     try:
         password_hash = hash_password(payload.password)
@@ -544,25 +554,29 @@ def create_bot_user(
             profile.display_name = payload.display_name.strip()
             profile.bio = (payload.bio or "").strip() or None
             db.add(profile)
-        existing = db.scalar(
-            select(OrgMembershipRecord).where(
-                OrgMembershipRecord.user_id == str(user.id),
-                OrgMembershipRecord.org_id == payload.organization_id,
+        from .data_isolation import without_org_data_isolation
+
+        # 机器人挂的组织可以不是 owner 当前所在组织,成员关系读写都绕开 C18G。
+        with without_org_data_isolation():
+            existing = db.scalar(
+                select(OrgMembershipRecord).where(
+                    OrgMembershipRecord.user_id == str(user.id),
+                    OrgMembershipRecord.org_id == payload.organization_id,
+                )
             )
-        )
-        if existing is None:
-            existing = OrgMembershipRecord(
-                membership_id=generate_membership_id(),
-                user_id=str(user.id),
-                org_id=payload.organization_id,
-                role="member",
-                status="active",
-            )
-            db.add(existing)
-            db.flush()
-        # 通讯录里的「所属组织」读的是 C19 的投影表,不是 org_memberships 本身。
-        # 2026-09-09 白苏婉/殷承岳都因为这里漏同步而显示「没有加入任何组织」。
-        sync_affiliation_from_membership(db, membership=existing, user=user)
+            if existing is None:
+                existing = OrgMembershipRecord(
+                    membership_id=generate_membership_id(),
+                    user_id=str(user.id),
+                    org_id=payload.organization_id,
+                    role="member",
+                    status="active",
+                )
+                db.add(existing)
+                db.flush()
+            # 通讯录里的「所属组织」读的是 C19 的投影表,不是 org_memberships 本身。
+            # 2026-09-09 白苏婉/殷承岳都因为这里漏同步而显示「没有加入任何组织」。
+            sync_affiliation_from_membership(db, membership=existing, user=user)
         _log_user_operation(
             db,
             actor=actor,
