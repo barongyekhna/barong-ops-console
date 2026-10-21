@@ -25,8 +25,6 @@ from typing import Any
 
 from sqlalchemy import text
 
-from .data_isolation import SKIP_ORG_DATA_ISOLATION
-
 logger = logging.getLogger(__name__)
 
 _TABLE = "ai_usage_ledger"
@@ -119,9 +117,17 @@ def claude_daily_budget_usd() -> float:
 
 
 def _session():
+    # 数据库层和隔离层都在用到时才导入:R-W/R-A worker 先导入的是本模块,
+    # 顶层导入 data_isolation 会和 db.session 形成循环导入,worker 一启动就崩(2026-10-21 发版踩到)。
     from ..db.session import SessionLocal
 
     return SessionLocal()
+
+
+def _skip_isolation() -> dict[str, Any]:
+    from .data_isolation import SKIP_ORG_DATA_ISOLATION
+
+    return SKIP_ORG_DATA_ISOLATION
 
 
 def record_ai_usage(
@@ -173,7 +179,7 @@ def record_ai_usage(
                 "latency_ms": int(latency_ms) if latency_ms is not None else None,
                 "error_code": (error_code or None) and error_code[:64],
             },
-            execution_options=SKIP_ORG_DATA_ISOLATION,
+            execution_options=_skip_isolation(),
         )
         db.commit()
     except Exception:  # noqa: BLE001
@@ -199,7 +205,7 @@ def claude_spend_today_usd() -> float | None:
                 """
             ),
             {"provider": CLAUDE_PROVIDER},
-            execution_options=SKIP_ORG_DATA_ISOLATION,
+            execution_options=_skip_isolation(),
         ).scalar()
         return float(value or 0)
     except Exception:  # noqa: BLE001
