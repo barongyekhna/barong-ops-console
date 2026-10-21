@@ -5,7 +5,10 @@
 #   daily/<日期>/    主库 + C19 记录库 + C19 文件库 的 pg_dump 自定义格式（-Fc -Z9）
 #                    n8n 的 SQLite 在线快照（sqlite3 backup API，不锁库）+ n8n 配置(含加密密钥)
 #                    配置打包并加密（.env.*、nginx 站点、备份密钥）
+#                    开发记录：Claude Code 聊天记录 + 项目记忆，打包加密成 claude-dev.tar.gz.gpg
 #   mirror/          聊天文件目录、产品媒体(K/I/F)、n8n 二进制目录 的 rsync 镜像（文件本身不可变）
+#                    claude-projects-archive/、codex-sessions/ 两个只增不删的归档（只在本机，不进异地）
+# 恢复开发记录：gpg -d --passphrase-file /root/.barong-backup-passphrase claude-dev.tar.gz.gpg | tar -xz -C /root
 # 保留：日备 7 份、周备(周日) 4 份、月备(每月 1 号) 3 份。
 # 异地：daily 当天目录整份 gpg 加密后 rsync 到洛杉矶 VPN 机，那边只留 3 天。
 # 心跳：成功后 upsert worker_heartbeats(nightly-backup)，超过 26 小时没成功，
@@ -116,6 +119,22 @@ tar -C / -czf - "${config_paths[@]}" \
     | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase-file "$PASSPHRASE_FILE" -o "$day_dir/config.tar.gz.gpg"
 say "  config.tar.gz.gpg $(du -h "$day_dir/config.tar.gz.gpg" | cut -f1)"
 
+# 3b. 开发记录：Claude Code 聊天记录和项目记忆。聊天里有工具输出过的钥匙片段，所以同样只存密文。
+say "3b. 开发记录"
+dev_paths=()
+for candidate in .claude/projects .claude/history.jsonl .claude/settings.json; do
+    [[ -e "/root/$candidate" ]] && dev_paths+=("$candidate")
+done
+# 正在进行的会话一直在写记录，tar 读到变化中的文件会返回 1（内容照样打进包），不算失败。
+tar_dev() { tar -C /root --warning=no-file-changed -czf - "$@" || (( $? == 1 )); }
+if (( ${#dev_paths[@]} )); then
+    tar_dev "${dev_paths[@]}" \
+        | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase-file "$PASSPHRASE_FILE" -o "$day_dir/claude-dev.tar.gz.gpg"
+    say "  claude-dev.tar.gz.gpg $(du -h "$day_dir/claude-dev.tar.gz.gpg" | cut -f1)"
+else
+    say "  跳过：/root/.claude 下没有开发记录"
+fi
+
 # 4. 文件镜像：聊天文件、产品媒体、n8n 二进制。对象不可变，rsync 增量即可。
 say "4. 文件镜像"
 mirror() {
@@ -130,6 +149,17 @@ mirror "$VOLUMES/console_i_media_data/_data" i-media
 mirror "$VOLUMES/console_f_media_data/_data" f-media
 rsync -a --delete --exclude 'database.sqlite*' --exclude 'crash.journal' "$N8N_DATA/" "$mirror_dir/n8n-data/"
 say "  n8n-data $(du -sh "$mirror_dir/n8n-data" | cut -f1)"
+# 开发记录归档：不带 --delete，源头被自动清理后这里仍然保留。
+archive() {
+    local src="$1" name="$2"
+    if [[ ! -d "$src" ]]; then say "  跳过 $name：$src 不存在"; return 0; fi
+    mkdir -p "$mirror_dir/$name"
+    # 24 = 拷贝途中源文件被清理掉了，已拷到的照样保留，不算失败。
+    rsync -a "$src/" "$mirror_dir/$name/" || (( $? == 24 ))
+    say "  $name $(du -sh "$mirror_dir/$name" | cut -f1)（只增不删）"
+}
+archive /root/.claude/projects claude-projects-archive
+archive /root/.codex/sessions codex-sessions
 
 # 5. 清单 + 校验和
 ( cd "$day_dir" && sha256sum ./* > SHA256SUMS )
