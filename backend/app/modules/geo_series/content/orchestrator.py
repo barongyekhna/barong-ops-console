@@ -52,7 +52,11 @@ from .prompt_skills import (
 
 logger = logging.getLogger(__name__)
 
-_PROVIDER = "chatgpt"
+# 2026-10-21 换血:面向美国买家的英文成稿交给「writer」档(默认 Claude Opus,见 services/ai_roles)。
+# 内容行上的 provider 列记实际干活的那家:平时是 claude,当天额度用完降级时是 deepseek。
+_AI_ROLE = "writer"
+_PROVIDER = "claude"
+_DEGRADED_PROVIDER = "deepseek"
 
 
 class GeoContentError(Exception):
@@ -66,6 +70,7 @@ class GeoContentError(Exception):
 class GeoContentOrchestrator:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self._last_provider = _PROVIDER
 
     # -- public entry ----------------------------------------------------------
     def generate_cluster(
@@ -335,7 +340,7 @@ class GeoContentOrchestrator:
             brand_audit_json=audit,
             generation_status="generated",
             skill_version=GEO_CONTENT_SKILL_VERSION,
-            provider=_PROVIDER,
+            provider=self._last_provider,
             created_by_user_id=getattr(user, "id", None),
         )
         self.db.add(spotlight)
@@ -755,8 +760,8 @@ class GeoContentOrchestrator:
 
         provider_db = SessionLocal()
         try:
-            return AIExecutionRouter(provider_db).execute(
-                provider=_PROVIDER,
+            result = AIExecutionRouter(provider_db).execute(
+                provider=_AI_ROLE,
                 task_type="generate",
                 payload=payload,
                 org=TARGET_ORGANIZATION_NAME,
@@ -765,6 +770,10 @@ class GeoContentOrchestrator:
             )
         finally:
             provider_db.close()
+        self._last_provider = (
+            _DEGRADED_PROVIDER if isinstance(result, dict) and result.get("_ai_degraded") else _PROVIDER
+        )
+        return result
 
     # -- persistence -----------------------------------------------------------
     def _replace_items(
@@ -847,7 +856,7 @@ class GeoContentOrchestrator:
                     brand_audit_json=audit,
                     generation_status="generated",
                     skill_version=GEO_CONTENT_SKILL_VERSION,
-                    provider=_PROVIDER,
+                    provider=self._last_provider,
                     created_by_user_id=user_id,
                 )
             )

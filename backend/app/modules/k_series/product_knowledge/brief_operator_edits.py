@@ -16,10 +16,10 @@ import json
 import logging
 from typing import Any
 
-import httpx
 from sqlalchemy.orm import Session
 
 from ....models.user import User
+from ....services import ai_roles
 from .info_overlay import (
     MAX_OVERLAY_ITEMS,
     OVERLAY_FIELD_LABELS,
@@ -103,36 +103,34 @@ def operator_image_prompt_and_seo(
             return fallback
         key = SecretManager(db_session=db).get_key("deepseek", org_id)
         db.rollback()
-        response = httpx.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "deepseek-flash",
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": (
-                            "You write ecommerce image prompts and WordPress media "
-                            "SEO. Product name: "
-                            f"{product.product_name_en or ''}. Main keyword: "
-                            f"{product.primary_keyword or ''}. The operator wants an "
-                            f"extra product image showing: {scene}\n"
-                            "Return STRICT JSON with keys prompt (English photo "
-                            "prompt, photorealistic, no text in image), title, alt, "
-                            "caption, description (English media SEO, keyword-aware, "
-                            "non-empty each)."
-                        ),
-                    }
-                ],
-            },
-            timeout=_SEO_PROMPT_TIMEOUT_SECONDS,
+        # 2026-10-21:原来直连 DeepSeek 没关 thinking、也没记账;改走 ai_roles 的 bulk 角色。
+        completion = ai_roles.complete(
+            ai_roles.ROLE_BULK,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "You write ecommerce image prompts and WordPress media "
+                        "SEO. Product name: "
+                        f"{product.product_name_en or ''}. Main keyword: "
+                        f"{product.primary_keyword or ''}. The operator wants an "
+                        f"extra product image showing: {scene}\n"
+                        "Return STRICT JSON with keys prompt (English photo "
+                        "prompt, photorealistic, no text in image), title, alt, "
+                        "caption, description (English media SEO, keyword-aware, "
+                        "non-empty each)."
+                    ),
+                }
+            ],
+            module="k.product_knowledge",
+            task="k_operator_image_seo",
+            anthropic_key=None,
+            deepseek_key=key,
+            json_only=True,
+            timeout_seconds=_SEO_PROMPT_TIMEOUT_SECONDS,
+            org_ref=org_id,
         )
-        response.raise_for_status()
-        parsed = json.loads(response.json()["choices"][0]["message"]["content"])
+        parsed = json.loads(completion.text)
         output = dict(fallback)
         for field in ("prompt", "title", "alt", "caption", "description"):
             value = str(parsed.get(field) or "").strip()

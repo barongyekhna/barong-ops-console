@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 from typing import Any
-from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -19,6 +18,8 @@ from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 
+from ....services import ai_roles
+from .constants import MODULE_KEY
 from .models import FCategoryProfile
 
 _TIMEOUT_SECONDS = 45
@@ -109,33 +110,31 @@ def _call_deepseek_profile(
             '只返回严格 JSON：{"products":[{"en":"...","zh":"...","note_zh":"..."}]}'
         ),
     }
-    body = {
-        "model": os.getenv("F_DEEPSEEK_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-flash")),
-        "temperature": 0.2,
-        "messages": [
-            {
-                "role": "system",
-                "content": "你是跨境电商类目专家。只返回 JSON，不要 Markdown。",
-            },
-            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
-        ],
-    }
-    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-    request = Request(
-        f"{base_url}/chat/completions",
-        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
+    messages = [
+        {
+            "role": "system",
+            "content": "你是跨境电商类目专家。只返回 JSON，不要 Markdown。",
         },
-        method="POST",
-    )
+        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+    ]
+    # 2026-10-21:原来直连 DeepSeek 没关 thinking(家规:永远关着,开着 40 倍成本)、也没记账。
+    # 改走 ai_roles 的 bulk 角色:关 thinking、记 AI 台账。
     try:
-        with urlopen(request, timeout=_TIMEOUT_SECONDS) as response:  # noqa: S310
-            payload = json.loads(response.read().decode("utf-8"))
+        completion = ai_roles.complete(
+            ai_roles.ROLE_BULK,
+            messages=messages,
+            module=MODULE_KEY,
+            task="f_category_profile",
+            anthropic_key=None,
+            deepseek_key=api_key,
+            deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL") or None,
+            json_only=True,
+            timeout_seconds=_TIMEOUT_SECONDS,
+        )
     except Exception as exc:  # noqa: BLE001
         raise FProfileUnavailableError(f"DeepSeek 调用失败：{str(exc)[:160]}") from exc
 
+    payload = {"choices": [{"message": {"content": completion.text}}]}
     return _parse_products(payload)
 
 

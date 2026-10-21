@@ -75,6 +75,7 @@ K_SERIES_MODULE_ID = "k.product_knowledge"
 K_SERIES_PROVIDER_ALIASES = ("serp", "chatgpt", "claude_opus", "deepseek")
 R_WAREHOUSE_MODULE_ID = "r.warehouse"
 KEEPA_KEY_TYPE = "keepa"
+ANTHROPIC_KEY_TYPE = "anthropic"
 # A 系列 JSON 凭据:secret 是一行 JSON,注入时原样给(不套 Bearer),调用方自己 json.loads。
 AMAZON_JSON_KEY_TYPES = frozenset({"amazon_sp_api", "amazon_ads_api"})
 AMAZON_JSON_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -846,6 +847,12 @@ def _injection_context_from_binding(
         header_value = secret_value
         query_param_name = "key"
         query_param_value = secret_value
+    elif key_type == ANTHROPIC_KEY_TYPE:
+        # Claude 官方口认 x-api-key,不认 Bearer。
+        header_name = "x-api-key"
+        header_value = secret_value
+        query_param_name = None
+        query_param_value = None
     elif key_type in AMAZON_JSON_KEY_TYPES:
         header_name = AMAZON_CREDENTIAL_HEADER
         header_value = secret_value

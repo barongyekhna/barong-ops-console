@@ -9,8 +9,7 @@ things on a loop:
    只花 DeepSeek 的钱，为白天的付费额度排出优先队列。
 3. 误杀抽检：每天抽取若干被初筛 cut 的产品，用免费的 1688 官方词搜
    做利润探针；误杀率过高时写告警。
-4. Opus 复核：RA_OPUS_DAILY_REVIEW=true 时，把当日 GPT 放行的 top N
-   交给 Opus 做最终把关。
+4. （已删除）Opus 每日复核：从没被调用过，2026-10-21 换血时连同函数一起删掉。
 
 All actions are idempotent per-day and guarded by env switches so the daemon
 can be safely restarted at any time.

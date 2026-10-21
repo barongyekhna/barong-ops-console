@@ -195,8 +195,7 @@ services:
       RA_PRESCREEN_MODE: "enforce"
       # 词搜优先策略：免费词搜+AI 看图确认同款/同类，词搜无果才花图搜额度。
       RA_1688_SEARCH_STRATEGY: "keyword_first"
-      # AI 看图模型（走 4sapi「I 系列企业分组备用key」）；节日品只认 same_product。
-      RA_VISION_MODEL: "gpt-4o-mini"
+      # AI 看图（同款/同类比对）2026-10-21 起走 Claude Haiku「fast」档，模型改 AI_ROLE_FAST_MODEL；节日品只认 same_product。
       # R-A 全部 DeepSeek 调用切 flash（2026-09-07 用户拍板：同通道 pro 19.5s / flash 6.3s）。
       RA_DEEPSEEK_MODEL: "deepseek-flash"
       # 抽词是「整份 skill 文档当 system prompt + 严格 JSON」，2026-09-07 北京时间中午

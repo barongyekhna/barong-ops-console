@@ -1,8 +1,10 @@
 """Provider role bindings for the R-A analysis framework.
 
-R-A uses model roles in the product-selection funnel. GPT and Opus are roles,
-not direct OpenAI/Anthropic SDK bindings; both are expected to route through the
-4sapi proxy key configured in the existing API-key orchestration layer.
+R-A uses model roles in the product-selection funnel. The "gpt" and "opus" layer
+names are historical; since the 2026-10-21 AI 换血 both run on the official Claude
+API (gpt layer → role "fast" = Haiku, opus layer → role "judge" = Opus, see
+backend/app/services/ai_roles.py) with the "anthropic" key bound to r.analysis.
+4sapi is image-generation only now.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 # 2026-09-11：官方退役 V4 Flash，deepseek-v4-flash 只是临时别名（实探已转发到
 # deepseek-flash），改写正名。别写 deepseek-v4.1-flash —— 官方口返 400。
 DEFAULT_RA_DEEPSEEK_MODEL = "deepseek-flash"
+ANTHROPIC_KEY_ALIAS = "anthropic"
 
 
 def ra_deepseek_model() -> str:
@@ -143,25 +146,26 @@ class RAnalysisProviderBinding:
     def foursapi_config(self) -> dict[str, Any]:
         return self.secret_manager.get_secret_config("4sapi", self.org_id)
 
+    def anthropic_config(self) -> dict[str, Any]:
+        """Claude 官方钥匙(r.analysis 上别名 anthropic 的绑定)。GPT/Opus/看图三层共用。"""
+        with self.secret_manager._session_scope() as db:
+            if db is None:
+                raise SecretManagerError("anthropic_key_requires_database")
+            candidates = _resolve_r_analysis_key_candidates(
+                db, self.org_id, key_aliases=(ANTHROPIC_KEY_ALIAS,)
+            )
+        if not candidates:
+            raise SecretManagerError("anthropic_key_not_bound_to_r_analysis")
+        return candidates[0]
+
     def gpt_config(self) -> dict[str, Any]:
-        return self._foursapi_role_config(
-            role="gpt",
-            markers=("chatgpt", "chat gpt", "gpt", "openai"),
-        )
+        return {**self.anthropic_config(), "role": "gpt"}
 
     def opus_config(self) -> dict[str, Any]:
-        return self._foursapi_role_config(
-            role="opus",
-            markers=("opus", "claude", "anthropic", "claude_opus"),
-        )
+        return {**self.anthropic_config(), "role": "opus"}
 
     def vision_config(self) -> dict[str, Any]:
-        """看图比对模型的 key：优先匹配「备用/vision/4o」标记的 4sapi key，
-        没有专用备用 key 时回退主 4sapi key（同一渠道都能调 gpt-4o-mini）。"""
-        return self._foursapi_role_config(
-            role="vision",
-            markers=("备用", "vision", "4o", "image", "看图", "i 系列", "i系列"),
-        )
+        return {**self.anthropic_config(), "role": "vision"}
 
     def rainforest_config(self) -> dict[str, Any]:
         return self.secret_manager.get_secret_config("rainforest", self.org_id)
@@ -211,8 +215,8 @@ class RAnalysisProviderBinding:
             "roles": [item.to_dict() for item in role_statuses],
             "routing": {
                 "deepseek": "deepseek",
-                "gpt": "4sapi",
-                "opus": "4sapi",
+                "gpt": "anthropic",
+                "opus": "anthropic",
                 "serper": "serper",
                 "alibaba1688": "alibaba1688_official_api" if alibaba_ready else supplier_source_mode,
                 "rainforest": "rainforest",
@@ -231,6 +235,11 @@ class RAnalysisProviderBinding:
         }
 
     def role_statuses(self) -> list[RAnalysisProviderStatus]:
+        try:
+            from backend.app.services.ai_roles import resolve_role
+        except ImportError:
+            from app.services.ai_roles import resolve_role  # type: ignore[no-redef]
+
         deepseek = self._secret_status("deepseek")
         gpt = self._role_secret_status("gpt")
         opus = self._role_secret_status("opus")
@@ -263,27 +272,23 @@ class RAnalysisProviderBinding:
             ),
             RAnalysisProviderStatus(
                 role="gpt",
-                service="4sapi",
-                label="GPT 第二层上下文验证",
+                service="anthropic",
+                label="Haiku 第二层上下文验证（官方）",
                 configured=gpt["configured"],
                 source=gpt["source"],
-                model_env="RA_GPT_MODEL",
-                model_name=os.getenv("RA_GPT_MODEL", "gpt-5.6-luna"),
-                base_url_env="FOURSAPI_BASE_URL",
-                base_url_configured=bool(os.getenv("FOURSAPI_BASE_URL", "").strip())
-                or bool(gpt.get("url")),
+                model_env="AI_ROLE_FAST_MODEL",
+                model_name=resolve_role("fast").model,
+                base_url_configured=bool(gpt.get("url")),
             ),
             RAnalysisProviderStatus(
                 role="opus",
-                service="4sapi",
-                label="Opus 第三层最终决策",
+                service="anthropic",
+                label="Opus 第三层最终决策（官方）",
                 configured=opus["configured"],
                 source=opus["source"],
-                model_env="RA_OPUS_MODEL",
-                model_name=os.getenv("RA_OPUS_MODEL", "claude-opus-4-8-thinking"),
-                base_url_env="FOURSAPI_BASE_URL",
-                base_url_configured=bool(os.getenv("FOURSAPI_BASE_URL", "").strip())
-                or bool(opus.get("url")),
+                model_env="AI_ROLE_JUDGE_MODEL",
+                model_name=resolve_role("judge").model,
+                base_url_configured=bool(opus.get("url")),
             ),
             RAnalysisProviderStatus(
                 role="serper",
@@ -363,45 +368,18 @@ class RAnalysisProviderBinding:
     def _role_secret_status(self, role: str) -> dict[str, Any]:
         try:
             config = self.gpt_config() if role == "gpt" else self.opus_config()
-        except SecretManagerError:
+        except Exception:  # noqa: BLE001 —— 状态页只报「未绑定」，不抛
             return {
-                "service": "4sapi",
+                "service": "anthropic",
                 "configured": False,
                 "source": "api_key_orchestration_missing",
             }
         return {
-            "service": "4sapi",
+            "service": "anthropic",
             "configured": bool(config.get("value")),
-            "source": "api_key_orchestration_role_match",
+            "source": "api_key_orchestration_anthropic",
             "url": config.get("url"),
         }
-
-    def _foursapi_role_config(
-        self,
-        *,
-        role: str,
-        markers: tuple[str, ...],
-    ) -> dict[str, Any]:
-        db = getattr(self.secret_manager, "db_session", None)
-        if db is None:
-            return self.foursapi_config()
-        try:
-            candidates = _resolve_r_analysis_key_candidates(db, self.org_id)
-        except Exception:
-            return self.foursapi_config()
-        fallback: dict[str, Any] | None = None
-        for candidate in candidates:
-            marker_text = " ".join(
-                str(candidate.get(name) or "").lower()
-                for name in ("name", "key_alias", "key_type", "provider")
-            )
-            if fallback is None:
-                fallback = candidate
-            if any(marker in marker_text for marker in markers):
-                return {**candidate, "role": role}
-        if fallback is not None:
-            return {**fallback, "role": role}
-        return self.foursapi_config()
 
 
 def google_ads_runtime_gate(*, configured: bool) -> dict[str, Any]:
@@ -459,7 +437,12 @@ def _env_flag(name: str, *, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on", "enabled"}
 
 
-def _resolve_r_analysis_key_candidates(db: Any, org_id: str) -> list[dict[str, Any]]:
+def _resolve_r_analysis_key_candidates(
+    db: Any,
+    org_id: str,
+    *,
+    key_aliases: tuple[str, ...] = ("4sapi", "chatgpt", "claude_opus", "openai"),
+) -> list[dict[str, Any]]:
     try:
         from backend.app.services.api_key_orchestration import (
             ApiKeyIsolationError,
@@ -477,7 +460,7 @@ def _resolve_r_analysis_key_candidates(db: Any, org_id: str) -> list[dict[str, A
             db,
             org_id=org_id,
             module_id="r.analysis",
-            key_aliases=("4sapi", "chatgpt", "claude_opus", "openai"),
+            key_aliases=key_aliases,
         )
     except (ApiKeyIsolationError, ApiKeyOrchestrationError) as exc:
         raise SecretManagerError(str(exc)) from exc

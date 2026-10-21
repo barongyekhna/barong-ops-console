@@ -64,12 +64,46 @@ def test_claude_and_chatgpt_probes_stay_on_existing_4sapi_proxy() -> None:
     assert len(requested) == 2
 
 
-def test_claude_probe_refuses_non_4sapi_route_without_network_call() -> None:
+def test_official_anthropic_key_probes_models_with_x_api_key() -> None:
+    # 2026-10-21 换血:Claude 改走官方口,api.anthropic.com 不再判 blocked_proxy_route。
+    requested: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request)
+        assert request.url.host == "api.anthropic.com"
+        assert request.url.path == "/v1/models"
+        assert request.headers["x-api-key"] == "test-secret-value"
+        assert request.headers["anthropic-version"] == "2023-06-01"
+        assert "authorization" not in request.headers
+        return httpx.Response(200, json={"data": [{"id": "claude-opus-5-5"}]})
+
+    for key_type, aliases, secret in (
+        ("anthropic", ("anthropic",), "test-secret-value"),
+        ("claude_opus", ("claude_opus",), "Bearer test-secret-value"),
+    ):
+        target = _target(url="https://api.anthropic.com", key_type=key_type, aliases=aliases, secret=secret)
+        assert adapter_for_target(target) == "anthropic"
+        result = probe_target(target, enforce_public_network=False, transport=httpx.MockTransport(handler))
+        assert result.status == "healthy"
+        assert result.reason_code == "models_list_ok"
+    assert len(requested) == 2
+
+
+def test_official_anthropic_key_rejected_is_invalid() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(401, json={"type": "error", "error": {"type": "authentication_error"}})
+
+    target = _target(url="https://api.anthropic.com", key_type="anthropic", aliases=("anthropic",))
+    result = probe_target(target, enforce_public_network=False, transport=httpx.MockTransport(handler))
+    assert result.status != "healthy"
+
+
+def test_claude_probe_on_unknown_proxy_still_refused_without_network_call() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise AssertionError(f"unexpected outbound request: {request.url}")
 
     target = _target(
-        url="https://api.anthropic.com",
+        url="https://some-other-relay.example",
         key_type="claude_opus",
         aliases=("claude_opus",),
     )

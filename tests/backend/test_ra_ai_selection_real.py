@@ -15,6 +15,7 @@ from r_system_v2.ra.ai_selection import run_ai_selection_for_candidate, run_ai_s
 class _FakeResponse:
     def __init__(self, payload: dict[str, object]) -> None:
         self.payload = payload
+        self._consumed = False
 
     def __enter__(self) -> "_FakeResponse":
         return self
@@ -22,8 +23,26 @@ class _FakeResponse:
     def __exit__(self, *_args: object) -> None:
         return None
 
-    def read(self) -> bytes:
+    def read(self, _size: int = -1) -> bytes:
+        # 统一路由的 _post_json 分块读到空为止;一次给完,之后返回空。
+        if self._consumed:
+            return b""
+        self._consumed = True
         return json.dumps(self.payload, ensure_ascii=False).encode("utf-8")
+
+
+def _route_claude_layers(monkeypatch, fake_ai_urlopen) -> None:
+    """2026-10-21 换血:gpt / opus 层走 ai_roles(官方 Claude),桩在统一路由的 urlopen 上。"""
+    monkeypatch.setattr(
+        "r_system_v2.ra.providers._resolve_r_analysis_key_candidates",
+        lambda _db, _org_id, *, key_aliases: [
+            {"value": "anthropic-secret", "url": "https://api.anthropic.com", "key_alias": "anthropic"}
+        ],
+    )
+    monkeypatch.setattr("backend.app.services.ai_provider_router.urlopen", fake_ai_urlopen)
+    monkeypatch.setattr("backend.app.services.ai_roles.claude_budget_exhausted", lambda: False)
+    monkeypatch.setattr("backend.app.services.ai_roles.record_ai_usage", lambda **_kwargs: None)
+    monkeypatch.setattr("r_system_v2.ra.ai_selection.record_ai_usage", lambda **_kwargs: None)
 
 
 def test_real_ra_ai_chain_writes_competition_and_three_layers(monkeypatch) -> None:
@@ -222,6 +241,7 @@ def test_real_ra_ai_chain_writes_competition_and_three_layers(monkeypatch) -> No
 
     monkeypatch.setattr("r_system_v2.ra.competition.urlopen", fake_rainforest_urlopen)
     monkeypatch.setattr("r_system_v2.ra.ai_selection.urlopen", fake_ai_urlopen)
+    _route_claude_layers(monkeypatch, fake_ai_urlopen)
 
     with Session(engine) as session:
         result = run_ai_selection_for_run(
@@ -256,6 +276,9 @@ def test_real_ra_ai_chain_writes_competition_and_three_layers(monkeypatch) -> No
         ).mappings().all()
         assert [row["layer"] for row in eval_rows] == ["prescreen", "gpt", "opus"]
         assert all(not str(row["model_name"]).startswith("mock-") for row in eval_rows)
+        models = {row["layer"]: row["model_name"] for row in eval_rows}
+        assert models["gpt"] == "claude-haiku-5-5"
+        assert models["opus"] == "claude-opus-5-5"
         # The stored prescreen surfaces as a context layer without competition
         # data; the judge layers must embed the Rainforest snapshot.
         assert all(
@@ -447,6 +470,7 @@ def test_real_ra_ai_chain_can_run_one_candidate_without_touching_siblings(monkey
 
     monkeypatch.setattr("r_system_v2.ra.competition.urlopen", fake_rainforest_urlopen)
     monkeypatch.setattr("r_system_v2.ra.ai_selection.urlopen", fake_ai_urlopen)
+    _route_claude_layers(monkeypatch, fake_ai_urlopen)
 
     with Session(engine) as session:
         result = run_ai_selection_for_candidate(

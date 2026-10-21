@@ -7,8 +7,9 @@ overlay），也不许留在成品图像素里（产品实拍上的 logo 必须�
 防线分四层，这个模块承担第 3 层（独立 AI 审查）+ 全链共享的工具：
 1. 源头：R→K 搬运剥品牌、落 ``detected_brand_terms`` 黑名单（r_to_k_transfer）。
 2. 生成：文案/作图指令红线带黑名单（prompt_skills / workflow_engine）。
-3. 审查（本模块）：文本面 = 黑名单精确匹配 + gpt-5.6-luna 语义识别；
-   图像面 = 每张成品图过视觉模型找品牌标识。fail-closed：任何一步
+3. 审查（本模块）：文本面 = 黑名单精确匹配 + DeepSeek 语义识别（ai_roles 的 bulk 档）；
+   图像面 = 每张成品图过视觉模型找品牌标识（识别类走 fast=Haiku，几何/物理
+   把关走 judge=Opus）。2026-10-21 换血前全部走 4sapi 的 GPT。fail-closed：任何一步
    出错都算未通过，宁可拦住也不放行。
 4. 门禁：P 上架要求 audit 存在 + clean + 内容指纹一致（p_series assemble）。
 
@@ -33,15 +34,21 @@ import json
 import logging
 import os
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ....models.user import User
-from ....services.module_execution_gate import require_module_execution_ready
+from ....services import anthropic_messages
+from ....services.ai_roles import ROLE_BULK, ROLE_FAST, ROLE_JUDGE, complete
+from ....services.module_execution_gate import (
+    ModuleExecutionGateError,
+    ModuleExecutionKey,
+    require_module_execution_ready,
+)
 from .constants import MODULE_KEY
 from .models import KProductKnowledgeMediaAsset, KProductKnowledgeProduct
 
@@ -306,53 +313,82 @@ def blacklist_violations(
     return violations
 
 
-# --- AI 调用（gpt-5.6-luna 文本审 + 视觉审图，httpx 直连 4sapi） ------------------
+# --- AI 调用（按 ai_roles 分档：文本审 bulk / 识别 fast / 把关 judge） -------------
+#
+# 2026-10-21 换血：此前四道审查全部 httpx 直连 4sapi 的 GPT（luna→sol→5.2-high 降级链）。
+# 现在按活的档次分家，钥匙从本组织 K 模块的绑定里取：anthropic（Claude 官方）和
+# deepseek。缺哪把钥匙，用到它的那一步就报错——fail-closed，绝不悄悄放行。
+# Claude 当天额度用完时 ai_roles.complete 会按家规降级给 DeepSeek 照常审。
 
-def _resolve_chat_key(db: Session, user: User | None):
-    context = require_module_execution_ready(
-        db,
-        module_id=MODULE_KEY,
-        user=user,
-        request=None,
-        key_requirements={"brand_audit": "chatgpt"},
-    )
+
+@dataclass(frozen=True)
+class AuditKeys:
+    org_id: str
+    anthropic_key: str | None
+    deepseek_key: str | None
+    deepseek_url: str | None
+
+
+def _optional_module_key(
+    db: Session, user: User | None, org_id: str, alias: str
+) -> ModuleExecutionKey | None:
+    try:
+        context = require_module_execution_ready(
+            db,
+            module_id=MODULE_KEY,
+            user=user,
+            request=None,
+            explicit_org_id=org_id,
+            key_requirements={"brand_audit": alias},
+        )
+    except ModuleExecutionGateError:
+        return None
     return context.key_for_step("brand_audit")
 
 
-# 与 ai_provider_router.MODEL_FALLBACKS 同思路:4sapi「OpenAI优质」分组
-# 会整组掉线(503 No available channel),低档通道仍在。审查是 fail-closed
-# 硬门,通道故障时按序降级,恢复后自动回到首选模型。
-_AUDIT_MODEL_CANDIDATES = ("gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.2-high")
+def _resolve_chat_key(db: Session, user: User | None) -> AuditKeys:
+    # 先不带钥匙过一次门：模块被停用/组织解析失败照旧直接抛，由调用方记成 errors。
+    context = require_module_execution_ready(
+        db, module_id=MODULE_KEY, user=user, request=None
+    )
+    claude = _optional_module_key(db, user, context.org_id, "anthropic")
+    deepseek = _optional_module_key(db, user, context.org_id, "deepseek")
+    if claude is None and deepseek is None:
+        raise RuntimeError("brand audit: neither anthropic nor deepseek key is bound")
+    # 只认官方地址：4sapi 时代的钥匙即使被错绑成 anthropic 也不拿去用。
+    anthropic_key = (
+        anthropic_messages.raw_key(claude.header_value)
+        if claude is not None and anthropic_messages.is_anthropic_url(claude.url)
+        else None
+    )
+    return AuditKeys(
+        org_id=context.org_id,
+        anthropic_key=anthropic_key,
+        deepseek_key=deepseek.header_value if deepseek is not None else None,
+        deepseek_url=deepseek.url if deepseek is not None else None,
+    )
 
 
-def _chat_completion(key, messages: list[dict[str, Any]]) -> str:
-    url = key.url.rstrip("/")
-    if not url.endswith("/v1"):
-        url = f"{url}/v1"
-    url = f"{url}/chat/completions"
-    last_error: Exception | None = None
-    with httpx.Client(timeout=_AUDIT_TIMEOUT_SECONDS) as client:
-        for model in _AUDIT_MODEL_CANDIDATES:
-            response = client.post(
-                url,
-                headers={
-                    "Content-Type": "application/json",
-                    key.header_name: key.header_value,
-                },
-                json={"model": model, "messages": messages},
-            )
-            if response.status_code >= 500:
-                # 503=通道下线、504=上游超时——都是代理侧故障,换模型再试
-                last_error = httpx.HTTPStatusError(
-                    f"upstream {response.status_code} for {model}",
-                    request=response.request,
-                    response=response,
-                )
-                continue
-            response.raise_for_status()
-            payload = response.json()
-            return str(payload["choices"][0]["message"]["content"] or "")
-    raise last_error or RuntimeError("brand audit: no AI channel available")
+def _chat_completion(
+    key: AuditKeys, role: str, task: str, messages: list[dict[str, Any]]
+) -> str:
+    if not isinstance(key, AuditKeys):
+        raise TypeError("brand audit needs AuditKeys from _resolve_chat_key")
+    result = complete(
+        role,
+        messages=messages,
+        module=MODULE_KEY,
+        task=f"brand_guard.{task}",
+        anthropic_key=key.anthropic_key,
+        deepseek_key=key.deepseek_key,
+        deepseek_base_url=key.deepseek_url,
+        json_only=True,
+        timeout_seconds=_AUDIT_TIMEOUT_SECONDS,
+        org_ref=key.org_id,
+    )
+    if result.degraded:
+        _LOGGER.info("brand audit %s degraded to %s (claude daily budget)", task, result.model)
+    return result.text
 
 
 def _json_from_reply(reply: str) -> dict[str, Any]:
@@ -410,6 +446,8 @@ def ai_text_violations(
         )
     reply = _chat_completion(
         key,
+        ROLE_BULK,
+        "text",
         [
             {"role": "system", "content": instruction},
             {"role": "user", "content": listing[:60000]},
@@ -458,6 +496,8 @@ def ai_image_violation(key, image_bytes: bytes, mime_type: str) -> list[str]:
     encoded = base64.b64encode(image_bytes).decode("ascii")
     reply = _chat_completion(
         key,
+        ROLE_FAST,
+        "image",
         [
             {
                 "role": "user",
@@ -587,7 +627,9 @@ def ai_geometry_violation(
             "image_url": {"url": f"data:{rendered_mime};base64,{ren_b64}"},
         }
     )
-    reply = _chat_completion(key, [{"role": "user", "content": content}])
+    reply = _chat_completion(
+        key, ROLE_JUDGE, "geometry", [{"role": "user", "content": content}]
+    )
     parsed = _json_from_reply(reply)
     if not parsed.get("flagged"):
         return []
@@ -791,7 +833,12 @@ def ai_operating_model(
                 },
             }
         )
-    parsed = _json_from_reply(_chat_completion(key, [{"role": "user", "content": content}]))
+    parsed = _json_from_reply(
+        _chat_completion(
+            # 工作原理推导错一次就是整组图画错(PSPE-001/002 潜水泵画在干地上),放「judge」档。
+            key, ROLE_JUDGE, "operating_model", [{"role": "user", "content": content}]
+        )
+    )
 
     def _clean_list(value: Any) -> list[str]:
         if not isinstance(value, list):
@@ -876,6 +923,8 @@ def ai_physics_violation(
     )
     reply = _chat_completion(
         key,
+        ROLE_JUDGE,
+        "physics",
         [
             {
                 "role": "user",

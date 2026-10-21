@@ -7,12 +7,21 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 from r_system_v2.rw.ai.model_config import deepseek_thinking_extras, rw_deepseek_model
+
+try:
+    from backend.app.services.ai_usage_ledger import record_ai_usage, usage_from_response
+except ImportError:  # pragma: no cover - 兼容以 app 为根的运行方式
+    from app.services.ai_usage_ledger import (  # type: ignore[no-redef]
+        record_ai_usage,
+        usage_from_response,
+    )
 from r_system_v2.rw.core.models import DeepSeekScreening, NormalizedProduct
 
 
@@ -213,11 +222,29 @@ class DeepSeekScreeningSkill:
             },
             method="POST",
         )
+        started = perf_counter()
         try:
             with urlopen(request, timeout=timeout) as response:  # nosec B310 - fixed DeepSeek URL.
                 data = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError):
+        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            record_ai_usage(
+                provider="deepseek",
+                model=model,
+                module="r.warehouse",
+                task="rw_form_screen",
+                success=False,
+                latency_ms=(perf_counter() - started) * 1000,
+                error_code=f"HTTP_{exc.code}" if isinstance(exc, HTTPError) else exc.__class__.__name__,
+            )
             return None
+        record_ai_usage(
+            provider="deepseek",
+            model=model,
+            module="r.warehouse",
+            task="rw_form_screen",
+            usage=usage_from_response(data if isinstance(data, dict) else {}),
+            latency_ms=(perf_counter() - started) * 1000,
+        )
         verdict = _parse_form_verdict(_extract_translation_text(data) or "")
         if not verdict or not bool(verdict.get("reject")):
             return None

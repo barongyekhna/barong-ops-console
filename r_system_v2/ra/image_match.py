@@ -1,6 +1,6 @@
 """Image comparison for 1688 keyword-first supplier discovery.
 
-主判：AI 看图（gpt-4o-mini via 4sapi）——1688 工厂图和亚马逊精修图几乎
+主判：AI 看图（ai_roles 的 fast 角色，2026-10-21 起 Claude Haiku 官方）——1688 工厂图和亚马逊精修图几乎
 不可能是同一张图，感知哈希认不出"重拍的同款"，必须由视觉模型判断
 "是不是同一个产品"。一次调用带 1 张亚马逊图 + 最多 5 张 1688 图。
 
@@ -96,7 +96,16 @@ def hamming_similarity(hash_a: int, hash_b: int) -> float:
 
 
 def vision_model_name() -> str:
-    return os.getenv("RA_VISION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    """看图比对走 ai_roles 的 fast 角色(2026-10-21 起 = Claude Haiku 官方;原 4sapi gpt-4o-mini)。"""
+    return _ai_roles().resolve_role("fast").model
+
+
+def _ai_roles():
+    try:
+        from backend.app.services import ai_roles
+    except ImportError:  # pragma: no cover
+        from app.services import ai_roles  # type: ignore[no-redef]
+    return ai_roles
 
 
 def ai_compare_amazon_to_offers(
@@ -134,27 +143,19 @@ def ai_compare_amazon_to_offers(
 
     try:
         from r_system_v2.core.secret_manager import SecretManager
-        from r_system_v2.ra.ai_selection import (
-            ProviderConfig,
-            _execute_chat_request,
-            _provider_config,
-            _try_parse_model_json,
-        )
+        from r_system_v2.ra.ai_selection import _try_parse_model_json
         from r_system_v2.ra.providers import RAnalysisProviderBinding
 
+        ai_roles = _ai_roles()
         binding = RAnalysisProviderBinding(
             org_id=org_id,
             secret_manager=SecretManager(db_session=db),
         )
-        provider = _provider_config(
-            role="vision",
-            service="4sapi",
-            secret=binding.vision_config(),
-            env_base_url="FOURSAPI_BASE_URL",
-            default_base_url="https://api.4sapi.com/v1",
-            env_model="RA_VISION_MODEL",
-            fallback_model="gpt-4o-mini",
-        )
+        anthropic_key = str(binding.vision_config().get("value") or "")
+        try:
+            deepseek_secret = binding.deepseek_config()
+        except Exception:  # noqa: BLE001 —— 只在 Claude 额度用完降级时才用得上
+            deepseek_secret = {}
         # 视觉调用要几秒：先结束打开的 SQL 事务，避免 idle-in-transaction 超时。
         try:
             db.rollback()
@@ -187,21 +188,21 @@ def ai_compare_amazon_to_offers(
             content.append(
                 {"type": "image_url", "image_url": {"url": url, "detail": detail}}
             )
-        response = _execute_chat_request(
-            provider,
-            spec={
-                "endpoint": "/v1/chat/completions",
-                "label": "vision_match",
-                "payload": {
-                    "model": provider.model,
-                    "messages": [{"role": "user", "content": content}],
-                    "temperature": 0,
-                    "response_format": {"type": "json_object"},
-                    "max_tokens": 500,
-                },
-            },
+        completion = ai_roles.complete(
+            "fast",
+            messages=[{"role": "user", "content": content}],
+            module="r.analysis",
+            task="ra_vision_match",
+            anthropic_key=anthropic_key,
+            deepseek_key=str(deepseek_secret.get("value") or "") or None,
+            deepseek_base_url=str(deepseek_secret.get("url") or "") or None,
+            json_only=True,
+            max_tokens=500,
+            timeout_seconds=float(os.getenv("RA_VISION_TIMEOUT_SECONDS", "90") or 90),
         )
-        output = _try_parse_model_json(response.get("content")) or {}
+        result["model"] = completion.model
+        result["degraded"] = completion.degraded
+        output = _try_parse_model_json(completion.text) or {}
         entries = output.get("results")
         if not isinstance(entries, list):
             raise ValueError("模型未返回 results 数组")

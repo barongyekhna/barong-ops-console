@@ -2121,9 +2121,10 @@ def translate_product(
         db,
         request=request,
         user=user,
-        key_requirements={"ai_provider": "ai_provider"},
+        # 2026-10-21 换血:翻译和风险词过滤是量大的低级活,交给「bulk」档(DeepSeek)。
+        key_requirements={"deepseek": "deepseek"},
     )
-    key = context.key_for_step("ai_provider")
+    key = context.key_for_step("deepseek")
     product = _product_by_ref(
         db,
         product_ref=product_id,
@@ -2133,7 +2134,7 @@ def translate_product(
     provider_output = _execute_provider_json(
         db,
         context=context,
-        provider="chatgpt",
+        provider="bulk",
         task_type="generate",
         payload={
             "product_id": _product_public_ref(product),
@@ -2176,9 +2177,10 @@ def risk_filter_product(
         db,
         request=request,
         user=user,
-        key_requirements={"ai_provider": "ai_provider"},
+        # 2026-10-21 换血:翻译和风险词过滤是量大的低级活,交给「bulk」档(DeepSeek)。
+        key_requirements={"deepseek": "deepseek"},
     )
-    key = context.key_for_step("ai_provider")
+    key = context.key_for_step("deepseek")
     product = _product_by_ref(
         db,
         product_ref=product_id,
@@ -2187,7 +2189,7 @@ def risk_filter_product(
     provider_output = _execute_provider_json(
         db,
         context=context,
-        provider="chatgpt",
+        provider="bulk",
         task_type="generate",
         payload={
             "product": ProductKnowledgeRead.model_validate(product).model_dump(mode="json"),

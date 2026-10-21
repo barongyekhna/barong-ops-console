@@ -193,7 +193,7 @@ def build_ra_worker_runtime() -> tuple[WorkerRuntimeStatus, RaProfitJobWorker]:
     configured = {}
     for name, loader in (
         ("deepseek", binding.deepseek_key),
-        ("foursapi", binding.foursapi_key),
+        ("anthropic", lambda: binding.anthropic_config().get("value")),
         ("serper", binding.serper_key),
         ("rainforest", binding.rainforest_key),
     ):
@@ -201,8 +201,9 @@ def build_ra_worker_runtime() -> tuple[WorkerRuntimeStatus, RaProfitJobWorker]:
             configured[name] = bool(loader())
         except Exception:
             configured[name] = False
-    configured["gpt"] = bool(configured.get("foursapi"))
-    configured["opus"] = bool(configured.get("foursapi"))
+    # 2026-10-21 换血：第二层(Haiku)和第三层(Opus)都走 Claude 官方钥匙。
+    configured["gpt"] = bool(configured.get("anthropic"))
+    configured["opus"] = bool(configured.get("anthropic"))
     _log("SecretManager connected")
     _log("R-A analysis module ready")
     _log("R-A worker queue ready")

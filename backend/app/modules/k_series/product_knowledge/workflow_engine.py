@@ -126,10 +126,12 @@ WORKFLOW_STEPS = (
     "export_p_gmc_seo",
 )
 
+# 2026-10-21 换血:步骤名保留(前端和历史执行记录都认它),背后的钥匙换了——
+# 关键词初筛是量大的活,交给 DeepSeek(「bulk」档);终筛走 Claude 官方钥匙(「judge」档)。
 DUAL_AI_KEY_REQUIREMENTS = {
     "serp_keyword_fetch": "serp",
-    "ai_filter_chatgpt": "chatgpt",
-    "ai_filter_claude_opus": "claude_opus",
+    "ai_filter_chatgpt": "deepseek",
+    "ai_filter_claude_opus": "anthropic",
 }
 
 CLOSED_LOOP_WORKFLOW_STEPS_V2 = (
@@ -151,8 +153,8 @@ CLOSED_LOOP_WORKFLOW_STEPS_V2 = (
 CLOSED_LOOP_AI_KEY_REQUIREMENTS = {
     "deepseek_enrichment": "deepseek",
     "serp_keyword_fetch": "serp",
-    "ai_filter_chatgpt": "chatgpt",
-    "ai_filter_claude_opus": "claude_opus",
+    "ai_filter_chatgpt": "deepseek",
+    "ai_filter_claude_opus": "anthropic",
 }
 
 DEEPSEEK_ENRICHMENT_FIELDS = (
@@ -1175,7 +1177,7 @@ class KProductKnowledgeWorkflowEngine:
             payload=ai_input,
         )
         provider_output = self._execute_provider(
-            provider="chatgpt",
+            provider="bulk",
             task_type="chat",
             key=key,
             gate_context=gate_context,
@@ -1256,7 +1258,7 @@ class KProductKnowledgeWorkflowEngine:
             payload=ai_input,
         )
         provider_output = self._execute_provider(
-            provider="claude",
+            provider="judge",
             task_type="chat",
             key=key,
             gate_context=gate_context,
@@ -5330,7 +5332,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         }
         try:
             rewritten = self._execute_provider(
-                provider="chatgpt",
+                provider="writer",
                 task_type="generate",
                 key=key,
                 gate_context=gate_context,
@@ -5504,7 +5506,8 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             module_id=MODULE_KEY,
             user=user,
             request=request,
-            key_requirements={"marketing_copy_generation": "chatgpt"},
+            # 面向美国买家的英文成稿:「writer」档(Claude 官方钥匙)。
+            key_requirements={"marketing_copy_generation": "anthropic"},
         )
         key = gate_context.key_for_step("marketing_copy_generation")
         from .brand_guard import (
@@ -5539,7 +5542,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         # does not drop the connection on idle-in-transaction timeout.
         self.db.commit()
         result = self._execute_provider(
-            provider="chatgpt",
+            provider="writer",
             task_type="generate",
             key=key,
             gate_context=gate_context,
@@ -5637,7 +5640,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             )
             try:
                 retry_raw = self._execute_provider(
-                    provider="chatgpt",
+                    provider="writer",
                     task_type="generate",
                     key=key,
                     gate_context=gate_context,
@@ -5783,7 +5786,8 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             module_id=MODULE_KEY,
             user=user,
             request=request,
-            key_requirements={"image_brief_generation": "chatgpt"},
+            # 作图指令首发走「fast」档(Haiku),格式不过关的重试升到「judge」档(Opus)。
+            key_requirements={"image_brief_generation": "anthropic"},
         )
         key = gate_context.key_for_step("image_brief_generation")
         from .brand_guard import (
@@ -5795,10 +5799,23 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         product_snapshot = sanitize_snapshot_for_generation(
             _copy_evidence_product_snapshot(product), product
         )
-        operating_model = self._resolve_operating_model(
-            product=product,
-            product_snapshot=product_snapshot,
-            key=key,
+        # 工作原理推导是 brand_guard 的看图活,用它自己的审查钥匙(Claude 官方 + DeepSeek),
+        # 不是作图指令这把钥匙。
+        from .brand_guard import _resolve_chat_key, product_operating_model
+
+        try:
+            audit_keys = _resolve_chat_key(self.db, user)
+        except Exception:  # noqa: BLE001 - 推导本来就是 best-effort,拿不到钥匙就沿用已有的
+            logger.exception("operating model audit keys unavailable product=%s", product.id)
+            audit_keys = None
+        operating_model = (
+            self._resolve_operating_model(
+                product=product,
+                product_snapshot=product_snapshot,
+                key=audit_keys,
+            )
+            if audit_keys is not None
+            else product_operating_model(product)
         )
         ai_input = {
             "module_id": MODULE_KEY,
@@ -5824,7 +5841,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         # does not drop the connection on idle-in-transaction timeout.
         self.db.commit()
         provider_result = self._execute_provider(
-            provider="chatgpt",
+            provider="fast",
             task_type="image_brief",
             key=key,
             gate_context=gate_context,
@@ -5858,9 +5875,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             )
         except KWorkflowExecutionError:
             # 采样波动/代理侧模型偷工都会产出越规输出(漏 overlay/漏 images)。
-            # 重试换格式纪律最强的模型(image_brief_retry → 5.2-high)再判死。
+            # 重试换格式纪律更强的一档(fast → judge)再判死。
             provider_result = self._execute_provider(
-                provider="chatgpt",
+                provider="judge",
                 task_type="image_brief_retry",
                 key=key,
                 gate_context=gate_context,
@@ -5950,7 +5967,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "previous_invalid_output": provider_result,
             }
             retry_result = self._execute_provider(
-                provider="chatgpt",
+                provider="judge",
                 task_type="generate",
                 key=key,
                 gate_context=gate_context,

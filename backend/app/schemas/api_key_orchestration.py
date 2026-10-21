@@ -18,6 +18,7 @@ class KeyType(str, Enum):
     OPENAI = "openai"
     CHATGPT = "chatgpt"
     CLAUDE_OPUS = "claude_opus"
+    ANTHROPIC = "anthropic"
     DEEPSEEK = "deepseek"
     N8N = "n8n"
     KEEPA = "keepa"

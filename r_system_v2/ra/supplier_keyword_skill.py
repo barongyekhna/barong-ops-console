@@ -7,6 +7,7 @@ import json
 import os
 import re
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -18,6 +19,14 @@ from r_system_v2.ra import key_health_bridge
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.providers import RAnalysisProviderBinding, ra_deepseek_model
 from r_system_v2.rw.ai.model_config import deepseek_thinking_extras
+
+try:
+    from backend.app.services.ai_usage_ledger import record_ai_usage, usage_from_response
+except ImportError:  # pragma: no cover - 兼容以 app 为根的运行方式
+    from app.services.ai_usage_ledger import (  # type: ignore[no-redef]
+        record_ai_usage,
+        usage_from_response,
+    )
 
 
 SKILL_VERSION = "ra-supplier-keyword-2026-09-07"
@@ -658,14 +667,12 @@ def _call_deepseek_keyword_profile(*, api_key: str, product: dict[str, Any]) -> 
         },
         method="POST",
     )
-    try:
-        with urlopen(request, timeout=_deepseek_timeout_seconds()) as response:
-            payload = json.loads(response.read().decode("utf-8", errors="replace"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:240]
-        raise RuntimeError(f"DeepSeek 关键词抽取失败：HTTP {exc.code} {detail}") from exc
-    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"DeepSeek 关键词抽取失败：{exc}") from exc
+    payload = _post_deepseek(
+        request,
+        timeout=_deepseek_timeout_seconds(),
+        task="ra_supplier_keywords",
+        failure_label="DeepSeek 关键词抽取失败",
+    )
 
     content = (
         payload.get("choices", [{}])[0]
@@ -728,14 +735,12 @@ def _call_deepseek_supplier_alignment(
         },
         method="POST",
     )
-    try:
-        with urlopen(request, timeout=_deepseek_match_timeout_seconds()) as response:
-            payload = json.loads(response.read().decode("utf-8", errors="replace"))
-    except HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:240]
-        raise RuntimeError(f"DeepSeek 供应商匹配失败：HTTP {exc.code} {detail}") from exc
-    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
-        raise RuntimeError(f"DeepSeek 供应商匹配失败：{exc}") from exc
+    payload = _post_deepseek(
+        request,
+        timeout=_deepseek_match_timeout_seconds(),
+        task="ra_supplier_alignment",
+        failure_label="DeepSeek 供应商匹配失败",
+    )
 
     content = (
         payload.get("choices", [{}])[0]
@@ -743,6 +748,49 @@ def _call_deepseek_supplier_alignment(
         .get("content", "")
     )
     return _parse_json_object(str(content))
+
+
+def _post_deepseek(
+    request: Request,
+    *,
+    timeout: float,
+    task: str,
+    failure_label: str,
+) -> dict[str, Any]:
+    """打一次 DeepSeek 并记 AI 台账(成功记 token,失败记错误码)。"""
+    started = perf_counter()
+    model = ra_deepseek_model()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:240]
+        _record_deepseek_failure(model, task=task, started=started, error_code=f"HTTP_{exc.code}")
+        raise RuntimeError(f"{failure_label}：HTTP {exc.code} {detail}") from exc
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        _record_deepseek_failure(model, task=task, started=started, error_code=exc.__class__.__name__)
+        raise RuntimeError(f"{failure_label}：{exc}") from exc
+    record_ai_usage(
+        provider="deepseek",
+        model=model,
+        module="r.analysis",
+        task=task,
+        usage=usage_from_response(payload if isinstance(payload, dict) else {}),
+        latency_ms=(perf_counter() - started) * 1000,
+    )
+    return payload if isinstance(payload, dict) else {}
+
+
+def _record_deepseek_failure(model: str, *, task: str, started: float, error_code: str) -> None:
+    record_ai_usage(
+        provider="deepseek",
+        model=model,
+        module="r.analysis",
+        task=task,
+        success=False,
+        latency_ms=(perf_counter() - started) * 1000,
+        error_code=error_code,
+    )
 
 
 def _skill_text() -> str:

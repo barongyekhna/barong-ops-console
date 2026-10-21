@@ -393,8 +393,10 @@ def _vision(messages: list[dict[str, Any]], *, org_id: str) -> dict[str, Any]:
         ledger_db.close()
     provider_db = SessionLocal()
     try:
-        result = AIExecutionRouter(provider_db, timeout_seconds=90.0, total_budget_seconds=120.0).execute(
-            provider="chatgpt", task_type="chat", payload={"messages": messages, "response_format": {"type": "json_object"}, "temperature": 0}, org=org_id, module_id=MODULE_KEY
+        # 2026-10-21 换血:把关类看图交给 Claude Opus(「judge」档)。换血前这两道门走 4sapi 的 GPT,
+        # 而且路由把图片块压成了文字,模型从没真正看到过图。Opus 看一排 9 张图要比 GPT 慢,超时放宽。
+        result = AIExecutionRouter(provider_db, timeout_seconds=180.0, total_budget_seconds=240.0).execute(
+            provider="judge", task_type="chat", payload={"messages": messages, "response_format": {"type": "json_object"}}, org=org_id, module_id=MODULE_KEY
         )
     except Exception:
         if charged:

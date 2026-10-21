@@ -23,6 +23,9 @@ FAILURE_STATUSES = frozenset(
 
 FOUR_S_API_HOSTS = frozenset(("4sapi.com", "www.4sapi.com"))
 DEEPSEEK_HOSTS = frozenset(("api.deepseek.com",))
+# 2026-10-21 换血:Claude 改走官方 API,不再只认 4sapi 中转。
+ANTHROPIC_HOSTS = frozenset(("api.anthropic.com",))
+ANTHROPIC_VERSION = "2023-06-01"
 SERPER_HOSTS = frozenset(("google.serper.dev",))
 KEEPA_HOSTS = frozenset(("api.keepa.com",))
 # 独立站 WP 桥凭据(H 站点健康):单站点系统,站点域名与全后端其它硬编码一致
@@ -116,6 +119,8 @@ def adapter_for_target(target: ProbeTarget) -> str:
         or "deepseek" in aliases
     ):
         return "deepseek"
+    if key_type == "anthropic" or hostname in ANTHROPIC_HOSTS:
+        return "anthropic"
     if hostname in FOUR_S_API_HOSTS:
         return "4sapi_openai_compatible"
     if aliases & {"chatgpt", "claude", "claude_opus", "4sapi"}:
@@ -319,6 +324,48 @@ def _probe_openai_compatible(
             )
             if balance_result is not None:
                 return balance_result
+    return _status_from_http(
+        adapter=adapter,
+        started=started,
+        response=response,
+        success_reason="models_list_ok",
+        details=details,
+    )
+
+
+def _probe_anthropic(
+    target: ProbeTarget,
+    *,
+    adapter: str,
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> ProbeResult:
+    """Claude 官方:GET /v1/models(零消耗),认 x-api-key + anthropic-version,不认 Bearer。"""
+    started = perf_counter()
+    secret = str(target.secret_value or "").strip()
+    if secret.lower().startswith("bearer "):
+        secret = secret[7:].strip()
+    response = _request(
+        "GET",
+        "https://api.anthropic.com/v1/models",
+        allowed_hosts=ANTHROPIC_HOSTS,
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        headers={"x-api-key": secret, "anthropic-version": ANTHROPIC_VERSION},
+    )
+    details: dict[str, Any] = {}
+    if response.status_code == 200:
+        payload = _json_dict(response)
+        models = payload.get("data") if payload else None
+        if not isinstance(models, list):
+            return _finish(
+                adapter=adapter,
+                started=started,
+                status="provider_error",
+                reason_code="models_response_invalid",
+                http_status=response.status_code,
+            )
+        details["models_visible"] = len(models)
     return _status_from_http(
         adapter=adapter,
         started=started,
@@ -1061,6 +1108,13 @@ def probe_target(
             adapter=adapter,
             allowed_hosts=FOUR_S_API_HOSTS,
             force_four_s_api=True,
+            enforce_public_network=enforce_public_network,
+            transport=transport,
+        )
+    if adapter == "anthropic":
+        return _probe_anthropic(
+            target,
+            adapter=adapter,
             enforce_public_network=enforce_public_network,
             transport=transport,
         )

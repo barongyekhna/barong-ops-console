@@ -8,6 +8,7 @@ from decimal import Decimal
 import json
 import os
 import re
+from time import perf_counter
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -37,6 +38,25 @@ from r_system_v2.ra.providers import RAnalysisProviderBinding, ra_deepseek_model
 from r_system_v2.ra.skill_loader import RASkillBundle, load_ra_skill_bundle
 from r_system_v2.rw.ai.model_config import deepseek_thinking_extras
 
+try:
+    from backend.app.services import ai_roles
+    from backend.app.services.ai_usage_ledger import (
+        estimate_cost_usd,
+        record_ai_usage,
+        usage_from_response,
+    )
+except ImportError:  # pragma: no cover - 兼容以 app 为根的运行方式
+    from app.services import ai_roles  # type: ignore[no-redef]
+    from app.services.ai_usage_ledger import (  # type: ignore[no-redef]
+        estimate_cost_usd,
+        record_ai_usage,
+        usage_from_response,
+    )
+
+LEDGER_MODULE = "r.analysis"
+# 2026-10-21 AI 换血:层名 gpt / opus 是历史叫法,实际按角色跑官方 Claude。
+LAYER_AI_ROLES = {"gpt": "fast", "opus": "judge"}
+
 
 RA_AI_PIPELINE_VERSION = "ra_multi_ai_real_v1"
 RA_AI_LAYERS = ("deepseek", "gpt", "opus")
@@ -53,6 +73,10 @@ class ProviderConfig:
     api_key: str
     base_url: str
     model: str
+    # 走 ai_roles.complete 的层(gpt→fast、opus→judge)才有;预算用完时降级用 DeepSeek 钥匙。
+    ai_role: str | None = None
+    deepseek_key: str = ""
+    deepseek_base_url: str = ""
 
 
 @dataclass(frozen=True)
@@ -416,7 +440,7 @@ def _evaluate_real_layers(
     """新漏斗：DeepSeek 初筛结果作为上下文层，GPT 是终审法官。
 
     Opus 不再默认参与每个候选（成本纪律）；RA_OPUS_PER_CANDIDATE=true 时
-    才对 GPT 放行的候选追加 Opus 层。每日 top10 复核由 auto-cruise 单独调度。
+    才对 GPT 放行的候选追加 Opus 层。手动「Opus 建议」见 run_opus_review_for_report。
     """
     layers: list[LayerDecision] = []
     prescreen_layer = _prescreen_layer_decision(context, skill_bundle=skill_bundle)
@@ -634,62 +658,84 @@ def _chat_completion(
     *,
     messages: list[dict[str, str]],
 ) -> dict[str, Any]:
-    last_error: str | None = None
-    for spec in _chat_request_specs(provider, messages=messages):
-        try:
-            return _execute_chat_request(provider, spec=spec)
-        except RAAISelectionError as exc:
-            last_error = str(exc)
-            if provider.role != "opus" or not _empty_content_error(last_error):
-                raise
-    raise RAAISelectionError(last_error or f"{provider.role} 返回内容为空。")
-
-
-def _chat_request_specs(
-    provider: ProviderConfig,
-    *,
-    messages: list[dict[str, str]],
-) -> list[dict[str, Any]]:
+    if provider.ai_role:
+        return _role_completion(provider, messages=messages)
     payload = {
         "model": provider.model,
         "messages": messages,
         "temperature": _float_env("RA_AI_TEMPERATURE", 0.15),
         "response_format": {"type": "json_object"},
     }
-    if provider.role != "opus":
-        return [{"endpoint": "/v1/chat/completions", "payload": payload, "label": "chat"}]
-    system_text = "\n".join(
-        message["content"]
-        for message in messages
-        if message.get("role") == "system" and message.get("content")
+    return _execute_chat_request(
+        provider,
+        spec={"endpoint": "/v1/chat/completions", "payload": payload, "label": "chat"},
     )
-    user_messages = [message for message in messages if message.get("role") != "system"]
-    # thinking 模型的思考过程也消耗输出额度：太小会全花在思考上导致正文为空。
-    max_tokens = _bounded_int(os.getenv("RA_OPUS_MAX_TOKENS"), 8000, 1024, 16000)
-    return [
-        {
-            "endpoint": "/v1/messages",
-            "label": "messages",
-            "payload": {
-                "model": provider.model,
-                "system": system_text,
-                "messages": user_messages,
-                "temperature": _float_env("RA_AI_TEMPERATURE", 0.15),
-                "max_tokens": max_tokens,
-            },
+
+
+_TRANSIENT_HTTP = frozenset({408, 429, 500, 502, 503, 504, 529})
+
+
+def _role_completion(
+    provider: ProviderConfig,
+    *,
+    messages: list[dict[str, str]],
+) -> dict[str, Any]:
+    """gpt / opus 层:按角色调官方 Claude(预算用完自动降级 DeepSeek),自带台账。"""
+    max_tokens = None
+    if provider.role == "opus":
+        max_tokens = _bounded_int(os.getenv("RA_OPUS_MAX_TOKENS"), 8000, 1024, 16000)
+    result = None
+    last_error: RAAISelectionError | None = None
+    # 瞬时错误(429/5xx/网络)退避重试,别把好产品打进待滑堆。
+    for attempt in range(3):
+        try:
+            result = ai_roles.complete(
+                str(provider.ai_role),
+                messages=messages,
+                module=LEDGER_MODULE,
+                task=f"ra_{provider.role}",
+                anthropic_key=provider.api_key,
+                deepseek_key=provider.deepseek_key or None,
+                deepseek_base_url=provider.deepseek_base_url or None,
+                json_only=True,
+                max_tokens=max_tokens,
+                timeout_seconds=float(_ai_timeout_seconds()),
+            )
+            break
+        except ai_roles.DirectCompletionError as exc:
+            last_error = RAAISelectionError(f"{provider.role} 调用失败：{exc.code}")
+            transient = exc.http_status in _TRANSIENT_HTTP or (
+                exc.http_status is None and exc.code not in {"AI_KEY_MISSING", "AI_REFUSAL"}
+            )
+            if transient and attempt < 2:
+                _retry_sleep(3.0 * (attempt + 1))
+                continue
+            raise last_error from exc
+    if result is None:
+        raise last_error or RAAISelectionError(f"{provider.role} 调用失败。")
+    content = result.text
+    if not content.strip():
+        raise RAAISelectionError(f"{provider.role} 返回内容为空（{result.model}）。")
+    if provider.role == "opus" and not _structured_model_output(_try_parse_model_json(content)):
+        raise RAAISelectionError(f"{provider.role} 返回的不是结构化 JSON（{result.model}）。")
+    usage = result.usage
+    cost = estimate_cost_usd(result.model, usage)
+    return {
+        "content": content,
+        "usage": {
+            "input_tokens": usage.input_tokens,
+            "output_tokens": usage.output_tokens,
+            "cache_read_input_tokens": usage.cache_read_tokens,
+            "cache_creation_input_tokens": usage.cache_write_tokens,
         },
-        {
-            "endpoint": "/v1/chat/completions",
-            "label": "chat_fallback",
-            "payload": {
-                "model": provider.model,
-                "messages": messages,
-                "temperature": _float_env("RA_AI_TEMPERATURE", 0.15),
-                "response_format": {"type": "json_object"},
-                "max_tokens": max_tokens,
-            },
-        },
-    ]
+        "request_endpoint": result.provider,
+        "request_label": "role",
+        "model": result.model,
+        "degraded": result.degraded,
+        "cost_usd": Decimal(str(cost)).quantize(Decimal("0.0001")) if cost is not None else None,
+        "prompt_tokens": usage.input_tokens,
+        "completion_tokens": usage.output_tokens,
+    }
 
 
 def _retry_sleep(seconds: float) -> None:
@@ -709,9 +755,11 @@ def _execute_chat_request(
         payload = {**payload, **deepseek_thinking_extras(provider.model)}
     endpoint = str(spec.get("endpoint") or "/v1/chat/completions")
     body = _json_dumps(payload).encode("utf-8")
+    ledger_task = f"ra_{spec.get('label') or provider.role}"
+    started = perf_counter()
     raw_body: str | None = None
     last_error: RAAISelectionError | None = None
-    # 4sapi 等分销网关会出现秒级渠道抖动（429/5xx/No available channel）：
+    # 网关偶发秒级抖动（429/5xx）：
     # 瞬时错误退避重试，别把好产品打进待滑堆。
     for attempt in range(3):
         request = Request(
@@ -740,12 +788,14 @@ def _execute_chat_request(
             if transient and attempt < 2:
                 _retry_sleep(3.0 * (attempt + 1))
                 continue
+            _record_failure(provider, task=ledger_task, started=started, error_code=f"HTTP_{exc.code}")
             raise last_error from exc
         except (URLError, TimeoutError) as exc:
             last_error = RAAISelectionError(f"{provider.role} 调用失败：{exc}")
             if attempt < 2:
                 _retry_sleep(3.0 * (attempt + 1))
                 continue
+            _record_failure(provider, task=ledger_task, started=started, error_code=exc.__class__.__name__)
             raise last_error from exc
     if raw_body is None:
         raise last_error or RAAISelectionError(f"{provider.role} 调用失败。")
@@ -755,22 +805,19 @@ def _execute_chat_request(
         raise RAAISelectionError(f"{provider.role} 返回内容不是 JSON。") from exc
     if not isinstance(parsed, dict):
         raise RAAISelectionError(f"{provider.role} 返回结构异常。")
+    record_ai_usage(
+        provider=provider.service,
+        model=provider.model,
+        module=LEDGER_MODULE,
+        task=ledger_task,
+        usage=usage_from_response(parsed),
+        latency_ms=(perf_counter() - started) * 1000,
+    )
     content = _response_content(parsed)
     if not isinstance(content, str) or not content.strip():
         raise RAAISelectionError(
             _empty_response_message(provider=provider, parsed=parsed, spec=spec)
         )
-    if provider.role == "opus":
-        parsed_output = _try_parse_model_json(content)
-        if not _structured_model_output(parsed_output):
-            raise RAAISelectionError(
-                _invalid_json_response_message(
-                    provider=provider,
-                    content=content,
-                    parsed=parsed,
-                    spec=spec,
-                )
-            )
     usage = parsed.get("usage") if isinstance(parsed.get("usage"), dict) else {}
     return {
         "content": content,
@@ -783,6 +830,18 @@ def _execute_chat_request(
             usage.get("completion_tokens") or usage.get("output_tokens")
         ),
     }
+
+
+def _record_failure(provider: ProviderConfig, *, task: str, started: float, error_code: str) -> None:
+    record_ai_usage(
+        provider=provider.service,
+        model=provider.model,
+        module=LEDGER_MODULE,
+        task=task,
+        success=False,
+        latency_ms=(perf_counter() - started) * 1000,
+        error_code=error_code,
+    )
 
 
 def _layer_request_payload(
@@ -1197,7 +1256,8 @@ def _normalize_layer_output(
         "provider": {
             "service": provider.service,
             "role": provider.role,
-            "model": provider.model,
+            "model": raw_response.get("model") or provider.model,
+            "degraded": bool(raw_response.get("degraded")),
             "base_url": _redacted_base_url(provider.base_url),
         },
         "request": _audit_request_payload(request_payload),
@@ -1209,7 +1269,7 @@ def _normalize_layer_output(
     return LayerDecision(
         layer=layer,
         model_role=provider.role,
-        model_name=provider.model,
+        model_name=str(raw_response.get("model") or provider.model),
         score=score,
         verdict=verdict,
         reason=reason,
@@ -1218,7 +1278,11 @@ def _normalize_layer_output(
         payload=payload,
         in_tokens=raw_response.get("prompt_tokens") or None,
         out_tokens=raw_response.get("completion_tokens") or None,
-        cost_usd=_estimated_cost(provider, raw_response.get("usage") or {}),
+        cost_usd=(
+            raw_response["cost_usd"]
+            if raw_response.get("cost_usd") is not None
+            else _estimated_cost(provider, raw_response.get("usage") or {})
+        ),
     )
 
 
@@ -1815,126 +1879,6 @@ def extract_amazon_ad_keywords(
     }
 
 
-def opus_daily_review_enabled() -> bool:
-    return os.getenv("RA_OPUS_DAILY_REVIEW", "").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }
-
-
-def run_opus_daily_review(
-    db: Session,
-    *,
-    org_id: str,
-    limit: int = 10,
-) -> dict[str, Any]:
-    """Opus 复核加餐：对最近 24h GPT 放行的 top N 候选做最终把关。
-
-    只在 RA_OPUS_DAILY_REVIEW=true 时由 auto-cruise 调度调用。
-    结果以 opus 层追加进 ra_ai_evaluations，并写回报告 payload.opus_review。
-    """
-    if not opus_daily_review_enabled():
-        return {"enabled": False, "reviewed": 0}
-    rows = db.execute(
-        text(
-            """
-            SELECT d.run_id, d.candidate_id, d.asin, d.final_score
-            FROM ra_final_decisions d
-            WHERE d.org_id = :org_id
-              AND d.verdict = 'pass'
-              AND d.created_at > CURRENT_TIMESTAMP - INTERVAL '24 hours'
-              AND NOT EXISTS (
-                SELECT 1 FROM ra_ai_evaluations e
-                WHERE e.org_id = d.org_id
-                  AND e.candidate_id = d.candidate_id
-                  AND e.run_id = d.run_id
-                  AND e.layer = 'opus'
-              )
-            ORDER BY d.final_score DESC NULLS LAST, d.created_at DESC
-            LIMIT :limit
-            """
-        ),
-        {"org_id": org_id, "limit": max(1, min(int(limit or 10), 20))},
-    ).mappings().all()
-    if not rows:
-        return {"enabled": True, "reviewed": 0}
-    providers = _load_provider_configs(db, org_id=org_id)
-    reviewed = 0
-    for row in rows:
-        run_id = str(row["run_id"])
-        candidate_id = str(row["candidate_id"])
-        contexts = [
-            context
-            for context in _load_candidate_contexts(db, org_id=org_id, run_id=run_id)
-            if str(context.get("candidate_id") or "") == candidate_id
-        ]
-        if not contexts:
-            continue
-        context = contexts[0]
-        context["prescreen"] = _load_prescreen_context(
-            db, org_id=org_id, asin=str(context.get("asin") or "")
-        )
-        channel = _candidate_channel(context, requested_channel="both")
-        bundle = _bundle_for_channel(channel, fallback=load_ra_skill_bundle("both"))
-        try:
-            opus = _call_layer(
-                providers["opus"],
-                layer="opus",
-                context=context,
-                skill_bundle=bundle,
-                channel=channel,
-                previous_layers=[],
-            )
-        except Exception:
-            continue
-        _insert_ai_evaluation(db, org_id=org_id, run_id=run_id, context=context, layer=opus)
-        db.execute(
-            text(
-                f"""
-                UPDATE ra_reports
-                SET payload = payload || {_json_bind(db, "opus_review")},
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE org_id = :org_id AND run_id = :run_id
-                  AND candidate_id = :candidate_id
-                """
-            ),
-            {
-                "org_id": org_id,
-                "run_id": run_id,
-                "candidate_id": candidate_id,
-                "opus_review": _json_dumps(
-                    {
-                        "opus_review": {
-                            "score": opus.score,
-                            "verdict": opus.verdict,
-                            "reason": opus.reason,
-                            "risks": opus.risks,
-                            "advantages": opus.advantages,
-                            "model": opus.model_name,
-                            "reviewed_at": datetime.now(UTC).isoformat(),
-                        }
-                    }
-                ),
-            },
-        )
-        emit_event(
-            db,
-            org_id=org_id,
-            run_id=run_id,
-            stage="opus_review",
-            asin=str(context.get("asin") or ""),
-            candidate_id=candidate_id,
-            verdict=opus.verdict,
-            detail={"score": opus.score, "reason": opus.reason[:200]},
-            commit=False,
-        )
-        db.commit()
-        reviewed += 1
-    return {"enabled": True, "reviewed": reviewed}
-
-
 def _load_provider_configs(db: Session, *, org_id: str) -> dict[str, ProviderConfig]:
     binding = RAnalysisProviderBinding(
         org_id=org_id,
@@ -1955,25 +1899,33 @@ def _load_provider_configs(db: Session, *, org_id: str) -> dict[str, ProviderCon
         env_model="RA_DEEPSEEK_MODEL",
         fallback_model=ra_deepseek_model(),
     )
-    gpt = _provider_config(
-        role="gpt",
-        service="4sapi",
-        secret=gpt_secret,
-        env_base_url="FOURSAPI_BASE_URL",
-        default_base_url="https://api.4sapi.com/v1",
-        env_model="RA_GPT_MODEL",
-        fallback_model="gpt-5.6-luna",
-    )
-    opus = _provider_config(
-        role="opus",
-        service="4sapi",
-        secret=opus_secret,
-        env_base_url="FOURSAPI_BASE_URL",
-        default_base_url="https://api.4sapi.com/v1",
-        env_model="RA_OPUS_MODEL",
-        fallback_model="claude-opus-4-8-thinking",
-    )
+    gpt = _role_provider_config("gpt", secret=gpt_secret, deepseek=deepseek)
+    opus = _role_provider_config("opus", secret=opus_secret, deepseek=deepseek)
     return {"deepseek": deepseek, "gpt": gpt, "opus": opus}
+
+
+def _role_provider_config(
+    layer: str,
+    *,
+    secret: dict[str, Any],
+    deepseek: ProviderConfig,
+) -> ProviderConfig:
+    """gpt / opus 层:Claude 官方钥匙 + 角色模型(ai_roles),降级时用 DeepSeek 钥匙。"""
+    api_key = str(secret.get("value") or "").strip()
+    if not api_key:
+        raise RAAISelectionError(f"{layer} 层的 Claude 官方钥匙未绑定（r.analysis / anthropic）。")
+    role = LAYER_AI_ROLES[layer]
+    target = ai_roles.resolve_role(role)
+    return ProviderConfig(
+        role=layer,
+        service=target.provider,
+        api_key=api_key,
+        base_url=str(secret.get("url") or "https://api.anthropic.com"),
+        model=target.model,
+        ai_role=role,
+        deepseek_key=deepseek.api_key,
+        deepseek_base_url=deepseek.base_url,
+    )
 
 
 def _provider_config(
@@ -2116,35 +2068,6 @@ def _empty_response_message(
     if thinking_tokens and output_tokens and thinking_tokens >= output_tokens:
         detail += "疑似 thinking 模型消耗完输出预算，未生成最终 JSON。"
     return detail
-
-
-def _invalid_json_response_message(
-    *,
-    provider: ProviderConfig,
-    content: str,
-    parsed: dict[str, Any],
-    spec: dict[str, Any],
-) -> str:
-    usage = parsed.get("usage") if isinstance(parsed.get("usage"), dict) else {}
-    output_tokens = _int_value(usage.get("output_tokens") or usage.get("completion_tokens"))
-    stop_reason = parsed.get("stop_reason") or parsed.get("finish_reason")
-    label = str(spec.get("label") or spec.get("endpoint") or "")
-    excerpt = re.sub(r"\s+", " ", content).strip()[:220]
-    return (
-        f"{provider.role} 返回 JSON 不完整或结构不合格"
-        f"（endpoint={label}, stop_reason={stop_reason}, output_tokens={output_tokens}）："
-        f"{excerpt}"
-    )
-
-
-def _empty_content_error(message: str | None) -> bool:
-    text_value = str(message or "")
-    return (
-        "返回内容为空" in text_value
-        or "未生成最终 JSON" in text_value
-        or "JSON 不完整" in text_value
-        or "结构不合格" in text_value
-    )
 
 
 def _json_dumps(value: Any) -> str:

@@ -28,7 +28,8 @@ PROVIDER_ALIASES = {
 PROVIDER_KEY_ALIASES = {
     "serp": "serp",
     "chatgpt": "chatgpt",
-    "claude": "claude_opus",
+    # 2026-10-21:Claude 的绑定别名从 claude_opus(4sapi 中转)换成 anthropic(官方钥匙)。
+    "claude": "anthropic",
     "deepseek": "deepseek",
     "keepa": "keepa",
     "google_ads": "google_ads",

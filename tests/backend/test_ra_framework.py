@@ -192,6 +192,18 @@ def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatc
         "r_system_v2.core.secret_manager._backend_resolver",
         lambda: (fake_resolver, FakeIsolationError, FakeOrchestrationError),
     )
+    anthropic_lookups: list[tuple[str, ...]] = []
+
+    def fake_anthropic_candidates(_db, org_id: str, *, key_aliases):
+        assert org_id == "org-ra"
+        anthropic_lookups.append(tuple(key_aliases))
+        return [{"value": "anthropic-secret", "url": "https://api.anthropic.com", "key_alias": "anthropic"}]
+
+    # 2026-10-21 换血:gpt / opus 两层只认 r.analysis 上别名 anthropic 的官方钥匙。
+    monkeypatch.setattr(
+        "r_system_v2.ra.providers._resolve_r_analysis_key_candidates",
+        fake_anthropic_candidates,
+    )
     binding = RAnalysisProviderBinding(
         org_id="org-ra",
         secret_manager=SecretManager(db_session=object()),
@@ -220,6 +232,10 @@ def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatc
     assert google_ads_role["runtime_enabled"] is False
     assert google_ads_role["review_status"] == "pending_basic_review"
     assert (R_ANALYSIS_MODULE_ID, "4sapi") in calls
+    assert anthropic_lookups and all(aliases == ("anthropic",) for aliases in anthropic_lookups)
+    assert status["routing"]["gpt"] == "anthropic"
+    assert status["routing"]["opus"] == "anthropic"
+    assert binding.opus_config()["value"] == "anthropic-secret"
 
 
 def test_google_ads_basic_review_gate_requires_manual_runtime_enable(monkeypatch) -> None:

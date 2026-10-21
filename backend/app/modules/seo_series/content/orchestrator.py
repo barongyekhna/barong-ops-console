@@ -33,7 +33,11 @@ from .prompt_skills import (
 
 logger = logging.getLogger(__name__)
 
-_PROVIDER = "chatgpt"
+# 2026-10-21 换血:面向美国买家的英文成稿交给「writer」档(默认 Claude Opus,见 services/ai_roles)。
+# 内容行上的 provider 列记实际干活的那家:平时是 claude,当天额度用完降级时是 deepseek。
+_AI_ROLE = "writer"
+_PROVIDER = "claude"
+_DEGRADED_PROVIDER = "deepseek"
 
 
 class SeoContentError(Exception):
@@ -47,6 +51,7 @@ class SeoContentError(Exception):
 class SeoContentOrchestrator:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self._last_provider = _PROVIDER
 
     # -- 事实装配 ---------------------------------------------------------------
     def _craft_facts(self, topic: SeoTopic) -> tuple[list[Any], list[dict[str, Any]]]:
@@ -279,7 +284,7 @@ class SeoContentOrchestrator:
             generation_status="generated",
             review_status="pending",
             skill_version=SEO_CONTENT_SKILL_VERSION,
-            provider=_PROVIDER,
+            provider=self._last_provider,
             workspace_key=scope_context.workspace_key,
             business_context=scope_context.business_context,
             scope_mode=scope_context.scope_mode,
@@ -440,8 +445,8 @@ class SeoContentOrchestrator:
 
         provider_db = SessionLocal()
         try:
-            return AIExecutionRouter(provider_db).execute(
-                provider=_PROVIDER,
+            result = AIExecutionRouter(provider_db).execute(
+                provider=_AI_ROLE,
                 task_type="generate",
                 payload=payload,
                 org=TARGET_ORGANIZATION_NAME,
@@ -450,6 +455,10 @@ class SeoContentOrchestrator:
             )
         finally:
             provider_db.close()
+        self._last_provider = (
+            _DEGRADED_PROVIDER if isinstance(result, dict) and result.get("_ai_degraded") else _PROVIDER
+        )
+        return result
 
 
 __all__ = ["SeoContentError", "SeoContentOrchestrator"]

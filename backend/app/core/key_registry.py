@@ -61,9 +61,26 @@ KEY_TYPE_REGISTRY: dict[str, dict[str, Any]] = {
         "adapter": "OpenAIAdapter",
         "module_ids": ["k.product_knowledge", "i.image_system", "r.analysis"],
     },
+    # 2026-10-21 换血:Claude 改走官方 API(Max 订阅送的额度)。官方钥匙单独一个类型,
+    # 注入头是 x-api-key;路由的 Claude 绑定别名也换成 anthropic,4sapi 时代的
+    # claude_opus 钥匙从此不会再被文字调用取到。
+    "anthropic": {
+        "type": "anthropic",
+        "name": "Anthropic(Claude 官方)",
+        "description": "Claude 官方 API(Haiku / Opus)",
+        "provider": "claude",
+        "auth_type": "api_key",
+        "enabled": True,
+        "scope": ["K", "R-A", "GEO", "SEO", "A"],
+        "validation_endpoint": None,
+        "default_url": "https://api.anthropic.com",
+        "default_alias": "anthropic",
+        "adapter": "AnthropicAdapter",
+        "module_ids": ["k.product_knowledge", "r.analysis", "amz.ops"],
+    },
     "claude_opus": {
         "type": "claude_opus",
-        "name": "Claude Opus",
+        "name": "Claude Opus(4sapi 中转,已退役)",
         "description": "Anthropic Claude API",
         "provider": "claude",
         "auth_type": "api_key",
@@ -213,6 +230,7 @@ KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
     "deepseek": ("deepseek",),
     "openai": ("openai",),
     "chatgpt": ("chatgpt", "4sapi"),
+    "anthropic": ("api.anthropic.com",),
     "claude_opus": ("claude", "anthropic", "opus"),
     "serp": ("serp", "serper"),
     "alibaba1688": ("1688", "alibaba1688", "open.1688.com", "阿里巴巴开放平台"),
@@ -253,6 +271,7 @@ def key_type_definition(key_type: str | None) -> dict[str, Any]:
 def list_key_type_definitions() -> list[dict[str, Any]]:
     preferred_order = [
         "deepseek",
+        "anthropic",
         "openai",
         "keepa",
         "alibaba1688",

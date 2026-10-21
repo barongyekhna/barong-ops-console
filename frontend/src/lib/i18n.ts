@@ -52,6 +52,7 @@ const K_PROVIDER_LABELS: Record<string, string> = {
   chatgpt: "ChatGPT",
   claude: "Claude",
   claude_opus: "Claude",
+  anthropic: "Claude(官方)",
   deepseek: "DeepSeek",
   serp: "SERP",
 };
@@ -102,7 +103,9 @@ function collectKnownProviderAliases(values: unknown[]): string[] {
       continue;
     }
 
-    if (normalized.includes("claude_opus")) {
+    if (normalized.includes("anthropic")) {
+      aliases.add("anthropic");
+    } else if (normalized.includes("claude_opus")) {
       aliases.add("claude_opus");
     } else if (normalized.includes("chatgpt")) {
       aliases.add("chatgpt");
@@ -129,7 +132,7 @@ function providerAliasesFromPath(path: string) {
     return ["deepseek"];
   }
   if (normalized.includes("/workflow/start")) {
-    return ["serp", "chatgpt", "claude_opus", "deepseek"];
+    return ["serp", "anthropic", "deepseek"];
   }
 
   return [];
@@ -157,7 +160,7 @@ function providerAliasesFromDetail(detail: unknown, path: string) {
 function kApiKeyMessage(aliases: string[]) {
   const labels = (aliases.length > 0
     ? aliases
-    : ["serp", "chatgpt", "claude_opus", "deepseek"]
+    : ["serp", "anthropic", "deepseek"]
   ).map((alias) => K_PROVIDER_LABELS[alias] ?? alias);
   const uniqueLabels = [...new Set(labels)];
 

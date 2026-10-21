@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260919_01_amz_finance",
+  "alembic_head": "20261021_01_ai_usage_ledger",
   "environment": "staging",
-  "expected_alembic_head": "20260919_01_amz_finance",
+  "expected_alembic_head": "20261021_01_ai_usage_ledger",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 133,
-  "migration_hash": "80f89a3bfee025278ebcb2d209a266ff122e01b184606d05c7bcae70260a1aac",
+  "migration_count": 134,
+  "migration_hash": "602e5c33dc845cf4359ee4ef7dcc1f804cdaefd316ff2080066c8b6619bd5cd9",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -140,9 +140,10 @@
     "20260918_01_amz_inventory_listings",
     "20260918_02_amz_actions_ledger",
     "20260918_03_rd_client_traces",
-    "20260919_01_amz_finance"
+    "20260919_01_amz_finance",
+    "20261021_01_ai_usage_ledger"
   ],
-  "migration_order_checksum": "b1becdc335219ed79cfebb37407af874300bc3cf497ee9bca63fa355aa055340",
+  "migration_order_checksum": "91882bceea0838cfb77dc7cb42eee9def7f169023c29d952480fb87b4718d3ae",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -1074,6 +1075,13 @@
       "down_revision": "20260918_03_rd_client_traces",
       "path": "backend/alembic/versions/20260919_01_amz_finance.py",
       "version": "20260919_01_amz_finance"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "5b0b3c219db354566de0ab22f1ae2769dbcb295a926269c29c61a2e6fe58e216",
+      "down_revision": "20260919_01_amz_finance",
+      "path": "backend/alembic/versions/20261021_01_ai_usage_ledger.py",
+      "version": "20261021_01_ai_usage_ledger"
     }
   ]
 }

@@ -15,6 +15,9 @@ from sqlalchemy.orm import Session
 
 from ..models.organization import OrganizationRecord
 from ..models.user import User
+from . import anthropic_messages
+from .ai_roles import DEGRADE_MODEL, DEGRADE_PROVIDER, is_role, resolve_role
+from .ai_usage_ledger import claude_budget_exhausted, record_ai_usage, usage_from_response
 from .event_collector import emit_event
 from .module_execution_gate import (
     ModuleExecutionContext,
@@ -31,7 +34,9 @@ from .provider_config_service import (
     upsert_provider_config,
 )
 
-AIProvider = Literal["serp", "chatgpt", "claude", "deepseek"]
+# 2026-10-21 换血：调用方优先传「角色」（bulk / fast / judge / writer，见 ai_roles），
+# 由角色决定供应商和模型。"chatgpt" 已退役 —— 4sapi 只留生图，文字调用一律报错而不是悄悄转发。
+AIProvider = Literal["serp", "claude", "deepseek", "bulk", "fast", "judge", "writer"]
 AITaskType = Literal[
     "search",
     "chat",
@@ -75,43 +80,23 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         # (动作白名单 + 权限位)而不在模型脑子里,所以这里可以放心用便宜的一档。
         "agent_chat": "deepseek-flash",
     },
-    "chatgpt": {
-        "default": "gpt-5.6-luna",
-        "chat": "gpt-5.6-luna",
-        "generate": "gpt-5.6-luna",
-        # 作图指令首发用家规模型;schema 校验失败的重试改用格式纪律
-        # 最强的 5.2-high(2026-07-22:代理商的 luna 通道连续产出缺
-        # overlay 的越规输出,重试同模型无效)。
-        "image_brief": "gpt-5.6-luna",
-        "image_brief_retry": "gpt-5.2-high",
-    },
-    # 2026-07-25 用户拍板:关键词终筛升到 Opus 5,并换上 claude-max 分组的新钥匙。
-    # 注意该分组没有 -thinking 变体(实探 claude-opus-5-thinking 返 503 无渠道),
-    # 模型名必须是裸的 claude-opus-5。
+    # 2026-10-21 换血:Claude 改走官方 API(Max 订阅送的额度)。直接写 provider="claude"
+    # 的老调用按「终审」档处理;新代码请传角色(ai_roles)。
     "claude": {
-        "default": "claude-opus-5",
-        "chat": "claude-opus-5",
-        "generate": "claude-opus-5",
+        "default": "claude-opus-5-5",
+        "chat": "claude-opus-5-5",
+        "generate": "claude-opus-5-5",
     },
 }
 
-DEFAULT_FALLBACK_PROVIDERS = {
-    "deepseek": "chatgpt",
-    "claude": "chatgpt",
-    # 2026-07-22 用户拍板:GPT 全系(含降级序列)都打不通时,试 Opus 4.8。
-    # 4sapi 上同一把钥匙可请求任意模型,通不通取决于钥匙分组的通道。
-    "chatgpt": "claude",
-}
-# 2026-07-22 实况:4sapi 的「OpenAI优质」分组会整组掉线(5.5/5.6 全家 503
-# "No available channel"),低档通道仍活着。同 provider 内按序降级,
-# 通道恢复后首选模型自动回归——不用人工切配置。
-MODEL_FALLBACKS: dict[str, list[str]] = {
-    "chatgpt": ["gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.2-high"],
-    # 2026-07-25:Claude 侧原本没有同组降级链——2026-07-24 实况是整个
-    # claude-官方 分组掉光(0 模型可见/全 503),终筛只能整条腿断掉转投 GPT。
-    # 新 claude-max 分组里 4-8 与 5 同在,配上降级链后单个模型掉线不再断腿。
-    "claude": ["claude-opus-5", "claude-opus-4-8"],
-}
+# 2026-10-21 清空:这张表曾让失败的调用悄悄转去别家(DeepSeek 失败转 GPT、Claude 失败转 GPT、
+# GPT 失败转 Claude),而且调用方传 fallback_provider=None 也挡不住(旧代码用的是 `or`)。
+# 换血后 Claude 是有额度上限的,这扇暗门会把大活压到 Claude 上吃光额度。
+# 现在跨供应商只有两种情况:调用方明确传了 fallback_provider;或 Claude 当天预算用完按家规降级。
+DEFAULT_FALLBACK_PROVIDERS: dict[str, str] = {}
+# 同一供应商内遇到通道级 503 换下一个模型。4sapi 时代的 GPT/Claude 降级链随中转一起退役;
+# 官方口没有「分组掉线」这回事,目前不需要链。
+MODEL_FALLBACKS: dict[str, list[str]] = {}
 # 240s:降级到低档模型(如 5.2-high)生成整页文案实测会超过 150s;
 # 生成类任务全部走异步 job,放宽超时不影响交互体验(2026-07-22)。
 DEFAULT_PROVIDER_TIMEOUT_SECONDS = 240.0
@@ -338,12 +323,39 @@ class OpenAIAdapter(BaseProviderAdapter):
         return body
 
 
-class ClaudeAdapter(BaseProviderAdapter):
-    endpoint_map = {
-        "default": "/v1/messages",
-        "chat": "/v1/messages",
-        "generate": "/v1/messages",
-    }
+class AnthropicAdapter(BaseProviderAdapter):
+    """Claude 官方 Messages API。协议细节都在 anthropic_messages 里。"""
+
+    endpoint_map = {"default": anthropic_messages.MESSAGES_ENDPOINT}
+    effort: str | None = None
+
+    def build_request(
+        self,
+        *,
+        task_type: str,
+        payload: dict[str, Any],
+        model: str | None,
+    ) -> ProviderRequest:
+        # 只认官方地址:4sapi 时代的 claude_opus 钥匙绝不能被这里拿去打中转。
+        if not anthropic_messages.is_anthropic_url(self.base_url):
+            raise ValueError("anthropic_adapter_requires_official_api_url")
+        max_tokens = payload.get("max_tokens") or payload.get("max_completion_tokens")
+        return ProviderRequest(
+            url=f"{self.base_url}{self.endpoint_for(task_type)}",
+            headers=anthropic_messages.headers_for(self.api_key, model),
+            body=anthropic_messages.build_body(
+                model=str(model),
+                messages=_messages_from_payload(payload),
+                effort=self.effort,
+                max_tokens=int(max_tokens) if max_tokens else None,
+                json_only=anthropic_messages.wants_json(payload),
+                system=payload.get("system") if isinstance(payload.get("system"), str) else None,
+            ),
+        )
+
+    def response_parser(self, response: dict[str, Any]) -> dict[str, Any]:
+        text = anthropic_messages.response_text(response)
+        return _parse_json_text(text) or {"content": text}
 
 
 class DeepSeekAdapter(OpenAIAdapter):
@@ -374,29 +386,24 @@ class DeepSeekAdapter(OpenAIAdapter):
 
 ADAPTERS = {
     "serp": SerperAdapter,
-    "chatgpt": OpenAIAdapter,
-    "claude": ClaudeAdapter,
+    "claude": AnthropicAdapter,
     "deepseek": DeepSeekAdapter,
 }
 
 
-def _messages_from_payload(payload: dict[str, Any]) -> list[dict[str, str]]:
+def _messages_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
     messages = payload.get("messages")
     if isinstance(messages, list) and all(isinstance(item, dict) for item in messages):
         normalized = []
         for item in messages:
             role = str(item.get("role") or "user")
             content = item.get("content")
-            normalized.append(
-                {
-                    "role": role,
-                    "content": (
-                        content
-                        if isinstance(content, str)
-                        else json.dumps(content, ensure_ascii=False, default=str)
-                    ),
-                }
-            )
+            # 2026-10-21:列表形式的 content(文字块 + image_url 图片块)原样保留。
+            # 旧代码把它 json.dumps 成一段文字 —— A 系列两道看图门因此从上线起就没把图
+            # 真正发给过模型,模型拿到的是一串 base64 字符(测试打桩没抓到)。
+            if not isinstance(content, (str, list)):
+                content = json.dumps(content, ensure_ascii=False, default=str)
+            normalized.append({"role": role, "content": content})
         return normalized
     prompt = payload.get("prompt") or payload.get("query")
     if not isinstance(prompt, str):
@@ -532,7 +539,26 @@ class AIExecutionRouter:
         execution_context: ModuleExecutionContext | None = None,
         fallback_provider: str | None = None,
     ) -> dict[str, Any]:
-        canonical_provider = normalize_provider(provider)
+        model_override: str | None = None
+        effort: str | None = None
+        if is_role(provider):
+            target = resolve_role(provider)
+            canonical_provider, model_override, effort = target.provider, target.model, target.effort
+        else:
+            canonical_provider = normalize_provider(provider)
+        if canonical_provider == "chatgpt":
+            # 4sapi 只留生图(用户 10-19 拍板)。这里报错而不是转发,漏改的调用方会当场暴露。
+            raise AIProviderExecutionError(
+                "AI_PROVIDER_RETIRED",
+                "ChatGPT text calls are retired; pass an AI role (bulk/fast/judge/writer).",
+                provider="chatgpt",
+                task_type=task_type,
+                status_code=500,
+            )
+        degraded = False
+        if canonical_provider == "claude" and claude_budget_exhausted():
+            # 家规(10-21):Claude 当天额度用完,降级给 DeepSeek 照常干活,并标明是降级做的。
+            canonical_provider, model_override, effort, degraded = DEGRADE_PROVIDER, DEGRADE_MODEL, None, True
         org_record = self._resolve_org(org)
         context = execution_context or require_module_execution_ready(
             self.db,
@@ -545,11 +571,25 @@ class AIExecutionRouter:
             },
         )
         self._validate_context_org(context=context, org_record=org_record)
+        if degraded and self._find_key(context, canonical_provider) is None:
+            # 调用方预先备好的上下文里只有 Claude 钥匙:为降级单独取一把 DeepSeek 钥匙。
+            # 取不到就当场报错(模块没绑 DeepSeek),绝不拿 Claude 钥匙去打 DeepSeek。
+            context = require_module_execution_ready(
+                self.db,
+                module_id=module_id,
+                user=user,
+                request=request,
+                explicit_org_id=org_record.org_id,
+                key_requirements={canonical_provider: provider_key_alias(canonical_provider)},
+            )
+            self._validate_context_org(context=context, org_record=org_record)
         key = self._key_for_provider(context, canonical_provider)
+        if degraded:
+            self._emit_degraded_event(org_id=org_record.org_id, task_type=task_type, module_id=module_id)
         # 墙钟总预算在这里起算,贯穿模型降级链与 provider fallback。
         # 不设它的话,一次 execute() 的真实上限是 timeout×(降级次数+fallback),
         # 而不是 timeout。
-        return self._execute_with_key(
+        result = self._execute_with_key(
             provider=canonical_provider,
             task_type=task_type,
             payload=payload,
@@ -560,7 +600,13 @@ class AIExecutionRouter:
             fallback_provider=fallback_provider,
             fallback_allowed=True,
             deadline=perf_counter() + self.total_budget_seconds,
+            model_override=model_override,
+            effort=effort,
+            degraded=degraded,
         )
+        if degraded:
+            result = {**result, "_ai_degraded": True}
+        return result
 
     def _execute_with_key(
         self,
@@ -575,8 +621,11 @@ class AIExecutionRouter:
         fallback_provider: str | None,
         fallback_allowed: bool,
         deadline: float | None = None,
+        model_override: str | None = None,
+        effort: str | None = None,
+        degraded: bool = False,
     ) -> dict[str, Any]:
-        model = AIModelRouter.resolve_model(provider=provider, task_type=task_type)
+        model = model_override or AIModelRouter.resolve_model(provider=provider, task_type=task_type)
         config = upsert_provider_config(
             self.db,
             org_id=org_record.org_id,
@@ -604,6 +653,8 @@ class AIExecutionRouter:
             header_name=key.header_name,
             key_alias=key.key_alias,
         )
+        if isinstance(adapter, AnthropicAdapter):
+            adapter.effort = effort
         base_url = config.base_url
         endpoint_called = adapter.endpoint_for(task_type)
         self._release_db_transaction()
@@ -615,11 +666,21 @@ class AIExecutionRouter:
         ]
         last_error: AIProviderExecutionError | None = None
         for active_model in model_candidates:
-            provider_request = adapter.build_request(
-                task_type=task_type,
-                payload=payload,
-                model=active_model,
-            )
+            try:
+                provider_request = adapter.build_request(
+                    task_type=task_type,
+                    payload=payload,
+                    model=active_model,
+                )
+            except ValueError as exc:
+                raise AIProviderExecutionError(
+                    "AI_PROVIDER_MISCONFIGURED",
+                    f"AI provider '{provider}' key is not usable: {exc}",
+                    provider=provider,
+                    task_type=task_type,
+                    status_code=500,
+                    details={"model": active_model, "base_url": base_url},
+                ) from exc
             channel_down = False
             for attempt in range(1, self.max_attempts + 1):
                 started = perf_counter()
@@ -631,6 +692,16 @@ class AIExecutionRouter:
                     )
                     parsed = adapter.response_parser(raw_response)
                     latency_ms = (perf_counter() - started) * 1000
+                    record_ai_usage(
+                        provider=provider,
+                        model=active_model,
+                        module=module_id,
+                        task=task_type,
+                        usage=usage_from_response(raw_response),
+                        degraded=degraded,
+                        latency_ms=latency_ms,
+                        org_ref=org_record.org_id,
+                    )
                     self._emit_execution_event(
                         provider=provider,
                         task_type=task_type,
@@ -658,6 +729,15 @@ class AIExecutionRouter:
                             "attempt": attempt,
                             "model": active_model,
                         },
+                    )
+                except anthropic_messages.ClaudeRefusalError as exc:
+                    last_error = AIProviderExecutionError(
+                        "AI_PROVIDER_REFUSAL",
+                        f"AI provider '{provider}' declined the request ({exc.category or 'unknown'}).",
+                        provider=provider,
+                        task_type=task_type,
+                        status_code=422,
+                        details={"attempt": attempt, "model": active_model, "category": exc.category},
                     )
                 except TimeoutError as exc:
                     last_error = AIProviderExecutionError(
@@ -692,6 +772,17 @@ class AIExecutionRouter:
                         },
                     )
                 latency_ms = (perf_counter() - started) * 1000
+                record_ai_usage(
+                    provider=provider,
+                    model=active_model,
+                    module=module_id,
+                    task=task_type,
+                    success=False,
+                    degraded=degraded,
+                    latency_ms=latency_ms,
+                    org_ref=org_record.org_id,
+                    error_code=last_error.code if last_error else None,
+                )
                 self._emit_execution_event(
                     provider=provider,
                     task_type=task_type,
@@ -709,7 +800,8 @@ class AIExecutionRouter:
             if not channel_down:
                 break
 
-        resolved_fallback = fallback_provider or DEFAULT_FALLBACK_PROVIDERS.get(provider)
+        # 只认调用方明确传的 fallback_provider(换血前这里会用 DEFAULT_FALLBACK_PROVIDERS 兜底)。
+        resolved_fallback = fallback_provider
         # 预算耗尽就别再开一份全新的 240s 去打备胎 —— 那正是"名义 240s 上限
         # 实际能跑 480s"的来源。宁可现在就失败,让上层重试。
         budget_left = deadline is None or perf_counter() < deadline
@@ -797,15 +889,13 @@ class AIExecutionRouter:
                 },
             )
 
-    def _key_for_provider(
-        self,
+    @staticmethod
+    def _find_key(
         context: ModuleExecutionContext,
         provider: str,
-    ) -> ModuleExecutionKey:
+    ) -> ModuleExecutionKey | None:
         expected_alias = provider_key_alias(provider)
         accepted_aliases = {provider, expected_alias}
-        if provider == "chatgpt":
-            accepted_aliases.add("ai_provider")
         for step, key in context.keys.items():
             if step in accepted_aliases or key.key_alias in accepted_aliases:
                 return key
@@ -814,8 +904,18 @@ class AIExecutionRouter:
                     return key
             except ProviderConfigError:
                 continue
-        if len(context.keys) == 1:
-            return next(iter(context.keys.values()))
+        return None
+
+    def _key_for_provider(
+        self,
+        context: ModuleExecutionContext,
+        provider: str,
+    ) -> ModuleExecutionKey:
+        # 2026-10-21 删掉了「上下文里只有一把钥匙就用它」的兜底:换血后同一个上下文里的钥匙
+        # 可能属于别家(比如降级时只剩 Claude 钥匙),拿错钥匙打错供应商比报错更糟。
+        key = self._find_key(context, provider)
+        if key is not None:
+            return key
         raise AIProviderExecutionError(
             "AI_PROVIDER_KEY_MISSING",
             f"Resolved execution context does not include provider '{provider}'.",
@@ -823,6 +923,23 @@ class AIExecutionRouter:
             task_type="chat",
             status_code=403,
             details={"available_steps": sorted(context.keys)},
+        )
+
+    def _emit_degraded_event(self, *, org_id: str, task_type: str, module_id: str) -> None:
+        emit_event(
+            event_type="ai_provider.degraded",
+            module="system",
+            action="ai_provider.degraded",
+            source="backend",
+            status="success",
+            org_id=org_id,
+            payload={
+                "reason": "claude_daily_budget_exhausted",
+                "provider_used": DEGRADE_PROVIDER,
+                "model": DEGRADE_MODEL,
+                "task_type": task_type,
+                "module_id": module_id,
+            },
         )
 
     def _emit_execution_event(

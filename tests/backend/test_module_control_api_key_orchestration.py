@@ -637,6 +637,54 @@ def test_openai_key_type_binds_to_i_image_system(
         assert context.header_value == "Bearer i-image-4sapi-secret"
 
 
+def test_anthropic_official_key_injects_x_api_key_header(
+    owner_client: TestClient,
+) -> None:
+    # 2026-10-21 换血:Claude 官方钥匙单独一个类型,注入头是 x-api-key(不套 Bearer)。
+    key_types = owner_client.get("/api/control-plane/api-key-orchestration/key-types")
+    assert key_types.status_code == 200, key_types.text
+    anthropic_type = next(item for item in key_types.json()["items"] if item["type"] == "anthropic")
+    assert anthropic_type["provider"] == "claude"
+    assert anthropic_type["default_url"] == "https://api.anthropic.com"
+
+    created = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{DEFAULT_ORG_ID}/keys",
+        json={
+            "name": "Claude 官方",
+            "url": "https://api.anthropic.com",
+            "key_value": "sk-ant-test-secret",
+            "key_type": "anthropic",
+        },
+    )
+    assert created.status_code == 201, created.text
+    created_item = created.json()["item"]
+    assert created_item["key_type"] == "anthropic"
+
+    bound = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{DEFAULT_ORG_ID}/bindings",
+        json={
+            "module_id": "k.product_knowledge",
+            "key_id": created_item["key_id"],
+            "key_alias": "anthropic",
+        },
+    )
+    assert bound.status_code == 201, bound.text
+
+    with SessionLocal() as db:
+        context = resolve_module_api_key_for_injection(
+            db,
+            org_id=DEFAULT_ORG_ID,
+            module_id="k.product_knowledge",
+            key_alias="anthropic",
+        )
+        assert context.key_type == "anthropic"
+        assert context.provider == "claude"
+        assert context.header_name == "x-api-key"
+        assert context.header_value == "sk-ant-test-secret"
+
+
 def test_k_series_key_reevaluation_activates_target_org_runtime(
     owner_client: TestClient,
 ) -> None:

@@ -74,6 +74,7 @@ const KEY_BINDING_ALIAS_OPTIONS = [
   "4sapi",
   "deepseek",
   "claude_opus",
+  "anthropic",
   "n8n",
   "keepa",
 ];

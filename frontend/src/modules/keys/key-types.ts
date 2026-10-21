@@ -6,6 +6,7 @@ export type ApiKeyType =
   | "openai"
   | "chatgpt"
   | "claude_opus"
+  | "anthropic"
   | "deepseek"
   | "n8n"
   | "keepa"
@@ -32,6 +33,13 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     description: "DeepSeek AI API",
     defaultUrl: "https://api.deepseek.com",
     defaultAlias: "deepseek",
+  },
+  {
+    type: "anthropic",
+    label: "Anthropic(Claude 官方)",
+    description: "Claude 官方 API(Haiku 快活 / Opus 终审);在 Claude Console 建 key,作用范围选单个工作区",
+    defaultUrl: "https://api.anthropic.com",
+    defaultAlias: "anthropic",
   },
   {
     type: "openai",
@@ -117,8 +125,8 @@ const LOOKUP_KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
   },
   {
     type: "claude_opus",
-    label: "Claude Opus",
-    description: "Anthropic Claude API",
+    label: "Claude Opus(4sapi 中转,已退役)",
+    description: "旧的 4sapi 中转 Claude 钥匙;文字调用已改走 Anthropic 官方",
     defaultUrl: "https://api.anthropic.com",
     defaultAlias: "claude_opus",
   },

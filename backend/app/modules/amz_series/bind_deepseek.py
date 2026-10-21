@@ -32,9 +32,15 @@ SOURCE_MARK = "amz_bind_deepseek"
 SOURCE_MODULE = "k.product_knowledge"
 DEEPSEEK_ALIAS = provider_key_alias("deepseek")
 # 2026-09-17:同一把梯子也给看图模型用(图片四道门走 chatgpt / 4sapi)。--provider chatgpt。
-PROVIDERS = ("deepseek", "chatgpt", "keepa")
-# 源钥匙在哪个模块下找:deepseek/chatgpt 在 K,keepa 在 R 仓库。
-SOURCE_MODULE_BY_PROVIDER = {"deepseek": "k.product_knowledge", "chatgpt": "k.product_knowledge", "keepa": "r.warehouse"}
+# 2026-10-21 换血:看图门改走 Claude 官方钥匙 --provider anthropic(chatgpt 那条保留只为 --undo 能撤旧绑定)。
+PROVIDERS = ("deepseek", "chatgpt", "keepa", "anthropic")
+# 源钥匙在哪个模块下找:deepseek/chatgpt/anthropic 在 K,keepa 在 R 仓库。
+SOURCE_MODULE_BY_PROVIDER = {
+    "deepseek": "k.product_knowledge",
+    "chatgpt": "k.product_knowledge",
+    "keepa": "r.warehouse",
+    "anthropic": "k.product_knowledge",
+}
 
 
 def find_source_key(db: Session, *, key_id: str | None, alias: str = DEEPSEEK_ALIAS, source_module: str = SOURCE_MODULE) -> ApiKeyRecord:

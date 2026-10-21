@@ -17,7 +17,8 @@ from backend.app.services import ai_provider_router as router_module
 from backend.app.services.ai_provider_router import (
     AIExecutionRouter,
     AIModelRouter,
-    ClaudeAdapter,
+    AIProviderExecutionError,
+    AnthropicAdapter,
     DeepSeekAdapter,
     OpenAIAdapter,
     ProviderRequest,
@@ -32,6 +33,15 @@ pytestmark = pytest.mark.unit
 
 ORG_ID = "org_11111111111111111111111111111111"
 MODULE_ID = "k.product_knowledge"
+
+
+@pytest.fixture(autouse=True)
+def _no_ledger(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """台账与预算闸不碰数据库:预算默认未用完,写台账只记在列表里。"""
+    rows: list[dict[str, Any]] = []
+    monkeypatch.setattr(router_module, "claude_budget_exhausted", lambda: False)
+    monkeypatch.setattr(router_module, "record_ai_usage", lambda **kwargs: rows.append(kwargs))
+    return rows
 
 
 def _session():
@@ -86,13 +96,11 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
         AIModelRouter.resolve_model(provider="deepseek", task_type="generate")
         == "deepseek-flash"
     )
-    assert (
-        AIModelRouter.resolve_model(provider="chatgpt", task_type="chat")
-        == "gpt-5.6-luna"
-    )
+    # 2026-10-21 换血:chatgpt 退出注册表,claude 指向官方 Opus 5.5。
+    assert AIModelRouter.resolve_model(provider="chatgpt", task_type="chat") is None
     assert (
         AIModelRouter.resolve_model(provider="claude", task_type="chat")
-        == "claude-opus-5"
+        == "claude-opus-5-5"
     )
 
     adapter_cases = [
@@ -111,11 +119,11 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
             "https://4sapi.example/v1/chat/completions",
         ),
         (
-            ClaudeAdapter,
-            "https://4sapi.example",
+            AnthropicAdapter,
+            "https://api.anthropic.com",
             "chat",
-            "claude-opus-5",
-            "https://4sapi.example/v1/messages",
+            "claude-opus-5-5",
+            "https://api.anthropic.com/v1/messages",
         ),
         (
             DeepSeekAdapter,
@@ -139,17 +147,22 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
         )
         assert request.url == expected_url
         assert request.body["model"] == model
-        if isinstance(adapter, OpenAIAdapter):
-            # OpenAI-compatible bodies are cleaned: unknown fields such as
+        if isinstance(adapter, (OpenAIAdapter, AnthropicAdapter)):
+            # OpenAI-compatible and Anthropic bodies are cleaned: unknown fields such as
             # task_type are rejected by real providers and must stay out.
             assert "task_type" not in request.body
         else:
             assert request.body["task_type"] == task_type
         assert request.body["messages"] == [{"role": "user", "content": "hello"}]
+        if isinstance(adapter, AnthropicAdapter):
+            assert request.headers["x-api-key"] == "redacted"
+            assert request.headers["anthropic-version"] == "2023-06-01"
+            assert "Authorization" not in request.headers
 
 
 def test_execution_router_syncs_provider_config_and_injects_model(
     monkeypatch: pytest.MonkeyPatch,
+    _no_ledger: list[dict[str, Any]],
 ) -> None:
     db = _session()
     _add_org(db)
@@ -167,7 +180,8 @@ def test_execution_router_syncs_provider_config_and_injects_model(
         return {
             "choices": [
                 {"message": {"content": "{\"keywords\":[\"steel pump\"]}"}}
-            ]
+            ],
+            "usage": {"prompt_tokens": 120, "completion_tokens": 30},
         }
 
     monkeypatch.setattr(router_module, "_post_json", fake_post_json)
@@ -178,44 +192,64 @@ def test_execution_router_syncs_provider_config_and_injects_model(
     )
 
     result = AIExecutionRouter(db, max_attempts=1).execute(
-        provider="chatgpt",
+        provider="bulk",
         task_type="generate",
         payload={"messages": [{"role": "user", "content": "filter keywords"}]},
         org=TARGET_ORGANIZATION_NAME,
         execution_context=_context(
             {
-                "chatgpt": _execution_key(
-                    step="chatgpt",
-                    alias="chatgpt",
-                    url="https://4sapi.example",
+                "deepseek": _execution_key(
+                    step="deepseek",
+                    alias="deepseek",
+                    url="https://deepseek.example",
                 )
             }
         ),
     )
 
     assert result == {"keywords": ["steel pump"]}
-    assert captured[0].url == "https://4sapi.example/v1/chat/completions"
-    assert captured[0].body["model"] == "gpt-5.6-luna"
+    assert captured[0].url == "https://deepseek.example/v1/chat/completions"
+    assert captured[0].body["model"] == "deepseek-flash"
+    assert captured[0].body["thinking"] == {"type": "disabled"}
     # OpenAI-compatible bodies are cleaned; task_type must not leak upstream.
     assert "task_type" not in captured[0].body
-    assert captured[0].headers["Authorization"] == "Bearer chatgpt"
+    assert captured[0].headers["Authorization"] == "Bearer deepseek"
     provider_config = db.scalar(
         select(ProviderConfigRecord).where(
             ProviderConfigRecord.org_id == ORG_ID,
             ProviderConfigRecord.module_id == MODULE_ID,
-            ProviderConfigRecord.provider == "chatgpt",
+            ProviderConfigRecord.provider == "deepseek",
         )
     )
     assert provider_config is not None
-    assert provider_config.base_url == "https://4sapi.example"
-    assert provider_config.source_key_id == "key_chatgpt"
-    assert events[0]["payload"]["provider_used"] == "chatgpt"
+    assert provider_config.base_url == "https://deepseek.example"
+    assert provider_config.source_key_id == "key_deepseek"
+    assert events[0]["payload"]["provider_used"] == "deepseek"
     assert events[0]["payload"]["endpoint_called"] == "/v1/chat/completions"
-    assert events[0]["payload"]["api_key_alias"] == "chatgpt"
+    assert events[0]["payload"]["api_key_alias"] == "deepseek"
     assert events[0]["payload"]["success"] is True
+    assert _no_ledger[0]["provider"] == "deepseek"
+    assert _no_ledger[0]["usage"].input_tokens == 120
+    assert _no_ledger[0]["usage"].output_tokens == 30
 
 
-def test_execution_router_falls_back_to_default_provider(
+def test_execution_router_rejects_retired_chatgpt_text_calls() -> None:
+    db = _session()
+    _add_org(db)
+    with pytest.raises(AIProviderExecutionError) as excinfo:
+        AIExecutionRouter(db, max_attempts=1).execute(
+            provider="chatgpt",
+            task_type="generate",
+            payload={"messages": [{"role": "user", "content": "x"}]},
+            org=TARGET_ORGANIZATION_NAME,
+            execution_context=_context(
+                {"chatgpt": _execution_key(step="chatgpt", alias="chatgpt", url="https://4sapi.example")}
+            ),
+        )
+    assert excinfo.value.code == "AI_PROVIDER_RETIRED"
+
+
+def test_execution_router_has_no_default_cross_provider_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     db = _session()
@@ -230,41 +264,38 @@ def test_execution_router_falls_back_to_default_provider(
     ) -> dict[str, Any]:
         del timeout_seconds, deadline
         captured.append(request)
-        if len(captured) == 1:
-            raise ValueError("temporary_provider_failure")
-        return {"choices": [{"message": {"content": "{\"content\":\"ok\"}"}}]}
+        raise ValueError("temporary_provider_failure")
 
     monkeypatch.setattr(router_module, "_post_json", fake_post_json)
     monkeypatch.setattr(router_module, "emit_event", lambda **_kwargs: None)
 
-    result = AIExecutionRouter(db, max_attempts=1).execute(
-        provider="claude",
-        task_type="chat",
-        payload={"messages": [{"role": "user", "content": "review"}]},
-        org=TARGET_ORGANIZATION_NAME,
-        execution_context=_context(
-            {
-                "ai_filter_claude_opus": _execution_key(
-                    step="ai_filter_claude_opus",
-                    alias="claude_opus",
-                    url="https://4sapi-claude.example",
-                ),
-                "chatgpt": _execution_key(
-                    step="chatgpt",
-                    alias="chatgpt",
-                    url="https://4sapi-chatgpt.example",
-                ),
-            }
-        ),
-    )
+    with pytest.raises(AIProviderExecutionError) as excinfo:
+        AIExecutionRouter(db, max_attempts=1).execute(
+            provider="claude",
+            task_type="chat",
+            payload={"messages": [{"role": "user", "content": "review"}]},
+            org=TARGET_ORGANIZATION_NAME,
+            execution_context=_context(
+                {
+                    "anthropic": _execution_key(
+                        step="anthropic",
+                        alias="anthropic",
+                        url="https://api.anthropic.com",
+                    ),
+                    "deepseek": _execution_key(
+                        step="deepseek",
+                        alias="deepseek",
+                        url="https://deepseek.example",
+                    ),
+                }
+            ),
+        )
 
-    assert result == {"content": "ok"}
-    # 非 503 的普通故障不触发同组换模型(MODEL_FALLBACKS 只认通道级 503),
-    # 因此这里直接跨供应商兜底到 chatgpt。
-    assert captured[0].url == "https://4sapi-claude.example/v1/messages"
-    assert captured[0].body["model"] == "claude-opus-5"
-    assert captured[1].url == "https://4sapi-chatgpt.example/v1/chat/completions"
-    assert captured[1].body["model"] == "gpt-5.6-luna"
+    assert excinfo.value.code == "AI_PROVIDER_REQUEST_FAILED"
+    # 换血前这里会悄悄转去 chatgpt;现在失败就是失败,只打了一次 Claude 官方口。
+    assert len(captured) == 1
+    assert captured[0].url == "https://api.anthropic.com/v1/messages"
+    assert captured[0].body["model"] == "claude-opus-5-5"
 
 
 def test_k_business_modules_do_not_directly_post_http() -> None:
