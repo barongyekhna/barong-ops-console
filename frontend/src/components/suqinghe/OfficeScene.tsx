@@ -523,7 +523,9 @@ function SnapshotView({ detail }: { detail: SnapshotDetail }) {
   const blockers = Array.isArray(payload.blockers) ? (payload.blockers as { product?: unknown; stage?: unknown; reasons?: unknown }[]) : [];
   const sections = useMemo(
     () =>
-      Object.entries(payload).filter(([key]) => !["headline", "blockers", "generated_at", "date"].includes(key)),
+      Object.entries(payload)
+        .filter(([key]) => !["headline", "blockers", "generated_at", "date"].includes(key))
+        .sort(([a], [b]) => sectionRank(a) - sectionRank(b)),
     [payload],
   );
   return (
@@ -548,10 +550,10 @@ function SnapshotView({ detail }: { detail: SnapshotDetail }) {
       </section>
       {sections.length > 0 ? (
         <section className={partStyles.section}>
-          <h3>其他</h3>
+          <h3>那天的全局情况</h3>
           <dl className={styles.summary}>
             {sections.map(([key, value]) => (
-              <SummaryRow key={key} label={SECTION_LABEL[key] ?? key} value={value} />
+              <SummaryRow key={key} label={SECTION_LABEL[key] ?? key} lines={describeSection(key, value)} />
             ))}
           </dl>
         </section>
@@ -560,22 +562,111 @@ function SnapshotView({ detail }: { detail: SnapshotDetail }) {
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: unknown }) {
-  let text: string;
-  if (value && typeof value === "object" && "error" in (value as Record<string, unknown>)) {
-    text = String((value as Record<string, unknown>).error || "读不到");
-  } else {
-    try {
-      text = JSON.stringify(value);
-    } catch {
-      text = String(value);
+const SECTION_ORDER = ["products", "goals", "content", "approvals", "workers", "keys", "ai"];
+const sectionRank = (key: string): number => {
+  const index = SECTION_ORDER.indexOf(key);
+  return index < 0 ? SECTION_ORDER.length : index;
+};
+
+const STAGE_TEXT: Record<string, string> = {
+  k_draft: "K 建档中",
+  k_workflow: "K 流水线进行中",
+  blocked_gate: "卡在 P 闸门",
+  ready_to_upload: "可以上架",
+  uploaded_draft: "已上传但还是草稿",
+  published: "已发布",
+  uploaded_unknown: "已上传（Woo 状态核不了）",
+};
+
+type Rec = Record<string, unknown>;
+const isRec = (value: unknown): value is Rec => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+const usd = (value: unknown): string => (typeof value === "number" ? `$${value < 0.01 && value > 0 ? value.toFixed(4) : value.toFixed(2)}` : "—");
+
+/** 快照里每一块数据 → 几行人话。认不出的结构只给一句「有数据但这里不展示」,绝不把 JSON 原样摊出来。 */
+export function describeSection(key: string, value: unknown): string[] {
+  if (isRec(value) && "error" in value) return [String(value.error || "读不到")];
+  switch (key) {
+    case "products": {
+      if (!isRec(value)) break;
+      const byStage = isRec(value.by_stage) ? value.by_stage : {};
+      const counts = Object.entries(byStage)
+        .filter(([, n]) => num(n) > 0)
+        .map(([stage, n]) => `${STAGE_TEXT[stage] ?? stage} ${num(n)}`);
+      const lines = [`一共 ${num(value.total)} 个产品${counts.length ? `：${counts.join(" · ")}` : ""}`];
+      if (value.woo_checked === false) lines.push("这一天 Woo 没核上，已上传的状态不确定。");
+      const items = Array.isArray(value.items) ? (value.items as Rec[]) : [];
+      for (const item of items.slice(0, 40)) {
+        const label = String(item.stage_label ?? STAGE_TEXT[String(item.stage)] ?? item.stage ?? "");
+        lines.push(`${item.sku ? `${String(item.sku)} · ` : ""}${String(item.name ?? "未命名")} —— ${label}`);
+      }
+      if (items.length > 40) lines.push(`……还有 ${items.length - 40} 个`);
+      return lines;
     }
-    if (text.length > 220) text = `${text.slice(0, 220)}…`;
+    case "goals": {
+      const goals = Array.isArray(value) ? (value as Rec[]) : [];
+      if (goals.length === 0) return ["还没定目标。"];
+      return goals.map((goal) => {
+        const metric = isRec(goal.metric) ? goal.metric : {};
+        const target = typeof metric.target === "number" ? metric.target : null;
+        const current = typeof goal.current === "number" ? goal.current : null;
+        const progress = target !== null && current !== null ? `（现在 ${current} / 目标 ${target}）` : "";
+        return `${String(goal.text ?? "")}${progress}`;
+      });
+    }
+    case "content": {
+      if (!isRec(value)) break;
+      return [
+        `已上线 ${num(value.live)} · 已生成 ${num(value.generated)} · 待审 ${num(value.pending_review)} · 批了没发 ${num(value.approved_unpublished)}`,
+      ];
+    }
+    case "approvals": {
+      if (!isRec(value)) break;
+      return [num(value.pending) ? `控制台里还有 ${num(value.pending)} 条审批等人处理` : "控制台里没有积压的审批。"];
+    }
+    case "workers": {
+      if (!isRec(value)) break;
+      const stale = Array.isArray(value.stale) ? value.stale.map(String) : [];
+      const lines = [stale.length ? `${num(value.total)} 个后台进程里有 ${stale.length} 个掉线：` : `${num(value.total)} 个后台进程都在干活。`];
+      return lines.concat(stale.map((name) => `· ${name}`));
+    }
+    case "keys": {
+      if (!isRec(value)) break;
+      const counts = isRec(value.counts) ? value.counts : {};
+      const failing = Array.isArray(value.failing) ? (value.failing as Rec[]) : [];
+      const lines = [`一共 ${num(counts.total)} 把钥匙，健康 ${num(counts.healthy)} 把。`];
+      if (failing.length === 0) lines.push("在用的钥匙都没问题。");
+      else lines.push(`在用的坏了 ${failing.length} 把：`);
+      for (const key of failing) {
+        const usedBy = Array.isArray(key.used_by) && key.used_by.length ? `（${key.used_by.map(String).join("、")} 在用）` : "";
+        lines.push(`· ${String(key.name ?? "?")}${usedBy}`);
+      }
+      if (num(value.failing_but_unused)) lines.push(`另有 ${num(value.failing_but_unused)} 把已经不用的旧钥匙坏了，不算故障。`);
+      return lines;
+    }
+    case "ai": {
+      if (!isRec(value)) break;
+      return [`Claude 当天花了 ${usd(value.claude_usd_today)}，每日上限 ${usd(value.claude_daily_budget_usd)}。`];
+    }
+    default:
+      break;
   }
+  if (value === null || value === undefined) return ["没有数据。"];
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return [String(value)];
+  return ["有数据，这里先不展示。"];
+}
+
+function SummaryRow({ label, lines }: { label: string; lines: string[] }) {
   return (
     <>
       <dt>{label}</dt>
-      <dd>{text}</dd>
+      <dd>
+        {lines.map((line, index) => (
+          <span className={styles.summaryLine} key={index}>
+            {line}
+          </span>
+        ))}
+      </dd>
     </>
   );
 }

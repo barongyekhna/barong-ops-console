@@ -129,3 +129,14 @@ test("场景/列表可切换,画加载失败自动退回列表", () => {
   assert.match(windowSource, /列表/);
   assert.match(windowSource, /放大/);
 });
+
+test("calendar snapshot sections render as plain Chinese lines, never raw JSON", () => {
+  const scene = readFileSync(new URL("../../frontend/src/components/suqinghe/OfficeScene.tsx", import.meta.url), "utf8");
+  assert.match(scene, /export function describeSection/);
+  for (const key of ["products", "goals", "content", "approvals", "workers", "keys", "ai"]) {
+    assert.ok(scene.includes(`case "${key}"`), `missing describer for ${key}`);
+  }
+  const snapshotView = scene.slice(scene.indexOf("function SnapshotView"), scene.indexOf("function MonitorPanel"));
+  assert.ok(!snapshotView.includes("JSON.stringify"), "SnapshotView must not dump JSON");
+  assert.ok(!snapshotView.includes(">其他<"), "the generic 其他 dump section is gone");
+});

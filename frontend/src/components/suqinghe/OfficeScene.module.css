@@ -645,3 +645,8 @@
     animation: none;
   }
 }
+
+.summaryLine {
+  display: block;
+  line-height: 1.6;
+}
