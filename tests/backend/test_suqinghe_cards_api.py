@@ -215,3 +215,38 @@ def test_control_and_instruct(auth_client: TestClient, people) -> None:
         assert [m.id for m in memory.relevant(db, "PSPE-001 怎么样")]
     texts = [a["text"] for a in auth_client.get("/api/app/suqinghe/office").json()["activity"]]
     assert any("老板交代" in t for t in texts) and any("新目标" in t for t in texts)
+
+
+def test_bookshelf_and_calendar_are_readable_by_everyone(auth_client: TestClient, people) -> None:
+    from datetime import date
+
+    with without_org_data_isolation(), SessionLocal() as db:
+        card = _new_card(db, "shelf")
+        cards.decide_card(db, card_id=card.ref, decision="reject", actor=_user(db, people["owner"]), channel="web", reason="PSPE-009 价格太低别上")
+        memory.record(db, kind="observation", subject="流量", body="首页跳出率偏高")
+        db.add(SqhSnapshot(snapshot_date=date(2026, 10, 22), payload={"headline": "店里已发布 6 个品", "blockers": [{"product": "PSPE-003"}]}))
+        db.commit()
+
+    _login(auth_client, REGULAR)
+    all_items = auth_client.get("/api/app/suqinghe/memory").json()["items"]
+    assert {"suggestion", "decision", "observation"} <= {item["kind"] for item in all_items}
+    assert set(all_items[0]) == {"id", "kind", "subject", "body", "refs", "source", "created_at"}
+
+    found = auth_client.get("/api/app/suqinghe/memory", params={"q": "PSPE-009"}).json()["items"]
+    assert any("价格太低别上" in item["body"] for item in found)
+
+    only_obs = auth_client.get("/api/app/suqinghe/memory", params={"kind": "observation"}).json()["items"]
+    assert only_obs and all(item["kind"] == "observation" for item in only_obs)
+
+    searched_decisions = auth_client.get("/api/app/suqinghe/memory", params={"kind": "decision", "q": "PSPE-009"}).json()["items"]
+    assert searched_decisions and all(item["kind"] == "decision" for item in searched_decisions)
+
+    assert auth_client.get("/api/app/suqinghe/memory", params={"kind": "gossip"}).status_code == 422
+
+    listed = auth_client.get("/api/app/suqinghe/snapshots").json()["items"]
+    assert listed[0]["date"] == "2026-10-22" and listed[0]["headline"] == "店里已发布 6 个品"
+    detail = auth_client.get("/api/app/suqinghe/snapshots/2026-10-22").json()
+    assert detail["payload"]["blockers"][0]["product"] == "PSPE-003"
+    missing = auth_client.get("/api/app/suqinghe/snapshots/2026-01-01")
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "SQH_SNAPSHOT_NOT_FOUND"

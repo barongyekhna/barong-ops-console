@@ -247,6 +247,8 @@ function candidateValues(paramName) {
   if (name === "source_key") return ["geo", "seo"];
   // 苏青禾的卡片短号是 4 位十六进制(C19 里说「批 #a3f9」),代理层按形状卡死。
   if (name === "ref") return ["a3f9"];
+  // 苏青禾的日历按日期取快照,代理层只认 YYYY-MM-DD。
+  if (name === "snapshot_date") return ["2026-10-22"];
   if (name.endsWith("_id")) return [UUID_SAMPLE, "12"];
   return PARAM_CANDIDATES.default;
 }

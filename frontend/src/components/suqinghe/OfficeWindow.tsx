@@ -1,36 +1,44 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import styles from "./Office.module.css";
 import {
   CARD_STATUS_LABEL,
   STATE_LABEL,
   VIA_LABEL,
-  addGoal,
-  controlOffice,
-  decideCard,
-  instructOffice,
   officeErrorMessage,
-  patchGoal,
   portraitFor,
-  type OfficeCard,
   type OfficeRead,
   type OfficeState,
 } from "./office-api";
+import { CardItem, GoalList, OwnerControls, minutesAgo, pickEasterLine, timeText } from "./OfficeParts";
+import { OfficeScene } from "./OfficeScene";
 
 const POSITION_KEY = "suqinghe-office-position";
+const VIEW_KEY = "suqinghe-office-view";
+const SIZE_KEY = "suqinghe-office-size";
 const MOBILE_QUERY = "(max-width: 760px)";
 
-// 彩蛋:连点肖像 5 下。纯前端、固定台词,不调 AI。口吻是女强人 + 温柔大姐姐,不撒娇不暧昧。
-const EASTER_LINES = [
-  "今天的活我扛着，你去喝口水。",
-  "别急，先把最要紧的一件做完，剩下的交给我。",
-  "数据我盯着呢，有事我第一时间说。",
-  "你定方向，细活我来跑。",
-  "今天也辛苦了，早点休息，明天见。",
-  "卡片我都排好序了，你挑最上面那张就行。",
-];
+type View = "scene" | "list";
+type Size = "normal" | "large";
+
+function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw && (allowed as readonly string[]).includes(raw) ? (raw as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writePref(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* 存不了就算了,只是偏好 */
+  }
+}
 
 type Position = { x: number; y: number };
 
@@ -57,24 +65,6 @@ function clamp(position: Position, width: number, height: number): Position {
   const maxX = Math.max(8, window.innerWidth - width - 8);
   const maxY = Math.max(8, window.innerHeight - 48);
   return { x: Math.min(Math.max(8, position.x), maxX), y: Math.min(Math.max(8, position.y), maxY) };
-}
-
-function minutesAgo(seconds: number | null): string {
-  if (seconds == null) return "从没上过线";
-  if (seconds < 60) return "刚刚";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} 分钟没动静`;
-  const hours = Math.round(minutes / 60);
-  return hours < 48 ? `${hours} 小时没动静` : `${Math.round(hours / 24)} 天没动静`;
-}
-
-function timeText(iso: string | null): string {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit", month: "numeric", day: "numeric" });
-  } catch {
-    return iso;
-  }
 }
 
 function StatusAnimation({ state }: { state: OfficeState }) {
@@ -111,6 +101,15 @@ export function OfficeWindow({
   const [bubble, setBubble] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 默认场景视图;列表视图是快速浏览和图片加载失败时的兜底。
+  const [view, setView] = useState<View>("scene");
+  const [size, setSize] = useState<Size>("normal");
+  const [sceneFailed, setSceneFailed] = useState(false);
+
+  useEffect(() => {
+    setView(readPref<View>(VIEW_KEY, ["scene", "list"], "scene"));
+    setSize(readPref<Size>(SIZE_KEY, ["normal", "large"], "normal"));
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia(MOBILE_QUERY);
@@ -122,7 +121,7 @@ export function OfficeWindow({
 
   useEffect(() => {
     const stored = readPosition();
-    const width = 420;
+    const width = Math.min(880, window.innerWidth - 16);
     setPosition(clamp(stored ?? { x: window.innerWidth - width - 24, y: 80 }, width, 200));
   }, []);
 
@@ -162,7 +161,7 @@ export function OfficeWindow({
     clicksRef.current = [...clicksRef.current.filter((at) => now - at < 3000), now];
     if (clicksRef.current.length >= 5) {
       clicksRef.current = [];
-      setBubble(EASTER_LINES[Math.floor(Math.random() * EASTER_LINES.length)]);
+      setBubble(pickEasterLine());
       window.setTimeout(() => setBubble(null), 4500);
     }
   };
@@ -188,11 +187,26 @@ export function OfficeWindow({
   const panelStyle =
     !isMobile && position ? { left: `${position.x}px`, top: `${position.y}px` } : undefined;
   const canCommand = Boolean(office?.can_command);
+  const showScene = view === "scene" && !sceneFailed;
+  const switchView = (next: View) => {
+    setView(next);
+    if (next === "scene") setSceneFailed(false);
+    writePref(VIEW_KEY, next);
+  };
+  const toggleSize = () => {
+    const next: Size = size === "large" ? "normal" : "large";
+    setSize(next);
+    writePref(SIZE_KEY, next);
+    if (position && panelRef.current) {
+      const width = Math.min(next === "large" ? 1200 : 880, window.innerWidth - 16);
+      setPosition(clamp(position, width, panelRef.current.getBoundingClientRect().height));
+    }
+  };
 
   return (
     <section
       aria-label="苏青禾的办公室"
-      className={`${styles.window} ${isMobile ? styles.windowSheet : ""}`}
+      className={`${styles.window} ${showScene ? (size === "large" ? styles.windowLarge : styles.windowScene) : ""} ${isMobile ? styles.windowSheet : ""}`}
       data-state={state}
       ref={panelRef}
       role="dialog"
@@ -208,16 +222,42 @@ export function OfficeWindow({
           <strong>苏青禾的办公室</strong>
           <span className={styles.subtitle}>独立站运营总管</span>
         </div>
-        <button aria-label="关闭办公室" className={styles.close} onClick={onClose} type="button">
-          ×
-        </button>
+        <div className={styles.headerTools}>
+          <div aria-label="视图" className={styles.viewToggle} role="group">
+            <button aria-pressed={showScene} onClick={() => switchView("scene")} type="button">
+              场景
+            </button>
+            <button aria-pressed={!showScene} onClick={() => switchView("list")} type="button">
+              列表
+            </button>
+          </div>
+          {showScene && !isMobile ? (
+            <button className={styles.sizeToggle} onClick={toggleSize} type="button">
+              {size === "large" ? "缩小" : "放大"}
+            </button>
+          ) : null}
+          <button aria-label="关闭办公室" className={styles.close} onClick={onClose} type="button">
+            ×
+          </button>
+        </div>
       </header>
 
       <div className={styles.body}>
         {!office ? (
           <p className={styles.muted}>{loadError ?? "正在推开办公室的门…"}</p>
+        ) : showScene ? (
+          <>
+            {actionError ? (
+              <p className={styles.error} role="alert">
+                {actionError}
+              </p>
+            ) : null}
+            <OfficeScene busy={busy} isMobile={isMobile} office={office} onSceneFailed={() => setSceneFailed(true)} run={run} />
+            {canCommand ? null : <p className={styles.muted}>只有老板能指挥她，你可以在这里看她干活、点开东西看。</p>}
+          </>
         ) : (
           <>
+            {sceneFailed && view === "scene" ? <p className={styles.muted}>办公室的画没加载出来，先用列表看。</p> : null}
             <div className={styles.stage} data-state={state}>
               <button aria-label="苏青禾的肖像" className={styles.portraitButton} onClick={onPortraitClick} type="button">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -299,33 +339,7 @@ export function OfficeWindow({
 
             <section className={styles.section}>
               <h3>目标</h3>
-              {office.goals.length === 0 ? <p className={styles.muted}>还没有目标。</p> : null}
-              <ul className={styles.list}>
-                {office.goals.map((goal) => (
-                  <li key={goal.id}>
-                    <span>
-                      {goal.text}
-                      {goal.status === "paused" ? <em className={styles.tag}>暂停</em> : null}
-                    </span>
-                    {canCommand ? (
-                      <span className={styles.inlineActions}>
-                        <button
-                          disabled={busy}
-                          onClick={() =>
-                            void run("调整目标失败", () => patchGoal(goal.id, { status: goal.status === "paused" ? "active" : "paused" }))
-                          }
-                          type="button"
-                        >
-                          {goal.status === "paused" ? "恢复" : "暂停"}
-                        </button>
-                        <button disabled={busy} onClick={() => void run("调整目标失败", () => patchGoal(goal.id, { status: "done" }))} type="button">
-                          完成
-                        </button>
-                      </span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
+              <GoalList busy={busy} canCommand={canCommand} goals={office.goals} run={run} />
             </section>
 
             <section className={styles.section}>
@@ -370,150 +384,6 @@ export function OfficeWindow({
           </>
         )}
       </div>
-    </section>
-  );
-}
-
-type Runner = (label: string, action: () => Promise<unknown>) => Promise<boolean>;
-
-function CardItem({ card, canCommand, busy, run }: { card: OfficeCard; canCommand: boolean; busy: boolean; run: Runner }) {
-  const [expanded, setExpanded] = useState(false);
-  const [rejecting, setRejecting] = useState(false);
-  const [reason, setReason] = useState("");
-
-  return (
-    <article className={styles.card}>
-      <button className={styles.cardHead} onClick={() => setExpanded((value) => !value)} type="button">
-        <span className={styles.cardRef}>#{card.ref}</span>
-        <strong>{card.title}</strong>
-      </button>
-      <p>{card.conclusion}</p>
-      {expanded ? (
-        <dl className={styles.cardDetail}>
-          {card.why ? (
-            <>
-              <dt>为什么</dt>
-              <dd>{card.why}</dd>
-            </>
-          ) : null}
-          {card.if_not ? (
-            <>
-              <dt>不做会怎样</dt>
-              <dd>{card.if_not}</dd>
-            </>
-          ) : null}
-          <dt>能不能撤回</dt>
-          <dd>{card.reversible ? "能" : "不能"}</dd>
-          <dt>把握</dt>
-          <dd>{card.confidence === "high" ? "高" : card.confidence === "low" ? "低" : "中"}</dd>
-          <dt>证据</dt>
-          <dd>
-            <pre>{JSON.stringify(card.evidence, null, 2)}</pre>
-          </dd>
-        </dl>
-      ) : null}
-      {canCommand ? (
-        rejecting ? (
-          <form
-            className={styles.rejectForm}
-            onSubmit={(event: FormEvent) => {
-              event.preventDefault();
-              if (!reason.trim()) return;
-              void run("驳回失败", () => decideCard(card.ref, "reject", reason.trim())).then((ok) => {
-                if (ok) {
-                  setRejecting(false);
-                  setReason("");
-                }
-              });
-            }}
-          >
-            <textarea
-              aria-label="驳回原因"
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="驳回原因（必填，她会记住）"
-              rows={2}
-              value={reason}
-            />
-            <div className={styles.inlineActions}>
-              <button disabled={busy || !reason.trim()} type="submit">
-                确认驳回
-              </button>
-              <button onClick={() => setRejecting(false)} type="button">
-                取消
-              </button>
-            </div>
-          </form>
-        ) : (
-          <div className={styles.inlineActions}>
-            <button className={styles.primary} disabled={busy} onClick={() => void run("批准失败", () => decideCard(card.ref, "approve"))} type="button">
-              批
-            </button>
-            <button disabled={busy} onClick={() => setRejecting(true)} type="button">
-              驳
-            </button>
-          </div>
-        )
-      ) : null}
-    </article>
-  );
-}
-
-function OwnerControls({ office, busy, run }: { office: OfficeRead; busy: boolean; run: Runner }) {
-  const [instruction, setInstruction] = useState("");
-  const [goalText, setGoalText] = useState("");
-  const [metric, setMetric] = useState("");
-  const [target, setTarget] = useState("");
-
-  return (
-    <section className={`${styles.section} ${styles.owner}`}>
-      <div className={styles.inlineActions}>
-        <button
-          disabled={busy}
-          onClick={() => void run(office.paused ? "恢复失败" : "暂停失败", () => controlOffice(office.paused ? "resume" : "pause"))}
-          type="button"
-        >
-          {office.paused ? "让她接着干" : "先停一停"}
-        </button>
-      </div>
-      <form
-        className={styles.row}
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault();
-          const text = instruction.trim();
-          if (!text) return;
-          void run("交代失败", () => instructOffice(text)).then((ok) => ok && setInstruction(""));
-        }}
-      >
-        <input aria-label="交代一句" onChange={(event) => setInstruction(event.target.value)} placeholder="交代一句…" value={instruction} />
-        <button disabled={busy || !instruction.trim()} type="submit">
-          交代
-        </button>
-      </form>
-      <form
-        className={styles.row}
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault();
-          const text = goalText.trim();
-          if (text.length < 2) return;
-          const numericTarget = target.trim() ? Number(target) : undefined;
-          void run("加目标失败", () =>
-            addGoal(text, metric.trim() || undefined, Number.isFinite(numericTarget) ? numericTarget : undefined),
-          ).then((ok) => {
-            if (ok) {
-              setGoalText("");
-              setMetric("");
-              setTarget("");
-            }
-          });
-        }}
-      >
-        <input aria-label="新目标" onChange={(event) => setGoalText(event.target.value)} placeholder="新目标，如：店里做到 30 个品" value={goalText} />
-        <input aria-label="指标（可选）" className={styles.narrow} onChange={(event) => setMetric(event.target.value)} placeholder="指标" value={metric} />
-        <input aria-label="目标值（可选）" className={styles.narrow} inputMode="decimal" onChange={(event) => setTarget(event.target.value)} placeholder="数值" value={target} />
-        <button disabled={busy || goalText.trim().length < 2} type="submit">
-          加目标
-        </button>
-      </form>
     </section>
   );
 }

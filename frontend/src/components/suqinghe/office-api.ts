@@ -95,6 +95,49 @@ export function instructOffice(text: string) {
   return apiRequest<{ id: number; queued: boolean }>(`${BASE}/instruct`, { body: { text }, method: "POST" });
 }
 
+/** 书柜:她的硬记忆(后端 GET /suqinghe/memory)。 */
+export type MemoryKind = "plan" | "suggestion" | "decision" | "note" | "dictation" | "observation";
+
+export type MemoryItem = {
+  id: number;
+  kind: MemoryKind | string;
+  subject: string;
+  body: string;
+  refs: Record<string, unknown>;
+  source: string;
+  created_at: string | null;
+};
+
+export function getMemory(params: { kind?: MemoryKind; q?: string; limit?: number } = {}) {
+  const query = new URLSearchParams();
+  if (params.kind) query.set("kind", params.kind);
+  if (params.q && params.q.trim()) query.set("q", params.q.trim());
+  if (params.limit) query.set("limit", String(params.limit));
+  const suffix = query.toString();
+  return apiRequest<{ items: MemoryItem[] }>(`${BASE}/memory${suffix ? `?${suffix}` : ""}`);
+}
+
+/** 日历:每天一份全局快照(后端 GET /suqinghe/snapshots[/{date}])。 */
+export type SnapshotSummary = { date: string; headline: string | null; created_at: string | null };
+export type SnapshotDetail = { date: string; headline: string | null; payload: Record<string, unknown> };
+
+export function getSnapshots(limit = 30) {
+  return apiRequest<{ items: SnapshotSummary[] }>(`${BASE}/snapshots?limit=${limit}`);
+}
+
+export function getSnapshot(date: string) {
+  return apiRequest<SnapshotDetail>(`${BASE}/snapshots/${encodeURIComponent(date)}`);
+}
+
+export const MEMORY_KIND_LABEL: Record<string, string> = {
+  plan: "计划",
+  suggestion: "建议",
+  decision: "决定",
+  note: "笔记",
+  dictation: "老板交代",
+  observation: "观察",
+};
+
 export const STATE_LABEL: Record<OfficeState, string> = {
   working: "干活",
   thinking: "在想",

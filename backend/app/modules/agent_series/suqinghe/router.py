@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ....api.deps import get_current_user, require_owner
@@ -19,7 +21,8 @@ from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import cards, memory, office
 from . import snapshot as _snapshot  # noqa: F401 —— 导入即登记 product_gate 指纹,批卡前才能查数据变没变
-from .models import SqhGoal
+from .constants import MEMORY_KINDS
+from .models import SqhGoal, SqhMemory, SqhSnapshot
 
 router = APIRouter(prefix="/suqinghe", tags=["suqinghe"])
 
@@ -53,6 +56,77 @@ def get_office(db: Session = Depends(get_db), user: User = Depends(get_current_u
     payload = office.office_payload(db, can_command=is_owner_role(user.role or ""))
     db.commit()
     return payload
+
+
+def _memory_item(row: SqhMemory) -> dict[str, Any]:
+    return {
+        "id": row.id,
+        "kind": row.kind,
+        "subject": row.subject,
+        "body": row.body,
+        "refs": row.refs or {},
+        "source": row.source,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+    }
+
+
+def _headline(payload: Any) -> str | None:
+    return payload.get("headline") if isinstance(payload, dict) else None
+
+
+@router.get("/memory")
+def get_memory(
+    kind: str | None = Query(default=None, max_length=16),
+    q: str | None = Query(default=None, max_length=200),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """书柜:她的硬记忆。任何登录的人都能翻(办公室本来就全站可看)。"""
+    del user
+    if kind is not None and kind not in MEMORY_KINDS:
+        raise HTTPException(status_code=422, detail={"code": "SQH_MEMORY_KIND_INVALID", "message": f"没有这种记忆:{kind}"})
+    question = (q or "").strip()
+    if question:
+        rows = memory.relevant(db, question, limit=200 if kind else limit)
+        if kind:
+            rows = [row for row in rows if row.kind == kind][:limit]
+    else:
+        rows = memory.recent(db, limit=limit, kinds=(kind,) if kind else None)
+    return {"items": [_memory_item(row) for row in rows]}
+
+
+@router.get("/snapshots")
+def list_snapshots(
+    limit: int = Query(default=30, ge=1, le=90),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """日历:每天一份全局快照的标题。"""
+    del user
+    rows = db.scalars(
+        select(SqhSnapshot).order_by(SqhSnapshot.snapshot_date.desc()).limit(limit),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    )
+    return {
+        "items": [
+            {
+                "date": row.snapshot_date.isoformat(),
+                "headline": _headline(row.payload),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+    }
+
+
+@router.get("/snapshots/{snapshot_date}")
+def get_snapshot(snapshot_date: date, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    del user
+    row = db.get(SqhSnapshot, snapshot_date, execution_options=SKIP_ORG_DATA_ISOLATION)
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SQH_SNAPSHOT_NOT_FOUND", "message": "那天没有快照。"})
+    return {"date": row.snapshot_date.isoformat(), "headline": _headline(row.payload), "payload": row.payload}
 
 
 @router.post("/cards/{ref}/decide")
