@@ -219,3 +219,25 @@ def test_morning_retry_is_capped_per_day() -> None:
     assert worker._morning_attempt_allowed(t0 + timedelta(minutes=62)) is True
     assert worker._morning_attempt_allowed(t0 + timedelta(minutes=93)) is False
     assert worker._morning_attempt_allowed(t0 + timedelta(days=1)) is True
+
+
+def test_keys_section_ignores_failing_keys_without_bindings(monkeypatch) -> None:
+    from backend.app.modules.agent_series.suqinghe import snapshot
+    from backend.app.modules.key_health import service as kh
+
+    monkeypatch.setattr(
+        kh,
+        "key_health_summary",
+        lambda db: {
+            "counts": {},
+            "items": [
+                {"key_name": "old 4sapi", "status": "invalid", "reason_code": "x", "bindings": []},
+                {"key_name": "image", "status": "invalid", "reason_code": "x", "bindings": [{"module_id": "i.image_system", "key_alias": "chatgpt"}]},
+                {"key_name": "ok", "status": "healthy", "reason_code": "", "bindings": [{"module_id": "k", "key_alias": "deepseek"}]},
+            ],
+        },
+    )
+    out = snapshot.keys_section(None)
+    assert [f["name"] for f in out["failing"]] == ["image"]
+    assert out["failing"][0]["used_by"] == ["i.image_system"]
+    assert out["failing_but_unused"] == 1

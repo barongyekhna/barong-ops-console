@@ -191,12 +191,22 @@ def keys_section(db: Session) -> dict[str, Any]:
 
     with without_org_data_isolation():
         summary = key_health_summary(db)
-    failing = [
-        {"name": item["key_name"], "status": item["status"], "reason": item["reason_code"]}
-        for item in summary.get("items", [])
-        if item["status"] not in {"healthy", "never_checked", "pending_review", "rate_limited"}
-    ]
-    return {"counts": summary.get("counts", {}), "failing": failing}
+    ok_statuses = {"healthy", "never_checked", "pending_review", "rate_limited"}
+    failing: list[dict[str, Any]] = []
+    retired = 0
+    for item in summary.get("items", []):
+        if item["status"] in ok_statuses:
+            continue
+        modules = sorted({b["module_id"] for b in item.get("bindings") or []})
+        if not modules:
+            # 没有任何在用绑定的坏钥匙(比如 10-21 换血时故意撤下的 4sapi 文字钥匙)不算故障——
+            # 10-22 首跑时她把它们当成「K 卡住的主因」发了换钥匙卡,就是这里没分开。
+            retired += 1
+            continue
+        failing.append(
+            {"name": item["key_name"], "status": item["status"], "reason": item["reason_code"], "used_by": modules}
+        )
+    return {"counts": summary.get("counts", {}), "failing": failing, "failing_but_unused": retired}
 
 
 def ai_section(db: Session) -> dict[str, Any]:
