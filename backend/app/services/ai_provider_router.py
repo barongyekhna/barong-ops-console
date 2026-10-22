@@ -538,7 +538,10 @@ class AIExecutionRouter:
         request: Request | None = None,
         execution_context: ModuleExecutionContext | None = None,
         fallback_provider: str | None = None,
+        usage_label: str | None = None,
     ) -> dict[str, Any]:
+        """``usage_label``:台账里记在谁名下(默认是模块 id)。数字员工共用 K 的钥匙,
+        但花费要能按人查(比如苏青禾记成 ``suqinghe``)。"""
         model_override: str | None = None
         effort: str | None = None
         if is_role(provider):
@@ -603,6 +606,7 @@ class AIExecutionRouter:
             model_override=model_override,
             effort=effort,
             degraded=degraded,
+            usage_label=usage_label,
         )
         if degraded:
             result = {**result, "_ai_degraded": True}
@@ -624,6 +628,7 @@ class AIExecutionRouter:
         model_override: str | None = None,
         effort: str | None = None,
         degraded: bool = False,
+        usage_label: str | None = None,
     ) -> dict[str, Any]:
         model = model_override or AIModelRouter.resolve_model(provider=provider, task_type=task_type)
         config = upsert_provider_config(
@@ -695,7 +700,7 @@ class AIExecutionRouter:
                     record_ai_usage(
                         provider=provider,
                         model=active_model,
-                        module=module_id,
+                        module=usage_label or module_id,
                         task=task_type,
                         usage=usage_from_response(raw_response),
                         degraded=degraded,
@@ -775,7 +780,7 @@ class AIExecutionRouter:
                 record_ai_usage(
                     provider=provider,
                     model=active_model,
-                    module=module_id,
+                    module=usage_label or module_id,
                     task=task_type,
                     success=False,
                     degraded=degraded,
@@ -820,6 +825,7 @@ class AIExecutionRouter:
                     fallback_provider=None,
                     fallback_allowed=False,
                     deadline=deadline,
+                    usage_label=usage_label,
                 )
             except (ProviderConfigError, AIProviderExecutionError):
                 pass

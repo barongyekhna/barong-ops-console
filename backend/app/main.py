@@ -54,6 +54,7 @@ from .modules.seo_series.machine_router import router as seo_machine_router
 from .modules.content_desk.router import router as content_desk_router
 from .modules.sm_series.router import router as sm_social_router
 from .modules.amz_series.router import router as amz_ops_router
+from .modules.agent_series.suqinghe.router import router as suqinghe_router
 from .modules.rd_series.router import router as rd_remote_desktop_router
 from .modules.content_links.machine_router import router as content_links_machine_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
@@ -1234,6 +1235,7 @@ app.include_router(content_desk_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(sm_social_router, prefix=APPLICATION_API_PREFIX)
 # A 系列亚马逊运营:人用端点只挂 /api/app 一次;门在 router 自己的 dependencies 里(super_admin 不直通)。
 app.include_router(amz_ops_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(suqinghe_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(rd_remote_desktop_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(content_links_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(content_links_machine_router)

@@ -158,6 +158,14 @@ from ..modules.sm_series.models import (
     SmPost,
     SmRejection,
 )
+from ..modules.agent_series.suqinghe.models import (
+    SqhActivity,
+    SqhCard,
+    SqhGoal,
+    SqhMemory,
+    SqhSnapshot,
+    SqhState,
+)
 from ..modules.amz_series.models import (
     AmzAdSearchTerm,
     AmzFxRate,
@@ -346,4 +354,10 @@ __all__ = [
     "RdSession",
     "RdSignal",
     "RdUnattendedGrant",
+    "SqhActivity",
+    "SqhCard",
+    "SqhGoal",
+    "SqhMemory",
+    "SqhSnapshot",
+    "SqhState",
 ]

@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { Sidebar, TopHeader } from "@/components/saas-shell";
+import { OfficeLauncher } from "@/components/suqinghe/OfficeLauncher";
 import { pageTitles } from "@/lib/navigation";
 
 function roleLabel(role: string | null | undefined) {
@@ -116,6 +117,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      {/* 苏青禾的办公室:全局浮窗入口,不进侧边栏。谁都能看,只有 owner 能指挥。 */}
+      <OfficeLauncher />
     </div>
   );
 }

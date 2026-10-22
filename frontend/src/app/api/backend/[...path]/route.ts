@@ -1450,6 +1450,37 @@ function isAllowedHomeDashboardPath(method: string, path: string[]) {
   return false;
 }
 
+const SUQINGHE_CARD_REF_PATTERN = /^[0-9a-f]{4,8}$/;
+const SUQINGHE_GOAL_ID_PATTERN = /^\d{1,12}$/;
+
+/**
+ * 苏青禾的办公室(全局浮窗):GET office 谁都能看;批卡 / 目标 / 暂停恢复 / 交代一句
+ * 只有 owner 能做——闸在后端 require_owner,这里只放行路径形状。
+ */
+function isAllowedSuqinghePath(method: string, path: string[]) {
+  if (path[0] !== "suqinghe") {
+    return false;
+  }
+  if (method === "GET") {
+    return path.length === 2 && path[1] === "office";
+  }
+  if (method === "POST") {
+    if (path.length === 2) {
+      return path[1] === "goals" || path[1] === "control" || path[1] === "instruct";
+    }
+    return (
+      path.length === 4 &&
+      path[1] === "cards" &&
+      SUQINGHE_CARD_REF_PATTERN.test(path[2]) &&
+      path[3] === "decide"
+    );
+  }
+  if (method === "PATCH") {
+    return path.length === 3 && path[1] === "goals" && SUQINGHE_GOAL_ID_PATTERN.test(path[2]);
+  }
+  return false;
+}
+
 function isAllowedHPath(method: string, path: string[]) {
   if (path[0] !== "h") {
     return false;
@@ -2939,6 +2970,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedFPath(method, path) ||
     isAllowedHPath(method, path) ||
     isAllowedHomeDashboardPath(method, path) ||
+    isAllowedSuqinghePath(method, path) ||
     isAllowedB2bPath(method, path) ||
     isAllowedMfgPath(method, path) ||
     isAllowedSmPath(method, path) ||

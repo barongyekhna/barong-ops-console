@@ -1,0 +1,212 @@
+"""审批卡:建卡、按 owner 的决定改状态。网页 / C19 / MCP 只有 decide_card 这一个入口。
+
+规矩(10-20 用户定):
+- 只有 owner 能批;驳回必须写原因(原因进记忆,同类连驳就该提议定规矩)。
+- 幂等、先到先得:已经决定过的卡,原样返回第一次的结果(谁、哪个渠道)。
+- 批之前看底层数据变没变:卡上存了建卡时的数据指纹,现在重算一遍,不一样就作废成 stale。
+- 影子期(10-22 起):批了只记账,不执行任何动作。执行器是第四步的事。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import secrets
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import select, update
+from sqlalchemy.orm import Session
+
+from ....core.roles import is_owner_role
+from ....models.user import User
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
+from . import memory
+from .constants import CARD_CHANNELS
+from .models import SqhCard
+
+# 重算指纹的函数:evidence["recheck"]["type"] → fn(db, recheck) -> 指纹。
+# 没登记 recheck 的卡不依赖具体数据(比如「今天的计划」),不做这一步。
+FINGERPRINTERS: dict[str, Callable[[Session, dict[str, Any]], str]] = {}
+
+
+class CardError(Exception):
+    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.status_code = status_code
+
+
+@dataclass(frozen=True)
+class DecideOutcome:
+    card: SqhCard
+    # True = 这一次真的改了状态;False = 早就决定过了(或已作废),原样返回。
+    changed: bool
+
+
+def fingerprint(value: Any) -> str:
+    raw = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def register_fingerprinter(kind: str, fn: Callable[[Session, dict[str, Any]], str]) -> None:
+    FINGERPRINTERS[kind] = fn
+
+
+def _new_ref(db: Session) -> str:
+    for _ in range(20):
+        ref = secrets.token_hex(2)
+        exists = db.scalar(select(SqhCard.id).where(SqhCard.ref == ref), execution_options=SKIP_ORG_DATA_ISOLATION)
+        if exists is None:
+            return ref
+    return secrets.token_hex(4)
+
+
+def create_card(
+    db: Session,
+    *,
+    dedupe_key: str,
+    kind: str,
+    title: str,
+    conclusion: str,
+    why: str = "",
+    if_not: str = "",
+    reversible: bool = True,
+    confidence: str = "medium",
+    evidence: dict[str, Any] | None = None,
+) -> tuple[SqhCard, bool]:
+    """同一个 dedupe_key 只建一次。返回 (卡, 是不是新建的)。"""
+    existing = db.scalar(select(SqhCard).where(SqhCard.dedupe_key == dedupe_key[:160]), execution_options=SKIP_ORG_DATA_ISOLATION)
+    if existing is not None:
+        return existing, False
+    evidence = evidence or {}
+    recheck = evidence.get("recheck") if isinstance(evidence.get("recheck"), dict) else None
+    data_fp = ""
+    if recheck and recheck.get("type") in FINGERPRINTERS:
+        data_fp = FINGERPRINTERS[recheck["type"]](db, recheck)
+    card = SqhCard(
+        ref=_new_ref(db),
+        dedupe_key=dedupe_key[:160],
+        kind=kind[:32],
+        title=title[:200],
+        conclusion=conclusion,
+        why=why,
+        if_not=if_not,
+        reversible=reversible,
+        confidence=confidence if confidence in {"low", "medium", "high"} else "medium",
+        evidence=evidence,
+        data_fingerprint=data_fp,
+        status="pending",
+    )
+    db.add(card)
+    db.flush()
+    memory.record(db, kind="suggestion", subject=card.title, body=card.conclusion, refs={"card_ref": card.ref, "kind": card.kind})
+    return card, True
+
+
+def find_card(db: Session, card_id_or_ref: str | int) -> SqhCard | None:
+    """只认短号(ref)。短号是 4 位十六进制,可能全是数字,所以不拿它去猜自增 id。"""
+    value = str(card_id_or_ref).strip().lstrip("#").lower()
+    return db.scalar(select(SqhCard).where(SqhCard.ref == value), execution_options=SKIP_ORG_DATA_ISOLATION)
+
+
+def decide_card(
+    db: Session,
+    *,
+    card_id: str | int,
+    decision: str,
+    actor: User,
+    channel: str,
+    reason: str | None = None,
+) -> DecideOutcome:
+    if decision not in {"approve", "reject"}:
+        raise CardError("SQH_CARD_DECISION_INVALID", "只能批或驳。")
+    if channel not in CARD_CHANNELS:
+        raise CardError("SQH_CARD_CHANNEL_INVALID", f"未知渠道 {channel}。")
+    if not is_owner_role(getattr(actor, "role", "") or ""):
+        raise CardError("SQH_OWNER_REQUIRED", "只有老板能批苏青禾的卡。", status_code=403)
+    card = find_card(db, card_id)
+    if card is None:
+        raise CardError("SQH_CARD_NOT_FOUND", "没有这张卡。", status_code=404)
+    # 先看是不是已经决定过了:C19 里一句不带原因的「驳 #ref」碰上网页已批的卡,
+    # 该告诉老板「已经批过了」,而不是让他补原因。
+    if card.status != "pending":
+        return DecideOutcome(card=card, changed=False)
+    reason = (reason or "").strip()
+    if decision == "reject" and not reason:
+        raise CardError("SQH_REJECT_REASON_REQUIRED", "驳回要写原因——她会记住,下次不再犯。")
+
+    recheck = card.evidence.get("recheck") if isinstance(card.evidence, dict) else None
+    if decision == "approve" and card.data_fingerprint and isinstance(recheck, dict):
+        fn = FINGERPRINTERS.get(str(recheck.get("type")))
+        current = fn(db, recheck) if fn else None
+        if current is not None and current != card.data_fingerprint:
+            _transition(db, card, status="stale", actor=actor, channel=channel, reason="建卡后底层数据变了,这张卡作废,她会按新数据重出。")
+            return DecideOutcome(card=card, changed=True)
+
+    new_status = "approved" if decision == "approve" else "rejected"
+    changed = _transition(db, card, status=new_status, actor=actor, channel=channel, reason=reason or None)
+    if changed:
+        verdict = "批了" if decision == "approve" else "驳了"
+        memory.record(
+            db,
+            kind="decision",
+            subject=card.title,
+            body=f"老板{verdict}「{card.title}」" + (f",原因:{reason}" if reason else "") + f"(渠道 {channel})",
+            refs={"card_ref": card.ref, "kind": card.kind, "decision": decision, "channel": channel},
+            source="human",
+            actor_user_id=str(actor.id),
+        )
+        memory.log_activity(db, f"老板{verdict} #{card.ref}「{card.title}」", kind="decision")
+    return DecideOutcome(card=card, changed=changed)
+
+
+def _transition(db: Session, card: SqhCard, *, status: str, actor: User, channel: str, reason: str | None) -> bool:
+    """条件更新:只有还在 pending 的卡才改。两个渠道同时批,只有一个改得动(先到先得)。"""
+    result = db.execute(
+        update(SqhCard)
+        .where(SqhCard.id == card.id, SqhCard.status == "pending")
+        .values(
+            status=status,
+            decided_by_user_id=str(actor.id),
+            decided_via=channel,
+            decision_reason=reason,
+            decided_at=datetime.now(UTC),
+        ),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    )
+    db.flush()
+    db.refresh(card)
+    return bool(result.rowcount)
+
+
+def pending_cards(db: Session, *, limit: int = 50) -> list[SqhCard]:
+    return list(
+        db.scalars(
+            select(SqhCard).where(SqhCard.status == "pending").order_by(SqhCard.created_at.desc()).limit(limit),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
+        )
+    )
+
+
+def card_payload(card: SqhCard) -> dict[str, Any]:
+    return {
+        "id": card.id,
+        "ref": card.ref,
+        "kind": card.kind,
+        "title": card.title,
+        "conclusion": card.conclusion,
+        "why": card.why,
+        "if_not": card.if_not,
+        "reversible": card.reversible,
+        "confidence": card.confidence,
+        "evidence": card.evidence,
+        "status": card.status,
+        "decided_via": card.decided_via,
+        "decision_reason": card.decision_reason,
+        "decided_at": card.decided_at.isoformat() if card.decided_at else None,
+        "created_at": card.created_at.isoformat() if card.created_at else None,
+    }

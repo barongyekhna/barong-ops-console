@@ -1,0 +1,148 @@
+"""收敛登记:python -m backend.app.modules.agent_series.suqinghe.bootstrap [--with-user]
+
+按 2026-08-22 的规矩,机器人的**身份**在控制台「用户管理 → 注册机器人」里建,这里不建号。
+默认只把 agent_registry 和 sqh_state(id=1)收敛到位。
+
+加 ``--with-user`` 时,对**已经存在**的 suqinghe 账号做幂等修补:is_bot、岗位、简介、显示名、
+深圳贸易公司的成员关系(只此一条,多一条整站 403),并把密码设成环境变量 SUQINGHE_PASSWORD
+(发版脚本生成、只写进 .env.production,聊天里从不出现)。账号不存在就报错退出,不代建。
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
+
+from ....core.security import hash_password
+from ....db.session import managed_session
+from ....models.c19 import C19ProfileRecord
+from ....models.org_membership import OrgMembershipRecord
+from ....models.organization import OrganizationRecord
+from ....repositories.operation_logs import create_operation_log
+from ....repositories.users import get_user_by_username
+from ....schemas.org_membership import generate_membership_id
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
+from ...c19.identity_sync_service import sync_affiliation_from_membership, sync_profile_for_user
+from ...k_series.product_knowledge.constants import TARGET_ORGANIZATION_NAME
+from .agent import ensure_suqinghe_agent
+from .constants import AGENT_BIO, AGENT_DISPLAY_NAME, AGENT_JOB_TITLE, AGENT_USERNAME, PASSWORD_ENV
+from .models import SqhState
+
+LOCK_ID = 803081902
+
+
+class BootstrapError(RuntimeError):
+    pass
+
+
+def resolve_store_org_id(db: Session) -> str:
+    explicit = (os.getenv("SUQINGHE_ORG_ID") or "").strip()
+    if explicit:
+        found = db.scalar(select(OrganizationRecord.org_id).where(OrganizationRecord.org_id == explicit), execution_options=SKIP_ORG_DATA_ISOLATION)
+        if found is None:
+            raise BootstrapError(f"SUQINGHE_ORG_ID 指向的组织不存在: {explicit}")
+        return str(found)
+    found = db.scalar(select(OrganizationRecord.org_id).where(OrganizationRecord.org_name == TARGET_ORGANIZATION_NAME), execution_options=SKIP_ORG_DATA_ISOLATION)
+    if found is None:
+        raise BootstrapError(f"找不到贸易公司组织(org_name={TARGET_ORGANIZATION_NAME}),请显式设置 SUQINGHE_ORG_ID。")
+    return str(found)
+
+
+def _ensure_single_membership(db: Session, *, user, org_id: str) -> None:
+    """只留深圳贸易公司这一条 member 关系,并同步到 C19 的组织投影(通讯录显示的是它)。"""
+    user_id = str(user.id)
+    rows = list(db.scalars(select(OrgMembershipRecord).where(OrgMembershipRecord.user_id == user_id), execution_options=SKIP_ORG_DATA_ISOLATION))
+    kept = None
+    for row in rows:
+        if row.org_id == org_id and kept is None:
+            kept = row
+            row.role = "member"
+            row.status = "active"
+            db.add(row)
+        else:
+            db.delete(row)
+    if kept is None:
+        kept = OrgMembershipRecord(membership_id=generate_membership_id(), user_id=user_id, org_id=org_id, role="member", status="active")
+        db.add(kept)
+    db.flush()
+    sync_affiliation_from_membership(db, membership=kept, user=user)
+
+
+def _ensure_state_row(db: Session) -> bool:
+    if db.get(SqhState, 1) is not None:
+        return False
+    db.add(SqhState(id=1))
+    db.flush()
+    return True
+
+
+def _lock(db: Session) -> None:
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": LOCK_ID}, execution_options=SKIP_ORG_DATA_ISOLATION)
+
+
+def converge_registry(db: Session) -> dict:
+    _lock(db)
+    created = ensure_suqinghe_agent(db)
+    state_created = _ensure_state_row(db)
+    db.commit()
+    return {"agent_registry_created": created, "state_row_created": state_created}
+
+
+def repair_identity(db: Session) -> dict:
+    _lock(db)
+    user = get_user_by_username(db, AGENT_USERNAME)
+    if user is None:
+        raise BootstrapError(f"账号 {AGENT_USERNAME} 不存在:请先在控制台「用户管理 → 注册机器人」里建号。")
+    org_id = resolve_store_org_id(db)
+    user.is_bot = True
+    user.job_title = AGENT_JOB_TITLE
+    user.organization_id = org_id
+    user.must_change_password = False
+    user.is_active = True
+    password = os.getenv(PASSWORD_ENV) or ""
+    password_set = False
+    if password:
+        user.password_hash = hash_password(password)
+        password_set = True
+    db.add(user)
+    db.flush()
+
+    sync_profile_for_user(db, user=user)
+    profile = db.get(C19ProfileRecord, user.id)
+    if profile is None:
+        raise BootstrapError("C19 profile 同步后不存在。")
+    profile.display_name = AGENT_DISPLAY_NAME
+    profile.bio = AGENT_BIO
+    db.add(profile)
+
+    _ensure_single_membership(db, user=user, org_id=org_id)
+    created = ensure_suqinghe_agent(db)
+    state_created = _ensure_state_row(db)
+    create_operation_log(
+        db,
+        actor_type="system",
+        actor_id="bot-bootstrap",
+        action="agent.bootstrap",
+        target_type="user",
+        target_id=str(user.id),
+        result="success",
+        details={"agent": AGENT_USERNAME, "outcome": "repaired", "org_id": org_id, "agent_registry_created": created, "password_set": password_set},
+    )
+    db.commit()
+    return {"user_id": user.id, "org_id": org_id, "agent_registry_created": created, "state_row_created": state_created, "password_set": password_set}
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    with managed_session() as db:
+        result = repair_identity(db) if "--with-user" in args else converge_registry(db)
+    print(result)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

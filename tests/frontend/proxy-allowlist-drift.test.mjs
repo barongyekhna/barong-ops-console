@@ -245,6 +245,8 @@ function candidateValues(paramName) {
   // 内容台的 source 只有两个合法值，代理层就把它卡死（别的段一律 404 在代理）。
   // 灌通用样本的话，严格的白名单会正确地拒绝它，然后这条漂移测试会误报。
   if (name === "source_key") return ["geo", "seo"];
+  // 苏青禾的卡片短号是 4 位十六进制(C19 里说「批 #a3f9」),代理层按形状卡死。
+  if (name === "ref") return ["a3f9"];
   if (name.endsWith("_id")) return [UUID_SAMPLE, "12"];
   return PARAM_CANDIDATES.default;
 }
