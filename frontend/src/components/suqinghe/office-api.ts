@@ -1,6 +1,13 @@
 "use client";
 
 import { ApiError, apiRequest } from "@/lib/api";
+import {
+  createC19DirectConversation,
+  listC19Directory,
+  listC19MessageHistory,
+  sendC19Message,
+} from "@/modules/c19/api";
+import type { C19MessageRecord } from "@/modules/c19/types";
 
 /** 与后端 `modules/agent_series/suqinghe/office.py` 的 office_payload 一一对应。 */
 export type OfficeState = "working" | "thinking" | "raised" | "night" | "offline";
@@ -223,3 +230,37 @@ export function portraitFor(state: OfficeState): string {
 }
 
 export const AVATAR_SRC = "/assets/agents/suqinghe/avatar.webp";
+
+// ---------------------------------------------------------------- 办公室里的聊天窗
+// 就是 C19 里你和她的那条私聊:同一份消息,两边都能看、都能发,不另起一套。
+
+export type ChatMessage = C19MessageRecord;
+
+let suqingheUserIdCache: number | null = null;
+
+/** 在 C19 通讯录里找到苏青禾(机器人、显示名「苏青禾」)。 */
+export async function findSuqingheUserId(): Promise<number | null> {
+  if (suqingheUserIdCache !== null) return suqingheUserIdCache;
+  const page = await listC19Directory({ search: "苏青禾", limit: 10 });
+  const hit = page.items.find((profile) => profile.display_name === "苏青禾" && profile.is_bot !== false);
+  suqingheUserIdCache = hit ? hit.user_id : null;
+  return suqingheUserIdCache;
+}
+
+/** 找到(或建好)你和她的私聊。C19 按两个人去重,已有的直接返回。 */
+export async function openSuqingheChat(): Promise<string | null> {
+  const peer = await findSuqingheUserId();
+  if (peer === null) return null;
+  const conversation = await createC19DirectConversation({ peer_user_id: peer });
+  return conversation.conversation_id;
+}
+
+export async function listChat(conversationId: string, limit = 40): Promise<ChatMessage[]> {
+  const page = await listC19MessageHistory(conversationId, { limit });
+  return [...page.records].sort((a, b) => a.sequence - b.sequence);
+}
+
+export function sendChat(conversationId: string, text: string) {
+  const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  return sendC19Message(conversationId, { client_message_id: `office-${id}`, content_type: "text", content: text });
+}

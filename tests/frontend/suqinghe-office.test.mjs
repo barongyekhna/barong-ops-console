@@ -105,7 +105,7 @@ test("场景面板里的指挥控件只在 can_command 时出现", () => {
   assert.match(scene, /const canCommand = Boolean\(office\.can_command\)/);
   assert.match(scene, /\{canCommand \? \(\s*<div className=\{partStyles\.inlineActions\}>\s*<PauseButton/);
   assert.match(scene, /\{canCommand \? <GoalForm/);
-  assert.match(scene, /只有老板能给她打电话/);
+  assert.match(scene, /她只听老板的安排；你也可以和她聊/);
   assert.match(scene, /只有老板能让她暂停或接着干/);
   assert.match(scene, /只有老板能批这些卡/);
 });
@@ -170,7 +170,7 @@ test("档案柜状态都有中文标签;进行中的每 5 秒刷新", () => {
 
 test("丢 1688 链接的输入框只给老板;收件筐里的建档卡能跳到档案", () => {
   const phone = scene.slice(scene.indexOf("function PhonePanel"), scene.indexOf("// ---------------------------------------------------------------- 档案柜"));
-  assert.match(phone, /\{canCommand \? \(\s*<>[\s\S]*<DossierLinkForm[\s\S]*\) : \(/);
+  assert.match(phone, /\{canCommand \? \(\s*<details[\s\S]*<DossierLinkForm[\s\S]*<\/details>\s*\) : \(/);
   assert.match(scene, /export function looksLike1688Offer/);
   assert.match(parts, /card\.kind !== "create_k_dossier"/);
   assert.match(parts, /看档案 →/);
@@ -187,4 +187,19 @@ test("档案详情不把原始 JSON 摊出来:字段逐行、来源可展开、�
   assert.match(scene, /page_json: "页面数据"/);
   assert.match(scene, /page_text: "页面文字"/);
   assert.match(scene, /去收件筐批/);
+});
+
+test("office phone embeds the C19 private chat with her and pings on new messages", () => {
+  const chat = readFileSync(new URL("../../frontend/src/components/suqinghe/OfficeChat.tsx", import.meta.url), "utf8");
+  const api = readFileSync(new URL("../../frontend/src/components/suqinghe/office-api.ts", import.meta.url), "utf8");
+  const scene = readFileSync(new URL("../../frontend/src/components/suqinghe/OfficeScene.tsx", import.meta.url), "utf8");
+  // 同一条 C19 私聊,不另起一套
+  assert.match(api, /createC19DirectConversation\(\{ peer_user_id: peer \}\)/);
+  assert.match(api, /listC19MessageHistory/);
+  assert.match(api, /sendC19Message/);
+  assert.match(chat, /和 C19 里的私聊是同一条对话/);
+  assert.match(chat, /isComposing/, "Enter 发送时不能打断中文输入法");
+  assert.match(scene, /<OfficeChat onSeen=\{onSeen\} \/>/);
+  assert.match(scene, /useChatPing\(openPanel === "phone"\)/);
+  assert.match(scene, /styles\.phoneDot/);
 });

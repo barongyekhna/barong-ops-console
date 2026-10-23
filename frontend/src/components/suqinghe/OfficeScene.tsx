@@ -28,7 +28,12 @@ import {
   type OfficeState,
   type SnapshotDetail,
   type SnapshotSummary,
+  listChat,
+  openSuqingheChat,
 } from "./office-api";
+import { useAuth } from "@/components/auth-provider";
+
+import { OfficeChat } from "./OfficeChat";
 import { CardItem, GoalForm, GoalList, InstructForm, PauseButton, minutesAgo, pickEasterLine, timeText, type Runner } from "./OfficeParts";
 
 /**
@@ -72,7 +77,7 @@ export const HOTSPOTS: { id: HotspotId; label: string; box: Box; panel: PanelId 
   { id: "monitor", label: "显示器 · 她在做什么", box: [56.3, 44.1, 9.2, 16.1], panel: "monitor" },
   { id: "inbox", label: "收件筐 · 待审卡", box: [42.0, 54.7, 9.1, 12.0], panel: "inbox" },
   { id: "coffee", label: "咖啡杯 · 今天花了多少", box: [50.4, 52.8, 4.2, 7.2], panel: "coffee" },
-  { id: "phone", label: "电话 · 交代一句", box: [65.6, 49.4, 5.6, 7.8], panel: "phone" },
+  { id: "phone", label: "电话 · 和她聊天", box: [65.6, 49.4, 5.6, 7.8], panel: "phone" },
   { id: "cat", label: "橘猫", box: [74.2, 65.3, 12.3, 12.5], panel: null },
   { id: "suqinghe", label: "苏青禾", box: [41.7, 23.4, 14.6, 29.7], panel: null },
 ];
@@ -86,7 +91,7 @@ const PANEL_TITLE: Record<PanelId, string> = {
   monitor: "🖥 显示器 · 她在做什么",
   inbox: "📥 收件筐",
   coffee: "☕ 咖啡杯 · 今天的账",
-  phone: "☎️ 电话",
+  phone: "☎️ 和苏青禾聊天",
 };
 
 const CAT_LINES = ["喵……（翻了个身）", "喵！（她说今天的卡都排好了）", "呼噜呼噜……", "喵？（老板来啦）"];
@@ -140,6 +145,7 @@ export function OfficeScene({
   const [bubble, setBubble] = useState<string | null>(null);
   const [catLine, setCatLine] = useState<string | null>(null);
   const [catPurr, setCatPurr] = useState(false);
+  const { chatPing, markSeen } = useChatPing(openPanel === "phone");
   const herClicks = useRef<number[]>([]);
   const catClicks = useRef<number[]>([]);
 
@@ -295,7 +301,8 @@ export function OfficeScene({
           </button>
         ))}
 
-        {bubble ? <div className={styles.speech}>{bubble}</div> : null}
+        {bubble ? <div className={styles.speech}>{bubble}</div> : chatPing ? <div className={styles.speech}>{chatPing}</div> : null}
+        {chatPing ? <span aria-hidden className={styles.phoneDot} style={{ left: "70.6%", top: "48.6%" }} /> : null}
         {catLine ? <div className={styles.catSpeech}>{catLine}</div> : null}
 
       </div>
@@ -329,6 +336,7 @@ export function OfficeScene({
                   canCommand={canCommand}
                   dossierFocus={dossierFocus}
                   office={office}
+                  onChatSeen={markSeen}
                   onOpenDossier={openDossier}
                   onOpenPanel={setOpenPanel}
                   panel={openPanel}
@@ -353,6 +361,7 @@ function PanelContent({
   setDossierFocus,
   onOpenDossier,
   onOpenPanel,
+  onChatSeen,
 }: {
   panel: PanelId;
   office: OfficeRead;
@@ -363,6 +372,7 @@ function PanelContent({
   setDossierFocus: (id: number | null) => void;
   onOpenDossier: (id: number | null) => void;
   onOpenPanel: (panel: PanelId) => void;
+  onChatSeen: (sequence: number) => void;
 }) {
   switch (panel) {
     case "inbox":
@@ -382,7 +392,7 @@ function PanelContent({
     case "door":
       return <DoorPanel busy={busy} canCommand={canCommand} office={office} run={run} />;
     case "phone":
-      return <PhonePanel busy={busy} canCommand={canCommand} onSubmitted={() => onOpenDossier(null)} run={run} />;
+      return <PhonePanel busy={busy} canCommand={canCommand} onSeen={onChatSeen} onSubmitted={() => onOpenDossier(null)} run={run} />;
     default:
       return null;
   }
@@ -805,25 +815,91 @@ function PhonePanel({
   busy,
   run,
   onSubmitted,
+  onSeen,
 }: {
   canCommand: boolean;
   busy: boolean;
   run: Runner;
   onSubmitted: () => void;
+  onSeen: (sequence: number) => void;
 }) {
   return (
-    <section className={partStyles.section}>
+    <>
+      <OfficeChat onSeen={onSeen} />
       {canCommand ? (
-        <>
+        <details className={partStyles.section}>
+          <summary>其他交代方式（不用聊天）</summary>
           <p className={partStyles.muted}>交代的事她会记下来；影子期只记录，不动手。</p>
           <InstructForm busy={busy} run={run} />
           <DossierLinkForm busy={busy} onSubmitted={onSubmitted} run={run} />
-        </>
+        </details>
       ) : (
-        <p className={partStyles.muted}>只有老板能给她打电话。</p>
+        <p className={partStyles.muted}>她只听老板的安排；你也可以和她聊，她会告诉你她在忙什么。</p>
       )}
-    </section>
+    </>
   );
+}
+
+// ---------------------------------------------------------------- 新消息提醒
+
+const CHAT_PING_POLL_MS = 15000;
+const seenKey = (userId: string) => `suqinghe-chat-seen:${userId}`;
+
+function readSeen(userId: string): number {
+  try {
+    return Number(window.localStorage.getItem(seenKey(userId)) || 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** 聊天窗没开时,每 15 秒看一眼她有没有发来新消息:有就在她头顶冒气泡、电话上亮红点。 */
+function useChatPing(chatOpen: boolean) {
+  const { user } = useAuth();
+  const userId = String(user?.id ?? "");
+  const [chatPing, setChatPing] = useState<string | null>(null);
+  const conversationRef = useRef<string | null>(null);
+
+  const markSeen = useCallback(
+    (sequence: number) => {
+      try {
+        if (sequence > readSeen(userId)) window.localStorage.setItem(seenKey(userId), String(sequence));
+      } catch {
+        /* 浏览器不让存就算了,只是提醒 */
+      }
+      setChatPing(null);
+    },
+    [userId],
+  );
+
+  useEffect(() => {
+    if (chatOpen || !userId) return undefined;
+    let alive = true;
+    const check = async () => {
+      if (document.hidden) return;
+      try {
+        conversationRef.current = conversationRef.current ?? (await openSuqingheChat());
+        if (!conversationRef.current || !alive) return;
+        const recent = await listChat(conversationRef.current, 5);
+        const hers = recent.filter((message) => String(message.sender_user_id) !== userId);
+        const latest = hers.at(-1);
+        if (alive && latest && latest.sequence > readSeen(userId)) {
+          const text = latest.content_type === "text" ? latest.content : "（发来一个附件）";
+          setChatPing(text.length > 40 ? `${text.slice(0, 40)}…` : text);
+        }
+      } catch {
+        /* 提醒是锦上添花,拉不到就等下一轮 */
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), CHAT_PING_POLL_MS);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [chatOpen, userId]);
+
+  return { chatPing, markSeen };
 }
 
 // ---------------------------------------------------------------- 档案柜(1688 → K 档案)
