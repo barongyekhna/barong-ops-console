@@ -31,6 +31,22 @@ CARD_CHANNELS = ("web", "c19", "mcp")
 MEMORY_KINDS = ("plan", "suggestion", "decision", "note", "dictation", "observation")
 GOAL_STATUSES = ("active", "paused", "done", "dropped")
 OFFICE_STATES = ("working", "thinking", "raised", "night", "offline")
+DOSSIER_STATUSES = ("queued", "fetching", "reading", "ready", "blocked", "failed", "created", "rejected")
+# 还在处理中的档案:同一个 offer 再交一次,不重复排队。
+DOSSIER_ACTIVE_STATUSES = ("queued", "fetching", "reading", "ready")
+DOSSIER_CARD_KIND = "create_k_dossier"
+
+
+def dossier_daily_limit() -> int:
+    """1688 每天最多开几个链接(匿名访问,频率高了会被 baxia 拦)。"""
+    try:
+        return max(0, int(os.getenv("SQH_1688_DAILY_LIMIT", "30")))
+    except ValueError:
+        return 30
+
+
+DOSSIER_MIN_GAP_SECONDS = 60
+DOSSIER_IMAGE_BUDGET_USD = 0.5
 
 
 def _env_float(name: str, default: float) -> float:

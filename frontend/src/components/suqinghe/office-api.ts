@@ -129,6 +129,68 @@ export function getSnapshot(date: string) {
   return apiRequest<SnapshotDetail>(`${BASE}/snapshots/${encodeURIComponent(date)}`);
 }
 
+/** 档案柜:一个 1688 链接 → 一份 K 档案草稿(后端 /suqinghe/dossiers)。 */
+export type DossierStatus = "queued" | "fetching" | "reading" | "ready" | "blocked" | "failed" | "created" | "rejected";
+
+export type DossierSummary = {
+  id: number;
+  offer_id: string;
+  status: DossierStatus;
+  title: string | null;
+  flagged_count: number;
+  cost_usd: number | null;
+  card_ref: string | null;
+  k_product_id: string | null;
+  created_at: string;
+  error?: string | null;
+  source_url?: string;
+  /** 只有 POST 提交时返回:排第几、要不要重新排、她回的一句话。 */
+  position?: number;
+  created?: boolean;
+  reply?: string;
+};
+
+// kind 以后端为准:writer = 英文名是按事实改写的,classifier = 类目是判定出来的;认不出的照原样显示。
+export type DraftSource = { kind: "page_json" | "page_text" | "image" | "writer" | "classifier" | "precedent" | (string & {}); ref?: string; raw?: string };
+
+export type DraftField = {
+  value: unknown;
+  unit?: string | null;
+  sources?: DraftSource[];
+  status: "ok" | "conflict" | "missing" | "needs_owner";
+  note?: string;
+};
+
+export type DossierDetail = DossierSummary & {
+  capture: Record<string, unknown>;
+  draft: Record<string, DraftField | unknown>;
+};
+
+export function submitDossier(url: string) {
+  return apiRequest<DossierSummary>(`${BASE}/dossiers`, { body: { url }, method: "POST" });
+}
+
+export function getDossiers(limit = 30) {
+  return apiRequest<{ items: DossierSummary[] }>(`${BASE}/dossiers?limit=${limit}`);
+}
+
+export function getDossier(id: number) {
+  return apiRequest<DossierDetail>(`${BASE}/dossiers/${encodeURIComponent(String(id))}`);
+}
+
+export const DOSSIER_STATUS_LABEL: Record<DossierStatus, string> = {
+  queued: "排队",
+  fetching: "在抓页面",
+  reading: "在读图",
+  ready: "待你批",
+  blocked: "被1688拦了",
+  failed: "失败",
+  created: "已建进K",
+  rejected: "已驳回",
+};
+
+export const DOSSIER_IN_PROGRESS: DossierStatus[] = ["queued", "fetching", "reading"];
+
 export const MEMORY_KIND_LABEL: Record<string, string> = {
   plan: "计划",
   suggestion: "建议",

@@ -1452,6 +1452,7 @@ function isAllowedHomeDashboardPath(method: string, path: string[]) {
 
 const SUQINGHE_CARD_REF_PATTERN = /^[0-9a-f]{4,8}$/;
 const SUQINGHE_GOAL_ID_PATTERN = /^\d{1,12}$/;
+const SUQINGHE_DOSSIER_ID_PATTERN = /^[1-9][0-9]{0,12}$/;
 const SUQINGHE_SNAPSHOT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -1464,14 +1465,17 @@ function isAllowedSuqinghePath(method: string, path: string[]) {
   }
   if (method === "GET") {
     if (path.length === 2) {
-      // office = 办公室全景;memory = 书柜(硬记忆);snapshots = 日历(每日快照列表)
-      return path[1] === "office" || path[1] === "memory" || path[1] === "snapshots";
+      // office = 办公室全景;memory = 书柜(硬记忆);snapshots = 日历(每日快照列表);dossiers = 档案柜
+      return path[1] === "office" || path[1] === "memory" || path[1] === "snapshots" || path[1] === "dossiers";
+    }
+    if (path.length === 3 && path[1] === "dossiers") {
+      return SUQINGHE_DOSSIER_ID_PATTERN.test(path[2]);
     }
     return path.length === 3 && path[1] === "snapshots" && SUQINGHE_SNAPSHOT_DATE_PATTERN.test(path[2]);
   }
   if (method === "POST") {
     if (path.length === 2) {
-      return path[1] === "goals" || path[1] === "control" || path[1] === "instruct";
+      return path[1] === "goals" || path[1] === "control" || path[1] === "instruct" || path[1] === "dossiers";
     }
     return (
       path.length === 4 &&

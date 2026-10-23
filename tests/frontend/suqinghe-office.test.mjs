@@ -140,3 +140,51 @@ test("calendar snapshot sections render as plain Chinese lines, never raw JSON",
   assert.ok(!snapshotView.includes("JSON.stringify"), "SnapshotView must not dump JSON");
   assert.ok(!snapshotView.includes(">其他<"), "the generic 其他 dump section is gone");
 });
+
+test("档案柜:书柜下半的柜门是新热区,和书柜不重叠,打开档案柜面板", () => {
+  assert.match(scene, /\{ id: "cabinet", label: "[^"]+", box: \[20\.0, 40\.5, 14\.5, 20\.5\], panel: "cabinet" \}/);
+  assert.match(scene, /\{ id: "bookshelf", label: "[^"]+", box: \[17\.9, 10\.9, 17\.7, 29\.0\], panel: "bookshelf" \}/);
+  // 书柜底边 10.9+29.0=39.9 < 柜门顶 40.5
+  assert.ok(10.9 + 29.0 < 40.5);
+  assert.match(scene, /case "cabinet":\s*return <CabinetPanel/);
+  assert.match(scene, /cabinet: "🗄 档案柜/);
+});
+
+test("档案柜状态都有中文标签;进行中的每 5 秒刷新", () => {
+  for (const [key, label] of [
+    ["queued", "排队"],
+    ["fetching", "在抓页面"],
+    ["reading", "在读图"],
+    ["ready", "待你批"],
+    ["blocked", "被1688拦了"],
+    ["failed", "失败"],
+    ["created", "已建进K"],
+    ["rejected", "已驳回"],
+  ]) {
+    assert.match(api, new RegExp(`${key}: "${label}"`));
+  }
+  assert.match(api, /export function submitDossier\(url: string\)/);
+  assert.match(api, /`\$\{BASE\}\/dossiers\?limit=\$\{limit\}`/);
+  assert.match(scene, /window\.setInterval\(load, 5000\)/);
+});
+
+test("丢 1688 链接的输入框只给老板;收件筐里的建档卡能跳到档案", () => {
+  const phone = scene.slice(scene.indexOf("function PhonePanel"), scene.indexOf("// ---------------------------------------------------------------- 档案柜"));
+  assert.match(phone, /\{canCommand \? \(\s*<>[\s\S]*<DossierLinkForm[\s\S]*\) : \(/);
+  assert.match(scene, /export function looksLike1688Offer/);
+  assert.match(parts, /card\.kind !== "create_k_dossier"/);
+  assert.match(parts, /看档案 →/);
+  assert.match(scene, /onOpenDossier=\{onOpenDossier\}/);
+});
+
+test("档案详情不把原始 JSON 摊出来:字段逐行、来源可展开、标红分颜色", () => {
+  const view = scene.slice(scene.indexOf("function DossierView"));
+  assert.ok(!view.includes("JSON.stringify"), "dossier detail must not dump JSON");
+  assert.match(scene, /export function plainValue/);
+  for (const status of ["conflict", "missing", "needs_owner"]) {
+    assert.match(sceneCss, new RegExp(`\\.fieldRow\\[data-status="${status}"\\]`));
+  }
+  assert.match(scene, /page_json: "页面数据"/);
+  assert.match(scene, /page_text: "页面文字"/);
+  assert.match(scene, /去收件筐批/);
+});

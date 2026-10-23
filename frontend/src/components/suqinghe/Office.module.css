@@ -678,3 +678,14 @@
 .narrow {
   max-width: 80px;
 }
+
+.linkButton {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}

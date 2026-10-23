@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Integer, String, Text, func
+from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -108,3 +108,27 @@ class SqhSnapshot(Base):
     snapshot_date: Mapped[date] = mapped_column(Date, primary_key=True)
     payload: Mapped[Any] = mapped_column(_json(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class SqhDossier(Base):
+    """一个 1688 链接 → 一份 K 档案草稿(10-23 第一项真本事)。批卡才真的建进 K。"""
+
+    __tablename__ = "sqh_dossiers"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    source_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    offer_id: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # queued → fetching → reading → ready → created;旁路:blocked / failed / rejected
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    requested_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    channel: Mapped[str] = mapped_column(String(8), nullable=False, default="web")
+    capture: Mapped[Any] = mapped_column(_json(), nullable=False, default=dict)
+    draft: Mapped[Any] = mapped_column(_json(), nullable=False, default=dict)
+    flagged_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    cost_usd: Mapped[Any] = mapped_column(Numeric(10, 4), nullable=False, default=0)
+    card_ref: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    k_product_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())

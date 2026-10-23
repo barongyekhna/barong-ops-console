@@ -9,10 +9,19 @@ import {
   MEMORY_KIND_LABEL,
   STATE_LABEL,
   VIA_LABEL,
+  DOSSIER_IN_PROGRESS,
+  DOSSIER_STATUS_LABEL,
+  getDossier,
+  getDossiers,
   getMemory,
   getSnapshot,
   getSnapshots,
   officeErrorMessage,
+  submitDossier,
+  type DossierDetail,
+  type DossierSummary,
+  type DraftField,
+  type DraftSource,
   type MemoryItem,
   type MemoryKind,
   type OfficeRead,
@@ -41,6 +50,7 @@ type Box = [number, number, number, number];
 export type HotspotId =
   | "door"
   | "bookshelf"
+  | "cabinet"
   | "whiteboard"
   | "calendar"
   | "monitor"
@@ -50,11 +60,13 @@ export type HotspotId =
   | "cat"
   | "suqinghe";
 
-export type PanelId = "door" | "bookshelf" | "whiteboard" | "calendar" | "monitor" | "inbox" | "coffee" | "phone";
+export type PanelId = "door" | "bookshelf" | "cabinet" | "whiteboard" | "calendar" | "monitor" | "inbox" | "coffee" | "phone";
 
 export const HOTSPOTS: { id: HotspotId; label: string; box: Box; panel: PanelId | null }[] = [
   { id: "door", label: "门口铭牌", box: [5.7, 23.4, 12.0, 42.0], panel: "door" },
-  { id: "bookshelf", label: "书柜 · 工作日志", box: [17.9, 10.9, 17.7, 50.3], panel: "bookshelf" },
+  // 书柜上半是工作日志;下半的柜门是「档案柜」(1688 → K 档案),两块不重叠。
+  { id: "bookshelf", label: "书柜 · 工作日志", box: [17.9, 10.9, 17.7, 29.0], panel: "bookshelf" },
+  { id: "cabinet", label: "档案柜 · 1688 档案", box: [20.0, 40.5, 14.5, 20.5], panel: "cabinet" },
   { id: "whiteboard", label: "白板 · 今日计划", box: [37.3, 9.4, 16.7, 13.5], panel: "whiteboard" },
   { id: "calendar", label: "日历 · 每日快照", box: [89.4, 27.0, 6.4, 19.6], panel: "calendar" },
   { id: "monitor", label: "显示器 · 她在做什么", box: [56.3, 44.1, 9.2, 16.1], panel: "monitor" },
@@ -68,6 +80,7 @@ export const HOTSPOTS: { id: HotspotId; label: string; box: Box; panel: PanelId 
 const PANEL_TITLE: Record<PanelId, string> = {
   door: "🚪 门口铭牌",
   bookshelf: "📚 书柜 · 工作日志",
+  cabinet: "🗄 档案柜 · 1688 档案",
   whiteboard: "📋 白板 · 今日计划",
   calendar: "🗓 日历 · 每日快照",
   monitor: "🖥 显示器 · 她在做什么",
@@ -117,6 +130,11 @@ export function OfficeScene({
   const state = office.state;
   const canCommand = Boolean(office.can_command);
   const [openPanel, setOpenPanel] = useState<PanelId | null>(null);
+  const [dossierFocus, setDossierFocus] = useState<number | null>(null);
+  const openDossier = useCallback((id: number | null) => {
+    setDossierFocus(id);
+    setOpenPanel("cabinet");
+  }, []);
   const [loaded, setLoaded] = useState<Set<OfficeState>>(() => new Set([state]));
   const [hint, setHint] = useState<HotspotId | null>(null);
   const [bubble, setBubble] = useState<string | null>(null);
@@ -306,7 +324,17 @@ export function OfficeScene({
                 </button>
               </header>
               <div className={styles.panelBody}>
-                <PanelContent busy={busy} canCommand={canCommand} office={office} panel={openPanel} run={run} />
+                <PanelContent
+                  busy={busy}
+                  canCommand={canCommand}
+                  dossierFocus={dossierFocus}
+                  office={office}
+                  onOpenDossier={openDossier}
+                  onOpenPanel={setOpenPanel}
+                  panel={openPanel}
+                  run={run}
+                  setDossierFocus={setDossierFocus}
+                />
               </div>
             </section>
           </>
@@ -321,18 +349,28 @@ function PanelContent({
   canCommand,
   busy,
   run,
+  dossierFocus,
+  setDossierFocus,
+  onOpenDossier,
+  onOpenPanel,
 }: {
   panel: PanelId;
   office: OfficeRead;
   canCommand: boolean;
   busy: boolean;
   run: Runner;
+  dossierFocus: number | null;
+  setDossierFocus: (id: number | null) => void;
+  onOpenDossier: (id: number | null) => void;
+  onOpenPanel: (panel: PanelId) => void;
 }) {
   switch (panel) {
     case "inbox":
-      return <InboxPanel busy={busy} canCommand={canCommand} office={office} run={run} />;
+      return <InboxPanel busy={busy} canCommand={canCommand} office={office} onOpenDossier={onOpenDossier} run={run} />;
     case "bookshelf":
       return <BookshelfPanel />;
+    case "cabinet":
+      return <CabinetPanel focus={dossierFocus} onOpenInbox={() => onOpenPanel("inbox")} setFocus={setDossierFocus} />;
     case "whiteboard":
       return <WhiteboardPanel busy={busy} canCommand={canCommand} office={office} run={run} />;
     case "calendar":
@@ -344,18 +382,30 @@ function PanelContent({
     case "door":
       return <DoorPanel busy={busy} canCommand={canCommand} office={office} run={run} />;
     case "phone":
-      return <PhonePanel busy={busy} canCommand={canCommand} run={run} />;
+      return <PhonePanel busy={busy} canCommand={canCommand} onSubmitted={() => onOpenDossier(null)} run={run} />;
     default:
       return null;
   }
 }
 
-function InboxPanel({ office, canCommand, busy, run }: { office: OfficeRead; canCommand: boolean; busy: boolean; run: Runner }) {
+function InboxPanel({
+  office,
+  canCommand,
+  busy,
+  run,
+  onOpenDossier,
+}: {
+  office: OfficeRead;
+  canCommand: boolean;
+  busy: boolean;
+  run: Runner;
+  onOpenDossier: (id: number) => void;
+}) {
   return (
     <>
       {office.pending_cards.length === 0 ? <p className={partStyles.muted}>收件筐是空的，暂时没有要批的。</p> : null}
       {office.pending_cards.map((card) => (
-        <CardItem busy={busy} canCommand={canCommand} card={card} key={card.ref} run={run} />
+        <CardItem busy={busy} canCommand={canCommand} card={card} key={card.ref} onOpenDossier={onOpenDossier} run={run} />
       ))}
       {!canCommand && office.pending_cards.length > 0 ? <p className={partStyles.muted}>只有老板能批这些卡。</p> : null}
       {office.recent_cards.length > 0 ? (
@@ -750,17 +800,398 @@ function DoorPanel({ office, canCommand, busy, run }: { office: OfficeRead; canC
   );
 }
 
-function PhonePanel({ canCommand, busy, run }: { canCommand: boolean; busy: boolean; run: Runner }) {
+function PhonePanel({
+  canCommand,
+  busy,
+  run,
+  onSubmitted,
+}: {
+  canCommand: boolean;
+  busy: boolean;
+  run: Runner;
+  onSubmitted: () => void;
+}) {
   return (
     <section className={partStyles.section}>
       {canCommand ? (
         <>
           <p className={partStyles.muted}>交代的事她会记下来；影子期只记录，不动手。</p>
           <InstructForm busy={busy} run={run} />
+          <DossierLinkForm busy={busy} onSubmitted={onSubmitted} run={run} />
         </>
       ) : (
         <p className={partStyles.muted}>只有老板能给她打电话。</p>
       )}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------- 档案柜(1688 → K 档案)
+
+/** 客户端只做最粗的一道:像 1688 商品链接才发。真正的解析和拒绝在后端。 */
+export function looksLike1688Offer(value: string): boolean {
+  const text = value.trim();
+  return /1688\.com\/offer\/\d+/i.test(text) || /[?&](offerId|offer_id)=\d+/i.test(text);
+}
+
+function DossierLinkForm({ busy, onSubmitted }: { busy: boolean; run: Runner; onSubmitted: () => void }) {
+  const [url, setUrl] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const valid = looksLike1688Offer(url);
+  return (
+    <form
+      className={styles.linkForm}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!valid || sending) return;
+        setSending(true);
+        setError(null);
+        submitDossier(url.trim())
+          .then(() => {
+            setUrl("");
+            onSubmitted();
+          })
+          .catch((err: unknown) => setError(officeErrorMessage(err, "没交上")))
+          .finally(() => setSending(false));
+      }}
+    >
+      <label htmlFor="sqh-1688-link">丢一个 1688 链接给她</label>
+      <input
+        id="sqh-1688-link"
+        onChange={(event) => setUrl(event.target.value)}
+        placeholder="https://detail.1688.com/offer/……html"
+        value={url}
+      />
+      {url && !valid ? <p className={partStyles.muted}>这看起来不像 1688 商品链接（要有 1688.com/offer/数字）。</p> : null}
+      {error ? <p className={partStyles.error}>{error}</p> : null}
+      <button className={partStyles.primary} disabled={busy || sending || !valid} type="submit">
+        {sending ? "交给她…" : "交给她整理成 K 档案"}
+      </button>
+    </form>
+  );
+}
+
+function CabinetPanel({
+  focus,
+  setFocus,
+  onOpenInbox,
+}: {
+  focus: number | null;
+  setFocus: (id: number | null) => void;
+  onOpenInbox: () => void;
+}) {
+  const [items, setItems] = useState<DossierSummary[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inProgress = (items ?? []).some((item) => DOSSIER_IN_PROGRESS.includes(item.status));
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      getDossiers(40)
+        .then((data) => {
+          if (alive) {
+            setItems(data.items);
+            setError(null);
+          }
+        })
+        .catch((err: unknown) => alive && setError(officeErrorMessage(err, "档案柜打不开")));
+    void load();
+    const timer = inProgress ? window.setInterval(load, 5000) : null;
+    return () => {
+      alive = false;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [inProgress]);
+
+  if (focus !== null) {
+    return <DossierView id={focus} onBack={() => setFocus(null)} onOpenInbox={onOpenInbox} />;
+  }
+  return (
+    <>
+      {error ? <p className={partStyles.error}>{error}</p> : null}
+      {items === null && !error ? <p className={partStyles.muted}>开柜门…</p> : null}
+      {items !== null && items.length === 0 ? (
+        <p className={partStyles.muted}>柜子是空的。老板可以在电话里丢一个 1688 链接给她。</p>
+      ) : null}
+      <ul className={styles.dossierList}>
+        {(items ?? []).map((item) => (
+          <li key={item.id}>
+            <button onClick={() => setFocus(item.id)} type="button">
+              <span className={styles.dossierTitle}>{item.title || `1688 · ${item.offer_id}`}</span>
+              <span className={styles.dossierMeta}>
+                <span className={styles.dossierStatus} data-status={item.status}>
+                  {DOSSIER_STATUS_LABEL[item.status] ?? item.status}
+                </span>
+                {item.flagged_count > 0 ? <span className={styles.flagBadge}>标红 {item.flagged_count}</span> : null}
+                {typeof item.cost_usd === "number" ? <span>${item.cost_usd.toFixed(3)}</span> : null}
+                <time>{timeText(item.created_at)}</time>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+const FIELD_LABEL: Record<string, string> = {
+  title_zh: "中文原标题",
+  product_name_en: "英文品名",
+  product_type: "产品类型",
+  google_category: "建议的谷歌类目",
+  category: "建议的谷歌类目",
+  material: "材质",
+  dimensions: "尺寸（单品）",
+  weight: "重量（单品）",
+  dimensions_pack: "尺寸（单个包装）",
+  weight_pack: "重量（单个包装）",
+  dimensions_carton: "外箱尺寸",
+  weight_carton: "外箱重量",
+  color: "颜色",
+  package_includes: "包装清单",
+  package: "包装",
+  moq: "起批量",
+  unit: "单位",
+  origin: "产地",
+  ship_from: "发货地",
+  age_range: "适用年龄",
+  brand: "品牌",
+  regular_price: "售价",
+  sale_price: "售价",
+  supplier: "供应商",
+  certifications: "认证",
+  power: "功率",
+  voltage: "电压",
+  battery: "电池",
+  capacity: "容量",
+  features: "功能卖点",
+  specs: "规格",
+  variants: "变体",
+  price_tiers: "阶梯价",
+  reference_images: "参考图",
+};
+
+const FIELD_STATUS_LABEL: Record<DraftField["status"], string> = {
+  ok: "",
+  conflict: "来源对不上",
+  missing: "没找到",
+  needs_owner: "要老板定",
+};
+
+const SOURCE_KIND_LABEL: Record<string, string> = {
+  page_json: "页面数据",
+  page_text: "页面文字",
+  image: "图片",
+  writer: "按事实改写",
+  classifier: "类目判定",
+  precedent: "店里先例",
+};
+
+const SPECIAL_KEYS = new Set(["variants", "price_tiers", "reference_images"]);
+
+type AnyRec = Record<string, unknown>;
+const asRec = (value: unknown): value is AnyRec => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+export function isDraftField(value: unknown): value is DraftField {
+  return asRec(value) && typeof value.status === "string" && "value" in value;
+}
+
+/** 草稿里的值 → 一行人话。对象展开成「键：值」,绝不原样摊 JSON。 */
+export function plainValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(plainValue).join("、");
+  if (asRec(value)) {
+    return Object.entries(value)
+      .filter(([, inner]) => inner !== null && inner !== undefined && inner !== "")
+      .map(([key, inner]) => `${FIELD_LABEL[key] ?? key}：${plainValue(inner)}`)
+      .join("；");
+  }
+  return "—";
+}
+
+function sourceText(source: DraftSource): string {
+  const where = source.kind === "image" && source.ref ? `${SOURCE_KIND_LABEL.image} · ${source.ref}` : SOURCE_KIND_LABEL[source.kind] ?? source.kind;
+  return source.raw ? `${where}：「${source.raw}」` : where;
+}
+
+function DossierView({ id, onBack, onOpenInbox }: { id: number; onBack: () => void; onOpenInbox: () => void }) {
+  const [detail, setDetail] = useState<DossierDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inProgress = detail ? DOSSIER_IN_PROGRESS.includes(detail.status) : true;
+
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      getDossier(id)
+        .then((data) => {
+          if (alive) {
+            setDetail(data);
+            setError(null);
+          }
+        })
+        .catch((err: unknown) => alive && setError(officeErrorMessage(err, "这份档案打不开")));
+    void load();
+    const timer = inProgress ? window.setInterval(load, 5000) : null;
+    return () => {
+      alive = false;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [id, inProgress]);
+
+  const draft = detail?.draft ?? {};
+  const fields = Object.entries(draft).filter(([key]) => !SPECIAL_KEYS.has(key));
+  const variants = listOf(draft.variants);
+  const tiers = listOf(draft.price_tiers);
+  const images = listOf(draft.reference_images).map((item) => (typeof item === "string" ? item : asRec(item) ? String(item.url ?? "") : "")).filter(Boolean);
+
+  return (
+    <>
+      <button className={partStyles.linkButton} onClick={onBack} type="button">
+        ← 回档案柜
+      </button>
+      {error ? <p className={partStyles.error}>{error}</p> : null}
+      {!detail && !error ? <p className={partStyles.muted}>翻档案…</p> : null}
+      {detail ? (
+        <>
+          <section className={partStyles.section}>
+            <h3>{detail.title || `1688 · ${detail.offer_id}`}</h3>
+            <p>
+              <span className={styles.dossierStatus} data-status={detail.status}>
+                {DOSSIER_STATUS_LABEL[detail.status] ?? detail.status}
+              </span>
+              {detail.flagged_count > 0 ? <span className={styles.flagBadge}> 标红 {detail.flagged_count}</span> : null}
+              {typeof detail.cost_usd === "number" ? ` · 花了 $${detail.cost_usd.toFixed(3)}` : ""}
+            </p>
+            {inProgress ? <p className={partStyles.muted}>她还在整理，这里每 5 秒刷新一次。</p> : null}
+            {detail.card_ref && detail.status === "ready" ? (
+              <button className={partStyles.primary} onClick={onOpenInbox} type="button">
+                去收件筐批（#{detail.card_ref}）
+              </button>
+            ) : null}
+            {detail.k_product_id ? (
+              <p>
+                已建进 K：<a href="/products">去 K 系列看</a>（产品 {detail.k_product_id}）
+              </p>
+            ) : null}
+          </section>
+
+          {fields.length > 0 ? (
+            <section className={partStyles.section}>
+              <h3>字段</h3>
+              <div className={styles.fieldTable}>
+                {fields.map(([key, raw]) => (
+                  <FieldRow field={raw} key={key} label={FIELD_LABEL[key] ?? key} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {variants.length > 0 ? (
+            <section className={partStyles.section}>
+              <h3>变体（{variants.length}）</h3>
+              <div className={styles.scrollX}>
+                <table className={styles.dossierTable}>
+                  <thead>
+                    <tr>
+                      <th>名称</th>
+                      <th>进价 ¥</th>
+                      <th>重量 g</th>
+                      <th>尺寸</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {variants.map((item, index) => {
+                      const row = asRec(item) ? item : {};
+                      return (
+                        <tr key={index}>
+                          <td>{plainValue(unwrap(row.name))}</td>
+                          <td>{plainValue(unwrap(row.cost_cny ?? row.price_cny ?? row.price))}</td>
+                          <td>{plainValue(unwrap(row.weight_g ?? row.weight))}</td>
+                          <td>{plainValue(unwrap(row.dimensions))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+
+          {tiers.length > 0 ? (
+            <section className={partStyles.section}>
+              <h3>阶梯价（1688 进价，仅供参考）</h3>
+              <ul className={partStyles.list}>
+                {tiers.map((item, index) => {
+                  const row = asRec(item) ? item : {};
+                  return (
+                    <li key={index}>
+                      <span>≥ {plainValue(row.begin_amount ?? row.beginAmount)} 件</span>
+                      <span>¥{plainValue(row.price)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+
+          {images.length > 0 ? (
+            <section className={partStyles.section}>
+              <h3>参考图（{images.length}）</h3>
+              <div className={styles.refImages}>
+                {images.slice(0, 12).map((url) => (
+                  <a href={url} key={url} rel="noreferrer" target="_blank">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="参考图" loading="lazy" referrerPolicy="no-referrer" src={url} />
+                  </a>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
+function unwrap(value: unknown): unknown {
+  return isDraftField(value) ? value.value : value;
+}
+
+function listOf(value: unknown): unknown[] {
+  const inner = unwrap(value);
+  return Array.isArray(inner) ? inner : [];
+}
+
+function FieldRow({ label, field }: { label: string; field: unknown }) {
+  const [open, setOpen] = useState(false);
+  const parsed: DraftField = isDraftField(field) ? field : { value: field, status: "ok" };
+  const sources = parsed.sources ?? [];
+  const flag = FIELD_STATUS_LABEL[parsed.status];
+  return (
+    <div className={styles.fieldRow} data-status={parsed.status}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <span className={styles.fieldValue}>
+        {plainValue(parsed.value)}
+        {parsed.unit ? ` ${parsed.unit}` : ""}
+        {flag ? <em className={styles.fieldFlag}>{flag}</em> : null}
+        {parsed.note ? <small className={styles.fieldNote}>{parsed.note}</small> : null}
+      </span>
+      {sources.length > 0 ? (
+        <button className={styles.sourceToggle} onClick={() => setOpen((value) => !value)} type="button">
+          {open ? "收起来源" : `来源 ${sources.length}`}
+        </button>
+      ) : (
+        <span />
+      )}
+      {open ? (
+        <ul className={styles.sourceList}>
+          {sources.map((source, index) => (
+            <li key={index}>{sourceText(source)}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }

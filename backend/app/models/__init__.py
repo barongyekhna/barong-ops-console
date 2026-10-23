@@ -161,6 +161,7 @@ from ..modules.sm_series.models import (
 from ..modules.agent_series.suqinghe.models import (
     SqhActivity,
     SqhCard,
+    SqhDossier,
     SqhGoal,
     SqhMemory,
     SqhSnapshot,
@@ -356,6 +357,7 @@ __all__ = [
     "RdUnattendedGrant",
     "SqhActivity",
     "SqhCard",
+    "SqhDossier",
     "SqhGoal",
     "SqhMemory",
     "SqhSnapshot",

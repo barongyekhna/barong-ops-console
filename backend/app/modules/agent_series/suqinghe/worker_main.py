@@ -34,7 +34,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, cards, memory, office, snapshot
+from . import brain, cards, dossiers, memory, office, snapshot
 from .constants import (
     AGENT_USERNAME,
     HEARTBEAT_INTERVAL_SECONDS,
@@ -135,7 +135,7 @@ def reminder_text(pending: int) -> str:
     return f"老板,今天有 {pending} 张卡等你,在办公室里(右下角我的头像)。不急,你有空再看。"
 
 
-def decided_text(card: Any, *, changed: bool, decision: str) -> str:
+def decided_text(card: Any, *, changed: bool, decision: str, execution: dict[str, Any] | None = None) -> str:
     if not changed:
         channel = CHANNEL_LABELS.get(card.decided_via or "", card.decided_via or "")
         if card.status == "approved":
@@ -147,6 +147,10 @@ def decided_text(card: Any, *, changed: bool, decision: str) -> str:
         return f"#{card.ref} 这张卡现在是 {card.status},不用再处理。"
     if card.status == "stale":
         return f"#{card.ref} 建卡后数据变了,这张卡我作废了,明早按新数据重出。"
+    if decision == "approve" and execution is not None:
+        if execution.get("ok"):
+            return f"收到,#{card.ref} 批了。{execution.get('note', '')}"
+        return f"#{card.ref} 批了,但我没做成:{execution.get('note', '')}。我记下了,你看一眼。"
     if decision == "approve":
         return f"收到,#{card.ref}「{card.title}」批了。影子期我先记下,不动手。"
     return f"收到,#{card.ref} 驳了,原因我记住了,同类的不再提。"
@@ -221,6 +225,18 @@ def run_morning(db, *, now: datetime | None = None) -> dict[str, Any]:
     first_line = result.plan.splitlines()[0] if result.plan else "今天的计划出好了"
     _set_activity(db, "working", first_line[:300], None)
     return {"snapshot": snap.get("headline"), "plan": result.plan, "cards_created": created, "role": result.role}
+
+
+def intake_links(db, links: list[tuple[str, str]], *, actor_user_id: str) -> str:
+    """老板在 C19 里丢了 1688 链接:排队,回一句排第几、大概多久。"""
+    replies: list[str] = []
+    for url, offer_id in links[:5]:
+        dossier, created, position = dossiers.enqueue(db, url=url, actor_user_id=actor_user_id, channel="c19")
+        replies.append(f"{offer_id}:" + dossiers.queue_reply(position, created=created, status=dossier.status))
+    db.commit()
+    if len(links) > 5:
+        replies.append("一次最多收 5 个,剩下的等这批做完再发我。")
+    return "\n".join(replies)
 
 
 def handle_dictations(db) -> int:
@@ -318,6 +334,9 @@ class SuqingheWorker:
             speaker = db.get(User, int(speaker_id)) if speaker_id.isdigit() else None
             if speaker is None or not is_owner_role(speaker.role or ""):
                 return "我只听老板的安排。想看我在忙什么,点控制台右下角我的头像就行。"
+            links = dossiers.find_1688_links(text)
+            if links:
+                return intake_links(db, links, actor_user_id=str(speaker.id))
             command = parse_command(text)
             if command is not None:
                 try:
@@ -326,7 +345,7 @@ class SuqingheWorker:
                     db.rollback()
                     return exc.message
                 db.commit()
-                return decided_text(outcome.card, changed=outcome.changed, decision=command.decision)
+                return decided_text(outcome.card, changed=outcome.changed, decision=command.decision, execution=outcome.execution)
             state = office.get_state(db)
             if state.paused:
                 return "老板,我现在是暂停状态。批卡照样可以在这儿说「批 #编号」;要我接着干,在办公室点「恢复」。"
@@ -402,6 +421,8 @@ class SuqingheWorker:
             if should_run_morning(now=now, last_plan=state.last_plan_date) and self._morning_attempt_allowed(now):
                 run_morning(db, now=now)
             handle_dictations(db)
+            # 1688 → K 档案:一轮最多一单,节流在 dossiers.process_next 里。
+            dossiers.process_next(db, now=now)
             try:
                 self.maybe_remind(db)
             except (ConsoleAuthError, httpx.HTTPError) as exc:

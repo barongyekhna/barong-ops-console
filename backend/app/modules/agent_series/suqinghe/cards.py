@@ -24,7 +24,7 @@ from ....core.roles import is_owner_role
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import memory
-from .constants import CARD_CHANNELS
+from .constants import CARD_CHANNELS, DOSSIER_CARD_KIND
 from .models import SqhCard
 
 # 重算指纹的函数:evidence["recheck"]["type"] → fn(db, recheck) -> 指纹。
@@ -45,6 +45,8 @@ class DecideOutcome:
     card: SqhCard
     # True = 这一次真的改了状态;False = 早就决定过了(或已作废),原样返回。
     changed: bool
+    # 批准后真的动了手(目前只有「建 K 档案」卡):{"ok": bool, "note": str, ...}。
+    execution: dict[str, Any] | None = None
 
 
 def fingerprint(value: Any) -> str:
@@ -161,7 +163,57 @@ def decide_card(
             actor_user_id=str(actor.id),
         )
         memory.log_activity(db, f"老板{verdict} #{card.ref}「{card.title}」", kind="decision")
-    return DecideOutcome(card=card, changed=changed)
+    execution = None
+    if changed and card.kind == DOSSIER_CARD_KIND:
+        execution = _after_dossier_decision(db, card, decision=decision, actor=actor)
+    return DecideOutcome(card=card, changed=changed, execution=execution)
+
+
+def _after_dossier_decision(db: Session, card: SqhCard, *, decision: str, actor: User) -> dict[str, Any]:
+    """「建 K 档案」卡决定之后:驳 → 档案标 rejected;批 → 先把「已批」落库,再真的去建。
+
+    ``create_product`` 会自己 commit,所以必须先提交卡的状态;执行失败不能让卡悄悄停在
+    「已批」——档案标 failed、写记忆和流水,卡的决定原因后面补一句「执行失败:…」。
+    """
+    from .executor import ExecutorError, create_k_from_dossier
+    from .models import SqhDossier
+
+    dossier_id = (card.evidence or {}).get("dossier_id") if isinstance(card.evidence, dict) else None
+    if not dossier_id:
+        return {"ok": False, "note": "卡上没有档案号,没法执行。"}
+    if decision == "reject":
+        dossier = db.get(SqhDossier, int(dossier_id), execution_options=SKIP_ORG_DATA_ISOLATION)
+        if dossier is not None and dossier.status == "ready":
+            dossier.status = "rejected"
+            db.add(dossier)
+            db.flush()
+        return {"ok": True, "note": "档案已驳回,不建。"}
+
+    db.commit()
+    try:
+        result = create_k_from_dossier(db, int(dossier_id), actor)
+    except Exception as exc:  # noqa: BLE001 —— 任何失败都要记账,不许吞
+        db.rollback()
+        message = str(exc)[:500] or exc.__class__.__name__
+        dossier = db.get(SqhDossier, int(dossier_id), execution_options=SKIP_ORG_DATA_ISOLATION)
+        if dossier is not None and dossier.status != "created":
+            dossier.status = "failed"
+            dossier.error = message
+            db.add(dossier)
+        db.execute(
+            update(SqhCard)
+            .where(SqhCard.id == card.id)
+            .values(decision_reason=((card.decision_reason or "") + f" 执行失败:{message}").strip()[:2000]),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
+        )
+        memory.record(db, kind="observation", subject=f"建 K 档案失败 #{card.ref}", body=message,
+                      refs={"card_ref": card.ref, "dossier_id": int(dossier_id)})
+        memory.log_activity(db, f"#{card.ref} 批了但建档没成:{message[:120]}", kind="error")
+        db.commit()
+        db.refresh(card)
+        return {"ok": False, "note": message}
+    db.refresh(card)
+    return {"ok": True, "note": result.note, "k_product_id": result.k_product_id, "sku": result.sku, "created": result.created}
 
 
 def _transition(db: Session, card: SqhCard, *, status: str, actor: User, channel: str, reason: str | None) -> bool:

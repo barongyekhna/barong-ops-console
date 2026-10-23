@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20261022_01_suqinghe",
+  "alembic_head": "20261023_01_suqinghe_dossiers",
   "environment": "staging",
-  "expected_alembic_head": "20261022_01_suqinghe",
+  "expected_alembic_head": "20261023_01_suqinghe_dossiers",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 135,
-  "migration_hash": "05965d5283f121b0ebde783bce6f1f22f0144c408c6b0ed484e0deec587dc427",
+  "migration_count": 136,
+  "migration_hash": "be234e79a4f7872447e922bc65ac8ad5f72b90e83f1fcc47c7af9c80d54762ad",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -142,9 +142,10 @@
     "20260918_03_rd_client_traces",
     "20260919_01_amz_finance",
     "20261021_01_ai_usage_ledger",
-    "20261022_01_suqinghe"
+    "20261022_01_suqinghe",
+    "20261023_01_suqinghe_dossiers"
   ],
-  "migration_order_checksum": "458de16bc4fd1cdf7450cf0372ccb8220e9a5c7cb80b7e3286a61c1864fdb530",
+  "migration_order_checksum": "d52166531739721416ba2f7ff07a78b0ecab4b302f8800e4ed2f339b70b8662e",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -1090,6 +1091,13 @@
       "down_revision": "20261021_01_ai_usage_ledger",
       "path": "backend/alembic/versions/20261022_01_suqinghe.py",
       "version": "20261022_01_suqinghe"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "8ec099fba05e4051a3145b82be750aef2dbb2d044025661a7bad046855c4804b",
+      "down_revision": "20261022_01_suqinghe",
+      "path": "backend/alembic/versions/20261023_01_suqinghe_dossiers.py",
+      "version": "20261023_01_suqinghe_dossiers"
     }
   ]
 }

@@ -41,7 +41,27 @@ export function timeText(iso: string | null): string {
   }
 }
 
-export function CardItem({ card, canCommand, busy, run }: { card: OfficeCard; canCommand: boolean; busy: boolean; run: Runner }) {
+export function dossierIdOf(card: OfficeCard): number | null {
+  if (card.kind !== "create_k_dossier") return null;
+  const evidence = card.evidence as { dossier_id?: unknown } | null;
+  const id = Number(evidence?.dossier_id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+export function CardItem({
+  card,
+  canCommand,
+  busy,
+  run,
+  onOpenDossier,
+}: {
+  card: OfficeCard;
+  canCommand: boolean;
+  busy: boolean;
+  run: Runner;
+  onOpenDossier?: (id: number) => void;
+}) {
+  const dossierId = dossierIdOf(card);
   const [expanded, setExpanded] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -53,6 +73,11 @@ export function CardItem({ card, canCommand, busy, run }: { card: OfficeCard; ca
         <strong>{card.title}</strong>
       </button>
       <p>{card.conclusion}</p>
+      {dossierId !== null && onOpenDossier ? (
+        <button className={styles.linkButton} onClick={() => onOpenDossier(dossierId)} type="button">
+          看档案 →
+        </button>
+      ) : null}
       {expanded ? (
         <dl className={styles.cardDetail}>
           {card.why ? (

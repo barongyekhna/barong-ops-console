@@ -158,7 +158,9 @@ def shortlist(db: Session, *, keywords_en: list[str], raw_text: str, limit: int 
                 scores[cand.id] = scores.get(cand.id, 0) + 1
         # 第三层:中心名词(最后一个词)单独命中英文名,分低,只为把候选面撑开。
         head = tokens[-1] if tokens else ""
-        if len(head) >= 4:
+        # 2026-10-23:原来要求 ≥4 个字母,「toy / cup / bag / pan」这类短中心名词整层被跳过,
+        # 「squishy toy」一个候选都捞不到(苏青禾 1688 首测踩到)。tokens 已经滤掉了 <3 的词和停用词。
+        if len(head) >= 3:
             for row in _query(db, column_sql="name", like=f"%{head}%"):
                 cand = _as_candidate(row)
                 rows.setdefault(cand.id, cand)

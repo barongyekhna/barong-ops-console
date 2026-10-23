@@ -19,10 +19,10 @@ from ....core.roles import is_owner_role
 from ....db.session import get_db
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
-from . import cards, memory, office
+from . import cards, dossiers, memory, office
 from . import snapshot as _snapshot  # noqa: F401 —— 导入即登记 product_gate 指纹,批卡前才能查数据变没变
 from .constants import MEMORY_KINDS
-from .models import SqhGoal, SqhMemory, SqhSnapshot
+from .models import SqhDossier, SqhGoal, SqhMemory, SqhSnapshot
 
 router = APIRouter(prefix="/suqinghe", tags=["suqinghe"])
 
@@ -137,7 +137,7 @@ def decide(ref: str, body: DecideBody, db: Session = Depends(get_db), owner: Use
         db.rollback()
         raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
     db.commit()
-    return {"changed": outcome.changed, "card": cards.card_payload(outcome.card)}
+    return {"changed": outcome.changed, "card": cards.card_payload(outcome.card), "execution": outcome.execution}
 
 
 @router.post("/goals")
@@ -188,3 +188,47 @@ def instruct(body: InstructBody, db: Session = Depends(get_db), owner: User = De
     memory.log_activity(db, f"老板交代:{body.text.strip()[:80]}", kind="instruct")
     db.commit()
     return {"id": row.id, "queued": True}
+
+
+# ---------------------------------------------------------------- 1688 → K 档案
+
+
+class DossierBody(BaseModel):
+    url: str = Field(min_length=8, max_length=1000)
+
+
+@router.post("/dossiers")
+def submit_dossier(body: DossierBody, db: Session = Depends(get_db), owner: User = Depends(require_owner)) -> dict[str, Any]:
+    try:
+        dossier, created, position = dossiers.enqueue(db, url=body.url, actor_user_id=str(owner.id), channel="web")
+    except dossiers.DossierError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail={"code": "SQH_DOSSIER_NOT_1688", "message": str(exc)}) from exc
+    db.commit()
+    return {
+        **dossiers.summary_payload(dossier),
+        "created": created,
+        "position": position,
+        "reply": dossiers.queue_reply(position, created=created, status=dossier.status),
+    }
+
+
+@router.get("/dossiers")
+def list_dossiers(
+    limit: int = Query(default=30, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    rows = db.scalars(
+        select(SqhDossier).order_by(SqhDossier.id.desc()).limit(limit),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    )
+    return {"items": [dossiers.summary_payload(row) for row in rows]}
+
+
+@router.get("/dossiers/{dossier_id}")
+def get_dossier(dossier_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    row = db.get(SqhDossier, dossier_id, execution_options=SKIP_ORG_DATA_ISOLATION)
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SQH_DOSSIER_NOT_FOUND", "message": "没有这份档案。"})
+    return dossiers.detail_payload(row)

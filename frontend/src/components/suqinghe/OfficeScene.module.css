@@ -650,3 +650,230 @@
   display: block;
   line-height: 1.6;
 }
+
+/* ---------- 档案柜(1688 → K 档案) ---------- */
+
+.linkForm {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-muted);
+}
+
+.linkForm label {
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+.linkForm input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-muted);
+  background: var(--color-panel-base);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.dossierList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dossierList button {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-muted);
+  background: var(--color-panel-base);
+  color: var(--color-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dossierList button:hover,
+.dossierList button:focus-visible {
+  border-color: var(--color-primary);
+}
+
+.dossierTitle {
+  font-weight: 600;
+  color: var(--color-text-strong);
+  overflow-wrap: anywhere;
+}
+
+.dossierMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.dossierStatus {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--color-muted);
+  color: var(--color-text);
+}
+
+.dossierStatus[data-status="ready"] {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.dossierStatus[data-status="created"] {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.dossierStatus[data-status="blocked"],
+.dossierStatus[data-status="failed"] {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.dossierStatus[data-status="queued"],
+.dossierStatus[data-status="fetching"],
+.dossierStatus[data-status="reading"] {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.flagBadge {
+  color: var(--color-error);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.fieldTable {
+  display: grid;
+  gap: 2px;
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: minmax(84px, 7.5em) minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  align-items: baseline;
+  padding: 6px 8px;
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+}
+
+.fieldRow[data-status="conflict"] {
+  border-left-color: var(--color-error);
+}
+
+.fieldRow[data-status="missing"] {
+  border-left-color: var(--color-warning);
+}
+
+.fieldRow[data-status="needs_owner"] {
+  border-left-color: var(--color-primary);
+}
+
+.fieldLabel {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.fieldValue {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+}
+
+.fieldFlag {
+  margin-left: 6px;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fieldRow[data-status="conflict"] .fieldFlag {
+  color: var(--color-error);
+}
+
+.fieldRow[data-status="missing"] .fieldFlag {
+  color: var(--color-warning);
+}
+
+.fieldRow[data-status="needs_owner"] .fieldFlag {
+  color: var(--color-primary);
+}
+
+.fieldNote {
+  display: block;
+  color: var(--color-muted);
+}
+
+.sourceToggle {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sourceList {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-muted);
+  overflow-wrap: anywhere;
+}
+
+.scrollX {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.dossierTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dossierTable th,
+.dossierTable td {
+  text-align: left;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--color-muted);
+  color: var(--color-text);
+}
+
+.dossierTable th {
+  color: var(--color-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.refImages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+
+.refImages img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--color-muted);
+  background: var(--color-elevated);
+}
