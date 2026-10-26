@@ -78,7 +78,9 @@ FIELD_LABELS_ZH = {
 }
 PACKAGE_FIELDS = ("package_includes", "package includes", "包装清单", "包装内含", "配件", "in the box", "包装含")
 # 和产品本身无关、或者品牌身份(K 不收品牌当规格)的属性,直接丢。
-IGNORED_ATTRIBUTES = ("品牌", "货号", "专利", "主要下游平台", "主要销售地区", "是否", "有可授权", "上市时间", "加工方式", "动漫角色")
+# 只对批发商有意义的属性(品牌授权、货号、能不能加印 LOGO……),不进档案也不进 K。
+# 10-26 加「加印」「定制」:灭蚊灯的「加印LOGO: 可以」「加工定制: 否」漏进了 K 给 AI 读的原始文本。
+IGNORED_ATTRIBUTES = ("品牌", "货号", "专利", "主要下游平台", "主要销售地区", "是否", "有可授权", "上市时间", "加工方式", "动漫角色", "加印", "定制")
 
 # 只有这些键会判「说法不一」:单值、上架要用、写错了要出事。其余(电芯、认证、充电方式、颜色……)几种说法并列就行。
 STRICT_KEYS = {"material", "dimensions", "weight", "age_range", "voltage", "capacity", "power", "runtime", "cycle_life"}
@@ -134,7 +136,7 @@ def _spec_key(name: Any) -> str | None:
     return None
 
 
-def _ignored(name: Any) -> bool:
+def ignored_attribute(name: Any) -> bool:
     label = _clean(name)
     return any(term in label for term in IGNORED_ATTRIBUTES)
 
@@ -535,7 +537,7 @@ def merge_specs(
 
     for attr in capture.get("attributes") or []:
         name, value = _clean(attr.get("name")), _clean(attr.get("value"))
-        if not name or _ignored(name):
+        if not name or ignored_attribute(name):
             continue
         key = _spec_key(name)
         kind = "page_json" if attr.get("source") == "page_json" else "page_text"

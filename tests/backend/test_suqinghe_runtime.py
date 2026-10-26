@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.db.base import Base
 from backend.app.models.organization import OrganizationRecord
-from backend.app.modules.agent_series.suqinghe import brain, persona, snapshot, worker_main
+from backend.app.modules.agent_series.suqinghe import brain, cards, persona, snapshot, worker_main
 from backend.app.modules.k_series.product_knowledge.constants import TARGET_ORGANIZATION_NAME
 from backend.app.services import ai_provider_router as router_module
 from backend.app.services.ai_provider_router import AIExecutionRouter, ProviderRequest
@@ -44,32 +44,100 @@ def test_system_prompt_carries_character_and_boundaries() -> None:
 # ---------------------------------------------------------------- 脑子解析
 
 
+LIVE = {f"worker:w{i}": {} for i in range(8)} | {"product:p1:blocked_gate": {"product_id": "p1"}}
+
+
 def test_parse_plan_handles_fenced_json_and_caps_cards() -> None:
     cards = [
-        {"dedupe_key_suffix": f"k{i}", "kind": "product_blocker", "title": f"卡{i}", "conclusion": "要老板定", "confidence": "high"}
+        {"issue": f"worker:w{i}", "kind": "ops_alert", "title": f"卡{i}", "conclusion": "要老板定", "confidence": "high"}
         for i in range(8)
     ]
     import json
 
     raw = {"content": "```json\n" + json.dumps({"plan": "今天先清 P 闸门", "cards": cards}, ensure_ascii=False) + "\n```"}
-    parsed = brain.parse_plan(raw)
+    parsed = brain.parse_plan(raw, LIVE)
     assert parsed is not None
     plan_text, parsed_cards = parsed
     assert plan_text == "今天先清 P 闸门"
     assert len(parsed_cards) == 5
-    assert parsed_cards[0]["dedupe_key_suffix"] == "k0"
+    assert parsed_cards[0]["issue"] == "worker:w0"
 
 
 def test_parse_plan_drops_cards_missing_required_fields_and_bad_kind() -> None:
-    parsed = brain.parse_plan({"plan": "p", "cards": [{"title": "无结论"}, {"dedupe_key_suffix": "a", "title": "t", "conclusion": "c", "kind": "weird", "confidence": "x"}]})
+    parsed = brain.parse_plan(
+        {"plan": "p", "cards": [{"title": "无结论", "issue": "worker:w0"}, {"issue": "worker:w1", "title": "t", "conclusion": "c", "kind": "weird", "confidence": "x"}]},
+        LIVE,
+    )
     assert parsed is not None
     _, cards = parsed
     assert len(cards) == 1 and cards[0]["kind"] == "other" and cards[0]["confidence"] == "medium"
 
 
+def test_parse_plan_keeps_only_cards_tied_to_one_snapshot_issue() -> None:
+    """卡必须对上快照里的一件事(编号原样抄回来),一件事一张;产品卡的 product_id 从编号来,不信模型写的。"""
+    parsed = brain.parse_plan(
+        {
+            "plan": "p",
+            "cards": [
+                {"issue": "key:没这把钥匙", "title": "编出来的", "conclusion": "c"},
+                {"title": "没编号", "conclusion": "c", "dedupe_key_suffix": "old_style"},
+                {"issue": "product:p1:blocked_gate", "title": "补价格", "conclusion": "c", "product_id": "别的产品"},
+                {"issue": "product:p1:blocked_gate", "title": "同一件事换个说法", "conclusion": "c"},
+            ],
+        },
+        LIVE,
+    )
+    assert parsed is not None
+    _, cards = parsed
+    assert [(c["issue"], c["title"], c["product_id"]) for c in cards] == [("product:p1:blocked_gate", "补价格", "p1")]
+
+
 def test_parse_plan_without_plan_text_is_none() -> None:
-    assert brain.parse_plan({"content": "not json at all"}) is None
-    assert brain.parse_plan({"plan": "", "cards": []}) is None
+    assert brain.parse_plan({"content": "not json at all"}, LIVE) is None
+    assert brain.parse_plan({"plan": "", "cards": []}, LIVE) is None
+
+
+def _snap(**overrides: Any) -> dict[str, Any]:
+    snap: dict[str, Any] = {
+        "products": {
+            "total": 2,
+            "by_stage": {},
+            "woo_checked": True,
+            "items": [
+                {"product_id": "p1", "sku": "PTB-001", "name": "Battery", "stage": "k_draft", "stage_label": "K 建档中", "gate_blockers": []},
+                {"product_id": "p2", "sku": "PSPE-001", "name": "Pump", "stage": "published", "stage_label": "已发布", "gate_blockers": []},
+            ],
+        },
+        "workers": {"total": 3, "stale": ["sm-worker"]},
+        "keys": {"counts": {}, "failing": [{"name": "i-spare", "status": "auth_failed", "reason": "401", "used_by": ["i.image_system"]}]},
+        "content": {"generated": 3, "pending_review": 0, "approved_unpublished": 0, "live": 3},
+        "approvals": {"pending": 2},
+        "goals": [{"id": 4, "text": "30 个品", "metric": {}, "current": None}],
+    }
+    snap.update(overrides)
+    return snap
+
+
+def test_issues_in_gives_ids_that_stay_the_same_across_days() -> None:
+    live, readable = brain.issues_in(_snap())
+    assert set(live) == {"product:p1:k_draft", "worker:sm-worker", "key:i-spare", "approvals", "goal:4"}
+    assert live["product:p1:k_draft"] == {"product_id": "p1"}
+    assert readable == {"product", "worker", "key", "goal", "content", "approvals"}
+    # 读不到的类别不算「事情没了」
+    _, readable = brain.issues_in(_snap(keys={"error": "读不到"}, workers={"error": "读不到"}))
+    assert "key" not in readable and "worker" not in readable
+
+
+def test_prompt_carries_issue_ids_and_what_was_already_raised() -> None:
+    import json
+
+    slim = json.loads(brain._snapshot_for_prompt(_snap(), already_raised={"key:i-spare", "worker:早就好了"}))
+    assert slim["products"]["stuck"][0]["issue"] == "product:p1:k_draft"
+    assert slim["stale_workers"] == [{"issue": "worker:sm-worker", "name": "sm-worker"}]
+    assert slim["failing_keys"][0]["issue"] == "key:i-spare"
+    assert slim["approvals"]["issue"] == "approvals" and "issue" not in slim["content"]
+    assert slim["goals"][0]["issue"] == "goal:4"
+    assert slim["already_raised"] == ["key:i-spare"]
 
 
 def test_parse_chat_clamps_mute_and_falls_back_to_raw_text() -> None:
@@ -141,8 +209,15 @@ def test_non_commands_are_not_parsed(text: str) -> None:
 
 
 def test_decided_text_reports_first_channel_when_already_decided() -> None:
-    card = SimpleNamespace(ref="a3f9", title="t", status="approved", decided_via="web")
+    card = SimpleNamespace(ref="a3f9", title="t", status="approved", decided_via="web", decision_reason=None)
     assert "已经批过了(网页)" in worker_main.decided_text(card, changed=False, decision="approve")
+
+
+def test_decided_text_says_why_she_retired_a_card() -> None:
+    gone = SimpleNamespace(ref="12fb", title="t", status="stale", decided_via=None, decision_reason=cards.GONE_REASON)
+    assert worker_main.decided_text(gone, changed=False, decision="approve") == f"#12fb 这张卡已经作废了:{cards.GONE_REASON}"
+    merged = SimpleNamespace(ref="1515", title="t", status="expired", decided_via=None, decision_reason=cards.LEGACY_REASON)
+    assert "一件事只留一张卡" in worker_main.decided_text(merged, changed=False, decision="approve")
 
 
 # ---------------------------------------------------------------- 主动开口规矩

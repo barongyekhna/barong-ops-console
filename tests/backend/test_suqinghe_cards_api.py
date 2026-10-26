@@ -250,3 +250,81 @@ def test_bookshelf_and_calendar_are_readable_by_everyone(auth_client: TestClient
     missing = auth_client.get("/api/app/suqinghe/snapshots/2026-01-01")
     assert missing.status_code == 404
     assert missing.json()["detail"]["code"] == "SQH_SNAPSHOT_NOT_FOUND"
+
+
+# ---------------------------------------------------------------- 一件事一张卡(10-26)
+
+
+def _morning(monkeypatch: pytest.MonkeyPatch, day: int, *, stale_workers, failing_keys, model_cards) -> dict:
+    """跑一次早间流程:快照和模型输出是假的,其余(对账、去重、建卡、记忆)走真库。"""
+    from datetime import UTC, datetime
+
+    from backend.app.modules.agent_series.suqinghe import brain, worker_main
+
+    snap = {
+        "headline": "测试",
+        "products": {"total": 0, "by_stage": {}, "woo_checked": None, "items": []},
+        "workers": {"total": 5, "stale": stale_workers} if stale_workers is not None else {"error": "读不到"},
+        "keys": {"counts": {}, "failing": [{"name": n, "status": "auth_failed", "reason": "401", "used_by": ["i"]} for n in failing_keys]}
+        if failing_keys is not None
+        else {"error": "读不到"},
+        "content": {"error": "读不到"},
+        "approvals": {"pending": 0},
+        "goals": [],
+    }
+    monkeypatch.setattr(worker_main.snapshot, "build_snapshot", lambda db, now=None: snap)
+    monkeypatch.setattr(brain, "plan_role", lambda db: "judge")
+    monkeypatch.setattr(brain, "_execute", lambda role, messages, timeout: {"plan": f"第 {day} 天的计划", "cards": model_cards})
+    with without_org_data_isolation(), SessionLocal() as db:
+        return worker_main.run_morning(db, now=datetime(2026, 11, day, 15, 30, tzinfo=UTC))  # 洛杉矶早上
+
+
+def _plan_cards(db) -> list[SqhCard]:
+    return list(db.scalars(select(SqhCard).order_by(SqhCard.id)))
+
+
+def test_same_issue_gets_one_card_across_days(monkeypatch: pytest.MonkeyPatch, people) -> None:
+    """10-23、10-24、10-26 同一把备用钥匙各发了一张卡:去重键里带了日期。现在按快照里那件事去重。"""
+    key_card = {"issue": "key:i-spare", "kind": "ops_alert", "title": "I 系列备用 key 被拒", "conclusion": "换不换"}
+    worker_card = {"issue": "worker:sm-worker", "kind": "ops_alert", "title": "sm-worker 掉线", "conclusion": "谁去拉起"}
+    with without_org_data_isolation(), SessionLocal() as db:
+        legacy, _ = cards.create_card(db, dedupe_key="2026-10-24:i_series_backup_key", kind="ops_alert", title="旧规矩发的", conclusion="换不换")
+        db.commit()
+        legacy_ref = legacy.ref
+
+    # 第 1 天:旧卡合并掉,两件事各一张
+    out = _morning(monkeypatch, 2, stale_workers=["sm-worker"], failing_keys=["i-spare"], model_cards=[key_card, worker_card])
+    assert out["cards_created"] == 2 and out["settled"]["merged"] == 1
+    # 第 2 天:换个说法再发同一件事 → 不建
+    again = {**key_card, "title": "I 系列图片备用 key 认证被拒,换不换"}
+    out = _morning(monkeypatch, 3, stale_workers=["sm-worker"], failing_keys=["i-spare"], model_cards=[again])
+    assert out["cards_created"] == 0
+    # 第 3 天:钥匙那一类读不到 → 卡不动(读不到 ≠ 好了)
+    out = _morning(monkeypatch, 4, stale_workers=["sm-worker"], failing_keys=None, model_cards=[])
+    assert out["settled"]["gone"] == 0
+
+    with without_org_data_isolation(), SessionLocal() as db:
+        rows = _plan_cards(db)
+        assert [(c.ref == legacy_ref, c.status) for c in rows] == [(True, "expired"), (False, "pending"), (False, "pending")]
+        assert rows[0].decision_reason == cards.LEGACY_REASON and rows[0].decided_by_user_id is None
+        worker = next(c for c in rows if c.evidence.get("issue") == "worker:sm-worker")
+        cards.decide_card(db, card_id=worker.ref, decision="reject", actor=_user(db, people["owner"]), channel="web", reason="sm 先不管")
+        db.commit()
+
+    # 第 4 天:钥匙好了 → 那张卡作废;进程还掉线,但老板驳过 → 不再提
+    out = _morning(monkeypatch, 5, stale_workers=["sm-worker"], failing_keys=[], model_cards=[worker_card])
+    assert out["settled"]["gone"] == 1 and out["cards_created"] == 0
+    # 第 5 天:进程好了 → 驳过的那张记一笔了结;第 6 天又掉线 → 算新的一回,可以再发
+    out = _morning(monkeypatch, 6, stale_workers=[], failing_keys=[], model_cards=[])
+    assert out["settled"]["settled"] == 1
+    out = _morning(monkeypatch, 7, stale_workers=["sm-worker"], failing_keys=[], model_cards=[worker_card])
+    assert out["cards_created"] == 1
+
+    with without_org_data_isolation(), SessionLocal() as db:
+        rows = _plan_cards(db)
+        key = next(c for c in rows if c.evidence.get("issue") == "key:i-spare")
+        assert key.status == "stale" and key.decision_reason == cards.GONE_REASON
+        workers = [c for c in rows if c.evidence.get("issue") == "worker:sm-worker"]
+        assert [c.status for c in workers] == ["rejected", "pending"]
+        assert workers[0].evidence["settled_on"] == "2026-11-06"
+        assert cards.raised_issues(db) == {"worker:sm-worker"}

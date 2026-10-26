@@ -5,6 +5,8 @@
 - 幂等、先到先得:已经决定过的卡,原样返回第一次的结果(谁、哪个渠道)。
 - 批之前看底层数据变没变:卡上存了建卡时的数据指纹,现在重算一遍,不一样就作废成 stale。
 - 影子期(10-22 起):批了只记账,不执行任何动作。执行器是第四步的事。
+- 一件事只发一张卡(10-26):早间计划的卡上记着快照里那件事的编号(evidence["issue"]),
+  卡还没了结就不再发;那件事从快照里消失过,下次再出现才算新的一回。
 """
 
 from __future__ import annotations
@@ -214,6 +216,80 @@ def _transition(db: Session, card: SqhCard, *, status: str, actor: User, channel
     db.flush()
     db.refresh(card)
     return bool(result.rowcount)
+
+
+# ---------------------------------------------------------------- 一件事一张卡(早间计划的卡)
+
+# 作废原因会原样出现在 C19 里,用她的口吻写。
+LEGACY_REASON = "同一件事以前天天发一张,规矩改了:一件事只留一张卡。这张合并掉了,事情要是还在,今天按新规矩重出一张。"
+GONE_REASON = "这件事今天的快照里已经没有了,不用再定。"
+RETIRE_REASONS = (LEGACY_REASON, GONE_REASON)
+_OPEN = ("pending", "approved", "rejected")
+
+
+def issue_category(issue: str) -> str:
+    return issue.split(":", 1)[0]
+
+
+def _issue_of(card: SqhCard) -> str | None:
+    issue = card.evidence.get("issue") if isinstance(card.evidence, dict) else None
+    return str(issue) if issue else None
+
+
+def _open_plan_cards(db: Session) -> list[SqhCard]:
+    # 档案卡按档案号管,不走这一套
+    return list(
+        db.scalars(
+            select(SqhCard).where(SqhCard.kind != DOSSIER_CARD_KIND, SqhCard.status.in_(_OPEN)),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
+        )
+    )
+
+
+def raised_issues(db: Session) -> set[str]:
+    """已经发过卡、还没了结的事:卡还在等批,或者批过/驳过而那件事还没消失过。"""
+    return {
+        issue
+        for card in _open_plan_cards(db)
+        if (issue := _issue_of(card)) and not card.evidence.get("settled_on")
+    }
+
+
+def _retire(db: Session, card: SqhCard, *, status: str, reason: str) -> int:
+    """系统作废一张还在等批的卡(不是老板的决定,所以不记人、不记渠道)。条件更新,和 _transition 一样先到先得。"""
+    result = db.execute(
+        update(SqhCard)
+        .where(SqhCard.id == card.id, SqhCard.status == "pending")
+        .values(status=status, decision_reason=reason, decided_at=datetime.now(UTC)),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    )
+    return int(result.rowcount or 0)
+
+
+def settle_issues(db: Session, *, live: set[str], readable: set[str], today: str) -> dict[str, int]:
+    """每天早上出计划前对一遍账。
+
+    - 旧规矩发的卡(没有事情编号)还在等批 → expired;那件事要是还在,今天最多再出一张。
+    - 卡上那件事今天没了(而且那一类今天读得到)→ 等批的 stale;批过/驳过的记 settled_on,
+      以后再出现算新的一回,可以重新发卡。读不到的类别一律不动(读不到 ≠ 没了)。
+    """
+    counts = {"merged": 0, "gone": 0, "settled": 0}
+    for card in _open_plan_cards(db):
+        issue = _issue_of(card)
+        if issue is None:
+            if card.status == "pending":
+                counts["merged"] += _retire(db, card, status="expired", reason=LEGACY_REASON)
+            continue
+        if issue in live or issue_category(issue) not in readable:
+            continue
+        if card.status == "pending":
+            counts["gone"] += _retire(db, card, status="stale", reason=GONE_REASON)
+        elif not card.evidence.get("settled_on"):
+            card.evidence = {**card.evidence, "settled_on": today}
+            db.add(card)
+            counts["settled"] += 1
+    db.flush()
+    return counts
 
 
 def pending_cards(db: Session, *, limit: int = 50) -> list[SqhCard]:

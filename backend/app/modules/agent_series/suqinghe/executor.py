@@ -6,8 +6,12 @@
 - 建完**回读**:英文名、来源、类目、参考图都对得上,档案才标 created;否则标 failed。
 
 选择(10-23):1688 只有进价,售价老板还没定 → 一律先建成**单品草稿**(simple_product,不带价)。
-K 的规矩是多变体产品每个变体必须有价,硬建 variable 只能填假价;变体清单原样写进
-raw_input_text / manual_notes,老板在 K 的「基础档案」面板定价时再改成多变体(那里能改类型和变体)。
+K 的规矩是多变体产品每个变体必须有价,硬建 variable 只能填假价;变体清单写进 raw_input_text,
+定价时再改成多变体(那里能改类型和变体)。
+
+写进 K 的只许是商品事实(10-26):raw_input_text、structured_specs_json 是 K 跑流程时喂给 AI 的(DeepSeek 富化、卖点、文案),
+manual_notes 会被当成「运营给的事实」喂给写卖点的 AI。所以进价、1688 链接、建档过程说明都不往这几栏写——
+进价留在档案里(定价从档案取),链接 K 有 source_url,过程在档案柜和她的记忆里。
 
 谁来跑(10-26):worker 每几秒捡一单「卡批了、档案还是 ready」的去建(``approved_waiting`` + ``build_approved``)。
 原来在老板点「批」的那个请求里同步建,要从 1688 CDN 一张张下参考图(单张超时 15 秒),点一下等 3–9 秒、最坏 45 秒以上。
@@ -26,7 +30,7 @@ from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import memory
 from .constants import DOSSIER_CARD_KIND
-from .dossier import SPEC_LABELS_ZH
+from .dossier import SPEC_LABELS_ZH, ignored_attribute
 from .models import SqhCard, SqhDossier
 
 logger = logging.getLogger(__name__)
@@ -105,7 +109,7 @@ def build_create_payload(dossier: SqhDossier) -> dict[str, Any]:
             "schema_version": "1.0",
             "source": {
                 "platform": "operator",
-                "note": f"苏青禾从 1688 offer {dossier.offer_id} 整理(档案 #{dossier.id}),老板批卡后建档",
+                "note": f"苏青禾按供应商资料整理(档案 #{dossier.id}),老板批卡后建档",
             },
             "additional_specs": additional,
         }
@@ -114,22 +118,20 @@ def build_create_payload(dossier: SqhDossier) -> dict[str, Any]:
     variant_lines = [
         f"- {v.get('name_zh')}"
         + (f" / {v['name_en']}" if v.get("name_en") else "")
-        + (f" · 进价 ¥{v['cost_price_cny']}" if v.get("cost_price_cny") not in (None, "") else "")
         + (f" · {v['weight_g']}g" if v.get("weight_g") else "")
         for v in variants
     ]
-    attr_lines = [f"{a.get('name')}: {a.get('value')}" for a in (draft.get("other_attributes") or [])[:20]]
-    raw_parts = [name_zh, f"1688: {dossier.source_url}"]
+    # 卖家自填的属性里混着「加印LOGO」「加工定制」这种只对批发商有用的,建档前的草稿里可能还留着(10-26 前的规则没滤)
+    attr_lines = [
+        f"{a.get('name')}: {a.get('value')}"
+        for a in (draft.get("other_attributes") or [])[:20]
+        if not ignored_attribute(a.get("name"))
+    ]
+    raw_parts = [name_zh]
     if variant_lines:
-        raw_parts.append("1688 规格(SKU):\n" + "\n".join(variant_lines))
+        raw_parts.append("规格(SKU):\n" + "\n".join(variant_lines))
     if attr_lines:
-        raw_parts.append("其他属性:\n" + "\n".join(attr_lines))
-    flagged = draft.get("flagged") or []
-    notes = [f"苏青禾档案 #{dossier.id}(影子期建档)。"]
-    if len(variants) > 1:
-        notes.append(f"1688 有 {len(variants)} 个 SKU;售价未定,先建成单品草稿,定价时在基础档案面板改成多变体。")
-    if flagged:
-        notes.append("待老板处理:" + ";".join(f"{f['path']}({f['status']})" for f in flagged))
+        raw_parts.append("卖家页面上的其他属性(卖家自填,没核实):\n" + "\n".join(attr_lines))
 
     category = _ok(fields.get("category"))
     package = _ok(fields.get("package_includes"))
@@ -144,7 +146,6 @@ def build_create_payload(dossier: SqhDossier) -> dict[str, Any]:
         "source_url": dossier.source_url,
         "structured_specs_json": structured,
         "package_includes_json": package if isinstance(package, list) and package else None,
-        "manual_notes": "\n".join(notes),
         "category_id": category.get("google_category_id") if isinstance(category, dict) else None,
     }
     return payload

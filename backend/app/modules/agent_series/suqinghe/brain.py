@@ -29,11 +29,12 @@ CARD_KINDS = ("product_blocker", "plan", "ops_alert", "goal", "other")
 PLAN_FORMAT = (
     "只输出一个 JSON 对象,不要别的文字:\n"
     '{"plan": "今天的计划,3-6 行,每行一件事,结论先行",\n'
-    ' "cards": [{"dedupe_key_suffix": "英文短串,同一件事每天一样",'
+    ' "cards": [{"issue": "快照里这件事的 issue 编号,原样抄",'
     ' "kind": "product_blocker|ops_alert|goal|other",'
     ' "title": "≤30 字", "conclusion": "要老板定的事,一句话", "why": "为什么", "if_not": "不做会怎样",'
-    ' "reversible": true, "confidence": "low|medium|high", "product_id": "快照里的 product_id 或省略"}]}\n'
-    f"cards 最多 {MAX_CARDS_PER_DAY} 张,只放真正需要老板拍板的事;能自己推出来的判断不要做成卡。没有就给空数组。"
+    ' "reversible": true, "confidence": "low|medium|high"}]}\n'
+    f"cards 最多 {MAX_CARDS_PER_DAY} 张,只放真正需要老板拍板的事;能自己推出来的判断不要做成卡。没有就给空数组。\n"
+    "每张卡对应快照里一件带 issue 编号的事,一件事最多一张;already_raised 里的事已经发过卡了,不要再发。"
 )
 
 CHAT_FORMAT = (
@@ -102,18 +103,58 @@ def parse_json(result: Any) -> dict[str, Any] | None:
     return _parse_json_text(raw)
 
 
-def _clean_card(raw: Any) -> dict[str, Any] | None:
+def issues_in(snapshot: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], set[str]]:
+    """快照里每件「可以发卡的事」一个跨天不变的编号,卡按它去重。返回 (今天有的事, 今天读得到的类别)。
+
+    编号:product:<产品 id>:<阶段>、worker:<进程名>、key:<钥匙名>、goal:<目标 id>、content、approvals。
+    读不到的类别不算「事情没了」(家规:读不到 ≠ 0),卡就不动。
+    10-26:原来去重键是「日期 + AI 起的后缀」,换一天就是新卡——I 系列备用钥匙那件事 10-23、10-24、10-26 各发了一张。
+    """
+    live: dict[str, dict[str, Any]] = {}
+    readable: set[str] = set()
+    products = snapshot.get("products")
+    if isinstance(products, dict) and "items" in products:
+        readable.add("product")
+        for item in products["items"]:
+            if item.get("stage") != "published":
+                live[f"product:{item['product_id']}:{item['stage']}"] = {"product_id": item["product_id"]}
+    workers = snapshot.get("workers")
+    if isinstance(workers, dict) and "stale" in workers:
+        readable.add("worker")
+        live.update({f"worker:{name}": {} for name in workers.get("stale") or []})
+    keys = snapshot.get("keys")
+    if isinstance(keys, dict) and "failing" in keys:
+        readable.add("key")
+        live.update({f"key:{item['name']}": {} for item in keys.get("failing") or []})
+    goals = snapshot.get("goals")
+    if isinstance(goals, list):
+        readable.add("goal")
+        live.update({f"goal:{goal['id']}": {} for goal in goals})
+    content = snapshot.get("content")
+    if isinstance(content, dict) and "error" not in content:
+        readable.add("content")
+        if content.get("pending_review") or content.get("approved_unpublished"):
+            live["content"] = {}
+    approvals = snapshot.get("approvals")
+    if isinstance(approvals, dict) and "pending" in approvals:
+        readable.add("approvals")
+        if approvals.get("pending"):
+            live["approvals"] = {}
+    return live, readable
+
+
+def _clean_card(raw: Any, live: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
     title = str(raw.get("title") or "").strip()
     conclusion = str(raw.get("conclusion") or "").strip()
-    suffix = str(raw.get("dedupe_key_suffix") or "").strip()
-    if not title or not conclusion or not suffix:
+    issue = str(raw.get("issue") or "").strip()
+    if not title or not conclusion or issue not in live:
         return None
     kind = str(raw.get("kind") or "other").strip()
     confidence = str(raw.get("confidence") or "medium").strip()
     card: dict[str, Any] = {
-        "dedupe_key_suffix": suffix[:100],
+        "issue": issue,
         "kind": kind if kind in CARD_KINDS else "other",
         "title": persona.enforce_style(title, max_chars=60),
         "conclusion": persona.enforce_style(conclusion, max_chars=300),
@@ -122,13 +163,14 @@ def _clean_card(raw: Any) -> dict[str, Any] | None:
         "reversible": bool(raw.get("reversible", True)),
         "confidence": confidence if confidence in {"low", "medium", "high"} else "medium",
     }
-    product_id = str(raw.get("product_id") or "").strip()
+    product_id = live[issue].get("product_id")
     if product_id:
         card["product_id"] = product_id
     return card
 
 
-def parse_plan(result: Any) -> tuple[str, list[dict[str, Any]]] | None:
+def parse_plan(result: Any, live: dict[str, dict[str, Any]]) -> tuple[str, list[dict[str, Any]]] | None:
+    """``live`` = 今天快照里有的事(issues_in)。对不上任何一件事的卡丢掉,同一件事只留第一张。"""
     data = parse_json(result)
     if not isinstance(data, dict):
         return None
@@ -136,12 +178,20 @@ def parse_plan(result: Any) -> tuple[str, list[dict[str, Any]]] | None:
     if not plan_text:
         return None
     cards_raw = data.get("cards") if isinstance(data.get("cards"), list) else []
-    cards = [c for c in (_clean_card(item) for item in cards_raw) if c is not None][:MAX_CARDS_PER_DAY]
-    return persona.enforce_style(plan_text), cards
+    cards: list[dict[str, Any]] = []
+    for item in cards_raw:
+        card = _clean_card(item, live)
+        if card is not None and all(card["issue"] != c["issue"] for c in cards):
+            cards.append(card)
+    return persona.enforce_style(plan_text), cards[:MAX_CARDS_PER_DAY]
 
 
-def _snapshot_for_prompt(snapshot: dict[str, Any]) -> str:
-    """喂给模型的快照:先算好、消好歧义(家规:喂智能体的快照先消歧)。只留卡点产品,省 token。"""
+def _snapshot_for_prompt(snapshot: dict[str, Any], *, already_raised: set[str] | None = None) -> str:
+    """喂给模型的快照:先算好、消好歧义(家规:喂智能体的快照先消歧)。只留卡点产品,省 token。
+
+    能发卡的每件事都带上 issue 编号(issues_in),卡上原样抄回来;already_raised = 已经发过卡、还没了结的事。
+    """
+    live, _ = issues_in(snapshot)
     products = snapshot.get("products")
     slim_products: Any = products
     if isinstance(products, dict) and "items" in products:
@@ -150,21 +200,34 @@ def _snapshot_for_prompt(snapshot: dict[str, Any]) -> str:
             "by_stage": products.get("by_stage"),
             "woo_checked": products.get("woo_checked"),
             "stuck": [
-                {k: item.get(k) for k in ("product_id", "sku", "name", "stage_label", "gate_blockers", "workflow_step")}
+                {
+                    "issue": f"product:{item['product_id']}:{item['stage']}",
+                    **{k: item.get(k) for k in ("sku", "name", "stage_label", "gate_blockers", "workflow_step")},
+                }
                 for item in products.get("items", [])
                 if item.get("stage") not in {"published"}
             ][:40],
         }
+    workers = snapshot.get("workers")
+    keys = snapshot.get("keys")
+    content = snapshot.get("content")
+    approvals = snapshot.get("approvals")
+    goals = snapshot.get("goals")
     slim = {
         "date": snapshot.get("date"),
         "headline": snapshot.get("headline"),
         "products": slim_products,
-        "content": snapshot.get("content"),
-        "stale_workers": (snapshot.get("workers") or {}).get("stale") if isinstance(snapshot.get("workers"), dict) else snapshot.get("workers"),
-        "failing_keys": (snapshot.get("keys") or {}).get("failing") if isinstance(snapshot.get("keys"), dict) else snapshot.get("keys"),
+        "content": {"issue": "content", **content} if "content" in live else content,
+        "stale_workers": [{"issue": f"worker:{name}", "name": name} for name in workers.get("stale") or []]
+        if isinstance(workers, dict) and "stale" in workers
+        else workers,
+        "failing_keys": [{"issue": f"key:{item['name']}", **item} for item in keys.get("failing") or []]
+        if isinstance(keys, dict) and "failing" in keys
+        else keys,
         "ai": snapshot.get("ai"),
-        "approvals": snapshot.get("approvals"),
-        "goals": snapshot.get("goals"),
+        "approvals": {"issue": "approvals", **approvals} if "approvals" in live else approvals,
+        "goals": [{"issue": f"goal:{goal['id']}", **goal} for goal in goals] if isinstance(goals, list) else goals,
+        "already_raised": sorted((already_raised or set()) & set(live)),
     }
     return json.dumps(slim, ensure_ascii=False, default=str)[:12000]
 
@@ -174,7 +237,7 @@ def _decisions_for_prompt(db: Session) -> str:
     return "\n".join(f"- {r.created_at:%m-%d} {r.body}" for r in rows if r.created_at) or "(还没有)"
 
 
-def plan(db: Session, snapshot: dict[str, Any]) -> PlanResult | None:
+def plan(db: Session, snapshot: dict[str, Any], *, already_raised: set[str] | None = None) -> PlanResult | None:
     role = plan_role(db)
     messages = [
         {"role": "system", "content": persona.system_prompt("影子期:你只出方案和审批卡,不执行。") + "\n\n" + PLAN_FORMAT},
@@ -182,7 +245,7 @@ def plan(db: Session, snapshot: dict[str, Any]) -> PlanResult | None:
             "role": "user",
             "content": (
                 "这是今天早上的全局快照(JSON,数字已经算好,读不到的项标了「读不到」,别把读不到当 0):\n"
-                f"{_snapshot_for_prompt(snapshot)}\n\n老板最近的决定和交代(别跟这些冲突;被驳过的同类建议不要再提):\n"
+                f"{_snapshot_for_prompt(snapshot, already_raised=already_raised)}\n\n老板最近的决定和交代(别跟这些冲突;被驳过的同类建议不要再提):\n"
                 f"{_decisions_for_prompt(db)}\n\n出今天的计划和需要老板拍板的卡。"
             ),
         },
@@ -193,7 +256,7 @@ def plan(db: Session, snapshot: dict[str, Any]) -> PlanResult | None:
     except Exception:  # noqa: BLE001 —— 没接通就不出计划,下一轮再试
         logger.exception("plan call failed role=%s", role)
         return None
-    parsed = parse_plan(result)
+    parsed = parse_plan(result, issues_in(snapshot)[0])
     if parsed is None:
         logger.warning("plan output unparseable role=%s", role)
         return None

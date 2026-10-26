@@ -123,7 +123,7 @@ def test_create_payload_passes_k_validation(capture) -> None:
     assert payload["product_type"] == "simple_product"  # 售价没定,先建单品草稿(见 executor 文档)
     assert payload["source_system"] == "1688" and payload["source_record_id"] == OFFER
     assert payload["product_name_en"].startswith("Squishy")
-    assert "SKU" in payload["raw_input_text"] and "售价未定" in payload["manual_notes"]
+    assert "SKU" in payload["raw_input_text"] and "manual_notes" not in payload
     request = ProductKnowledgeCreate(**payload)  # 规格是 operator 形状、没品牌,K 的校验要能过
     assert request.structured_specs_json is None or request.structured_specs_json["source"]["platform"] == "operator"
     assert request.package_includes_json == ["12 squishy toys per box"]
@@ -170,6 +170,30 @@ def test_battery_spec_panel_in_k() -> None:
         ("电池/电芯", "18650、Li-ion、全新A品电芯、锂电工具电池", "详情图 7 · 第 1 段"),
         ("认证", "MSDS、ce、UN38.3、UL 1642 Lithium Batteries、FCC Part 15 Subpart B (Class B)", "属性「产品认证」"),
     ]
+
+
+@pytest.mark.parametrize("offer_id", ["643348607768", "773137484620", "888786557113"])
+def test_only_product_facts_reach_the_fields_k_feeds_to_ai(offer_id: str) -> None:
+    """K 跑流程时 AI 读 raw_input_text / structured_specs_json,写卖点的 AI 还把 manual_notes 当「运营给的事实」。
+
+    10-26 三份真档案建进 K 后:raw_input_text 里有每个规格的进价和 1688 链接、卖家的「加印LOGO: 可以」,
+    manual_notes 是建档过程说明(「苏青禾档案 #7」「待老板处理:retail_price」)——都不是商品事实。
+    """
+    live = json.loads(LIVE_DRAFTS.read_text(encoding="utf-8"))[offer_id]
+    fake = SimpleNamespace(
+        id=live["dossier_id"], offer_id=offer_id, source_url=f"https://detail.1688.com/offer/{offer_id}.html", draft=live["draft"]
+    )
+    payload = executor.build_create_payload(fake)
+    request = ProductKnowledgeCreate(**payload)
+    fed_to_ai = request.raw_input_text + json.dumps(request.structured_specs_json, ensure_ascii=False)
+    for leak in ("进价", "¥", "1688", "offer", "加印", "加工定制", "苏青禾档案", "待老板处理", "retail_price"):
+        assert leak not in fed_to_ai, leak
+    assert request.manual_notes is None
+    # 该有的还在:每个规格名、卖家写的功能属性
+    for variant in live["draft"]["variants"]:
+        assert variant["name_zh"] in request.raw_input_text
+    if offer_id == "888786557113":
+        assert "马达类型: 无刷马达" in request.raw_input_text
 
 
 def test_throttle_rules() -> None:

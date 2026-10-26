@@ -3,7 +3,7 @@
 每一轮(SQH_LOOP_SECONDS,默认 60 秒):
 1. 写业务心跳(间隔按 120 秒算,3 倍没成功 = 办公室显示「掉线」)。
 2. 暂停中:只写心跳,别的都不做(C19 里老板的批/驳照样认——那是老板的动作,不是她的)。
-3. 洛杉矶早上 7 点以后、今天还没出过计划:快照 → 计划 → 审批卡(同一个 dedupe_key 不重复建)。
+3. 洛杉矶早上 7 点以后、今天还没出过计划:快照 → 对账(没了的事作废卡)→ 计划 → 审批卡(一件事只发一张,见 cards.settle_issues)。
 4. 老板在办公室「交代一句」的事:记下、回执,影子期不执行。
 5. 主动开口四规矩:一天最多一条、洛杉矶 8–22 点、只在有待审卡时、静音期内不说、同一天不重复。
 
@@ -142,6 +142,8 @@ def decided_text(card: Any, *, changed: bool, decision: str, execution: dict[str
             return f"#{card.ref} 这张卡已经批过了({channel})。"
         if card.status == "rejected":
             return f"#{card.ref} 这张卡已经驳过了({channel})。"
+        if card.decision_reason in cards.RETIRE_REASONS:
+            return f"#{card.ref} 这张卡已经作废了:{card.decision_reason}"
         if card.status == "stale":
             return f"#{card.ref} 这张卡已经作废了:底层数据变了,我会按新数据重出。"
         return f"#{card.ref} 这张卡现在是 {card.status},不用再处理。"
@@ -192,8 +194,17 @@ def run_morning(db, *, now: datetime | None = None) -> dict[str, Any]:
     memory.log_activity(db, f"快照:{snap.get('headline', '')}"[:500], kind="snapshot")
     db.commit()
 
+    live, readable = brain.issues_in(snap)
+    settled = cards.settle_issues(db, live=set(live), readable=readable, today=today.isoformat())
+    if settled["merged"]:
+        memory.log_activity(db, f"旧卡里同一件事发了好几张,合并掉 {settled['merged']} 张;还在的事今天按新规矩最多再出一张。", kind="plan")
+    if settled["gone"]:
+        memory.log_activity(db, f"{settled['gone']} 张卡上的事今天已经没有了,卡作废。", kind="plan")
+    raised = cards.raised_issues(db)
+    db.commit()
+
     _set_activity(db, "thinking", "在想今天的计划…", 40)
-    result = brain.plan(db, snap)
+    result = brain.plan(db, snap, already_raised=raised)
     created = 0
     if result is None:
         memory.log_activity(db, "计划没出来(脑子没接通或输出不对),下一轮再试。", kind="error")
@@ -203,12 +214,14 @@ def run_morning(db, *, now: datetime | None = None) -> dict[str, Any]:
 
     _set_activity(db, "working", "在写审批卡…", 80)
     for item in result.cards:
-        evidence: dict[str, Any] = {"snapshot_date": today.isoformat(), "plan_role": result.role}
+        if item["issue"] in raised:  # 提示词里说了别再发,模型还是发了
+            continue
+        evidence: dict[str, Any] = {"snapshot_date": today.isoformat(), "plan_role": result.role, "issue": item["issue"]}
         if item.get("product_id"):
             evidence["recheck"] = {"type": "product_gate", "product_id": item["product_id"]}
         _, is_new = cards.create_card(
             db,
-            dedupe_key=f"{today.isoformat()}:{item['dedupe_key_suffix']}",
+            dedupe_key=f"issue:{item['issue']}:{today.isoformat()}",
             kind=item["kind"],
             title=item["title"],
             conclusion=item["conclusion"],
@@ -228,7 +241,7 @@ def run_morning(db, *, now: datetime | None = None) -> dict[str, Any]:
     db.commit()
     first_line = result.plan.splitlines()[0] if result.plan else "今天的计划出好了"
     _set_activity(db, "working", first_line[:300], None)
-    return {"snapshot": snap.get("headline"), "plan": result.plan, "cards_created": created, "role": result.role}
+    return {"snapshot": snap.get("headline"), "plan": result.plan, "cards_created": created, "role": result.role, "settled": settled}
 
 
 def intake_links(db, links: list[tuple[str, str]], *, actor_user_id: str) -> str:
