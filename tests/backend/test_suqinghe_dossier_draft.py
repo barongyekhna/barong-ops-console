@@ -341,6 +341,24 @@ def test_value_in_another_unit_is_not_this_field() -> None:
     assert (specs["capacity"]["value"], specs["capacity"]["unit"]) == ("18", "Wh")
 
 
+def test_quantity_without_a_number_is_a_slogan() -> None:
+    # 10-26 电钻重新整理(#10):25% 拦住了,同一套图「核心卖点」拼图上的配字「电力强劲 持久续航」又被读成了续航。
+    draft = _draft_with(_real_capture(DRILL), [_fact("runtime", "电力强劲 持久续航", image=2)])
+    assert "runtime" not in draft["specs"]
+    assert draft["image_read"]["ignored_narrative"] == 1
+    # 只管量;材质这类文字字段本来就没有数,照收
+    facts = [
+        _fact("capacity", "大容量", image=3),
+        _fact("weight", "轻便", image=4),
+        _fact("runtime", "4小时", image=5),
+        _fact("material", "阻燃ABS", image=6),
+    ]
+    stats: dict = {}
+    specs, _ = dossier.merge_specs({"attributes": [], "title_zh": "露营灯"}, facts, stats=stats)
+    assert stats["ignored_narrative"] == 2 and "capacity" not in specs and "weight" not in specs
+    assert "runtime" in specs and specs["material"]["value"] == "阻燃ABS"
+
+
 def test_title_vs_attribute_is_a_real_conflict_and_consult_service_is_a_placeholder() -> None:
     # 电钻:标题 12V,属性表「额定电压范围:交流220V」(充电器输入)—— 不替老板选;「外形尺寸:咨询客服」不是尺寸。
     draft = _draft_with(_real_capture(DRILL), [])

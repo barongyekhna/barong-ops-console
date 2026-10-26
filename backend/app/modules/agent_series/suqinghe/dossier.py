@@ -373,7 +373,7 @@ def _attr_value(key: str, value: str) -> str:
 
 
 def _prepare_image_facts(facts: list[dict[str, Any]], stats: dict[str, int]) -> list[dict[str, Any]]:
-    """读图事实进合并之前先过三道:别的商品、广告语、尺寸图上的单个标注。"""
+    """读图事实进合并之前先过三道:别的商品、广告语(太长,或者量的字段里没有数)、尺寸图上的单个标注。"""
     kept: list[dict[str, Any]] = []
     single_dims: dict[tuple[Any, Any, Any], list[dict[str, Any]]] = {}
     full_dims_segments: set[tuple[Any, Any, Any]] = set()
@@ -385,6 +385,10 @@ def _prepare_image_facts(facts: list[dict[str, Any]], stats: dict[str, int]) -> 
         field_name = _clean(fact.get("field")).casefold()
         value = _clean(fact.get("value"))
         if field_name not in PACKAGE_FIELDS and len(value) > NARRATIVE_LIMIT:
+            stats["ignored_narrative"] += 1
+            continue
+        # 续航、容量、电压、重量、尺寸……这些量没有数就是广告语(10-26 电钻:卖点拼图配字「电力强劲 持久续航」被读成续航)
+        if _base_key(_spec_key(field_name) or "") in _UNIT_FACTORS and not _NUM.search(value):
             stats["ignored_narrative"] += 1
             continue
         if _spec_key(field_name) == "dimensions":
