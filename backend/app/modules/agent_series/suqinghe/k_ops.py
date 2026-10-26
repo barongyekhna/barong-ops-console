@@ -118,6 +118,15 @@ class KHands:
         payload = ProductKnowledgeRiskReviewRequest(execution_id=execution_id, decisions=decisions, confirm_no_risk_terms=not decisions)
         return _call(k.product_knowledge_workflow_risk_review, product_id=product_id, payload=payload, **self._ctx())
 
+    # ---- 基础档案 ----
+
+    def update_product(self, product_id: UUID, **fields: Any) -> Any:
+        """K 页面「基础档案」的保存:改规格会作废已批的卖点和文案(K 自己的规矩)。"""
+        from ...k_series.product_knowledge import router as k
+        from ...k_series.product_knowledge.schemas import ProductKnowledgeUpdate
+
+        return _call(k.product_knowledge_update, product_id=product_id, payload=ProductKnowledgeUpdate(**fields), **self._ctx())
+
     # ---- 卖点 ----
 
     def generate_selling_points(self, product_id: UUID) -> Any:

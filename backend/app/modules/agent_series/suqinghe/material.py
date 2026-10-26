@@ -28,6 +28,9 @@ CLAIM_KINDS = ("feature", "claim", "hype")
 MATERIAL_SOURCE = "1688_image"
 MATERIAL_GROUP = "卖点素材(1688 详情图)"
 MATERIAL_BUDGET_USD = 0.10
+# 2(10-26 预演后):卖家的服务承诺(给产品投保险、售后、出口认证证书展示)不算卖点——电池那单读进了「携手平安保险给每一个产品投保」。
+# 版本低于这个数的素材会重读一遍(pipeline 看 material["version"])。
+MATERIAL_VERSION = 2
 _CONFIDENCE = {"high": 0.9, "medium": 0.7}
 
 _CLAIM_RULES = (
@@ -41,7 +44,8 @@ _CLAIM_RULES = (
     "   claim = 主观但说得过去的好处(续航持久、光线柔和、握感舒适、小巧便携、操作简单);\n"
     "   hype = 夸张、绝对化、比较、没法核实的(超强动力、秒杀同类、永不损坏、工业级、100% 防水、全网最低、行业第一)。\n"
     "4. 每条标 subject:this = 这件商品(或它的某个规格);other = 别的商品(兼容机型表、同店别的型号、对比图里的别家);"
-    "unsure = 看不出。\n\n"
+    "unsure = 看不出。\n"
+    "5. 卖家自己的服务承诺不是商品卖点,一律不抄:给产品买保险、售后包退换、工厂实力、「出口认证/证书展示」、发货快、批发价。\n\n"
     "Transcribe ONLY selling claims literally printed in this image segment. Never guess or translate.\n"
     'Reply JSON only: {"facts": [{"text": "as printed", "kind": "feature|claim|hype", '
     '"subject": "this|other|unsure", "confidence": "high|medium|low"}]}. Empty list if nothing.'
@@ -147,12 +151,14 @@ def collect(db: Any, capture: dict[str, Any], **reader: Any) -> dict[str, Any]:
     )
     material = summarize(read)
     material["read_at"] = datetime.now(UTC).isoformat()
+    material["version"] = MATERIAL_VERSION
     return material
 
 
 __all__ = [
     "CLAIM_KINDS",
     "MATERIAL_GROUP",
+    "MATERIAL_VERSION",
     "MATERIAL_SOURCE",
     "attribute_items",
     "claims_prompt",

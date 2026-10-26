@@ -115,7 +115,7 @@ def test_material_lands_in_k_as_evidence_and_hype_waits_for_the_boss(built, monk
             ]
         }
     )
-    monkeypatch.setattr(material, "collect", lambda db, capture, **kw: {**summary, "read_at": "t"})
+    monkeypatch.setattr(material, "collect", lambda db, capture, **kw: {**summary, "read_at": "t", "version": material.MATERIAL_VERSION})
     out = pipeline.run_step(dossier_id, "material")
     assert out["ok"], out
     with without_org_data_isolation(), SessionLocal() as db:
@@ -126,7 +126,15 @@ def test_material_lands_in_k_as_evidence_and_hype_waits_for_the_boss(built, monk
         ]
         draft = db.get(SqhDossier, dossier_id).draft
         assert [r["text"] for r in draft["material"]["hype"]] == ["秒杀同类"]
-    assert _pick() == (dossier_id, "keywords")
+    assert _pick() == (dossier_id, "english_specs")  # 下一步补规格的英文(在卖点之前)
+
+    # 素材规则升级后重读:旧的那几行先删掉,不留下一半旧一半新
+    newer = material.summarize({"facts": [{"text": "Type-C 充电", "kind": "feature", "subject": "this", "confidence": "high", "image_index": 0, "segment_index": 0}]})
+    monkeypatch.setattr(material, "collect", lambda db, capture, **kw: {**newer, "read_at": "t2", "version": material.MATERIAL_VERSION})
+    assert pipeline.run_step(dossier_id, "material")["ok"]
+    with without_org_data_isolation(), SessionLocal() as db:
+        rows = db.scalars(select(KProductKnowledgeAttribute).where(KProductKnowledgeAttribute.product_id == product_id)).all()
+        assert [(r.attribute_key, r.attribute_value_text) for r in rows if r.source == material.MATERIAL_SOURCE] == [("sqh_feature_01", "Type-C 充电")]
 
 
 def _plant_execution(product_id: str, **fields: Any) -> None:
@@ -151,7 +159,11 @@ def test_keywords_then_risk_review_hand_her_judgement_to_k(built, monkeypatch: p
     dossier_id, product_id, _ = built
     with without_org_data_isolation(), SessionLocal() as db:
         dossier = db.get(SqhDossier, dossier_id)
-        dossier.draft = {**dossier.draft, "material": {"features": [], "claims": [], "hype": []}}
+        dossier.draft = {
+            **dossier.draft,
+            "material": {"features": [], "claims": [], "hype": [], "version": material.MATERIAL_VERSION},
+            "pipeline": {"english_specs": {"rows": 0, "missed": [], "at": "t"}},
+        }
         db.commit()
     answers = iter(
         [
@@ -187,3 +199,20 @@ def test_keywords_then_risk_review_hand_her_judgement_to_k(built, monkeypatch: p
     assert [(d["term"], d["decision"]) for d in reviewed["decisions"]] == [("Squishmallows dumpling", "reject"), ("squishy dumpling toy", "approve")]
     assert all(d["reason"].startswith("苏青禾:") for d in reviewed["decisions"])
     assert _pipe(dossier_id)["risk"]["decisions"] == reviewed["decisions"]
+
+
+def test_english_specs_go_through_k_and_show_in_the_buyer_table(built, monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.modules.k_series.product_knowledge.buyer_display import buyer_spec_rows
+
+    dossier_id, product_id, _ = built
+    with without_org_data_isolation(), SessionLocal() as db:
+        before = db.get(KProductKnowledgeProduct, product_id).structured_specs_json
+        assert buyer_spec_rows(before, target_market="US") == []  # 建档写进去的全是中文,买家表一行没有
+    monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: {"values": {"material": "TPR rubber", "age_range": "Ages 3+"}})
+    out = pipeline.run_step(dossier_id, "english_specs")
+    assert out["ok"], out
+    with without_org_data_isolation(), SessionLocal() as db:
+        after = db.get(KProductKnowledgeProduct, product_id).structured_specs_json
+        assert buyer_spec_rows(after, target_market="US"), after
+        assert all(not row.get("label_en") or row.get("value_en") for row in after["additional_specs"])
+    assert _pipe(dossier_id)["english_specs"]["rows"] >= 1

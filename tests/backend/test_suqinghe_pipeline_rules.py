@@ -15,6 +15,7 @@ pytestmark = pytest.mark.unit
 def _view(**overrides) -> View:
     base = dict(
         material_done=True,
+        english_done=True,
         stopped=False,
         blocked_step=None,
         execution_status=None,
@@ -34,6 +35,9 @@ def _view(**overrides) -> View:
     ("overrides", "expected"),
     [
         ({"material_done": False}, "material"),
+        ({"english_done": False}, "english_specs"),
+        # 规格英文排在卖点前面:关键词都跑完了也要先补(改规格会作废已批的卖点)
+        ({"english_done": False, "risk_approved": True, "execution_status": "blocked", "sp_approved": True}, "english_specs"),
         ({}, "keywords"),
         ({"execution_status": "running", "execution_minutes": 5}, None),  # K 还在跑,等
         ({"execution_status": "running", "execution_minutes": 90}, "keywords_retry"),  # 跑到一半断了

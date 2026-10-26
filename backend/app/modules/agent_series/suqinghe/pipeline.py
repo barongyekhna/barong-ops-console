@@ -2,7 +2,7 @@
 
 她建进 K 的产品(档案 created),她自己按顺序往下推,和运营在 K 里点按钮一样(k_ops.KHands,身份是批建档卡的老板):
 
-  卖点素材 → 主关键词 → 关键词(K 工作流:富化 → SERP → 两道筛,停在风险词)→ 风险词(她判)
+  卖点素材 → 规格的英文 → 主关键词 → 关键词(K 工作流:富化 → SERP → 两道筛,停在风险词)→ 风险词(她判)
   → 卖点(K 生成 → 她批)→【价格卡,老板批】→ 文案 → 作图指令 → 出图 →【审核卡,老板批】→ 保存图片 → 推上独立站(草稿)
 
 价格卡排在文案前面:K 写文案按变体的包装数量写,颜色变体的主图要变体参考图——变体和售价得先定。
@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, k_ops, material, memory
+from . import cards, english_specs, k_ops, material, memory
 from .constants import USAGE_LABEL
 from .models import SqhCard, SqhDossier
 
@@ -50,6 +50,7 @@ JUDGE_TIMEOUT_SECONDS = 120.0
 
 STEP_LABELS = {
     "material": "收卖点素材",
+    "english_specs": "补规格的英文",
     "keywords": "跑关键词",
     "keywords_retry": "重跑关键词",
     "risk_review": "判风险词",
@@ -66,6 +67,7 @@ class View:
     """一个产品在 K 里走到哪了。全是从 K 和档案里读出来的事实,不是她另记的进度。"""
 
     material_done: bool
+    english_done: bool  # 买家规格表要的英文补好了(K 只展示带英文的规格行)
     stopped: bool  # 老板驳了「卡住」卡:这个品先不做
     blocked_step: str | None  # 「卡住」卡还在等老板
     execution_status: str | None
@@ -84,6 +86,8 @@ def next_step(view: View) -> str | None:
         return None
     if not view.material_done:
         return "material"
+    if not view.english_done:
+        return "english_specs"  # 改规格会作废已批的卖点,所以排在卖点前面
     if view.execution_status is None:
         return "keywords"
     if view.execution_status in {"running", "created"}:
@@ -133,8 +137,10 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
         minutes = (datetime.now(UTC) - execution.updated_at).total_seconds() / 60
     approved = product.selling_points_approved_json if isinstance(product.selling_points_approved_json, dict) else {}
     candidates = product.selling_points_candidates_json if isinstance(product.selling_points_candidates_json, dict) else {}
+    material_version = (draft.get("material") or {}).get("version") if isinstance(draft.get("material"), dict) else None
     return View(
-        material_done="material" in draft,
+        material_done=(material_version or 0) >= material.MATERIAL_VERSION,
+        english_done=bool(pipe.get("english_specs")) or english_specs.done(product.structured_specs_json),
         stopped=bool(pipe.get("stopped")),
         blocked_step=(pipe.get("blocked") or {}).get("step") if isinstance(pipe.get("blocked"), dict) else None,
         execution_status=getattr(execution, "status", None),
@@ -304,6 +310,8 @@ def selling_point_review(candidates: dict[str, Any], errors: dict[int, str] | No
     out: list[dict[str, Any]] = []
     for index, bullet in enumerate(_bullets(candidates)):
         keep = bullet.get("verification_status") == "verified" and index not in errors and str(bullet.get("evidence") or "").strip()
+        if keep and is_certification_claim(bullet):
+            keep = False  # 认证要有证书才能写(GMC 那次封号就是 Misrepresentation);老板在审核卡上看到、有证书再放
         item = {k: bullet.get(k) for k in ("id", "category", "text", "text_zh", "importance_score", "evidence", "evidence_excerpt")}
         item["importance_score"] = item.get("importance_score") or 0
         item["category"] = item.get("category") or "feature"
@@ -312,10 +320,17 @@ def selling_point_review(candidates: dict[str, Any], errors: dict[int, str] | No
     return out
 
 
-def _judge(db: Session, ask: str, brief: str, extra: str, *, timeout: float = JUDGE_TIMEOUT_SECONDS) -> Any:
+def is_certification_claim(bullet: dict[str, Any]) -> bool:
+    """说「通过了某某认证」的卖点。证据只是卖家自己填的属性,没有证书在手就不能对买家说。"""
+    category = str(bullet.get("category") or "").lower()
+    evidence = str(bullet.get("evidence") or "").lower()
+    return "certif" in category or "certification" in evidence
+
+
+def _judge(db: Session, ask: str, brief: str, extra: str, *, timeout: float = JUDGE_TIMEOUT_SECONDS, role: str | None = None) -> Any:
     from . import brain
 
-    role = brain.plan_role(db)  # 她当天 Claude 额度用完就降到便宜档
+    role = role or brain.plan_role(db)  # 她当天 Claude 额度用完就降到便宜档
     db.commit()  # 出网前放掉事务
     return brain._execute(
         role,
@@ -357,6 +372,7 @@ def _step_material(ctx: Ctx) -> str:
 
     capture = ctx.dossier.capture if isinstance(ctx.dossier.capture, dict) else {}
     summary = material.collect(ctx.db, capture, usage_label=PIPELINE_USAGE_LABEL)
+    _drop_old_material(ctx)
     items = material.attribute_items(summary)
     if items:
         k_service.patch_attributes(ctx.db, product_id=ctx.product.id, payload=ProductKnowledgeAttributePatch(items=items), scope_context=ctx.scope)
@@ -364,6 +380,43 @@ def _step_material(ctx: Ctx) -> str:
     draft["material"] = summary
     ctx.dossier.draft = draft
     return f"卖点素材:功能点 {len(summary['features'])} 条、好处 {len(summary['claims'])} 条进了 K,宣传语 {len(summary['hype'])} 条留给老板看"
+
+
+def _drop_old_material(ctx: Ctx) -> None:
+    """重读素材前把她上一版写进 K 的那几行删掉(只删她自己的组和来源);K 没有删属性的接口,
+    删完照 K 的规矩作废依赖这些证据的产出(卖点、文案)——和 K 自己改属性时一样。"""
+    from sqlalchemy import delete
+
+    from ...k_series.product_knowledge.models import KProductKnowledgeAttribute as A
+    from ...k_series.product_knowledge.service import invalidate_evidence_outputs
+
+    result = ctx.db.execute(
+        delete(A).where(A.product_id == ctx.product.id, A.attribute_group == material.MATERIAL_GROUP, A.source == material.MATERIAL_SOURCE),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    )
+    if result.rowcount:
+        invalidate_evidence_outputs(ctx.product)
+        ctx.db.add(ctx.product)
+    ctx.db.flush()
+
+
+def _step_english_specs(ctx: Ctx) -> str:
+    draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
+    rows, todo = english_specs.plan(ctx.product.structured_specs_json, draft.get("specs") or {})
+    translated: dict[str, Any] = {}
+    if todo:
+        from .brain import parse_json
+
+        listing = "\n".join(f"- {key}: {value}" for key, value in todo.items())
+        result = _judge(ctx.db, english_specs.TRANSLATE_ASK, _product_brief(ctx.dossier, ctx.product), f"要翻的规格值:\n{listing}", role="fast")
+        data = parse_json(result)
+        translated = data.get("values") if isinstance(data, dict) and isinstance(data.get("values"), dict) else {}
+    rows, missed = english_specs.apply_translations(rows, translated)
+    specs = {**(ctx.product.structured_specs_json or {}), "additional_specs": rows}
+    ctx.hands.update_product(ctx.product.id, structured_specs_json=specs)
+    english = [r for r in rows if r.get("label_en") and r.get("value_en")]
+    _save_pipe(ctx.dossier, english_specs={"rows": len(english), "missed": missed, "at": datetime.now(UTC).isoformat()})
+    return f"规格补了英文 {len(english)} 行" + (f",{len(missed)} 行翻不出来没给(K 不展示它)" if missed else "")
 
 
 def _keyword_choice(ctx: Ctx) -> dict[str, Any]:
@@ -442,7 +495,8 @@ def _step_approve_selling_points(ctx: Ctx) -> str:
             raise StepError("候选卖点被 K 逐条退回,剩下的一条都不够格") from exc
         ctx.hands.approve_selling_points(ctx.product.id, bullets=review, seo_keywords=seo)
     kept = sum(1 for item in review if item["review_decision"] == "approve")
-    _save_pipe(ctx.dossier, selling_points={"kept": kept, "dropped": len(review) - kept, "at": datetime.now(UTC).isoformat()})
+    held = [item["text"] for item in review if item["review_decision"] == "reject" and is_certification_claim(item)]
+    _save_pipe(ctx.dossier, selling_points={"kept": kept, "dropped": len(review) - kept, "held_certifications": held, "at": datetime.now(UTC).isoformat()})
     return f"卖点批了 {kept} 条(驳 {len(review) - kept} 条证据核不上的)"
 
 
@@ -461,6 +515,7 @@ JOB_TYPES = {"selling_points": "selling_points"}
 
 STEPS = {
     "material": _step_material,
+    "english_specs": _step_english_specs,
     "keywords": lambda ctx: _step_keywords(ctx, retry=False),
     "keywords_retry": lambda ctx: _step_keywords(ctx, retry=True),
     "risk_review": _step_risk_review,
