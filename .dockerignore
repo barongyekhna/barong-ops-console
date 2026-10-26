@@ -12,6 +12,8 @@ backend/__pycache__
 **/__pycache__
 *.pyc
 tests/**/__pycache__
+# 备份一律不进构建上下文(nightly 二十几 G,原来每次构建都整个打包发一遍);下面两行 C19 部署测试点名查,留着
+backups/
 backups/c19-record/
 backups/c19-asset/
 *.dump
