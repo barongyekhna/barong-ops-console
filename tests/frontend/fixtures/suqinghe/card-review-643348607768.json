@@ -1,0 +1,72 @@
+{
+ "kind": "k_review",
+ "evidence": {
+  "dossier_id": 7,
+  "k_product_id": "518c4532-6f3c-4bea-85d7-abb4679efc6e",
+  "sku": "PTB-001",
+  "main_keyword": "12v drill battery",
+  "copy": {
+   "h1": "12V Lithium Drill Battery Pack",
+   "title": "12V Drill Battery | Barong Yekhna",
+   "headline": "Power through every project",
+   "short_description": null,
+   "bullets": [
+    "Brand-new 18650 cells",
+    "Up to 500 cycles"
+   ],
+   "faq": 1,
+   "missing_inputs": []
+  },
+  "selling_points": [
+   "采用18650全新电芯"
+  ],
+  "images": [
+   {
+    "asset_id": "0dfd2588-8e83-49eb-b752-a9525bbd2090",
+    "position": 1,
+    "placement": "gallery",
+    "role": "主图"
+   },
+   {
+    "asset_id": "aa4244ff-6328-4561-b2da-2817dcc1b9d4",
+    "position": 2,
+    "placement": "gallery",
+    "role": "卖点图"
+   }
+  ],
+  "audit": {
+   "clean": false,
+   "violations": [
+    {
+     "kind": "image",
+     "position": 2,
+     "finding": "产品几何与原图不符"
+    }
+   ],
+   "errors": []
+  },
+  "concerns": [
+   "锂电池要按带电渠道运输"
+  ],
+  "held_certifications": [
+   "通过 UL 1642 认证"
+  ],
+  "hype": [
+   "工业级高性能锂电池"
+  ],
+  "flagged": [
+   "retail_price(needs_owner)"
+  ],
+  "prices": [
+   {
+    "label": "2000mAh",
+    "price": 19.99
+   }
+  ],
+  "risk": [],
+  "recheck": {
+   "type": "k_review",
+   "product_id": "518c4532-6f3c-4bea-85d7-abb4679efc6e"
+  }
+ }
+}

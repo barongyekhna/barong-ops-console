@@ -1,0 +1,174 @@
+{
+ "kind": "k_price",
+ "evidence": {
+  "dossier_id": 7,
+  "k_product_id": "518c4532-6f3c-4bea-85d7-abb4679efc6e",
+  "sku": "PTB-001",
+  "main_keyword": "12v drill battery",
+  "variants": [
+   {
+    "key": "v1",
+    "name_zh": "2000mah",
+    "name_en": "2000mAh Battery",
+    "cost_cny": 39.0,
+    "weight_g": 170.0,
+    "dims_cm": [
+     13.0,
+     9.0,
+     8.0
+    ],
+    "weight_note": "",
+    "kg": 0.17,
+    "goods": 5.42,
+    "ship": 4.9,
+    "floor": 11.99,
+    "include": true,
+    "price": 19.99,
+    "profit": 11.37,
+    "margin": 0.569,
+    "label_en": "2000mAh",
+    "axis": "size",
+    "note": "参照 Hyper Tough 12V 2.0Ah $24.82,略低",
+    "image_url": null,
+    "variant_id": null
+   },
+   {
+    "key": "v2",
+    "name_zh": "12V直充充电器",
+    "name_en": "12V Direct Charger",
+    "cost_cny": 9.0,
+    "weight_g": 80.0,
+    "dims_cm": [
+     13.0,
+     9.0,
+     8.0
+    ],
+    "weight_note": "",
+    "kg": 0.156,
+    "goods": 1.25,
+    "ship": 4.73,
+    "floor": 5.99,
+    "include": false,
+    "price": 9.99,
+    "profit": 6.06,
+    "margin": 0.607,
+    "label_en": "12V Charger",
+    "axis": "size",
+    "note": "这是充电器,不是电池",
+    "image_url": null,
+    "variant_id": null
+   },
+   {
+    "key": "v3",
+    "name_zh": "2500mah",
+    "name_en": "2500mAh Battery",
+    "cost_cny": 49.0,
+    "weight_g": 165.0,
+    "dims_cm": [
+     13.0,
+     9.0,
+     8.0
+    ],
+    "weight_note": "",
+    "kg": 0.165,
+    "goods": 6.81,
+    "ship": 4.84,
+    "floor": 13.99,
+    "include": true,
+    "price": 22.99,
+    "profit": 12.94,
+    "margin": 0.563,
+    "label_en": "2500mAh",
+    "axis": "size",
+    "note": "",
+    "image_url": null,
+    "variant_id": null
+   },
+   {
+    "key": "v4",
+    "name_zh": "1500mah",
+    "name_en": "1500mAh Battery",
+    "cost_cny": 29.0,
+    "weight_g": 175.0,
+    "dims_cm": [
+     13.0,
+     9.0,
+     8.0
+    ],
+    "weight_note": "",
+    "kg": 0.175,
+    "goods": 4.03,
+    "ship": 4.97,
+    "floor": 9.99,
+    "include": true,
+    "price": 16.99,
+    "profit": 9.8,
+    "margin": 0.577,
+    "label_en": "1500mAh",
+    "axis": "size",
+    "note": "",
+    "image_url": null,
+    "variant_id": null
+   },
+   {
+    "key": "v5",
+    "name_zh": "1300mah",
+    "name_en": "1300mAh Battery",
+    "cost_cny": 16.99,
+    "weight_g": 160.0,
+    "dims_cm": [
+     13.0,
+     9.0,
+     8.0
+    ],
+    "weight_note": "",
+    "kg": 0.16,
+    "goods": 2.36,
+    "ship": 4.78,
+    "floor": 7.99,
+    "include": true,
+    "price": 7.99,
+    "profit": 2.97,
+    "margin": 0.372,
+    "label_en": "1300mAh",
+    "axis": "size",
+    "note": "低于保底价 $7.99,抬到保底价",
+    "image_url": null,
+    "variant_id": null
+   }
+  ],
+  "competitors": {
+   "query": "12v drill battery",
+   "n": 39,
+   "min": 10.99,
+   "p25": 25.19,
+   "median": 39.95,
+   "p75": 74.69,
+   "max": 149.99,
+   "samples": []
+  },
+  "questions": [
+   "这款通用电池配哪些牌子的电钻?"
+  ],
+  "summary": "按容量分档,参照白牌价位",
+  "assumptions": {
+   "usd_cny": 7.2,
+   "ship_cny_per_kg": 90,
+   "ship_cny_per_piece": 20,
+   "fee_rate": 0.0349,
+   "fee_fixed_usd": 0.49,
+   "buyer_shipping_usd": 2.99,
+   "min_margin": 0.3,
+   "volumetric_divisor": 6000.0
+  },
+  "shipping": {
+   "class": "cn-direct-standard",
+   "contains_battery": true
+  },
+  "boss_reason": null,
+  "recheck": {
+   "type": "k_price",
+   "product_id": "518c4532-6f3c-4bea-85d7-abb4679efc6e"
+  }
+ }
+}

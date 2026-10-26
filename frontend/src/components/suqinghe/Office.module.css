@@ -695,3 +695,108 @@
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* ---- 价格卡、审核卡(10-26) ---- */
+
+.preLine {
+  white-space: pre-line;
+}
+
+.cardBody {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.priceTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.priceTable th,
+.priceTable td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--color-muted);
+  text-align: right;
+  vertical-align: top;
+}
+
+.priceTable th:first-child,
+.priceTable td:first-child {
+  text-align: left;
+}
+
+.priceTable small {
+  display: block;
+  color: var(--color-muted);
+}
+
+.priceTable tr[data-include="no"] td {
+  color: var(--color-muted);
+  text-decoration: line-through;
+}
+
+.priceTable tr[data-include="no"] td:first-child small {
+  text-decoration: none;
+}
+
+.rowNote {
+  white-space: normal;
+}
+
+.questionList,
+.bulletList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.questionList li {
+  color: var(--color-warning);
+}
+
+.reviewTitle {
+  font-size: 13px;
+  color: var(--color-text-strong);
+}
+
+.warnLine {
+  color: var(--color-warning);
+}
+
+.thumbGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 6px;
+}
+
+.thumbGrid figure {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.thumbGrid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--color-muted);
+  background: var(--color-panel-base);
+}
+
+.thumbGrid figcaption {
+  font-size: 11px;
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .priceTable th:nth-child(2),
+  .priceTable td:nth-child(2) {
+    display: none;
+  }
+}
