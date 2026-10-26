@@ -207,7 +207,7 @@ def competitor_stats(items: list[dict[str, Any]], *, query: str) -> dict[str, An
         "median": round(statistics.median(prices), 2),
         "p75": round(q[-1], 2),
         "max": round(prices[-1], 2),
-        "samples": kept[:8],
+        "samples": kept[:15],
     }
 
 
@@ -250,8 +250,9 @@ PRICE_ASK = (
     "还有谷歌购物上同类商品的价格。\n"
     "要求:\n"
     "- 每个规格给一个售价(美元,尾数 .99),不得低于它的保底价。\n"
-    "- 参照竞品价位:我们是新店、没有评论,第一批价放在竞品中位数附近或略低;别贴着最低价打价格战;"
-    "成本高到放不进竞品区间的,就给保底价,并在 note 里说明。\n"
+    "- 参照竞品价位,但只跟能比的比:我们是无品牌新店、没有评论,大牌(Milwaukee、DeWalt、Bosch、Makita、Ryobi、"
+    "Thermacell 这类)的价格不能直接比——看例子里同类的无牌/白牌/超市自有牌(Hyper Tough、Ozark Trail、Warrior 这类)"
+    "卖多少,第一批价放在它们附近或略低;别贴着最低价打价格战。成本高到放不进这个区间的,就给保底价,并在 note 里说明。\n"
     "- 指出不对劲的规格:不是同一种商品(比如电池里混进了充电器)→ include=false 并说明;"
     "几个规格重量一模一样、缺重量 → note 里提醒。\n"
     "- label_en:这个规格在英文商品页上的选项名(短,比如 2000mAh、Black、Tool Only、Kit with 2 Batteries)。\n"
@@ -271,11 +272,11 @@ def price_prompt_extra(lines: list[Line], competitors: dict[str, Any], a: Assump
         for line in lines
     )
     if competitors.get("n"):
-        samples = "; ".join(f"{row['title'][:60]} ${row['price']}" for row in competitors.get("samples", [])[:6])
+        samples = "\n".join(f"  ${row['price']} | {row['source']} | {row['title'][:80]}" for row in competitors.get("samples", [])[:15])
         comp = (
             f"谷歌购物「{competitors.get('query')}」{competitors['n']} 个价:最低 ${competitors['min']},"
             f"四分之一 ${competitors['p25']},中位 ${competitors['median']},四分之三 ${competitors['p75']},"
-            f"最高 ${competitors['max']}。例子:{samples}"
+            f"最高 ${competitors['max']}。例子(价格 | 店 | 标题):\n{samples}"
         )
     else:
         comp = f"竞品价没拿到({competitors.get('error') or '没有结果'}),按成本给价并说明。"
