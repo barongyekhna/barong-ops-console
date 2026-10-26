@@ -183,6 +183,18 @@ def test_read_detail_images_triages_then_extracts() -> None:
     assert out["stopped_reason"] is None
 
 
+def test_read_detail_images_accepts_stored_dict() -> None:
+    # 10-26 真链接首跑:dossiers 把 capture 存成 to_dict() 字典再交给读图,读图按属性取 → AttributeError。
+    router = _StubRouter([False, True, True])
+    out = s.read_detail_images(
+        None,
+        _capture_with(3).to_dict(),
+        download=lambda url: _image(800, 600),
+        router_factory=lambda db: router,
+    )
+    assert out["segments_seen"] == 3 and out["segments_read"] == 2
+
+
 def test_read_detail_images_stops_at_budget() -> None:
     router = _StubRouter([True] * 20)
     out = s.read_detail_images(

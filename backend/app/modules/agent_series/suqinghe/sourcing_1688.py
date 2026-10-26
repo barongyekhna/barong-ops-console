@@ -478,7 +478,8 @@ def fetch_offer(url: str, *, timeout_s: float = 25) -> Capture:
         return Capture(offer_id=None, url=url, blocked=True, block_reason="not_a_1688_offer_url")
     target = offer_url(offer_id)
     with ThreadPoolExecutor(max_workers=1) as pool:
-        final_url, title, html, text = pool.submit(_render_page, target, timeout_s).result(timeout=timeout_s + 40)
+        # 正常一页 43–48 秒(启动浏览器+滚动+重试取内容);10-26 实测 +40 余量偶发超时,放到 +80。
+        final_url, title, html, text = pool.submit(_render_page, target, timeout_s).result(timeout=timeout_s + 80)
     reason = detect_blocked(final_url=final_url, title=title, html=html)
     if reason:
         return Capture(offer_id=offer_id, url=target, title_zh=title or None, blocked=True, block_reason=reason)
@@ -605,7 +606,7 @@ def _default_router_factory(db: Any) -> Any:
 
 def read_detail_images(
     db: Any,
-    capture: Capture,
+    capture: Capture | dict[str, Any],
     *,
     budget_usd: float = 0.50,
     download: Callable[[str], bytes | None] | None = None,
@@ -634,7 +635,9 @@ def read_detail_images(
         )
         return _as_json(result)
 
-    for image_index, url in enumerate(capture.detail_images):
+    # 排队流水线里存库的是 to_dict() 后的字典,直接调用时是 Capture;两种都认。
+    detail_images = capture.get("detail_images") if isinstance(capture, dict) else capture.detail_images
+    for image_index, url in enumerate(detail_images or []):
         if stopped:
             break
         data = download(url)
