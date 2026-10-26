@@ -138,6 +138,16 @@ def products_section(db: Session) -> dict[str, Any]:
         woo = fetch_product_states_safely(db, woo_ids)
         woo_checked = woo is not None
 
+    from .models import SqhDossier
+
+    # 她自己建进 K、流水线在推的品(pipeline.py 管着,卡也由流水线自己发)
+    mine = {
+        str(pid)
+        for pid in db.scalars(
+            select(SqhDossier.k_product_id).where(SqhDossier.status == "created", SqhDossier.k_product_id.is_not(None)),
+            execution_options=_X,
+        )
+    }
     rows: list[dict[str, Any]] = []
     for product in products:
         pid = str(product.id)
@@ -157,6 +167,7 @@ def products_section(db: Session) -> dict[str, Any]:
                 "gate_blockers": gate if gate is not None else ("读不到" if pid in gates else []),
                 "upload_status": getattr(job, "status", None),
                 "woo_id": getattr(job, "external_product_id", None),
+                "mine": pid in mine,
             }
         )
     counts = Counter(row["stage"] for row in rows)

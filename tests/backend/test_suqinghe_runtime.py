@@ -118,6 +118,18 @@ def _snap(**overrides: Any) -> dict[str, Any]:
     return snap
 
 
+def test_her_own_products_are_reported_but_not_raised_as_issues() -> None:
+    import json
+
+    snap = _snap()
+    snap["products"]["items"].append({"product_id": "p9", "sku": "HPD-001", "name": "Drill", "stage": "k_workflow", "stage_label": "K 流水线进行中", "gate_blockers": [], "mine": True})
+    live, _ = brain.issues_in(snap)
+    assert not any(key.startswith("product:p9") for key in live)
+    slim = json.loads(brain._snapshot_for_prompt(snap))
+    assert [i["sku"] for i in slim["products"]["mine_in_progress"]] == ["HPD-001"]
+    assert all(i["sku"] != "HPD-001" for i in slim["products"]["stuck"])
+
+
 def test_issues_in_gives_ids_that_stay_the_same_across_days() -> None:
     live, readable = brain.issues_in(_snap())
     assert set(live) == {"product:p1:k_draft", "worker:sm-worker", "key:i-spare", "approvals", "goal:4"}

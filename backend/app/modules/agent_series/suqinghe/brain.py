@@ -116,7 +116,8 @@ def issues_in(snapshot: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], set[
     if isinstance(products, dict) and "items" in products:
         readable.add("product")
         for item in products["items"]:
-            if item.get("stage") != "published":
+            # 她自己流水线在推的品不算「事」:卡由流水线按步骤发(价格卡、审核卡、卡住卡),早上别再重复发一张
+            if item.get("stage") != "published" and not item.get("mine"):
                 live[f"product:{item['product_id']}:{item['stage']}"] = {"product_id": item["product_id"]}
     workers = snapshot.get("workers")
     if isinstance(workers, dict) and "stale" in workers:
@@ -205,7 +206,13 @@ def _snapshot_for_prompt(snapshot: dict[str, Any], *, already_raised: set[str] |
                     **{k: item.get(k) for k in ("sku", "name", "stage_label", "gate_blockers", "workflow_step")},
                 }
                 for item in products.get("items", [])
-                if item.get("stage") not in {"published"}
+                if item.get("stage") not in {"published"} and not item.get("mine")
+            ][:40],
+            # 她自己在推的:计划里可以说进度,不用为它们发卡(流水线自己会发)
+            "mine_in_progress": [
+                {k: item.get(k) for k in ("sku", "name", "stage_label")}
+                for item in products.get("items", [])
+                if item.get("stage") not in {"published"} and item.get("mine")
             ][:40],
         }
     workers = snapshot.get("workers")
