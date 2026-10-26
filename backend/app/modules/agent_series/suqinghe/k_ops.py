@@ -158,6 +158,48 @@ class KHands:
             raise KOpError("W_SHIPPING_INVALID", str(exc)) from exc
         self.db.commit()
 
+    # ---- 文案、作图指令、出图(K 的任务队列 / 渲染队列,k-worker 去跑)----
+
+    def generate_copy(self, product_id: UUID) -> Any:
+        from ...k_series.product_knowledge import router as k
+
+        return _call(k.product_knowledge_generate_copy, product_id=product_id, **self._ctx())
+
+    def generate_image_brief(self, product_id: UUID) -> Any:
+        from ...k_series.product_knowledge import router as k
+
+        return _call(k.product_knowledge_generate_image_brief, product_id=product_id, **self._ctx())
+
+    def render_images(self, product_id: UUID) -> Any:
+        """按作图指令一次出全部位置;作图指令过期(卖点/规格变了)会 409 IMAGE_BRIEF_*_STALE。"""
+        from ...k_series.product_knowledge import router as k
+
+        return _call(k.product_knowledge_render_images, product_id=product_id, payload=k.RenderImagesRequest(positions=None), **self._ctx())
+
+    def render_retry(self, product_id: UUID, *, batch_id: UUID) -> Any:
+        from ...k_series.product_knowledge import router as k
+
+        return _call(k.product_knowledge_render_images_retry, product_id=product_id, payload=k.RenderRetryRequest(batch_id=batch_id), **self._ctx())
+
+    def render_rework(self, product_id: UUID, *, asset_id: UUID, extra_prompt: str) -> Any:
+        """单张重做:原 prompt + 老板的修改意见。"""
+        from ...k_series.product_knowledge import router as k
+
+        payload = k.RenderReworkRequest(asset_id=asset_id, extra_prompt=extra_prompt[:2000])
+        return _call(k.product_knowledge_render_rework, product_id=product_id, payload=payload, **self._ctx())
+
+    def save_renders(self, product_id: UUID) -> Any:
+        """K 页面的「保存」:暂存图转正、绑主图、再跑一遍品牌审查。只在老板批了审核卡之后调(机器人只能交稿)。"""
+        from ...k_series.product_knowledge import router as k
+
+        return _call(k.product_knowledge_render_assets_save, product_id=product_id, payload=None, **self._ctx())
+
+    def dispatch(self, product_id: UUID) -> Any:
+        """P 的「上架」:过门禁 → 排进上传队列 → n8n 推到 Woo(新品一律落草稿)。"""
+        from ...p_series import router as p
+
+        return _call(p.p_dispatch, product_id=product_id, channel="woocommerce", **self._ctx())
+
     # ---- 卖点 ----
 
     def generate_selling_points(self, product_id: UUID) -> Any:

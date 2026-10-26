@@ -47,13 +47,13 @@ def _view(**overrides) -> View:
         # K 那边连着失败两次 → 停手发卡,不再重排(排队那一下总是「成功」的,不能按它数)
         ({"risk_approved": True, "execution_status": "blocked", "sp_job": "failed", "sp_failures": 2}, "block:selling_points"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_job": "completed", "sp_candidates": True}, "approve_selling_points"),
-        # 卖点批完 → 价格卡:没发过/被驳/作废 → 出一张;在等老板 → 等;批了 → 去 K 里改;改完 → 下一段(文案)
+        # 卖点批完 → 价格卡:没发过/被驳/作废 → 出一张;在等老板 → 等;批了 → 去 K 里改;改完 → 写文案
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True}, "price_card"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "pending"}, None),
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "rejected"}, "price_card"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "stale"}, "price_card"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved"}, "apply_price"),
-        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved", "price_applied": True, "shipping_set": True}, None),
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved", "price_applied": True, "shipping_set": True}, "copy"),
         ({"blocked_step": "keywords"}, None),  # 「卡住」卡在等老板
         ({"stopped": True, "material_done": False}, None),  # 老板说这个品先不做
     ],
@@ -114,3 +114,39 @@ def test_stand_in_request_carries_the_org_k_reads() -> None:
     request = k_ops.stand_in_request("org_trade")
     assert _scope_context(request).workspace_key == "org_trade"
     assert _request_state_value(request, "org_id", "active_org_id", "session_org_id") == "org_trade"
+
+
+PRICED = {"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved", "price_applied": True, "shipping_set": True}
+READY = {**PRICED, "copy_ok": True, "brief_ok": True, "render_requested": True, "staged": 9}
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({**PRICED}, "copy"),
+        ({**PRICED, "copy_job": "running"}, None),
+        ({**PRICED, "copy_job": "failed", "copy_failures": 1}, "copy"),
+        ({**PRICED, "copy_job": "failed", "copy_failures": 2}, "block:copy"),
+        ({**PRICED, "copy_ok": True}, "image_brief"),
+        ({**PRICED, "copy_ok": True, "brief_job": "pending"}, None),
+        ({**PRICED, "copy_ok": True, "brief_job": "failed", "brief_failures": 2}, "block:image_brief"),
+        ({**PRICED, "copy_ok": True, "brief_ok": True}, "render"),
+        ({**READY, "render_active": True}, None),
+        ({**READY, "audit_active": True}, None),  # 出完图 K 自己跑品牌审查,等它
+        ({**READY}, "review_card"),
+        ({**READY, "render_failed": 2}, "render_retry"),
+        ({**READY, "render_failed": 2, "render_retried": True}, "review_card"),  # 补过一次还缺的,卡上写着
+        ({**READY, "staged": 0}, "block:render"),
+        ({**READY, "review_card": "pending"}, None),
+        ({**READY, "review_card": "stale"}, "review_card"),
+        ({**READY, "review_card": "rejected"}, "rework"),
+        ({**READY, "review_card": "approved"}, "save_renders"),
+        ({**READY, "review_card": "approved", "saved": True}, "dispatch"),
+        ({**READY, "review_card": "approved", "saved": True, "dispatched": True, "upload_status": "queued"}, None),
+        ({**READY, "review_card": "approved", "saved": True, "dispatched": True, "upload_status": "failed"}, "block:dispatch"),
+        ({**READY, "review_card": "approved", "saved": True, "dispatched": True, "upload_status": "success"}, "readback"),
+        ({**READY, "review_card": "approved", "saved": True, "dispatched": True, "upload_status": "success", "live_checked": True}, None),
+    ],
+)
+def test_after_the_price_copy_images_review_then_publish(overrides, expected) -> None:
+    assert next_step(_view(**overrides)) == expected

@@ -2206,9 +2206,14 @@ STAGED_TTL_HOURS = 24
 
 def cleanup_stale_staged(db: Session, product_id: UUID | None = None) -> int:
     """惰性清理：staged 超过 24 小时未保存的成品图删除（防意外刷新丢失
-    的挂载期结束）。在查询/入队等触发点顺手调用。"""
+    的挂载期结束）。在查询/入队等触发点顺手调用。
+
+    两种暂存图不吃这条回收,因为等的是人、人不一定当天审:
+    - 外部精修通道(MCP)交的稿;
+    - metadata.hold_until 还没到的(苏青禾把这批图放进审核卡等老板批时标上,
+      老板批了她才点「保存」——机器人只能交稿不能发布,这个人工关口不能被 24h 回收绕掉)。
+    """
     clause = "AND product_id = :product_id" if product_id is not None else ""
-    # 外部精修通道(MCP)交的稿不吃 24h 惰性回收:人不一定当天审。
     params: dict[str, Any] = {"tag": RENDER_PIPELINE_TAG, "external": EXTERNAL_SUBMISSION_TAG}
     if product_id is not None:
         params["product_id"] = product_id
@@ -2220,6 +2225,7 @@ def cleanup_stale_staged(db: Session, product_id: UUID | None = None) -> int:
             WHERE status = 'staged'
               AND metadata_json->>'render_pipeline' = :tag
               AND COALESCE(metadata_json->>'submitted_via', '') <> :external
+              AND COALESCE((metadata_json->>'hold_until')::timestamptz, '-infinity'::timestamptz) <= now()
               AND (metadata_json->>'staged_at')::timestamptz
                   < now() - interval '{STAGED_TTL_HOURS} hours'
               {clause}

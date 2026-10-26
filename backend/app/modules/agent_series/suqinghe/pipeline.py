@@ -3,7 +3,8 @@
 她建进 K 的产品(档案 created),她自己按顺序往下推,和运营在 K 里点按钮一样(k_ops.KHands,身份是批建档卡的老板):
 
   卖点素材 → 主关键词 → 关键词(K 工作流:富化 → SERP → 两道筛,停在风险词)→ 风险词(她判)
-  → 卖点(K 生成 → 她批)→【价格卡,老板批】→ 文案 → 作图指令 → 出图 →【审核卡,老板批】→ 保存图片 → 推上独立站(草稿)
+  → 卖点(K 生成 → 她批)→【价格卡,老板批】→ 文案 → 作图指令 → 出图(K 自动品牌审查)
+  →【审核卡,老板批】→ 保存图片 → 推上独立站(草稿,P 的上架)→ 回读 Woo
 
 价格卡排在文案前面:K 写文案按变体的包装数量写,颜色变体的主图要变体参考图——变体和售价得先定。
 
@@ -18,9 +19,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import re
 import secrets
+from datetime import timedelta
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -42,7 +46,11 @@ logger = logging.getLogger(__name__)
 PIPELINE_USAGE_LABEL = f"{USAGE_LABEL}.k"
 BLOCKED_CARD_KIND = "k_blocked"
 PRICE_CARD_KIND = "k_price"
-PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND, PRICE_CARD_KIND)
+REVIEW_CARD_KIND = "k_review"
+PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND)
+ACTIVE_JOB = {"pending", "running"}
+# 审核卡上的暂存图留多久(K 的暂存图 24 小时没人保存就回收;老板不一定当天看)
+REVIEW_HOLD_DAYS = 14
 MAX_STEP_FAILURES = 2
 # K 工作流的「running」超过这么久没动静,当成上一次跑到一半断了(worker 重启之类),从断的那步重跑
 RUNNING_STALE_MINUTES = 40
@@ -58,6 +66,15 @@ STEP_LABELS = {
     "approve_selling_points": "批卖点",
     "price_card": "出价格卡",
     "apply_price": "按批的价改变体、选运费模板",
+    "copy": "写文案",
+    "image_brief": "出作图指令",
+    "render": "出图",
+    "render_retry": "补出没出成的图",
+    "review_card": "出审核卡",
+    "rework": "按老板的意见改",
+    "save_renders": "保存图片",
+    "dispatch": "推上独立站",
+    "readback": "回读独立站",
 }
 
 
@@ -82,6 +99,23 @@ class View:
     price_applied: bool = False  # 售价填进 K 了(多变体每个都有价 / 单品有价)
     shipping_set: bool = False  # 运费模板选好了
     price_card: str | None = None  # 最近一张价格卡的状态
+    copy_ok: bool = False  # 文案在,而且证据快照和现在的卖点/规格对得上(P 门禁同一判据)
+    copy_job: str | None = None
+    copy_failures: int = 0
+    brief_ok: bool = False  # 作图指令在,而且是照现在这版文案出的
+    brief_job: str | None = None
+    brief_failures: int = 0
+    render_requested: bool = False  # 照现在这版作图指令排过图
+    render_active: bool = False
+    render_failed: int = 0  # 最近一批里失败的张数
+    render_retried: bool = False
+    staged: int = 0  # 等保存的图
+    audit_active: bool = False  # K 的品牌审查在跑(出图批次跑完、保存之后它都会自己跑)
+    review_card: str | None = None
+    saved: bool = False
+    dispatched: bool = False
+    upload_status: str | None = None
+    live_checked: bool = False
 
 
 def next_step(view: View) -> str | None:
@@ -98,11 +132,11 @@ def next_step(view: View) -> str | None:
         # 停在风险词 = 正常;停在别处(SERP、两道筛失败,blocked/failed 带错误码)= 重跑那一步
         return "risk_review" if view.execution_step in RISK_STEPS else "keywords_retry"
     if view.sp_approved:
-        if view.price_applied and view.shipping_set:
-            return None  # 下一步是文案(下一段)
-        if view.price_card == "pending":
-            return None  # 等老板批价格卡
-        return "apply_price" if view.price_card == "approved" else "price_card"
+        if not (view.price_applied and view.shipping_set):
+            if view.price_card == "pending":
+                return None  # 等老板批价格卡
+            return "apply_price" if view.price_card == "approved" else "price_card"
+        return _next_after_price(view)
     if view.sp_job in {"pending", "running"}:
         return None
     if view.sp_candidates:
@@ -111,6 +145,44 @@ def next_step(view: View) -> str | None:
     if view.sp_job == "failed" and view.sp_failures >= MAX_STEP_FAILURES:
         return "block:selling_points"
     return "selling_points"
+
+
+def _next_after_price(view: View) -> str | None:
+    """价定了以后:文案 → 作图指令 → 出图 → 审核卡 →(老板批)→ 保存 → 推上去 → 回读。"""
+    if view.copy_job in ACTIVE_JOB:
+        return None
+    if not view.copy_ok:
+        return "block:copy" if view.copy_job == "failed" and view.copy_failures >= MAX_STEP_FAILURES else "copy"
+    if view.brief_job in ACTIVE_JOB:
+        return None
+    if not view.brief_ok:
+        return "block:image_brief" if view.brief_job == "failed" and view.brief_failures >= MAX_STEP_FAILURES else "image_brief"
+    if not view.render_requested:
+        return "render"
+    if view.render_active or view.audit_active:
+        return None
+    if view.review_card in {None, "stale", "expired"}:
+        if view.render_failed and not view.render_retried:
+            return "render_retry"
+        return "review_card" if view.staged else "block:render"
+    if view.review_card == "pending":
+        return None
+    if view.review_card == "rejected":
+        return "rework"
+    # 审核卡批了
+    if not view.saved:
+        return "save_renders"
+    if not view.dispatched:
+        return "dispatch"
+    if view.upload_status in {"queued", "dispatched"}:
+        return None
+    if view.upload_status == "failed":
+        return "block:dispatch"
+    return None if view.live_checked else "readback"
+
+
+def _digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
 
 
 def _pipe(dossier: SqhDossier) -> dict[str, Any]:
@@ -159,7 +231,78 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
         price_applied=_price_applied(db, product),
         shipping_set=bool((product.shipping_class or "").strip()),
         price_card=_card_status(db, (pipe.get("price") or {}).get("card_ref")),
+        **_later_view(db, product, pipe, jobs),
     )
+
+
+def _later_view(db: Session, product: Any, pipe: dict[str, Any], jobs: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """价定了以后那一段的事实:文案/作图指令/出图/审查从 K 读,审核卡和上架从她的记号 + P 的上传表读。"""
+    from sqlalchemy import text
+
+    from ...p_series.upload.assemble import _evidence_gate_blockers  # P 门禁判「文案证据对不对得上」的同一个函数
+
+    reset = pipe.get("reset") or {}
+    copy = product.marketing_copy_json
+    brief = product.image_instruction_json
+    brief_mark = pipe.get("brief") or {}
+    render_mark = pipe.get("render") or {}
+    publish = pipe.get("publish") or {}
+    renders = db.execute(
+        text(
+            "SELECT batch_id, status, count(*) AS n FROM k_image_render_jobs WHERE product_id = :p "
+            "AND batch_id = (SELECT batch_id FROM k_image_render_jobs WHERE product_id = :p ORDER BY created_at DESC LIMIT 1) "
+            "GROUP BY batch_id, status"
+        ),
+        {"p": str(product.id)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    ).mappings().all()
+    active_any = db.execute(
+        text("SELECT count(*) FROM k_image_render_jobs WHERE product_id = :p AND status IN ('pending', 'running')"),
+        {"p": str(product.id)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    ).scalar()
+    latest_batch = str(renders[0]["batch_id"]) if renders else None
+    upload = None
+    if publish.get("job_id"):
+        upload = db.execute(
+            text("SELECT status FROM p_upload_jobs WHERE job_id = :j"), {"j": publish["job_id"]}, execution_options=SKIP_ORG_DATA_ISOLATION
+        ).scalar()
+    return {
+        "copy_ok": bool(copy) and not _evidence_gate_blockers(product),
+        "copy_job": (jobs.get("marketing_copy") or {}).get("status"),
+        "copy_failures": k_ops.failed_attempts(db, product.id, "marketing_copy", since=reset.get("copy")),
+        "brief_ok": bool(brief) and brief_mark.get("copy_digest") == _digest(copy),
+        "brief_job": (jobs.get("image_brief") or {}).get("status"),
+        "brief_failures": k_ops.failed_attempts(db, product.id, "image_brief", since=reset.get("image_brief")),
+        "render_requested": bool(brief) and render_mark.get("brief_digest") == _digest(brief),
+        "render_active": bool(active_any),
+        "render_failed": sum(int(r["n"]) for r in renders if r["status"] == "failed"),
+        "render_retried": bool(latest_batch) and render_mark.get("retried_batch") == latest_batch,
+        "staged": len(staged_renders(db, product.id)),
+        "audit_active": (jobs.get("brand_audit") or {}).get("status") in ACTIVE_JOB,
+        "review_card": _card_status(db, (pipe.get("review") or {}).get("card_ref")),
+        "saved": bool(publish.get("saved_at")),
+        "dispatched": bool(publish.get("job_id")),
+        "upload_status": upload,
+        "live_checked": bool(publish.get("live")),
+    }
+
+
+def staged_renders(db: Session, product_id: Any) -> list[Any]:
+    """等保存的出图(K 的 k_auto_render 暂存图),每个位置只留最新的一张(单张重做会在同一位置多出一张)。"""
+    from ...k_series.product_knowledge.image_render_jobs import RENDER_PIPELINE_TAG
+    from ...k_series.product_knowledge.models import KProductKnowledgeMediaAsset as A
+
+    rows = db.scalars(
+        select(A).where(A.product_id == product_id, A.asset_type == "image", A.status == "staged").order_by(A.created_at),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    )
+    latest: dict[int, Any] = {}
+    for row in rows:
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        if meta.get("render_pipeline") == RENDER_PIPELINE_TAG:
+            latest[int(meta.get("position") or 0)] = row
+    return [latest[position] for position in sorted(latest)]
 
 
 def _price_applied(db: Session, product: Any) -> bool:
@@ -658,8 +801,294 @@ def _price_fingerprint(db: Session, recheck: dict[str, Any]) -> str:
 cards.register_fingerprinter(PRICE_CARD_KIND, _price_fingerprint)
 
 
+# ---------------------------------------------------------------- 文案 → 作图指令 → 出图
+
+
+def _step_copy(ctx: Ctx) -> str:
+    ctx.hands.generate_copy(ctx.product.id)
+    return "文案排进 K 的队列了(Claude 写,一两分钟)"
+
+
+def _step_image_brief(ctx: Ctx) -> str:
+    ctx.hands.generate_image_brief(ctx.product.id)
+    # 作图指令是照文案出的:记下这版文案,文案换了指令就得重出
+    _save_pipe(ctx.dossier, brief={"copy_digest": _digest(ctx.product.marketing_copy_json), "at": datetime.now(UTC).isoformat()})
+    return "作图指令排进 K 的队列了"
+
+
+def _step_render(ctx: Ctx) -> str:
+    try:
+        out = ctx.hands.render_images(ctx.product.id)
+    except k_ops.KOpError as exc:
+        if exc.code in {"IMAGE_BRIEF_SELLING_POINTS_STALE", "IMAGE_BRIEF_EVIDENCE_STALE"}:
+            _save_pipe(ctx.dossier, brief=None)  # 卖点/规格变过,作图指令重出
+            return "作图指令跟不上现在的卖点了,重新出一版"
+        raise
+    batch = str(getattr(out, "batch_id", "") or "")
+    _save_pipe(ctx.dossier, render={"brief_digest": _digest(ctx.product.image_instruction_json), "batch_id": batch, "at": datetime.now(UTC).isoformat()})
+    return f"出图排上了:{len(getattr(out, 'jobs', []) or [])} 张(k-worker 一张十几秒到一分钟)"
+
+
+def _step_render_retry(ctx: Ctx) -> str:
+    from sqlalchemy import text
+
+    batch = ctx.db.execute(
+        text("SELECT batch_id FROM k_image_render_jobs WHERE product_id = :p ORDER BY created_at DESC LIMIT 1"),
+        {"p": str(ctx.product.id)},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    ).scalar()
+    ctx.hands.render_retry(ctx.product.id, batch_id=batch)
+    mark = {**(_pipe(ctx.dossier).get("render") or {}), "retried_batch": str(batch)}
+    _save_pipe(ctx.dossier, render=mark)
+    return "没出成的那几张再出一次"
+
+
+# ---------------------------------------------------------------- 审核卡
+
+
+COMPLIANCE_ASK = (
+    "你在帮一个美国独立站上新品前把关:按美国的规矩看这件商品和它的英文商品页,有没有会惹麻烦的地方。\n"
+    "只看真有的,常见的有:驱虫/杀虫/消毒功效(EPA 管,含药剂的驱蚊片尤其要登记)、医疗健康功效(FDA)、儿童用品(CPSC/CPSIA)、"
+    "带电子发射的(FCC)、锂电池(运输、标注)、没证书的认证说法、别人的商标、Prop 65。\n"
+    "每条一句中文,说清是什么、为什么、建议怎么办;没有就给空数组。\n"
+    'Reply JSON only: {"concerns": ["..."]}'
+)
+
+
+def _copy_summary(copy: Any) -> dict[str, Any]:
+    copy = copy if isinstance(copy, dict) else {}
+    page = copy.get("product_page_copy") if isinstance(copy.get("product_page_copy"), dict) else {}
+    fold = page.get("above_the_fold") if isinstance(page.get("above_the_fold"), dict) else {}
+    seo = copy.get("seo") if isinstance(copy.get("seo"), dict) else {}
+    return {
+        "h1": seo.get("h1"),
+        "title": seo.get("title"),
+        "headline": fold.get("headline"),
+        "short_description": fold.get("short_description"),
+        "bullets": [str(b) for b in page.get("key_bullets") or []][:8],
+        "faq": len(copy.get("page_faq") or []),
+        "missing_inputs": [str(m) for m in copy.get("missing_inputs") or []][:6],
+    }
+
+
+def _hold(db: Session, assets: list[Any]) -> None:
+    """审核卡上的暂存图标上 hold_until:K 的 24 小时回收不收它们(老板批了才保存)。"""
+    until = (datetime.now(UTC) + timedelta(days=REVIEW_HOLD_DAYS)).isoformat()
+    for asset in assets:
+        asset.metadata_json = {**(asset.metadata_json or {}), "hold_until": until}
+        db.add(asset)
+    db.flush()
+
+
+def _step_review_card(ctx: Ctx) -> str:
+    from .brain import parse_json
+
+    product, dossier = ctx.product, ctx.dossier
+    draft = dossier.draft if isinstance(dossier.draft, dict) else {}
+    pipe = _pipe(dossier)
+    staged = staged_renders(ctx.db, product.id)
+    images = [
+        {
+            "asset_id": str(a.id),
+            "position": int((a.metadata_json or {}).get("position") or 0),
+            "placement": (a.metadata_json or {}).get("placement") or "gallery",
+            "role": (a.metadata_json or {}).get("role_label") or a.asset_role,
+        }
+        for a in staged
+    ]
+    copy = _copy_summary(product.marketing_copy_json)
+    points = [str(b.get("text")) for b in _bullets(product.selling_points_approved_json)]
+    audit = product.brand_audit_json if isinstance(product.brand_audit_json, dict) else {}
+    violations = [
+        {"kind": kind, "position": v.get("position"), "finding": str(v.get("finding") or v.get("term") or "")[:300]}
+        for kind in ("text", "image")
+        for v in audit.get(f"{kind}_violations") or []
+        if isinstance(v, dict)
+    ]
+    price_ref = (pipe.get("price") or {}).get("card_ref")
+    price_card = ctx.db.scalar(select(SqhCard).where(SqhCard.ref == str(price_ref)), execution_options=SKIP_ORG_DATA_ISOLATION) if price_ref else None
+    prices = [
+        {"label": line.get("label_en"), "price": line.get("price")}
+        for line in ((price_card.evidence or {}).get("variants") if price_card else []) or []
+        if isinstance(line, dict) and line.get("include")
+    ]
+    flagged = [f"{f.get('path')}({f.get('status')})" for f in draft.get("flagged") or [] if isinstance(f, dict)]
+    hype = [r["text"] for r in (draft.get("material") or {}).get("hype") or [] if isinstance(r, dict)]
+    held = (pipe.get("selling_points") or {}).get("held_certifications") or []
+    result = _judge(
+        ctx.db,
+        COMPLIANCE_ASK,
+        _product_brief(dossier, product),
+        "英文商品页:\n" + json.dumps({k: copy[k] for k in ("h1", "headline", "short_description", "bullets")}, ensure_ascii=False),
+    )
+    data = parse_json(result)
+    concerns = [str(c).strip()[:300] for c in (data.get("concerns") or []) if str(c).strip()][:6] if isinstance(data, dict) else []
+    _hold(ctx.db, staged)
+    lines = [
+        f"标题:{copy['h1'] or product.product_name_en}",
+        *[f"• {b}" for b in copy["bullets"][:5]],
+        f"图片 {len(images)} 张(详情在卡片里);品牌审查:{'干净' if audit.get('clean') and not violations else f'有 {len(violations)} 处要你看'}",
+        *[f"审查发现:第 {v['position']} 张 {v['finding'][:120]}" if v["kind"] == "image" else f"审查发现(文字):{v['finding'][:120]}" for v in violations[:4]],
+        *[f"合规要你看:{c}" for c in concerns],
+        *([f"没写进卖点的认证说法(有证书再放):{';'.join(held)[:200]}"] if held else []),
+        *([f"卖家的宣传语我没用:{'、'.join(hype)[:200]}"] if hype else []),
+        *([f"档案里还没定的:{'、'.join(flagged)[:200]}"] if flagged else []),
+        *(["价格:" + "、".join(f"{item['label']} ${item['price']}" for item in prices)] if prices else []),
+    ]
+    card, _ = cards.create_card(
+        ctx.db,
+        dedupe_key=f"k_review:{product.id}:{datetime.now(UTC).isoformat()}",
+        kind=REVIEW_CARD_KIND,
+        title=f"{product.sku} 上架审核:文案 + {len(images)} 张图"[:60],
+        conclusion=(
+            "卖点、文案、图片都齐了。批了我就保存图片、推上独立站(落草稿,你在 WP 后台看过再点发布);"
+            "不行就驳回,写清楚哪张图、哪句话要改,我照着改。"
+        ),
+        why="\n".join(line for line in lines if line),
+        if_not="这个品停在 K 里,不上架。",
+        reversible=True,
+        confidence="medium" if (violations or concerns) else "high",
+        evidence={
+            "dossier_id": dossier.id,
+            "k_product_id": str(product.id),
+            "sku": product.sku,
+            "main_keyword": pipe.get("main_keyword"),
+            "copy": copy,
+            "selling_points": points,
+            "images": images,
+            "audit": {"clean": bool(audit.get("clean")), "violations": violations, "errors": [str(e)[:200] for e in audit.get("errors") or []]},
+            "concerns": concerns,
+            "held_certifications": held,
+            "hype": hype,
+            "flagged": flagged,
+            "prices": prices,
+            "risk": [d for d in (pipe.get("risk") or {}).get("decisions") or [] if isinstance(d, dict)],
+            "recheck": {"type": REVIEW_CARD_KIND, "product_id": str(product.id)},
+        },
+    )
+    _save_pipe(dossier, review={"card_ref": card.ref, "at": datetime.now(UTC).isoformat(), "history": (pipe.get("review") or {}).get("history") or []})
+    return f"审核卡 #{card.ref} 发了:{len(images)} 张图" + (f",合规 {len(concerns)} 条要看" if concerns else "")
+
+
+def _review_fingerprint(db: Session, recheck: dict[str, Any]) -> str:
+    """审核卡建好之后,文案、卖点、待保存的图有人动过 → 卡作废重出(老板批的得是他看到的那一版)。"""
+    from ...k_series.product_knowledge.models import KProductKnowledgeProduct as P
+
+    try:
+        product = db.get(P, UUID(str(recheck.get("product_id"))), execution_options=SKIP_ORG_DATA_ISOLATION)
+    except (TypeError, ValueError):
+        product = None
+    if product is None:
+        return cards.fingerprint({"missing": True})
+    return cards.fingerprint(
+        {
+            "copy": _digest(product.marketing_copy_json),
+            "points": _digest(product.selling_points_approved_json),
+            "staged": [str(a.id) for a in staged_renders(db, product.id)],
+        }
+    )
+
+
+cards.register_fingerprinter(REVIEW_CARD_KIND, _review_fingerprint)
+
+
+REWORK_ASK = (
+    "老板驳回了这件商品的上架审核卡,下面是他的原话和卡上的东西(卖点按编号、图片按位置号)。判断他要改什么,只输出 JSON:\n"
+    '{"drop_points": ["要去掉的卖点编号,比如 bp3"], "image_fixes": [{"position": 2, "instruction": "这张图怎么改,一句话"}], '
+    '"unclear": "他说的里面对不上卖点或图片、或者我改不了的那部分,原话照抄;没有就空字符串"}\n'
+    "文案是从卖点写出来的:老板说某句话不对,去掉对应的卖点文案就会跟着改。"
+)
+
+
+def _step_rework(ctx: Ctx) -> str:
+    from .brain import parse_json
+
+    pipe = _pipe(ctx.dossier)
+    review = pipe.get("review") or {}
+    card = ctx.db.scalar(select(SqhCard).where(SqhCard.ref == str(review.get("card_ref"))), execution_options=SKIP_ORG_DATA_ISOLATION)
+    reason = (card.decision_reason if card else "") or ""
+    approved = _bullets(ctx.product.selling_points_approved_json)
+    staged = {int((a.metadata_json or {}).get("position") or 0): a for a in staged_renders(ctx.db, ctx.product.id)}
+    listing = "\n".join(f"{b.get('id')}: {b.get('text')}" for b in approved)
+    pictures = "\n".join(f"第 {pos} 张:{(a.metadata_json or {}).get('role_label') or a.asset_role}" for pos, a in staged.items())
+    result = _judge(ctx.db, REWORK_ASK, _product_brief(ctx.dossier, ctx.product), f"老板原话:{reason}\n\n卖点:\n{listing}\n\n图片:\n{pictures}", role="fast")
+    data = parse_json(result) if result is not None else None
+    data = data if isinstance(data, dict) else {}
+    drop = {str(x) for x in data.get("drop_points") or []} & {str(b.get("id")) for b in approved}
+    fixes = [f for f in data.get("image_fixes") or [] if isinstance(f, dict) and int(f.get("position") or 0) in staged and str(f.get("instruction") or "").strip()]
+    unclear = str(data.get("unclear") or "").strip()
+    done: list[str] = []
+    if drop:
+        bullets = [
+            {**{k: b.get(k) for k in ("id", "category", "text", "text_zh", "importance_score", "evidence", "evidence_excerpt")}, "review_decision": "reject" if str(b.get("id")) in drop else "approve"}
+            for b in approved
+        ]
+        ctx.hands.approve_selling_points(ctx.product.id, bullets=bullets, seo_keywords=[str(x) for x in (ctx.product.selling_points_approved_json or {}).get("seo_keywords") or []])
+        done.append(f"去掉卖点 {'、'.join(sorted(drop))}(文案、作图指令、图跟着重出)")
+    elif fixes:
+        for fix in fixes:
+            ctx.hands.render_rework(ctx.product.id, asset_id=staged[int(fix["position"])].id, extra_prompt=f"{fix['instruction']}(老板原话:{reason[:300]})")
+        done.append(f"按意见重做第 {'、'.join(str(int(f['position'])) for f in fixes)} 张图")
+    if not done:
+        raise StepError(f"老板的意见我对不上要改哪里:{unclear or reason[:200]}")
+    history = [*(review.get("history") or []), {"card_ref": review.get("card_ref"), "reason": reason, "did": done, "unclear": unclear}]
+    _save_pipe(ctx.dossier, review={"card_ref": None, "history": history})
+    return ";".join(done) + (f";这部分我改不了,在新审核卡上再问你:{unclear[:120]}" if unclear else "")
+
+
+# ---------------------------------------------------------------- 老板批了审核卡:保存 → 推上去 → 回读
+
+
+def _step_save_renders(ctx: Ctx) -> str:
+    ctx.hands.save_renders(ctx.product.id)
+    publish = {**(_pipe(ctx.dossier).get("publish") or {}), "saved_at": datetime.now(UTC).isoformat()}
+    _save_pipe(ctx.dossier, publish=publish)
+    return "图片保存了(主图绑好),K 再跑一遍品牌审查"
+
+
+def _step_dispatch(ctx: Ctx) -> str:
+    try:
+        out = ctx.hands.dispatch(ctx.product.id)
+    except k_ops.KOpError as exc:
+        blockers = exc.detail.get("blockers") if isinstance(exc.detail, dict) else None
+        raise StepError(f"上架门禁没过:{';'.join(blockers) if blockers else exc.message}") from exc
+    publish = {**(_pipe(ctx.dossier).get("publish") or {}), "job_id": out.job_id, "dispatched_at": datetime.now(UTC).isoformat()}
+    _save_pipe(ctx.dossier, publish=publish)
+    return f"推上独立站的任务排上了(P 上传任务 {out.job_id},一两分钟)"
+
+
+def _step_readback(ctx: Ctx) -> str:
+    """不信「上传成功」四个字:去 Woo 上把这个商品读回来,确认它真在、是草稿。"""
+    from sqlalchemy import text
+
+    from ...content_core.wc_sync import fetch_product_states_safely
+
+    publish = _pipe(ctx.dossier).get("publish") or {}
+    row = ctx.db.execute(
+        text("SELECT status, external_product_id, external_url, error FROM p_upload_jobs WHERE job_id = :j"),
+        {"j": publish.get("job_id")},
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    ).mappings().first()
+    if row is None or row["status"] != "success" or not row["external_product_id"]:
+        raise StepError(f"上传任务不是成功状态:{dict(row) if row else '找不到'}")
+    woo_id = int(row["external_product_id"])
+    ctx.db.commit()  # 出网前放掉事务
+    states = fetch_product_states_safely(ctx.db, [woo_id])
+    state = (states or {}).get(woo_id)
+    if not state:
+        raise StepError(f"Woo 上读不到商品 #{woo_id}")
+    live = {"woo_id": woo_id, "status": state.get("status"), "url": row["external_url"], "checked_at": datetime.now(UTC).isoformat()}
+    _save_pipe(ctx.dossier, publish={**publish, "live": live})
+    memory.record(
+        ctx.db, kind="observation", subject=f"{ctx.product.sku} 上了独立站",
+        body=f"{ctx.product.sku} 推上独立站:Woo #{woo_id},状态 {state.get('status')}(新品落草稿,老板在 WP 后台看过再发布)。",
+        refs={"dossier_id": ctx.dossier.id, "woo_id": woo_id, "k_product_id": str(ctx.product.id)},
+    )
+    return f"Woo 上读回来了:#{woo_id},状态 {state.get('status')}"
+
+
 # 排进 K 队列的那几步各对应 K 的哪种任务(失败按 K 的任务表数)
-JOB_TYPES = {"selling_points": "selling_points"}
+JOB_TYPES = {"selling_points": "selling_points", "copy": "marketing_copy", "image_brief": "image_brief"}
 
 STEPS = {
     "material": _step_material,
@@ -670,6 +1099,15 @@ STEPS = {
     "approve_selling_points": _step_approve_selling_points,
     "price_card": _step_price_card,
     "apply_price": _step_apply_price,
+    "copy": _step_copy,
+    "image_brief": _step_image_brief,
+    "render": _step_render,
+    "render_retry": _step_render_retry,
+    "review_card": _step_review_card,
+    "rework": _step_rework,
+    "save_renders": _step_save_renders,
+    "dispatch": _step_dispatch,
+    "readback": _step_readback,
 }
 
 
@@ -690,8 +1128,7 @@ def run_step(dossier_id: int, step: str) -> dict[str, Any]:
             sku = getattr(product, "sku", None) or dossier.k_product_id
             if step.startswith("block:"):
                 blocked = step.split(":", 1)[1]
-                last = k_ops.latest_jobs(db, dossier.k_product_id).get(JOB_TYPES.get(blocked, blocked)) or {}
-                return _block(db, dossier=dossier, sku=sku, step=blocked, count=MAX_STEP_FAILURES, message=f"K 那边的任务失败:{last.get('error') or '没留原因'}")
+                return _block(db, dossier=dossier, sku=sku, step=blocked, count=MAX_STEP_FAILURES, message=_block_reason(db, dossier, blocked))
             label = STEP_LABELS.get(step, step)
             try:
                 if product is None:
@@ -716,6 +1153,24 @@ def run_step(dossier_id: int, step: str) -> dict[str, Any]:
             return {"ok": True, "step": step, "note": note}
     finally:
         db.close()
+
+
+def _block_reason(db: Session, dossier: SqhDossier, step: str) -> str:
+    from sqlalchemy import text
+
+    if step == "render":
+        errors = db.execute(
+            text("SELECT position, error FROM k_image_render_jobs WHERE product_id = :p AND status = 'failed' ORDER BY created_at DESC LIMIT 3"),
+            {"p": str(dossier.k_product_id)},
+            execution_options=SKIP_ORG_DATA_ISOLATION,
+        ).fetchall()
+        return "一张图都没出成:" + ";".join(f"第 {pos} 张 {str(err or '')[:120]}" for pos, err in errors) if errors else "一张图都没出成"
+    if step == "dispatch":
+        job_id = ((_pipe(dossier).get("publish") or {}).get("job_id"))
+        error = db.execute(text("SELECT error FROM p_upload_jobs WHERE job_id = :j"), {"j": job_id}, execution_options=SKIP_ORG_DATA_ISOLATION).scalar()
+        return f"推上独立站失败:{str(error or '没留原因')[:300]}"
+    last = k_ops.latest_jobs(db, dossier.k_product_id).get(JOB_TYPES.get(step, step)) or {}
+    return f"K 那边的任务失败:{last.get('error') or '没留原因'}"
 
 
 def _record_failure(db: Session, *, dossier_id: int, sku: str, step: str, message: str) -> dict[str, Any]:
@@ -772,13 +1227,23 @@ def after_decision(db: Session, card: SqhCard, *, decision: str) -> dict[str, An
         if decision == "approve":
             return {"ok": True, "note": "好,我这就按这个价改变体、选运费模板,然后接着写文案、出图。"}
         return {"ok": True, "note": "收到,我照你说的重算一版价格卡。"}
+    if card.kind == REVIEW_CARD_KIND:
+        if decision == "approve":
+            return {"ok": True, "note": "好,我这就保存图片、推上独立站(落草稿),推好了在 WP 后台能看到。"}
+        return {"ok": True, "note": "收到,我照你说的改,改好再给你看。"}
     step = str(evidence.get("step") or "")
     failures = dict(_pipe(dossier).get("failures") or {})
     failures.pop(step, None)
     if decision == "approve":
         # K 任务表里的失败从这一刻重新数(next_step 按 reset 之后的失败次数判停)
         reset = {**(_pipe(dossier).get("reset") or {}), step: datetime.now(UTC).isoformat()}
-        _save_pipe(dossier, failures=failures, blocked=None, reset=reset)
+        updates: dict[str, Any] = {"failures": failures, "blocked": None, "reset": reset}
+        if step == "dispatch":
+            # 上传失败那一单作废,重新推
+            updates["publish"] = {k: v for k, v in (_pipe(dossier).get("publish") or {}).items() if k not in {"job_id", "dispatched_at"}}
+        if step == "render":
+            updates["render"] = None  # 重新出一批
+        _save_pipe(dossier, **updates)
         db.flush()
         return {"ok": True, "note": f"好,我再试一次「{STEP_LABELS.get(step, step)}」,一会儿看结果。"}
     _save_pipe(dossier, failures=failures, blocked=None, stopped={"step": step, "card_ref": card.ref, "reason": card.decision_reason, "at": datetime.now(UTC).isoformat()})
@@ -829,6 +1294,9 @@ class Runner:
 __all__ = [
     "BLOCKED_CARD_KIND",
     "PIPELINE_CARD_KINDS",
+    "PRICE_CARD_KIND",
+    "REVIEW_CARD_KIND",
+    "staged_renders",
     "Runner",
     "STEP_LABELS",
     "View",

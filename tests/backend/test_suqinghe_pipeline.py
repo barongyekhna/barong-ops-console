@@ -255,3 +255,109 @@ def test_price_card_then_apply_variants_prices_and_shipping(built, monkeypatch: 
         assert product.shipping_class == pricing.DEFAULT_SHIPPING_CLASS and product.contains_battery is False
         blockers = gate_blockers(db, product)
         assert not [b for b in blockers if "价格" in b or "运费模板" in b], blockers
+
+
+def _stage_render(product_id: str, position: int, *, days_old: float = 2.0) -> str:
+    """一张 K 的暂存出图(k_auto_render),staged_at 设成几天前。"""
+    from datetime import timedelta
+
+    from backend.app.modules.k_series.product_knowledge.image_render_jobs import RENDER_PIPELINE_TAG
+    from backend.app.modules.k_series.product_knowledge.models import KProductKnowledgeMediaAsset
+
+    with without_org_data_isolation(), SessionLocal() as db:
+        asset = KProductKnowledgeMediaAsset(
+            product_id=product_id,
+            asset_type="image",
+            asset_role="main" if position == 1 else "gallery",
+            status="staged",
+            review_status="pending",
+            mime_type="image/webp",
+            metadata_json={
+                "render_pipeline": RENDER_PIPELINE_TAG,
+                "position": position,
+                "placement": "gallery",
+                "role_label": f"图{position}",
+                "staged_at": (datetime.now(UTC) - timedelta(days=days_old)).isoformat(),
+            },
+        )
+        db.add(asset)
+        db.commit()
+        return str(asset.id)
+
+
+def test_review_card_holds_its_images_then_rework_then_publish(built, monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from backend.app.modules.content_core import wc_sync
+    from backend.app.modules.k_series.product_knowledge import image_render_jobs as irj
+    from backend.app.modules.k_series.product_knowledge.models import KProductKnowledgeMediaAsset
+
+    dossier_id, product_id, owner = built
+    with without_org_data_isolation(), SessionLocal() as db:
+        product = db.get(KProductKnowledgeProduct, product_id)
+        product.marketing_copy_json = {
+            "seo": {"h1": "Squishy Dumpling Stress Toy", "title": "t"},
+            "product_page_copy": {"above_the_fold": {"headline": "Squeeze the stress away"}, "key_bullets": ["Soft TPR", "Slow rise"]},
+            "page_faq": [{"question": "q", "answer": "a"}],
+        }
+        product.selling_points_approved_json = {"review_status": "approved", "bullets": [{"id": "bp1", "text": "柔软 TPR", "category": "material", "importance_score": 8, "evidence": "verified_feature:x"}]}
+        product.brand_audit_json = {"clean": True, "image_violations": [], "text_violations": [], "errors": []}
+        db.commit()
+    first = [_stage_render(product_id, pos) for pos in (1, 2)]
+    monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: {"concerns": ["写了缓解焦虑就算健康功效,别写"]})
+    out = pipeline.run_step(dossier_id, "review_card")
+    assert out["ok"], out
+    ref = _pipe(dossier_id)["review"]["card_ref"]
+    with without_org_data_isolation(), SessionLocal() as db:
+        card = db.scalar(select(SqhCard).where(SqhCard.ref == ref))
+        assert card.kind == pipeline.REVIEW_CARD_KIND and [i["asset_id"] for i in card.evidence["images"]] == first
+        assert card.evidence["concerns"] == ["写了缓解焦虑就算健康功效,别写"] and "合规要你看" in card.why
+        assert card.evidence["copy"]["h1"] == "Squishy Dumpling Stress Toy"
+        # 暂存了两天,K 的 24 小时回收照样跑——审核卡上的图不收
+        assert irj.cleanup_stale_staged(db, product_id) == 0
+        db.commit()
+        assert {a.status for a in db.scalars(select(KProductKnowledgeMediaAsset).where(KProductKnowledgeMediaAsset.id.in_(first)))} == {"staged"}
+
+    # 驳回:她把老板的话对到第 2 张图,单张重做
+    _decide(ref, "reject", owner, reason="第二张图太暗")
+    reworked: list[tuple[str, str]] = []
+    monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: {"drop_points": [], "image_fixes": [{"position": 2, "instruction": "调亮"}], "unclear": ""})
+    monkeypatch.setattr(k_ops.KHands, "render_rework", lambda self, pid, *, asset_id, extra_prompt: reworked.append((str(asset_id), extra_prompt)))
+    out = pipeline.run_step(dossier_id, "rework")
+    assert out["ok"] and "第 2 张" in out["note"], out
+    assert reworked == [(first[1], "调亮(老板原话:第二张图太暗)")]
+    assert _pipe(dossier_id)["review"]["card_ref"] is None and _pipe(dossier_id)["review"]["history"][0]["reason"] == "第二张图太暗"
+
+    # 重做的图出来了(同一位置新的一张)→ 新审核卡带的是新图;老板批了 → 保存 → 推 → 回读 Woo
+    newer = _stage_render(product_id, 2, days_old=0)
+    assert pipeline.run_step(dossier_id, "review_card")["ok"]
+    ref2 = _pipe(dossier_id)["review"]["card_ref"]
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert [i["asset_id"] for i in db.scalar(select(SqhCard).where(SqhCard.ref == ref2)).evidence["images"]] == [first[0], newer]
+    assert "推上独立站" in _decide(ref2, "approve", owner)["note"]
+    calls: list[str] = []
+    monkeypatch.setattr(k_ops.KHands, "save_renders", lambda self, pid: calls.append("save"))
+    monkeypatch.setattr(k_ops.KHands, "dispatch", lambda self, pid: calls.append("dispatch") or SimpleNamespace(job_id="job-sqh-1"))
+    assert pipeline.run_step(dossier_id, "save_renders")["ok"]
+    assert pipeline.run_step(dossier_id, "dispatch")["ok"]
+    assert calls == ["save", "dispatch"]
+    with without_org_data_isolation(), SessionLocal() as db:
+        from sqlalchemy import text
+
+        db.execute(
+            text(
+                "INSERT INTO p_upload_jobs (job_id, product_id, channel, status, token, external_product_id, external_url, created_at, updated_at) "
+                "VALUES ('job-sqh-1', :p, 'woocommerce', 'success', 't', '4321', 'https://shop/p/4321', now(), now())"
+            ),
+            {"p": product_id},
+        )
+        db.commit()
+    monkeypatch.setattr(wc_sync, "fetch_product_states_safely", lambda db, ids: {4321: {"status": "draft"}})
+    out = pipeline.run_step(dossier_id, "readback")
+    assert out["ok"] and "#4321" in out["note"] and "draft" in out["note"], out
+    assert _pipe(dossier_id)["publish"]["live"]["status"] == "draft"
+    with without_org_data_isolation(), SessionLocal() as db:
+        db.execute(__import__("sqlalchemy").text("DELETE FROM p_upload_jobs WHERE job_id = 'job-sqh-1'"))
+        db.execute(delete(KProductKnowledgeMediaAsset).where(KProductKnowledgeMediaAsset.product_id == product_id, KProductKnowledgeMediaAsset.status == "staged"))
+        db.execute(delete(SqhCard).where(SqhCard.kind == pipeline.REVIEW_CARD_KIND))
+        db.commit()
