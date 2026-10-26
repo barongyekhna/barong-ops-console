@@ -147,4 +147,7 @@ test("读图出问题要说出来", () => {
   const budget = buildDossierView({ image_read: { images: 19, segments_seen: 9, stopped_reason: "budget", images_failed: 1 } });
   assert.equal(budget.reading.text, "详情图 19 张,读了 9 段,1 张打不开");
   assert.ok(budget.reading.problem.includes("预算"));
+  // 扔掉的读图结果要说出条数(10-26 电钻:续航读成「25%」)
+  const unit = buildDossierView({ image_read: { images: 11, segments_seen: 16, ignored_other: 1, ignored_unit: 2 } });
+  assert.equal(unit.reading.ignored, "已排除:别的商品 1 条、单位对不上 2 条");
 });

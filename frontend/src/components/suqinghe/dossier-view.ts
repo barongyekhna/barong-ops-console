@@ -286,6 +286,7 @@ function readingOf(value: unknown): DossierViewModel["reading"] {
     num("ignored_other") ? `别的商品 ${num("ignored_other")} 条` : "",
     num("ignored_narrative") ? `广告语 ${num("ignored_narrative")} 条` : "",
     num("ignored_drawing") ? `零件尺寸标注 ${num("ignored_drawing")} 条` : "",
+    num("ignored_unit") ? `单位对不上 ${num("ignored_unit")} 条` : "",
   ].filter(Boolean);
   return { text: line, problem, ignored: ignoredParts.length ? `已排除:${ignoredParts.join("、")}` : null };
 }

@@ -220,6 +220,34 @@ def _numbers(base: str, value: str, unit: str | None) -> tuple[float, ...] | Non
     return tuple(round(n * factor, 3) for n in numbers)
 
 
+# 「%」不是任何一种量的单位(10-26 电钻:广告图「续航持久」表盘上的 25% 被读成了续航)。
+_NOT_A_UNIT = {"%", "％"}
+_UNIT_TOKEN_TAIL = re.compile(r"\d\s*([a-zA-Z\"%％]+|[一-鿿]+)\s*$")
+
+
+def _wrong_unit(key: str, value: Any, unit: str | None) -> bool:
+    """读图给的单位属于另一种量(续航「25%」、容量「12V」、重量「84mm」)→ 这条说的不是这个字段。认不出的单位照收。"""
+    base = _base_key(key)
+    if base not in _UNIT_FACTORS:
+        return False
+    token = (unit or "").strip().casefold()
+    if not token:
+        tail = _UNIT_TOKEN_TAIL.search(_clean(value))
+        token = tail.group(1).casefold() if tail else ""
+    if token in _NOT_A_UNIT:
+        return True
+    family = next((name for name, table in _UNIT_FACTORS.items() if token in table), None)
+    return family is not None and family != base
+
+
+_DIM_SEPARATOR = re.compile(r"(?<=\d)\s*[*xX×＊]\s*(?=\d)")
+
+
+def _tidy(key: str, value: str) -> str:
+    """尺寸统一写成「153×40×40」(卖家和图上 *、x、X 都有)。"""
+    return _DIM_SEPARATOR.sub("×", value) if _base_key(key) == "dimensions" else value
+
+
 def _close(a: float, b: float, *, rel: float = 0.01, absolute: float = 0.0) -> bool:
     return abs(a - b) <= max(absolute, rel * max(abs(a), abs(b)), 1e-9)
 
@@ -492,10 +520,10 @@ def merge_specs(
 ) -> tuple[dict[str, dict[str, Any]], list[dict[str, str]]]:
     """属性表 + 标题 + 规格名 + 详情图事实 → {规格键: 字段}。返回 (specs, other_attributes)。
 
-    ``stats`` 传进来会被填上:扔掉了几条别的商品 / 广告语 / 零件尺寸标注。
+    ``stats`` 传进来会被填上:扔掉了几条别的商品 / 广告语 / 零件尺寸标注 / 单位对不上的。
     """
     stats = stats if stats is not None else {}
-    for name in ("ignored_other", "ignored_narrative", "ignored_drawing"):
+    for name in ("ignored_other", "ignored_narrative", "ignored_drawing", "ignored_unit"):
         stats.setdefault(name, 0)
     observations: dict[str, list[_Obs]] = {}
     placeholders: dict[str, list[dict[str, Any]]] = {}
@@ -516,7 +544,7 @@ def merge_specs(
             placeholders.setdefault(key, []).append(source)
             continue
         number, unit = _split_unit(_attr_value(key, value), None)
-        observations.setdefault(key, []).append(_Obs(number, unit, source, primary=True, strong=True))
+        observations.setdefault(key, []).append(_Obs(_tidy(key, number), unit, source, primary=True, strong=True))
 
     title = _clean(capture.get("title_zh"))
     for key, values in _values_in(title).items():
@@ -541,8 +569,11 @@ def merge_specs(
         number, unit = _split_unit(fact.get("value"), fact.get("unit"))
         if not number or is_placeholder(number):
             continue
+        if _wrong_unit(key, fact.get("value"), unit):
+            stats["ignored_unit"] += 1
+            continue
         strong = (fact.get("subject") or "this") == "this" and (fact.get("confidence") or "high") in {"high", "medium"}
-        observations.setdefault(key, []).append(_Obs(number, unit, _image_source(fact), primary=False, strong=strong))
+        observations.setdefault(key, []).append(_Obs(_tidy(key, number), unit, _image_source(fact), primary=False, strong=strong))
 
     specs: dict[str, dict[str, Any]] = {}
     for key in [*SPEC_LABELS_ZH, *(k for k in observations if k not in SPEC_LABELS_ZH)]:
@@ -825,6 +856,7 @@ def _image_read_summary(capture: dict[str, Any], image_read: dict[str, Any] | No
         "ignored_other": stats.get("ignored_other", 0),
         "ignored_narrative": stats.get("ignored_narrative", 0),
         "ignored_drawing": stats.get("ignored_drawing", 0),
+        "ignored_unit": stats.get("ignored_unit", 0),
         "detail_error": capture.get("detail_error"),
     }
 

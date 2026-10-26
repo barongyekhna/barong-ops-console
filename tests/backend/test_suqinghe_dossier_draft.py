@@ -272,7 +272,29 @@ def test_dimension_drawing_labels_merge_and_part_labels_are_dropped() -> None:
     # 同一段已有完整的长×宽×高,单个标注就是多余的
     facts = [_fact("dimensions", "153*40*40", "mm", image=13), _fact("dimensions", "35", "MM", image=13)]
     specs, _ = dossier.merge_specs(capture, facts, stats=(stats := {}))
-    assert specs["dimensions"]["value"] == "153*40*40" and stats["ignored_drawing"] == 1
+    assert specs["dimensions"]["value"] == "153×40×40" and stats["ignored_drawing"] == 1
+    # 页面属性里的 x 也统一成 ×,单位照常拆出来
+    specs, _ = dossier.merge_specs({"attributes": [{"name": "尺寸", "value": "15x4x4cm", "source": "page_json"}]}, [])
+    assert specs["dimensions"]["value"] == "15×4×4" and specs["dimensions"]["unit"] == "cm"
+
+
+def test_value_in_another_unit_is_not_this_field() -> None:
+    # 10-26 电钻(#9):广告图「续航持久」表盘上的 25% 被读成了续航,没标红就进了档案。
+    draft = _draft_with(_real_capture(DRILL), [_fact("runtime", "25", "%", image=5), _fact("runtime", "25%", image=5, segment=1)])
+    assert "runtime" not in draft["specs"]
+    assert draft["image_read"]["ignored_unit"] == 2
+    # 别的量的单位同理;认不出的单位(Wh)照收,宁可多列也不悄悄丢
+    facts = [
+        _fact("capacity", "12", "V", image=6),
+        _fact("weight", "84", "mm", image=7),
+        _fact("runtime", "3-5 小时", image=8),
+        _fact("capacity", "18", "Wh", image=9),
+    ]
+    stats: dict = {}
+    specs, _ = dossier.merge_specs({"attributes": [], "title_zh": "露营灯"}, facts, stats=stats)
+    assert stats["ignored_unit"] == 2 and "weight" not in specs
+    assert (specs["runtime"]["value"], specs["runtime"]["unit"]) == ("3-5", "小时")
+    assert (specs["capacity"]["value"], specs["capacity"]["unit"]) == ("18", "Wh")
 
 
 def test_title_vs_attribute_is_a_real_conflict_and_consult_service_is_a_placeholder() -> None:
