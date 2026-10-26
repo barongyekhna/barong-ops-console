@@ -20,6 +20,7 @@ from ....db.session import get_db
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import cards, dossiers, memory, office
+from . import pipeline as _pipeline  # noqa: F401 —— 导入即登记 k_price 指纹(价格卡批之前核 K 里的价有没有人动过)
 from . import snapshot as _snapshot  # noqa: F401 —— 导入即登记 product_gate 指纹,批卡前才能查数据变没变
 from .constants import MEMORY_KINDS
 from .models import SqhDossier, SqhGoal, SqhMemory, SqhSnapshot

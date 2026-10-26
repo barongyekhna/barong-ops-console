@@ -15,7 +15,6 @@ pytestmark = pytest.mark.unit
 def _view(**overrides) -> View:
     base = dict(
         material_done=True,
-        english_done=True,
         stopped=False,
         blocked_step=None,
         execution_status=None,
@@ -35,9 +34,6 @@ def _view(**overrides) -> View:
     ("overrides", "expected"),
     [
         ({"material_done": False}, "material"),
-        ({"english_done": False}, "english_specs"),
-        # 规格英文排在卖点前面:关键词都跑完了也要先补(改规格会作废已批的卖点)
-        ({"english_done": False, "risk_approved": True, "execution_status": "blocked", "sp_approved": True}, "english_specs"),
         ({}, "keywords"),
         ({"execution_status": "running", "execution_minutes": 5}, None),  # K 还在跑,等
         ({"execution_status": "running", "execution_minutes": 90}, "keywords_retry"),  # 跑到一半断了
@@ -51,7 +47,13 @@ def _view(**overrides) -> View:
         # K 那边连着失败两次 → 停手发卡,不再重排(排队那一下总是「成功」的,不能按它数)
         ({"risk_approved": True, "execution_status": "blocked", "sp_job": "failed", "sp_failures": 2}, "block:selling_points"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_job": "completed", "sp_candidates": True}, "approve_selling_points"),
-        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True}, None),  # 等价格卡
+        # 卖点批完 → 价格卡:没发过/被驳/作废 → 出一张;在等老板 → 等;批了 → 去 K 里改;改完 → 下一段(文案)
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True}, "price_card"),
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "pending"}, None),
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "rejected"}, "price_card"),
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "stale"}, "price_card"),
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved"}, "apply_price"),
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved", "price_applied": True, "shipping_set": True}, None),
         ({"blocked_step": "keywords"}, None),  # 「卡住」卡在等老板
         ({"stopped": True, "material_done": False}, None),  # 老板说这个品先不做
     ],

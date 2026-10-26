@@ -75,6 +75,9 @@ PROVIDER_AMZ_KEEPA = "amz_keepa_tokens"
 # SM 社媒写手(DeepSeek 生成一条帖子 = 1 次)。新出网付费调用当天接台账(铁律)。
 # 默认 200/天:mock 期四周日历满打满算约 150 格,够一次性写完还留余量。
 PROVIDER_SM_WRITER = "sm_writer_deepseek"
+# 苏青禾定价比价:谷歌购物(Serper /shopping)按主关键词搜一次 = 1 次。新出网付费调用当天接台账(铁律)。
+# 默认 30/天:一个品只在出价格卡时搜一次(被驳重算会再搜),一天上十几个品也用不完。
+PROVIDER_SQH_SERPER_SHOPPING = "sqh_serper_shopping"
 
 DEFAULT_DAILY_BUDGETS = {
     PROVIDER_1688_IMAGE_SEARCH: 330,
@@ -101,6 +104,7 @@ DEFAULT_DAILY_BUDGETS = {
     PROVIDER_AMZ_REVIEWS: 0,
     PROVIDER_AMZ_KEEPA: 150,
     PROVIDER_SM_WRITER: 200,
+    PROVIDER_SQH_SERPER_SHOPPING: 30,
 }
 
 BUDGET_ENV_NAMES = {
@@ -125,6 +129,7 @@ BUDGET_ENV_NAMES = {
     PROVIDER_AMZ_REVIEWS: "AMZ_REVIEWS_DAILY_BUDGET",
     PROVIDER_AMZ_KEEPA: "AMZ_KEEPA_DAILY_BUDGET",
     PROVIDER_SM_WRITER: "SM_WRITER_DAILY_BUDGET",
+    PROVIDER_SQH_SERPER_SHOPPING: "SQH_SERPER_DAILY_BUDGET",
 }
 
 
@@ -164,6 +169,7 @@ def provider_label(provider: str) -> str:
         PROVIDER_AMZ_REVIEWS: "亚马逊评论归簇",
         PROVIDER_AMZ_KEEPA: "亚马逊竞品盯盘(Keepa)",
         PROVIDER_SM_WRITER: "SM 社媒写手",
+        PROVIDER_SQH_SERPER_SHOPPING: "苏青禾定价比价(谷歌购物)",
     }.get(provider, provider)
 
 

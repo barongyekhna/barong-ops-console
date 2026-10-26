@@ -2,7 +2,7 @@
 
 她建进 K 的产品(档案 created),她自己按顺序往下推,和运营在 K 里点按钮一样(k_ops.KHands,身份是批建档卡的老板):
 
-  卖点素材 → 规格的英文 → 主关键词 → 关键词(K 工作流:富化 → SERP → 两道筛,停在风险词)→ 风险词(她判)
+  卖点素材 → 主关键词 → 关键词(K 工作流:富化 → SERP → 两道筛,停在风险词)→ 风险词(她判)
   → 卖点(K 生成 → 她批)→【价格卡,老板批】→ 文案 → 作图指令 → 出图 →【审核卡,老板批】→ 保存图片 → 推上独立站(草稿)
 
 价格卡排在文案前面:K 写文案按变体的包装数量写,颜色变体的主图要变体参考图——变体和售价得先定。
@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, english_specs, k_ops, material, memory
+from . import cards, k_ops, material, memory, pricing
 from .constants import USAGE_LABEL
 from .models import SqhCard, SqhDossier
 
@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 # 她推流水线时自己的 AI 判断(主关键词、风险词)记在这个名下;K 自己的调用记在 K 名下。
 PIPELINE_USAGE_LABEL = f"{USAGE_LABEL}.k"
 BLOCKED_CARD_KIND = "k_blocked"
-PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND,)
+PRICE_CARD_KIND = "k_price"
+PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND, PRICE_CARD_KIND)
 MAX_STEP_FAILURES = 2
 # K 工作流的「running」超过这么久没动静,当成上一次跑到一半断了(worker 重启之类),从断的那步重跑
 RUNNING_STALE_MINUTES = 40
@@ -50,12 +51,13 @@ JUDGE_TIMEOUT_SECONDS = 120.0
 
 STEP_LABELS = {
     "material": "收卖点素材",
-    "english_specs": "补规格的英文",
     "keywords": "跑关键词",
     "keywords_retry": "重跑关键词",
     "risk_review": "判风险词",
     "selling_points": "生成卖点",
     "approve_selling_points": "批卖点",
+    "price_card": "出价格卡",
+    "apply_price": "按批的价改变体、选运费模板",
 }
 
 
@@ -67,7 +69,6 @@ class View:
     """一个产品在 K 里走到哪了。全是从 K 和档案里读出来的事实,不是她另记的进度。"""
 
     material_done: bool
-    english_done: bool  # 买家规格表要的英文补好了(K 只展示带英文的规格行)
     stopped: bool  # 老板驳了「卡住」卡:这个品先不做
     blocked_step: str | None  # 「卡住」卡还在等老板
     execution_status: str | None
@@ -78,6 +79,9 @@ class View:
     sp_failures: int  # K 生成卖点失败了几次(老板批「再试」后重新数)
     sp_candidates: bool
     sp_approved: bool
+    price_applied: bool = False  # 售价填进 K 了(多变体每个都有价 / 单品有价)
+    shipping_set: bool = False  # 运费模板选好了
+    price_card: str | None = None  # 最近一张价格卡的状态
 
 
 def next_step(view: View) -> str | None:
@@ -86,8 +90,6 @@ def next_step(view: View) -> str | None:
         return None
     if not view.material_done:
         return "material"
-    if not view.english_done:
-        return "english_specs"  # 改规格会作废已批的卖点,所以排在卖点前面
     if view.execution_status is None:
         return "keywords"
     if view.execution_status in {"running", "created"}:
@@ -96,7 +98,11 @@ def next_step(view: View) -> str | None:
         # 停在风险词 = 正常;停在别处(SERP、两道筛失败,blocked/failed 带错误码)= 重跑那一步
         return "risk_review" if view.execution_step in RISK_STEPS else "keywords_retry"
     if view.sp_approved:
-        return None  # 下一步是价格卡
+        if view.price_applied and view.shipping_set:
+            return None  # 下一步是文案(下一段)
+        if view.price_card == "pending":
+            return None  # 等老板批价格卡
+        return "apply_price" if view.price_card == "approved" else "price_card"
     if view.sp_job in {"pending", "running"}:
         return None
     if view.sp_candidates:
@@ -140,7 +146,6 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
     material_version = (draft.get("material") or {}).get("version") if isinstance(draft.get("material"), dict) else None
     return View(
         material_done=(material_version or 0) >= material.MATERIAL_VERSION,
-        english_done=bool(pipe.get("english_specs")) or english_specs.done(product.structured_specs_json),
         stopped=bool(pipe.get("stopped")),
         blocked_step=(pipe.get("blocked") or {}).get("step") if isinstance(pipe.get("blocked"), dict) else None,
         execution_status=getattr(execution, "status", None),
@@ -151,7 +156,23 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
         sp_failures=k_ops.failed_attempts(db, product.id, "selling_points", since=(pipe.get("reset") or {}).get("selling_points")),
         sp_candidates=candidates.get("review_status") == "candidate" and bool(_bullets(candidates)),
         sp_approved=approved.get("review_status") == "approved" and bool(_bullets(approved)),
+        price_applied=_price_applied(db, product),
+        shipping_set=bool((product.shipping_class or "").strip()),
+        price_card=_card_status(db, (pipe.get("price") or {}).get("card_ref")),
     )
+
+
+def _price_applied(db: Session, product: Any) -> bool:
+    if (product.product_type or "") == "variable_product":
+        prices = [v.price_override for v in k_ops.variant_rows(db, product.id)]
+        return bool(prices) and all(p is not None for p in prices)
+    return product.regular_price is not None
+
+
+def _card_status(db: Session, ref: Any) -> str | None:
+    if not ref:
+        return None
+    return db.scalar(select(SqhCard.status).where(SqhCard.ref == str(ref)), execution_options=SKIP_ORG_DATA_ISOLATION)
 
 
 # ---------------------------------------------------------------- 她管哪些产品
@@ -400,25 +421,6 @@ def _drop_old_material(ctx: Ctx) -> None:
     ctx.db.flush()
 
 
-def _step_english_specs(ctx: Ctx) -> str:
-    draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
-    rows, todo = english_specs.plan(ctx.product.structured_specs_json, draft.get("specs") or {})
-    translated: dict[str, Any] = {}
-    if todo:
-        from .brain import parse_json
-
-        listing = "\n".join(f"- {key}: {value}" for key, value in todo.items())
-        result = _judge(ctx.db, english_specs.TRANSLATE_ASK, _product_brief(ctx.dossier, ctx.product), f"要翻的规格值:\n{listing}", role="fast")
-        data = parse_json(result)
-        translated = data.get("values") if isinstance(data, dict) and isinstance(data.get("values"), dict) else {}
-    rows, missed = english_specs.apply_translations(rows, translated)
-    specs = {**(ctx.product.structured_specs_json or {}), "additional_specs": rows}
-    ctx.hands.update_product(ctx.product.id, structured_specs_json=specs)
-    english = [r for r in rows if r.get("label_en") and r.get("value_en")]
-    _save_pipe(ctx.dossier, english_specs={"rows": len(english), "missed": missed, "at": datetime.now(UTC).isoformat()})
-    return f"规格补了英文 {len(english)} 行" + (f",{len(missed)} 行翻不出来没给(K 不展示它)" if missed else "")
-
-
 def _keyword_choice(ctx: Ctx) -> dict[str, Any]:
     pipe = _pipe(ctx.dossier)
     if pipe.get("main_keyword"):
@@ -510,17 +512,164 @@ def rejected_indexes(detail: Any) -> dict[int, str]:
     return out
 
 
+def _contains_battery(dossier: SqhDossier) -> bool:
+    """带锂电的走带电线路(运费模板上标「含电池」)。规格里有电芯/容量,或者品名带电池、锂电、充电。"""
+    draft = dossier.draft if isinstance(dossier.draft, dict) else {}
+    specs = draft.get("specs") or {}
+    if any(isinstance(specs.get(k), dict) and specs[k].get("status") == "ok" for k in ("battery_type", "capacity")):
+        return True
+    name = str(((draft.get("fields") or {}).get("name_zh") or {}).get("value") or "")
+    return any(word in name for word in ("电池", "锂电", "充电"))
+
+
+def _step_price_card(ctx: Ctx) -> str:
+    draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
+    pipe = _pipe(ctx.dossier)
+    a = pricing.assumptions()
+    lines = pricing.cost_lines([v for v in draft.get("variants") or [] if isinstance(v, dict)], a)
+    if not lines:
+        raise StepError("档案里没有规格和进价,算不了价")
+    query = pipe.get("main_keyword") or ctx.product.primary_keyword or ctx.product.product_name_en or ""
+    competitors = pricing.fetch_shopping(ctx.db, query=query, org_id=ctx.hands.org_id)
+    previous = (pipe.get("price") or {}).get("card_ref")
+    boss_reason = None
+    if previous and _card_status(ctx.db, previous) == "rejected":
+        boss_reason = ctx.db.scalar(select(SqhCard.decision_reason).where(SqhCard.ref == previous), execution_options=SKIP_ORG_DATA_ISOLATION)
+    extra = pricing.price_prompt_extra(lines, competitors, a, boss_reason=boss_reason)
+    result = _judge(ctx.db, pricing.PRICE_ASK, _product_brief(ctx.dossier, ctx.product), extra)
+    lines, questions, summary = pricing.apply_plan(lines, result, a)
+    included = [line for line in lines if line.include and line.price is not None]
+    if not included:
+        raise StepError("一个能卖的规格都算不出价(缺进价或重量)")
+    battery = _contains_battery(ctx.dossier)
+    sku = ctx.product.sku
+    low, high = min(line.price for line in included), max(line.price for line in included)
+    margins = [line.margin for line in included if line.margin is not None]
+    price_text = f"${low:.2f}" if low == high else f"${low:.2f}–${high:.2f}"
+    card, _ = cards.create_card(
+        ctx.db,
+        dedupe_key=f"k_price:{ctx.product.id}:{datetime.now(UTC).isoformat()}",
+        kind=PRICE_CARD_KIND,
+        title=f"{sku} 定价 {price_text}"[:60],
+        conclusion=(
+            f"{len(included)} 个规格,建议售价 {price_text},单件毛利率 {min(margins):.0%}–{max(margins):.0%}。"
+            f"批了我就把它改成{'多变体' if len(included) > 1 else '单品'}、填价,运费模板选 {pricing.DEFAULT_SHIPPING_CLASS}"
+            f"{'(含电池)' if battery else ''},然后接着写文案、出图。要改价就驳回,写上你要的价。"
+        ),
+        why="\n".join(
+            part
+            for part in (
+                pricing.lines_text(lines),
+                summary,
+                *[f"要你定:{q}" for q in questions],
+                pricing.competitors_text(competitors),
+                pricing.assumption_text(a),
+            )
+            if part
+        ),
+        if_not="不定价,K 写不了文案(文案按规格写),后面的图片和上架都停着。",
+        reversible=True,
+        confidence="medium",
+        evidence={
+            "dossier_id": ctx.dossier.id,
+            "k_product_id": str(ctx.product.id),
+            "sku": sku,
+            "main_keyword": query,
+            "variants": [line.as_dict() for line in lines],
+            "competitors": competitors,
+            "questions": questions,
+            "summary": summary,
+            "assumptions": {k: getattr(a, k) for k in a.__dataclass_fields__},
+            "shipping": {"class": pricing.DEFAULT_SHIPPING_CLASS, "contains_battery": battery},
+            "boss_reason": boss_reason,
+            "recheck": {"type": PRICE_CARD_KIND, "product_id": str(ctx.product.id)},
+        },
+    )
+    _save_pipe(ctx.dossier, price={"card_ref": card.ref, "at": datetime.now(UTC).isoformat()})
+    return f"价格卡 #{card.ref} 发了:{len(included)} 个规格 {price_text}"
+
+
+def _step_apply_price(ctx: Ctx) -> str:
+    ref = (_pipe(ctx.dossier).get("price") or {}).get("card_ref")
+    card = ctx.db.scalar(select(SqhCard).where(SqhCard.ref == str(ref)), execution_options=SKIP_ORG_DATA_ISOLATION) if ref else None
+    if card is None or card.status != "approved":
+        raise StepError("找不到批过的价格卡")
+    evidence = card.evidence if isinstance(card.evidence, dict) else {}
+    lines = [line for line in evidence.get("variants") or [] if isinstance(line, dict) and line.get("include") and line.get("price")]
+    if not lines:
+        raise StepError("价格卡上没有要卖的规格")
+    heaviest = max(lines, key=lambda line: line.get("weight_g") or 0)
+    physical: dict[str, Any] = {"price_currency": "USD"}
+    if heaviest.get("weight_g"):
+        physical["package_weight_json"] = {"value": heaviest["weight_g"], "unit": "g"}
+    if isinstance(heaviest.get("dims_cm"), list) and len(heaviest["dims_cm"]) == 3:
+        length, width, height = heaviest["dims_cm"]
+        physical["package_dimensions_json"] = {"length": length, "width": width, "height": height, "unit": "cm"}
+    if len(lines) == 1:
+        ctx.hands.update_product(ctx.product.id, regular_price=lines[0]["price"], **physical)
+    else:
+        default = next((v for v in k_ops.variant_rows(ctx.db, ctx.product.id) if (v.attributes_json or {}).get("default_variant")), None)
+        variants = []
+        for index, line in enumerate(lines):
+            label = line.get("label_en") or line.get("name_en")
+            axis = line.get("axis") or "function"
+            count = re.search(r"\d+", str(label or "")) if axis == "quantity" else None
+            # K 的 quantity 是整数(几件装);标签里抠不出数就按 function 放
+            item: dict[str, Any] = {"quantity": int(count.group())} if count else {("function" if axis == "quantity" else axis): label}
+            item["price_override"] = line["price"]
+            if index == 0 and default is not None:
+                item["variant_id"] = default.id  # 原来那条默认变体挂着参考图,原地改,删了会 409
+            if line.get("weight_g"):
+                item["weight_json"] = {"value": line["weight_g"], "unit": "g"}
+            if isinstance(line.get("dims_cm"), list) and len(line["dims_cm"]) == 3:
+                item["dimensions_json"] = dict(zip(("length", "width", "height"), line["dims_cm"]), unit="cm")
+            if line.get("axis") == "color" and line.get("image_url"):
+                item["reference_image_url"] = line["image_url"]
+            variants.append(item)
+        ctx.hands.sync_variants(ctx.product.id, product_type="variable_product", variants=variants)
+        ctx.hands.update_product(ctx.product.id, **physical)
+    shipping = evidence.get("shipping") or {}
+    ctx.db.expire_all()
+    from ...k_series.product_knowledge.models import KProductKnowledgeProduct as P
+
+    product = ctx.db.get(P, ctx.product.id, execution_options=SKIP_ORG_DATA_ISOLATION)
+    ctx.hands.set_shipping(product, shipping_class_slug=shipping.get("class") or pricing.DEFAULT_SHIPPING_CLASS, contains_battery=bool(shipping.get("contains_battery")))
+    ctx.db.expire_all()
+    product = ctx.db.get(P, ctx.product.id, execution_options=SKIP_ORG_DATA_ISOLATION)
+    if not (_price_applied(ctx.db, product) and (product.shipping_class or "").strip()):
+        raise StepError("改完回读:价格或运费模板没落上")
+    return f"按批的价改好了:{len(lines)} 个规格,运费模板 {product.shipping_class}"
+
+
+def _price_fingerprint(db: Session, recheck: dict[str, Any]) -> str:
+    """价格卡建好之后,K 里这个品的类型、变体、价格有人动过 → 卡作废重出(批的时候核)。"""
+    from ...k_series.product_knowledge.models import KProductKnowledgeProduct as P
+
+    try:
+        product = db.get(P, UUID(str(recheck.get("product_id"))), execution_options=SKIP_ORG_DATA_ISOLATION)
+    except (TypeError, ValueError):
+        product = None
+    if product is None:
+        return cards.fingerprint({"missing": True})
+    variants = sorted((str(v.id), str(v.price_override)) for v in k_ops.variant_rows(db, product.id))
+    return cards.fingerprint({"type": product.product_type, "price": str(product.regular_price), "variants": variants})
+
+
+cards.register_fingerprinter(PRICE_CARD_KIND, _price_fingerprint)
+
+
 # 排进 K 队列的那几步各对应 K 的哪种任务(失败按 K 的任务表数)
 JOB_TYPES = {"selling_points": "selling_points"}
 
 STEPS = {
     "material": _step_material,
-    "english_specs": _step_english_specs,
     "keywords": lambda ctx: _step_keywords(ctx, retry=False),
     "keywords_retry": lambda ctx: _step_keywords(ctx, retry=True),
     "risk_review": _step_risk_review,
     "selling_points": _step_selling_points,
     "approve_selling_points": _step_approve_selling_points,
+    "price_card": _step_price_card,
+    "apply_price": _step_apply_price,
 }
 
 
@@ -618,6 +767,11 @@ def after_decision(db: Session, card: SqhCard, *, decision: str) -> dict[str, An
     dossier = db.get(SqhDossier, int(evidence.get("dossier_id") or 0), execution_options=SKIP_ORG_DATA_ISOLATION)
     if dossier is None:
         return {"ok": False, "note": "卡上的档案不在了。"}
+    if card.kind == PRICE_CARD_KIND:
+        # 真正去改交给流水线线程(apply_price / 重出价格卡),这里只回一句
+        if decision == "approve":
+            return {"ok": True, "note": "好,我这就按这个价改变体、选运费模板,然后接着写文案、出图。"}
+        return {"ok": True, "note": "收到,我照你说的重算一版价格卡。"}
     step = str(evidence.get("step") or "")
     failures = dict(_pipe(dossier).get("failures") or {})
     failures.pop(step, None)

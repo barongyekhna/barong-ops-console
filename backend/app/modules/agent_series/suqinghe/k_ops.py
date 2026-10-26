@@ -127,6 +127,37 @@ class KHands:
 
         return _call(k.product_knowledge_update, product_id=product_id, payload=ProductKnowledgeUpdate(**fields), **self._ctx())
 
+    def sync_variants(self, product_id: UUID, *, product_type: str, variants: list[dict[str, Any]]) -> Any:
+        """「基础档案」面板改类型和变体:多变体每个都要有价;payload 里没列的旧变体会被删(还挂着图的删不掉,409)。"""
+        from ...k_series.product_knowledge import router as k
+        from ...k_series.product_knowledge.schemas import ProductKnowledgeVariantsSync
+
+        payload = ProductKnowledgeVariantsSync(product_type=product_type, variants=variants)
+        return _call(k.product_knowledge_variants_sync, product_id=product_id, payload=payload, **self._ctx())
+
+    def set_shipping(self, product: Any, *, shipping_class_slug: str, contains_battery: bool) -> None:
+        """W-S 物流中枢的「手动指定运费模板」(和 W 页面同一个服务函数;W 的门槛是 w.site_ops.manage,owner 直通)。"""
+        from ....core.roles import is_owner_role
+        from ...w_series.shipping import service as shipping
+
+        if not is_owner_role(getattr(self.actor, "role", "") or ""):
+            raise KOpError("W_PERMISSION_DENIED", "指定运费模板要老板的身份。")
+        try:
+            shipping.manually_update_product(
+                self.db,
+                product,
+                shipping_class_present=True,
+                shipping_class_slug=shipping_class_slug,
+                contains_battery_present=True,
+                contains_battery=contains_battery,
+                us_stock_present=False,
+                us_stock=None,
+                clear_review=True,
+            )
+        except ValueError as exc:
+            raise KOpError("W_SHIPPING_INVALID", str(exc)) from exc
+        self.db.commit()
+
     # ---- 卖点 ----
 
     def generate_selling_points(self, product_id: UUID) -> Any:
@@ -181,4 +212,12 @@ def failed_attempts(db: Session, product_id: Any, job_type: str, *, since: Any =
     return int(db.execute(text(sql), params, execution_options=SKIP_ORG_DATA_ISOLATION).scalar() or 0)
 
 
-__all__ = ["KHands", "KOpError", "failed_attempts", "latest_execution", "latest_jobs", "stand_in_request"]
+def variant_rows(db: Session, product_id: Any) -> list[Any]:
+    from sqlalchemy import select
+
+    from ...k_series.product_knowledge.models import KProductKnowledgeVariant as V
+
+    return list(db.scalars(select(V).where(V.product_id == product_id).order_by(V.created_at), execution_options=SKIP_ORG_DATA_ISOLATION))
+
+
+__all__ = ["KHands", "KOpError", "failed_attempts", "latest_execution", "latest_jobs", "stand_in_request", "variant_rows"]

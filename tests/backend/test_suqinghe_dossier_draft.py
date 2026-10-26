@@ -149,7 +149,7 @@ def test_specs_reach_k_named_by_what_they_are(offer_id: str) -> None:
     上面那条只验了 K 收不收,没验写进去的对不对。
     """
     rows, draft = _k_spec_rows(offer_id)
-    ok = {key: item for key, item in draft["specs"].items() if item["status"] == "ok"}
+    ok = {key: item for key, item in draft["specs"].items() if item["status"] == "ok" and key not in executor.HELD_SPEC_KEYS}
     assert [row["key"] for row in rows] == [f"sqh_{key}" for key in ok]
     for row, (key, item) in zip(rows, ok.items()):
         assert row["label"] == dossier.SPEC_LABELS_ZH[key]
@@ -168,8 +168,9 @@ def test_battery_spec_panel_in_k() -> None:
         ("循环次数", "500 次", "详情图 7 · 第 1 段"),
         ("尺寸(单品)", "84×48×40 mm", "详情图 11 · 第 1 段"),
         ("电池/电芯", "18650、Li-ion、全新A品电芯、锂电工具电池", "详情图 7 · 第 1 段"),
-        ("认证", "MSDS、ce、UN38.3、UL 1642 Lithium Batteries、FCC Part 15 Subpart B (Class B)", "属性「产品认证」"),
     ]
+    # 认证留在档案里给老板看,不进 K(进了 K 就上买家规格表和卖点;没证书不能对买家说)
+    assert "certification" in _k_spec_rows("643348607768")[1]["specs"]
 
 
 @pytest.mark.parametrize("offer_id", ["643348607768", "773137484620", "888786557113"])

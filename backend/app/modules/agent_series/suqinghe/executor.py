@@ -35,6 +35,10 @@ from .models import SqhCard, SqhDossier
 
 logger = logging.getLogger(__name__)
 SOURCE_SYSTEM = "1688"
+# 留在档案里、不写进 K 的规格:认证是卖家自己填的(「UL 1642、UN38.3、FCC」「QB/T2198、GB7000」),
+# 写进 K 就会出现在买家看的规格表和卖点里——没证书在手对买家说「通过某某认证」= GMC 那次的 Misrepresentation。
+# 老板手上有证书,再手动加进 K。(10-26 预演:电池的买家规格表里赫然一行 Certification)
+HELD_SPEC_KEYS = frozenset({"certification"})
 
 
 class ExecutorError(RuntimeError):
@@ -88,6 +92,8 @@ def build_create_payload(dossier: SqhDossier) -> dict[str, Any]:
 
     additional: list[dict[str, Any]] = []
     for key, item in specs.items():
+        if key in HELD_SPEC_KEYS:
+            continue
         value = _ok(item)
         if value in (None, ""):
             continue

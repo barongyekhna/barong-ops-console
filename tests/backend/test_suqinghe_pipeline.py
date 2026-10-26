@@ -126,7 +126,7 @@ def test_material_lands_in_k_as_evidence_and_hype_waits_for_the_boss(built, monk
         ]
         draft = db.get(SqhDossier, dossier_id).draft
         assert [r["text"] for r in draft["material"]["hype"]] == ["秒杀同类"]
-    assert _pick() == (dossier_id, "english_specs")  # 下一步补规格的英文(在卖点之前)
+    assert _pick() == (dossier_id, "keywords")
 
     # 素材规则升级后重读:旧的那几行先删掉,不留下一半旧一半新
     newer = material.summarize({"facts": [{"text": "Type-C 充电", "kind": "feature", "subject": "this", "confidence": "high", "image_index": 0, "segment_index": 0}]})
@@ -162,7 +162,6 @@ def test_keywords_then_risk_review_hand_her_judgement_to_k(built, monkeypatch: p
         dossier.draft = {
             **dossier.draft,
             "material": {"features": [], "claims": [], "hype": [], "version": material.MATERIAL_VERSION},
-            "pipeline": {"english_specs": {"rows": 0, "missed": [], "at": "t"}},
         }
         db.commit()
     answers = iter(
@@ -201,18 +200,58 @@ def test_keywords_then_risk_review_hand_her_judgement_to_k(built, monkeypatch: p
     assert _pipe(dossier_id)["risk"]["decisions"] == reviewed["decisions"]
 
 
-def test_english_specs_go_through_k_and_show_in_the_buyer_table(built, monkeypatch: pytest.MonkeyPatch) -> None:
-    from backend.app.modules.k_series.product_knowledge.buyer_display import buyer_spec_rows
+def test_price_card_then_apply_variants_prices_and_shipping(built, monkeypatch: pytest.MonkeyPatch) -> None:
+    """价格卡:她算、老板批;批了她才去 K 里改成多变体、填价、选运费模板。驳了按老板的话重出一张。"""
+    from backend.app.modules.agent_series.suqinghe import pricing
+    from backend.app.modules.p_series.upload.assemble import gate_blockers
+    from backend.app.modules.w_series.shipping.models import WShippingClass
 
-    dossier_id, product_id, _ = built
+    dossier_id, product_id, owner = built
+    variants = [
+        {"name_zh": "黑色", "name_en": "Black", "cost_price_cny": 20.0, "weight_g": 200.0, "dims_cm": [10.0, 8.0, 6.0]},
+        {"name_zh": "绿色", "name_en": "Green", "cost_price_cny": 20.0, "weight_g": None, "dims_cm": None},
+    ]
     with without_org_data_isolation(), SessionLocal() as db:
-        before = db.get(KProductKnowledgeProduct, product_id).structured_specs_json
-        assert buyer_spec_rows(before, target_market="US") == []  # 建档写进去的全是中文,买家表一行没有
-    monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: {"values": {"material": "TPR rubber", "age_range": "Ages 3+"}})
-    out = pipeline.run_step(dossier_id, "english_specs")
+        dossier = db.get(SqhDossier, dossier_id)
+        dossier.draft = {**dossier.draft, "variants": variants, "pipeline": {"main_keyword": "squishy stress toy"}}
+        if not db.scalar(select(WShippingClass).where(WShippingClass.slug == pricing.DEFAULT_SHIPPING_CLASS)):
+            db.add(WShippingClass(slug=pricing.DEFAULT_SHIPPING_CLASS, name="中国直发-标准线", zone_rates_json=[], origin="cn_direct"))
+        db.commit()
+    shops: list[str] = []
+    monkeypatch.setattr(pricing, "fetch_shopping", lambda db, *, query, org_id: shops.append(query) or {"query": query, "n": 5, "min": 8.99, "p25": 11.99, "median": 14.99, "p75": 17.99, "max": 24.99, "samples": []})
+    asks: list[str] = []
+
+    def judge(db, ask, brief, extra, **kw):
+        asks.append(extra)
+        return {"variants": [{"key": "v1", "include": True, "price": 1.0, "label_en": "Black", "axis": "color"}, {"key": "v2", "include": True, "price": 15.99, "label_en": "Green", "axis": "color"}], "questions": [], "summary": "按颜色"}
+
+    monkeypatch.setattr(pipeline, "_judge", judge)
+    out = pipeline.run_step(dossier_id, "price_card")
+    assert out["ok"], out
+    ref = _pipe(dossier_id)["price"]["card_ref"]
+    with without_org_data_isolation(), SessionLocal() as db:
+        card = db.scalar(select(SqhCard).where(SqhCard.ref == ref))
+        lines = {line["label_en"]: line for line in card.evidence["variants"]}
+        assert card.kind == pipeline.PRICE_CARD_KIND and card.status == "pending"
+        assert lines["Black"]["price"] == lines["Black"]["floor"] > 1.0  # 模型给 $1 → 抬到保底价
+        assert lines["Green"]["price"] == 15.99 and "没写这个规格的重量" in lines["Green"]["weight_note"]
+        assert shops == ["squishy stress toy"]
+
+    # 驳回:下一张价格卡带着老板的话去问模型
+    assert "重算" in _decide(ref, "reject", owner, reason="绿色卖 19.99")["note"]
+    assert pipeline.run_step(dossier_id, "price_card")["ok"]
+    assert "绿色卖 19.99" in asks[-1]
+    ref2 = _pipe(dossier_id)["price"]["card_ref"]
+    assert ref2 != ref
+
+    assert "改变体" in _decide(ref2, "approve", owner)["note"]
+    out = pipeline.run_step(dossier_id, "apply_price")
     assert out["ok"], out
     with without_org_data_isolation(), SessionLocal() as db:
-        after = db.get(KProductKnowledgeProduct, product_id).structured_specs_json
-        assert buyer_spec_rows(after, target_market="US"), after
-        assert all(not row.get("label_en") or row.get("value_en") for row in after["additional_specs"])
-    assert _pipe(dossier_id)["english_specs"]["rows"] >= 1
+        product = db.get(KProductKnowledgeProduct, product_id)
+        assert product.product_type == "variable_product"
+        rows = k_ops.variant_rows(db, product_id)
+        assert sorted((v.color, float(v.price_override)) for v in rows) == sorted([("Black", lines["Black"]["floor"]), ("Green", 15.99)])
+        assert product.shipping_class == pricing.DEFAULT_SHIPPING_CLASS and product.contains_battery is False
+        blockers = gate_blockers(db, product)
+        assert not [b for b in blockers if "价格" in b or "运费模板" in b], blockers
