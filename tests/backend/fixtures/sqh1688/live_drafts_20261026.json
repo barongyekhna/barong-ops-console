@@ -1,0 +1,1341 @@
+{
+ "643348607768": {
+  "dossier_id": 7,
+  "draft": {
+   "specs": {
+    "weight": {
+     "note": "",
+     "unit": "g",
+     "value": "166",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "电池净重：166g",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "voltage": {
+     "note": "",
+     "unit": "V",
+     "value": "12",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "12v手电钻电池 高倍率手枪钻螺丝刀通用款大容量电动工具锂电池",
+       "ref": "商品标题",
+       "kind": "page_text"
+      },
+      {
+       "raw": "12V直充充电器",
+       "ref": "规格(SKU)名称",
+       "kind": "page_json"
+      },
+      {
+       "raw": "12V",
+       "ref": "详情图 4 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "12V",
+       "ref": "详情图 6 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "电池电压：12V",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "12V Li-ion",
+       "ref": "详情图 13 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "Nominal Voltage 12V",
+       "ref": "详情图 15 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "2V(电池外壳上可见部分字样,前面字符被遮挡)",
+       "ref": "详情图 10 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "capacity": {
+     "note": "按规格不同,见变体表",
+     "unit": null,
+     "value": "1300mAh / 1500mAh / 2000mAh / 2500mAh",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "2000mah、2500mah、1500mah、1300mah",
+       "ref": "规格(SKU)名称",
+       "kind": "page_json"
+      },
+      {
+       "raw": "Rated Capacity 2000mAh",
+       "ref": "详情图 15 · 第 1 段",
+       "kind": "image"
+      }
+     ],
+     "per_variant": {
+      "1300mah": "1300mAh",
+      "1500mah": "1500mAh",
+      "2000mah": "2000mAh",
+      "2500mah": "2500mAh"
+     }
+    },
+    "material": {
+     "note": "",
+     "unit": null,
+     "value": "阻燃ABS",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "阻燃ABS材料",
+       "ref": "详情图 10 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "材料组成：阻燃ABS材料",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "cycle_life": {
+     "note": "",
+     "unit": "次",
+     "value": "500",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "循环使用可达500次",
+       "ref": "详情图 7 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "足容，400-500次循环，稳定性高",
+       "ref": "详情图 8 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "循环次数：500+",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "dimensions": {
+     "note": "",
+     "unit": "mm",
+     "value": "84×48×40",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "84mm / 48mm / 40mm",
+       "ref": "详情图 11 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "battery_type": {
+     "note": "",
+     "unit": null,
+     "value": "18650、Li-ion、全新A品电芯、锂电工具电池",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "18650全新电芯足容不虚标，高循环次数",
+       "ref": "详情图 7 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "电芯类型：18650动力电芯",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "COMPONENT - LITHIUM BATTERIES ... INR18650 2000mAh, INR18650 1500mAh, INR18650 1300mAh, INR18650 2500mAh",
+       "ref": "详情图 15 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "Li-ion",
+       "ref": "详情图 4 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "12V Li-ion",
+       "ref": "详情图 13 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "全新A品电芯",
+       "ref": "详情图 8 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "电池类型：锂电工具电池",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      }
+     ],
+     "alternatives": [
+      {
+       "why": "还有这种说法",
+       "unit": null,
+       "value": "RECHARGEABLE LITHIUM ION BATTERY",
+       "sources": [
+        {
+         "raw": "Name of Sample: RECHARGEABLE LITHIUM ION BATTERY",
+         "ref": "详情图 15 · 第 1 段",
+         "kind": "image"
+        }
+       ]
+      },
+      {
+       "why": "还有这种说法",
+       "unit": null,
+       "value": "Lithium battery pack",
+       "sources": [
+        {
+         "raw": "Lithium battery pack",
+         "ref": "详情图 16 · 第 1 段",
+         "kind": "image"
+        }
+       ]
+      }
+     ]
+    },
+    "certification": {
+     "note": "",
+     "unit": null,
+     "value": "MSDS、ce、UN38.3、UL 1642 Lithium Batteries、FCC Part 15 Subpart B (Class B)",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "MSDS、ce、UN38.3",
+       "ref": "属性「产品认证」",
+       "kind": "page_json"
+      },
+      {
+       "raw": "UN38.3 Test Report / UN38.3 检测报告",
+       "ref": "详情图 15 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "UL 1642 - Lithium Batteries",
+       "ref": "详情图 15 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "47 CFR FCC Part 15 Subpart B (Class B)",
+       "ref": "详情图 16 · 第 1 段",
+       "kind": "image"
+      }
+     ],
+     "alternatives": [
+      {
+       "why": "把握不大,或看不出是不是本品",
+       "unit": null,
+       "value": "TCT191204676",
+       "sources": [
+        {
+         "raw": "Certification No.: TCT191204676",
+         "ref": "详情图 15 · 第 2 段",
+         "kind": "image"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "fields": {
+    "moq": {
+     "note": "",
+     "unit": "个",
+     "value": 3,
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "3",
+       "ref": "起批量",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "name_en": {
+     "note": "",
+     "unit": null,
+     "value": "12V Li-ion 18650 Battery Pack for Cordless Drill and Screwdriver",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "",
+       "ref": "据事实改写",
+       "kind": "writer"
+      }
+     ]
+    },
+    "name_zh": {
+     "note": "",
+     "unit": null,
+     "value": "12v手电钻电池 高倍率手枪钻螺丝刀通用款大容量电动工具锂电池",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "12v手电钻电池 高倍率手枪钻螺丝刀通用款大容量电动工具锂电池",
+       "ref": "商品标题",
+       "kind": "page_text"
+      }
+     ]
+    },
+    "category": {
+     "note": "",
+     "unit": null,
+     "value": {
+      "name": "Power Tool Batteries",
+      "path": "Hardware > Tool Accessories > Power Tool Batteries",
+      "name_zh": "电动工具电池",
+      "confidence": "high",
+      "google_category_id": "6295"
+     },
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "产品是12V锂电手电钻/螺丝刀的替换电池包，属于电动工具配件中的电池类目，6295「电动工具电池」最具体贴切。不是充电器(6292)，也不是普通电池(4928)。",
+       "ref": "殷承岳的类目判定",
+       "kind": "classifier"
+      }
+     ]
+    },
+    "product_type": {
+     "note": "",
+     "unit": null,
+     "value": "variable_product",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "5 个 SKU",
+       "ref": "SKU 列表",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "retail_price": {
+     "note": "1688 只有进价(按规格 ¥9–¥49),美国售价请老板定",
+     "unit": "USD",
+     "value": null,
+     "status": "needs_owner",
+     "sources": []
+    },
+    "package_includes": {
+     "note": "页面和详情图里都没找到包装清单",
+     "unit": null,
+     "value": null,
+     "status": "missing",
+     "sources": []
+    }
+   },
+   "flagged": [
+    {
+     "note": "1688 只有进价(按规格 ¥9–¥49),美国售价请老板定",
+     "path": "retail_price",
+     "label": "美国售价",
+     "status": "needs_owner"
+    },
+    {
+     "note": "页面和详情图里都没找到包装清单",
+     "path": "package_includes",
+     "label": "包装清单",
+     "status": "missing"
+    }
+   ],
+   "pricing": {
+    "moq": 3,
+    "mode": "sku",
+    "text": "按规格 ¥9–¥49",
+    "unit": "个",
+    "tiers": [],
+    "range_cny": [
+     9.0,
+     49.0
+    ]
+   },
+   "version": 2,
+   "offer_id": "643348607768",
+   "supplier": {
+    "name": "湖南来美电子科技有限公司",
+    "type": "factory",
+    "years": 7,
+    "location": "广东佛山",
+    "shop_url": "https://shop050j9p25815y0.1688.com"
+   },
+   "variants": [
+    {
+     "specs": {
+      "capacity": "2000mAh"
+     },
+     "sku_id": "4795232306799",
+     "dims_cm": [
+      13.0,
+      9.0,
+      8.0
+     ],
+     "name_en": "2000mAh Battery",
+     "name_zh": "2000mah",
+     "weight_g": 170.0,
+     "image_url": null,
+     "cost_price_cny": 39.0
+    },
+    {
+     "specs": {
+      "voltage": "12V"
+     },
+     "sku_id": "5054465747860",
+     "dims_cm": [
+      13.0,
+      9.0,
+      8.0
+     ],
+     "name_en": "12V Direct Charger",
+     "name_zh": "12V直充充电器",
+     "weight_g": 80.0,
+     "image_url": null,
+     "cost_price_cny": 9.0
+    },
+    {
+     "specs": {
+      "capacity": "2500mAh"
+     },
+     "sku_id": "4795232306800",
+     "dims_cm": [
+      13.0,
+      9.0,
+      8.0
+     ],
+     "name_en": "2500mAh Battery",
+     "name_zh": "2500mah",
+     "weight_g": 165.0,
+     "image_url": null,
+     "cost_price_cny": 49.0
+    },
+    {
+     "specs": {
+      "capacity": "1500mAh"
+     },
+     "sku_id": "4795232306798",
+     "dims_cm": [
+      13.0,
+      9.0,
+      8.0
+     ],
+     "name_en": "1500mAh Battery",
+     "name_zh": "1500mah",
+     "weight_g": 175.0,
+     "image_url": null,
+     "cost_price_cny": 29.0
+    },
+    {
+     "specs": {
+      "capacity": "1300mAh"
+     },
+     "sku_id": "4813865331950",
+     "dims_cm": [
+      13.0,
+      9.0,
+      8.0
+     ],
+     "name_en": "1300mAh Battery",
+     "name_zh": "1300mah",
+     "weight_g": 160.0,
+     "image_url": null,
+     "cost_price_cny": 16.99
+    }
+   ],
+   "image_read": {
+    "facts": 42,
+    "images": 19,
+    "cost_usd": 0.008,
+    "cost_basis": "ledger",
+    "reader_role": "fast",
+    "detail_error": null,
+    "ignored_other": 9,
+    "images_failed": 0,
+    "segments_read": 21,
+    "segments_seen": 21,
+    "stopped_reason": null,
+    "ignored_drawing": 0,
+    "ignored_narrative": 1
+   },
+   "source_url": "https://detail.1688.com/offer/643348607768.html",
+   "summary_zh": "12v手电钻电池 高倍率手枪钻螺丝刀通用款大容量电动工具锂电:5 个规格,整理出规格 8 项;标红 2 项(说法不一 0、没找到 1、要老板定 1)。",
+   "price_tiers": [],
+   "flagged_count": 2,
+   "other_attributes": [
+    {
+     "name": "存储温度",
+     "value": "5-50"
+    },
+    {
+     "name": "保护功能",
+     "value": "过充保护、温控保护、过放保护"
+    },
+    {
+     "name": "使用范围",
+     "value": "除草机、电动工具储能、手持电钻、无线水枪、充电扳手"
+    },
+    {
+     "name": "充电工作温度",
+     "value": "5-40"
+    },
+    {
+     "name": "放电工作温度",
+     "value": "5-40"
+    }
+   ],
+   "reference_images": [
+    "https://cbu01.alicdn.com/img/ibank/O1CN013LAeID1oCbrPhpMyu_!!2208532485189-0-cib.jpg",
+    "https://cbu01.alicdn.com/img/ibank/O1CN017qqRES1oCbrGlxkko_!!2208532485189-0-cib.jpg",
+    "https://cbu01.alicdn.com/img/ibank/O1CN01eIDajC1oCbrPjwsxR_!!2208532485189-0-cib.jpg"
+   ]
+  }
+ },
+ "773137484620": {
+  "dossier_id": 8,
+  "draft": {
+   "specs": {
+    "color": {
+     "note": "",
+     "unit": null,
+     "value": "黑色、绿色",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "AH06光棍驱蚊露营灯[黑色]、AH06光棍驱蚊露营灯[绿色]",
+       "ref": "属性「颜色」",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "power": {
+     "note": "",
+     "unit": null,
+     "value": "10",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "10",
+       "ref": "属性「功率」",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "weight": {
+     "note": "",
+     "unit": "g",
+     "value": "148",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "产品净重：148g",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      },
+      {
+       "raw": "净重: 148g",
+       "ref": "详情图 15 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "runtime": {
+     "note": "",
+     "unit": "小时",
+     "value": "3-5",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "续航：3-5小时",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "capacity": {
+     "note": "说法不一:1200 / 3000 mAh",
+     "unit": null,
+     "value": null,
+     "status": "conflict",
+     "sources": [
+      {
+       "raw": "1200",
+       "ref": "属性「电池容量」",
+       "kind": "page_json"
+      },
+      {
+       "raw": "电池容量：内置18650*1锂电池3000mah",
+       "ref": "详情图 14 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "电池容量：内置18650*1锂电池3000mah",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      }
+     ],
+     "candidates": [
+      {
+       "unit": null,
+       "value": "1200",
+       "sources": [
+        {
+         "raw": "1200",
+         "ref": "属性「电池容量」",
+         "kind": "page_json"
+        }
+       ]
+      },
+      {
+       "unit": "mAh",
+       "value": "3000",
+       "sources": [
+        {
+         "raw": "电池容量：内置18650*1锂电池3000mah",
+         "ref": "详情图 14 · 第 1 段",
+         "kind": "image"
+        },
+        {
+         "raw": "电池容量：内置18650*1锂电池3000mah",
+         "ref": "详情图 14 · 第 2 段",
+         "kind": "image"
+        }
+       ]
+      }
+     ],
+     "alternatives": [
+      {
+       "why": "把握不大,或看不出是不是本品",
+       "unit": "mAh",
+       "value": "1500",
+       "sources": [
+        {
+         "raw": "1500mah",
+         "ref": "详情图 11 · 第 1 段",
+         "kind": "image"
+        },
+        {
+         "raw": "1500",
+         "ref": "详情图 11 · 第 2 段",
+         "kind": "image"
+        }
+       ]
+      }
+     ]
+    },
+    "charging": {
+     "note": "",
+     "unit": null,
+     "value": "Type-c快充、笔记本充电、车载电源充电",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "Type-c快充",
+       "ref": "详情图 1 · 第 2 段",
+       "kind": "image"
+      },
+      {
+       "raw": "采用TYPE-C快充接口",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "充电方式：type-c快充",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      },
+      {
+       "raw": "连接笔记本充电",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "用车载电源充电",
+       "ref": "详情图 12 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "material": {
+     "note": "说法不一:铝合金 / 尼龙+PS",
+     "unit": null,
+     "value": null,
+     "status": "conflict",
+     "sources": [
+      {
+       "raw": "铝合金",
+       "ref": "属性「材质」",
+       "kind": "page_json"
+      },
+      {
+       "raw": "材质：尼龙+PS",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      }
+     ],
+     "candidates": [
+      {
+       "unit": null,
+       "value": "铝合金",
+       "sources": [
+        {
+         "raw": "铝合金",
+         "ref": "属性「材质」",
+         "kind": "page_json"
+        }
+       ]
+      },
+      {
+       "unit": null,
+       "value": "尼龙+PS",
+       "sources": [
+        {
+         "raw": "材质：尼龙+PS",
+         "ref": "详情图 14 · 第 2 段",
+         "kind": "image"
+        }
+       ]
+      }
+     ]
+    },
+    "dimensions": {
+     "note": "",
+     "unit": "mm",
+     "value": "153*40*40",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "产品尺寸：153*40*40 mm",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "weight_pack": {
+     "note": "",
+     "unit": "g",
+     "value": "256.2",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "全套重量：256.2g",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      },
+      {
+       "raw": "毛重：256.2g",
+       "ref": "详情图 15 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "battery_type": {
+     "note": "",
+     "unit": null,
+     "value": "内置1节*18650锂电池、内置18650*1锂电池",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "内置1节*18650锂电池",
+       "ref": "详情图 11 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "电池容量：内置18650*1锂电池3000mah",
+       "ref": "详情图 14 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "certification": {
+     "note": "",
+     "unit": null,
+     "value": "QB/T2198、GB7000",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "产品执行标准：QB/T2198、GB7000",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "dimensions_pack": {
+     "note": "",
+     "unit": "mm",
+     "value": "186*110*45",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "纸盒尺寸：186*110*45.mm",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      }
+     ]
+    }
+   },
+   "fields": {
+    "moq": {
+     "note": "",
+     "unit": "盒",
+     "value": 2,
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "2",
+       "ref": "起批量",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "name_en": {
+     "note": "",
+     "unit": null,
+     "value": "3-in-1 Rechargeable Mosquito Repellent Camping Light Flashlight with Tripod",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "",
+       "ref": "据事实改写",
+       "kind": "writer"
+      }
+     ]
+    },
+    "name_zh": {
+     "note": "",
+     "unit": null,
+     "value": "跨境户外灭蚊灯3合1强光手电筒长续航支架驱蚊灯暖光氛围露营灯",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "跨境户外灭蚊灯3合1强光手电筒长续航支架驱蚊灯暖光氛围露营灯",
+       "ref": "商品标题",
+       "kind": "page_text"
+      }
+     ]
+    },
+    "category": {
+     "note": "",
+     "unit": null,
+     "value": {
+      "name": "Camping Lights & Lanterns",
+      "path": "Sporting Goods > Outdoor Recreation > Camping & Hiking > Camping Lights & Lanterns",
+      "name_zh": "营地灯/灯具",
+      "confidence": "high",
+      "google_category_id": "1019"
+     },
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "产品核心是户外露营用的三合一营地灯（含驱蚊、手电、暖光氛围），归营地灯/灯具最贴切。虽带手电功能，但手电筒类目只覆盖单一照明，不能体现露营灯主用途。",
+       "ref": "殷承岳的类目判定",
+       "kind": "classifier"
+      }
+     ]
+    },
+    "product_type": {
+     "note": "",
+     "unit": null,
+     "value": "variable_product",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "2 个 SKU",
+       "ref": "SKU 列表",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "retail_price": {
+     "note": "1688 只有进价(¥28.5),美国售价请老板定",
+     "unit": "USD",
+     "value": null,
+     "status": "needs_owner",
+     "sources": []
+    },
+    "package_includes": {
+     "note": "",
+     "unit": null,
+     "value": [
+      "Tripod stand",
+      "USB-C charging cable"
+     ],
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "自带三脚架配件",
+       "ref": "详情图 6 · 第 1 段",
+       "kind": "image"
+      },
+      {
+       "raw": "配件：三脚支架、type-c充电线",
+       "ref": "详情图 14 · 第 2 段",
+       "kind": "image"
+      }
+     ]
+    }
+   },
+   "flagged": [
+    {
+     "note": "1688 只有进价(¥28.5),美国售价请老板定",
+     "path": "retail_price",
+     "label": "美国售价",
+     "status": "needs_owner"
+    },
+    {
+     "note": "说法不一:铝合金 / 尼龙+PS",
+     "path": "specs.material",
+     "label": "材质",
+     "status": "conflict"
+    },
+    {
+     "note": "说法不一:1200 / 3000 mAh",
+     "path": "specs.capacity",
+     "label": "容量",
+     "status": "conflict"
+    }
+   ],
+   "pricing": {
+    "moq": 2,
+    "mode": "sku",
+    "text": "¥28.5",
+    "unit": "盒",
+    "tiers": [],
+    "range_cny": [
+     28.5,
+     28.5
+    ]
+   },
+   "version": 2,
+   "offer_id": "773137484620",
+   "supplier": {
+    "name": "杭州鑫耀照明有限公司",
+    "type": "factory",
+    "years": 17,
+    "location": "浙江杭州",
+    "shop_url": "https://rxkm518.1688.com"
+   },
+   "variants": [
+    {
+     "specs": {},
+     "sku_id": "5357538820703",
+     "dims_cm": [
+      15.0,
+      4.0,
+      4.0
+     ],
+     "name_en": "Mosquito Repellent Camping Light, Black",
+     "name_zh": "AH06光棍驱蚊露营灯[黑色]",
+     "weight_g": 260.0,
+     "image_url": null,
+     "cost_price_cny": 28.5
+    },
+    {
+     "specs": {},
+     "sku_id": "5357538820704",
+     "dims_cm": null,
+     "name_en": "Mosquito Repellent Camping Light, Green",
+     "name_zh": "AH06光棍驱蚊露营灯[绿色]",
+     "weight_g": null,
+     "image_url": null,
+     "cost_price_cny": 28.5
+    }
+   ],
+   "image_read": {
+    "facts": 47,
+    "images": 15,
+    "cost_usd": 0.0101,
+    "cost_basis": "ledger",
+    "reader_role": "fast",
+    "detail_error": null,
+    "ignored_other": 0,
+    "images_failed": 0,
+    "segments_read": 28,
+    "segments_seen": 28,
+    "stopped_reason": null,
+    "ignored_drawing": 0,
+    "ignored_narrative": 1
+   },
+   "source_url": "https://detail.1688.com/offer/773137484620.html",
+   "summary_zh": "跨境户外灭蚊灯3合1强光手电筒长续航支架驱蚊灯暖光氛围露营灯:2 个规格,整理出规格 10 项;标红 3 项(说法不一 2、没找到 0、要老板定 1)。",
+   "price_tiers": [],
+   "flagged_count": 3,
+   "other_attributes": [
+    {
+     "name": "光源形式",
+     "value": "LED"
+    },
+    {
+     "name": "电源形式",
+     "value": "充电"
+    },
+    {
+     "name": "加印LOGO",
+     "value": "可以"
+    },
+    {
+     "name": "发电方式",
+     "value": "手摇"
+    },
+    {
+     "name": "加工定制",
+     "value": "否"
+    },
+    {
+     "name": "360度旋转",
+     "value": "是"
+    },
+    {
+     "name": "配置充电器",
+     "value": "是"
+    },
+    {
+     "name": "最大射程",
+     "value": "50米以下"
+    }
+   ],
+   "reference_images": [
+    "https://cbu01.alicdn.com/img/ibank/O1CN01Vq2umn1liGel5FBpP_!!971994852-0-cib.jpg",
+    "https://cbu01.alicdn.com/img/ibank/O1CN01n3bw3A1liGeqXsETo_!!971994852-0-cib.jpg",
+    "https://cbu01.alicdn.com/img/ibank/O1CN01hI9GmH1liGen4mQq9_!!971994852-0-cib.jpg"
+   ]
+  }
+ },
+ "888786557113": {
+  "dossier_id": 9,
+  "draft": {
+   "specs": {
+    "runtime": {
+     "note": "",
+     "unit": "%",
+     "value": "25",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "25%",
+       "ref": "详情图 6 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    },
+    "voltage": {
+     "note": "说法不一:交流220 V / 12 V",
+     "unit": null,
+     "value": null,
+     "status": "conflict",
+     "sources": [
+      {
+       "raw": "交流220V",
+       "ref": "属性「额定电压范围」",
+       "kind": "page_json"
+      },
+      {
+       "raw": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持",
+       "ref": "商品标题",
+       "kind": "page_text"
+      }
+     ],
+     "candidates": [
+      {
+       "unit": "V",
+       "value": "交流220",
+       "sources": [
+        {
+         "raw": "交流220V",
+         "ref": "属性「额定电压范围」",
+         "kind": "page_json"
+        }
+       ]
+      },
+      {
+       "unit": "V",
+       "value": "12",
+       "sources": [
+        {
+         "raw": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持",
+         "ref": "商品标题",
+         "kind": "page_text"
+        }
+       ]
+      }
+     ]
+    },
+    "dimensions": {
+     "note": "卖家只写了「咨询客服」这类占位,要问供应商或看图",
+     "unit": null,
+     "value": null,
+     "status": "missing",
+     "sources": [
+      {
+       "raw": "咨询客服",
+       "ref": "属性「外形尺寸」",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "battery_type": {
+     "note": "",
+     "unit": null,
+     "value": "A品电芯",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "A品电芯聚能升级",
+       "ref": "详情图 6 · 第 1 段",
+       "kind": "image"
+      }
+     ]
+    }
+   },
+   "fields": {
+    "moq": {
+     "note": "",
+     "unit": "件",
+     "value": 1,
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "1",
+       "ref": "起批量",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "name_en": {
+     "note": "",
+     "unit": null,
+     "value": "12V Cordless Brushless Drill Driver, Keyless Chuck, Variable Speed",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "",
+       "ref": "据事实改写",
+       "kind": "writer"
+      }
+     ]
+    },
+    "name_zh": {
+     "note": "",
+     "unit": null,
+     "value": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持",
+       "ref": "商品标题",
+       "kind": "page_text"
+      }
+     ]
+    },
+    "category": {
+     "note": "",
+     "unit": null,
+     "value": {
+      "name": "Handheld Power Drills",
+      "path": "Hardware > Tools > Drills > Handheld Power Drills",
+      "name_zh": "手持电钻",
+      "confidence": "high",
+      "google_category_id": "2629"
+     },
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "产品是12V锂电手电钻/冲击钻套装，核心功能为手持钻孔与拧螺丝，最贴合「手持电钻」叶子类目。不是组合套装(4716)，因主体是单一电钻而非多件电动工具组合。",
+       "ref": "殷承岳的类目判定",
+       "kind": "classifier"
+      }
+     ]
+    },
+    "product_type": {
+     "note": "",
+     "unit": null,
+     "value": "variable_product",
+     "status": "ok",
+     "sources": [
+      {
+       "raw": "3 个 SKU",
+       "ref": "SKU 列表",
+       "kind": "page_json"
+      }
+     ]
+    },
+    "retail_price": {
+     "note": "1688 只有进价(按规格 ¥36–¥76),美国售价请老板定",
+     "unit": "USD",
+     "value": null,
+     "status": "needs_owner",
+     "sources": []
+    },
+    "package_includes": {
+     "note": "页面和详情图里都没找到包装清单",
+     "unit": null,
+     "value": null,
+     "status": "missing",
+     "sources": []
+    }
+   },
+   "flagged": [
+    {
+     "note": "1688 只有进价(按规格 ¥36–¥76),美国售价请老板定",
+     "path": "retail_price",
+     "label": "美国售价",
+     "status": "needs_owner"
+    },
+    {
+     "note": "页面和详情图里都没找到包装清单",
+     "path": "package_includes",
+     "label": "包装清单",
+     "status": "missing"
+    },
+    {
+     "note": "卖家只写了「咨询客服」这类占位,要问供应商或看图",
+     "path": "specs.dimensions",
+     "label": "尺寸(单品)",
+     "status": "missing"
+    },
+    {
+     "note": "说法不一:交流220 V / 12 V",
+     "path": "specs.voltage",
+     "label": "电压",
+     "status": "conflict"
+    }
+   ],
+   "pricing": {
+    "moq": 1,
+    "mode": "sku",
+    "text": "按规格 ¥36–¥76",
+    "unit": "件",
+    "tiers": [],
+    "range_cny": [
+     36.0,
+     76.0
+    ]
+   },
+   "version": 2,
+   "offer_id": "888786557113",
+   "supplier": {
+    "name": "南通温德姆电动工具有限公司",
+    "type": "factory",
+    "years": 2,
+    "location": "江苏南通",
+    "shop_url": "https://shop64v3b87b17350.1688.com"
+   },
+   "variants": [
+    {
+     "specs": {},
+     "sku_id": "5901389135831",
+     "dims_cm": null,
+     "name_en": "2 Batteries + 1 Charger Kit",
+     "name_zh": "两电一充套装",
+     "weight_g": 2000.0,
+     "image_url": null,
+     "cost_price_cny": 76.0
+    },
+    {
+     "specs": {},
+     "sku_id": "5901389135829",
+     "dims_cm": null,
+     "name_en": "Tool Only",
+     "name_zh": "裸机",
+     "weight_g": 2000.0,
+     "image_url": null,
+     "cost_price_cny": 36.0
+    },
+    {
+     "specs": {},
+     "sku_id": "5901389135830",
+     "dims_cm": null,
+     "name_en": "1 Battery + 1 Charger Kit",
+     "name_zh": "一电一充套装",
+     "weight_g": 2000.0,
+     "image_url": null,
+     "cost_price_cny": 66.0
+    }
+   ],
+   "image_read": {
+    "facts": 11,
+    "images": 11,
+    "cost_usd": 0.0048,
+    "cost_basis": "ledger",
+    "reader_role": "fast",
+    "detail_error": null,
+    "ignored_other": 0,
+    "images_failed": 1,
+    "segments_read": 16,
+    "segments_seen": 16,
+    "stopped_reason": null,
+    "ignored_drawing": 0,
+    "ignored_narrative": 0
+   },
+   "source_url": "https://detail.1688.com/offer/888786557113.html",
+   "summary_zh": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持:3 个规格,整理出规格 2 项;标红 4 项(说法不一 1、没找到 2、要老板定 1)。",
+   "price_tiers": [],
+   "flagged_count": 4,
+   "other_attributes": [
+    {
+     "name": "电源类型",
+     "value": "充电式-锂电"
+    },
+    {
+     "name": "电钻的角向",
+     "value": "直向"
+    },
+    {
+     "name": "电钻结构",
+     "value": "充电式"
+    },
+    {
+     "name": "钻头夹持方式",
+     "value": "自锁夹头"
+    },
+    {
+     "name": "适用范围",
+     "value": "家装、安装，装修、木材钻孔"
+    },
+    {
+     "name": "正反转向",
+     "value": "有"
+    },
+    {
+     "name": "系列",
+     "value": "手电钻"
+    },
+    {
+     "name": "盘径",
+     "value": "10"
+    },
+    {
+     "name": "电钻能否调速",
+     "value": "无极调速"
+    },
+    {
+     "name": "类型",
+     "value": "手电钻"
+    },
+    {
+     "name": "马达类型",
+     "value": "无刷马达"
+    }
+   ],
+   "reference_images": [
+    "https://cbu01.alicdn.com/img/ibank/O1CN01qePYBo1m4Fmd338pk_!!2219078414900-0-cib.jpg",
+    "https://cbu01.alicdn.com/img/ibank/O1CN01Yj8EdS1m4FkwQmmuh_!!2219078414900-0-cib.jpg",
+    "https://cbu01.alicdn.com/img/ibank/O1CN01uY1qZu1m4Fkw0Gvgx_!!2219078414900-0-cib.jpg"
+   ]
+  }
+ }
+}

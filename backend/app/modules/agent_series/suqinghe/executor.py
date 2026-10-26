@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import memory
+from .dossier import SPEC_LABELS_ZH
 from .models import SqhDossier
 
 logger = logging.getLogger(__name__)
@@ -87,7 +88,8 @@ def build_create_payload(dossier: SqhDossier) -> dict[str, Any]:
         additional.append(
             {
                 "key": f"sqh_{key}",
-                "label": str(source.get("ref") or key)[:255],
+                # 名字写「这是什么」,「从哪读到的」进 source_label(10-26:K 里规格名曾是「详情图 12 · 第 1 段」)
+                "label": SPEC_LABELS_ZH.get(key, key),
                 "source_label": str(source.get("ref") or key)[:255],
                 "value": f"{value}{(' ' + unit) if unit else ''}",
                 "raw_value": str(source.get("raw") or value)[:1000],

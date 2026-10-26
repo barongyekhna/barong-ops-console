@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -126,6 +127,49 @@ def test_create_payload_passes_k_validation(capture) -> None:
     request = ProductKnowledgeCreate(**payload)  # 规格是 operator 形状、没品牌,K 的校验要能过
     assert request.structured_specs_json is None or request.structured_specs_json["source"]["platform"] == "operator"
     assert request.package_includes_json == ["12 squishy toys per box"]
+
+
+LIVE_DRAFTS = FIXTURE / "live_drafts_20261026.json"  # 10-26 线上三份档案的草稿原样:#7 电池、#8 灭蚊灯、#9 电钻
+
+
+def _k_spec_rows(offer_id: str) -> tuple[list[dict], dict]:
+    live = json.loads(LIVE_DRAFTS.read_text(encoding="utf-8"))[offer_id]
+    fake = SimpleNamespace(
+        id=live["dossier_id"], offer_id=offer_id, source_url=f"https://detail.1688.com/offer/{offer_id}.html", draft=live["draft"]
+    )
+    request = ProductKnowledgeCreate(**executor.build_create_payload(fake))  # 先过 K 的建档校验
+    return request.structured_specs_json["additional_specs"], live["draft"]
+
+
+@pytest.mark.parametrize("offer_id", ["643348607768", "773137484620", "888786557113"])
+def test_specs_reach_k_named_by_what_they_are(offer_id: str) -> None:
+    """进 K 的规格行:名字是「重量、电压…」,出处进出处栏。
+
+    10-26:名字写成了出处(「详情图 12 · 第 1 段」「商品标题」),同一段图读出两条就重名,K 的规格面板里认不出哪行是什么。
+    上面那条只验了 K 收不收,没验写进去的对不对。
+    """
+    rows, draft = _k_spec_rows(offer_id)
+    ok = {key: item for key, item in draft["specs"].items() if item["status"] == "ok"}
+    assert [row["key"] for row in rows] == [f"sqh_{key}" for key in ok]
+    for row, (key, item) in zip(rows, ok.items()):
+        assert row["label"] == dossier.SPEC_LABELS_ZH[key]
+        assert row["source_label"] == item["sources"][0]["ref"]
+    assert len({row["label"] for row in rows}) == len(rows)
+
+
+def test_battery_spec_panel_in_k() -> None:
+    """电池那单进 K 后,规格面板逐行是这样(老板要一眼看懂)。"""
+    rows, _ = _k_spec_rows("643348607768")
+    assert [(row["label"], row["value"], row["source_label"]) for row in rows] == [
+        ("重量(单品)", "166 g", "详情图 12 · 第 1 段"),
+        ("电压", "12 V", "商品标题"),
+        ("容量", "1300mAh / 1500mAh / 2000mAh / 2500mAh", "规格(SKU)名称"),
+        ("材质", "阻燃ABS", "详情图 10 · 第 1 段"),
+        ("循环次数", "500 次", "详情图 7 · 第 1 段"),
+        ("尺寸(单品)", "84×48×40 mm", "详情图 11 · 第 1 段"),
+        ("电池/电芯", "18650、Li-ion、全新A品电芯、锂电工具电池", "详情图 7 · 第 1 段"),
+        ("认证", "MSDS、ce、UN38.3、UL 1642 Lithium Batteries、FCC Part 15 Subpart B (Class B)", "属性「产品认证」"),
+    ]
 
 
 def test_throttle_rules() -> None:
