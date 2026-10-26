@@ -238,11 +238,14 @@ def list_dossiers(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    rows = db.scalars(
-        select(SqhDossier).order_by(SqhDossier.id.desc()).limit(limit),
-        execution_options=SKIP_ORG_DATA_ISOLATION,
+    rows = list(
+        db.scalars(
+            select(SqhDossier).order_by(SqhDossier.id.desc()).limit(limit),
+            execution_options=SKIP_ORG_DATA_ISOLATION,
+        )
     )
-    return {"items": [dossiers.summary_payload(row) for row in rows]}
+    building = dossiers.building_refs(db, rows)
+    return {"items": [dossiers.summary_payload(row, building=row.card_ref in building) for row in rows]}
 
 
 @router.get("/dossiers/{dossier_id}")
@@ -250,4 +253,4 @@ def get_dossier(dossier_id: int, db: Session = Depends(get_db), user: User = Dep
     row = db.get(SqhDossier, dossier_id, execution_options=SKIP_ORG_DATA_ISOLATION)
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "SQH_DOSSIER_NOT_FOUND", "message": "没有这份档案。"})
-    return dossiers.detail_payload(row)
+    return dossiers.detail_payload(row, building=row.card_ref in dossiers.building_refs(db, [row]))

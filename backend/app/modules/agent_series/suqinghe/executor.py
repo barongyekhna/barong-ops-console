@@ -8,6 +8,9 @@
 选择(10-23):1688 只有进价,售价老板还没定 → 一律先建成**单品草稿**(simple_product,不带价)。
 K 的规矩是多变体产品每个变体必须有价,硬建 variable 只能填假价;变体清单原样写进
 raw_input_text / manual_notes,老板在 K 的「基础档案」面板定价时再改成多变体(那里能改类型和变体)。
+
+谁来跑(10-26):worker 每几秒捡一单「卡批了、档案还是 ready」的去建(``approved_waiting`` + ``build_approved``)。
+原来在老板点「批」的那个请求里同步建,要从 1688 CDN 一张张下参考图(单张超时 15 秒),点一下等 3–9 秒、最坏 45 秒以上。
 """
 
 from __future__ import annotations
@@ -16,14 +19,15 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import memory
+from .constants import DOSSIER_CARD_KIND
 from .dossier import SPEC_LABELS_ZH
-from .models import SqhDossier
+from .models import SqhCard, SqhDossier
 
 logger = logging.getLogger(__name__)
 SOURCE_SYSTEM = "1688"
@@ -158,8 +162,8 @@ def _reference_count(db: Session, product_id: Any) -> int:
     )
 
 
-def create_k_from_dossier(db: Session, dossier_id: int, actor: User) -> ExecutorResult:
-    """建档 + 回读。出错抛 ExecutorError(调用方负责记账,别让卡悄悄停在「已批」)。"""
+def create_k_from_dossier(db: Session, dossier_id: int, actor: User | None) -> ExecutorResult:
+    """建档 + 回读。出错抛 ExecutorError(调用方 build_approved 负责记账,别让卡悄悄停在「已批」)。"""
     from ...k_series.product_knowledge import service as k_service
     from ...k_series.product_knowledge.manual_reference import attach_reference_image_urls
     from ...k_series.product_knowledge.models import KProductKnowledgeProduct as P
@@ -232,3 +236,50 @@ def create_k_from_dossier(db: Session, dossier_id: int, actor: User) -> Executor
     )
     db.commit()
     return ExecutorResult(dossier.id, str(fresh.id), True, fresh.sku, actual_refs, note)
+
+
+def approved_waiting(db: Session, *, limit: int = 1) -> list[tuple[SqhDossier, SqhCard]]:
+    """批了、还没建进 K 的档案:档案还是 ready,它那张「建 K 档案」卡已经 approved。先批的先建。"""
+    rows = db.execute(
+        select(SqhDossier, SqhCard)
+        .join(SqhCard, SqhCard.ref == SqhDossier.card_ref)
+        .where(SqhDossier.status == "ready", SqhCard.status == "approved", SqhCard.kind == DOSSIER_CARD_KIND)
+        .order_by(SqhCard.decided_at, SqhDossier.id)
+        .limit(limit),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    ).all()
+    return [(dossier, card) for dossier, card in rows]
+
+
+def record_failure(db: Session, *, card: SqhCard, dossier_id: int, message: str) -> dict[str, Any]:
+    """批了但没建成:档案标 failed、写记忆和流水,卡的决定原因后面补一句「执行失败:…」。"""
+    dossier = db.get(SqhDossier, dossier_id, execution_options=SKIP_ORG_DATA_ISOLATION)
+    if dossier is not None and dossier.status != "created":
+        dossier.status = "failed"
+        dossier.error = message
+        db.add(dossier)
+    db.execute(
+        update(SqhCard)
+        .where(SqhCard.id == card.id)
+        .values(decision_reason=((card.decision_reason or "") + f" 执行失败:{message}").strip()[:2000]),
+        execution_options=SKIP_ORG_DATA_ISOLATION,
+    )
+    memory.record(db, kind="observation", subject=f"建 K 档案失败 #{card.ref}", body=message,
+                  refs={"card_ref": card.ref, "dossier_id": dossier_id})
+    memory.log_activity(db, f"#{card.ref} 批了但建档没成:{message[:120]}", kind="error")
+    db.commit()
+    return {"ok": False, "card_ref": card.ref, "dossier_id": dossier_id, "note": message}
+
+
+def build_approved(db: Session, dossier: SqhDossier, card: SqhCard) -> dict[str, Any]:
+    """真的去建(慢活:K 建档 + 下载参考图)。任何失败都记账,不许吞。"""
+    dossier_id = dossier.id
+    approver = str(card.decided_by_user_id or "")
+    actor = db.get(User, int(approver), execution_options=SKIP_ORG_DATA_ISOLATION) if approver.isdigit() else None
+    try:
+        result = create_k_from_dossier(db, dossier_id, actor)
+    except Exception as exc:  # noqa: BLE001 —— 任何失败都要记账,不许吞
+        db.rollback()
+        return record_failure(db, card=card, dossier_id=dossier_id, message=str(exc)[:500] or exc.__class__.__name__)
+    return {"ok": True, "card_ref": card.ref, "dossier_id": dossier_id, "note": result.note,
+            "k_product_id": result.k_product_id, "sku": result.sku, "created": result.created}

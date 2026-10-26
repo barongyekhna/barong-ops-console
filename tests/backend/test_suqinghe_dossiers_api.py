@@ -90,6 +90,13 @@ def _process(now: datetime) -> SqhDossier | None:
         return dossiers.process_next(db, now=now, fetch=_fetch, read=_read, build=_build)
 
 
+def _build_approved() -> dict | None:
+    """worker 那一步:捡一单批了还没建的去建。"""
+    with without_org_data_isolation(), SessionLocal() as db:
+        waiting = executor.approved_waiting(db)
+        return executor.build_approved(db, *waiting[0]) if waiting else None
+
+
 def test_submit_is_owner_only_and_everyone_can_read(clean, auth_client: TestClient) -> None:
     _login(auth_client, REGULAR)
     assert auth_client.post("/api/app/suqinghe/dossiers", json={"url": URL}).status_code == 403
@@ -128,8 +135,14 @@ def test_process_throttle_then_approve_creates_k_product_and_dedupes(clean, auth
     _login(auth_client, OWNER)
     resp = auth_client.post(f"/api/app/suqinghe/cards/{ready.card_ref}/decide", json={"decision": "approve"})
     assert resp.status_code == 200, resp.text
-    execution = resp.json()["execution"]
+    # 点「批」只落「已批」就回;真的建交给 worker(10-26:原来同步建、下参考图,点一下等 3–9 秒)
+    assert resp.json()["execution"] == {"ok": True, "queued": True, "note": cards.BUILD_QUEUED_NOTE}
+    listed = {item["id"]: item for item in auth_client.get("/api/app/suqinghe/dossiers").json()["items"]}
+    assert listed[ready.id]["status"] == "ready" and listed[ready.id]["building"] is True
+    execution = _build_approved()
     assert execution["ok"] is True and execution["created"] is True, execution
+    detail = auth_client.get(f"/api/app/suqinghe/dossiers/{ready.id}").json()
+    assert detail["status"] == "created" and detail["building"] is False
 
     with without_org_data_isolation(), SessionLocal() as db:
         saved = db.get(SqhDossier, ready.id)
@@ -148,7 +161,8 @@ def test_process_throttle_then_approve_creates_k_product_and_dedupes(clean, auth
         db.commit()
     second = _process(T0 + timedelta(minutes=5))
     assert second is not None and second.status == "ready"
-    again = auth_client.post(f"/api/app/suqinghe/cards/{second.card_ref}/decide", json={"decision": "approve"}).json()["execution"]
+    assert auth_client.post(f"/api/app/suqinghe/cards/{second.card_ref}/decide", json={"decision": "approve"}).json()["execution"]["queued"] is True
+    again = _build_approved()
     assert again["ok"] is True and again["created"] is False and again["k_product_id"] == execution["k_product_id"]
     with without_org_data_isolation(), SessionLocal() as db:
         count = db.scalars(select(KProductKnowledgeProduct).where(KProductKnowledgeProduct.source_record_id == OFFER)).all()
@@ -183,10 +197,59 @@ def test_executor_failure_is_recorded_not_swallowed(clean, monkeypatch) -> None:
         owner = db.get(User, clean["owner"])
         out = cards.decide_card(db, card_id=ready.card_ref, decision="approve", actor=owner, channel="web")
         db.commit()
-        assert out.execution["ok"] is False and "K 建档挂了" in out.execution["note"]
+        assert out.execution["queued"] is True
+    outcome = _build_approved()
+    assert outcome["ok"] is False and "K 建档挂了" in outcome["note"] and outcome["card_ref"] == ready.card_ref
+    with without_org_data_isolation(), SessionLocal() as db:
         assert db.get(SqhDossier, ready.id).status == "failed"
         card = db.scalar(select(SqhCard).where(SqhCard.ref == ready.card_ref))
         assert card.status == "approved" and "执行失败" in (card.decision_reason or "")
+    assert _build_approved() is None  # 记过账的不会再被捡起来反复建
+
+
+def test_approve_returns_at_once_and_redo_waits_for_the_build(clean, monkeypatch) -> None:
+    # 10-26:老板点「批」要等 3–9 秒 —— 请求里同步建档、从 1688 CDN 一张张下参考图。现在请求里一步都不建。
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossiers.enqueue(db, url=URL, actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+    ready = _process(T0)
+
+    def must_not_build(*args, **kwargs):
+        raise AssertionError("点「批」的请求里不该建档")
+
+    real_build = executor.create_k_from_dossier
+    monkeypatch.setattr(executor, "create_k_from_dossier", must_not_build)
+    with without_org_data_isolation(), SessionLocal() as db:
+        owner = db.get(User, clean["owner"])
+        out = cards.decide_card(db, card_id=ready.card_ref, decision="approve", actor=owner, channel="web")
+        db.commit()
+        assert out.execution["queued"] is True and db.get(SqhDossier, ready.id).status == "ready"
+        # 批了、还没建完:不许重新整理 —— 驳卡驳不动,档案却会被标驳回,就没人去建了
+        with pytest.raises(dossiers.DossierError, match="正在建进 K"):
+            dossiers.redo(db, dossier_id=ready.id, actor=owner)
+        db.rollback()
+        assert [d.id for d, _ in executor.approved_waiting(db)] == [ready.id]
+    monkeypatch.setattr(executor, "create_k_from_dossier", real_build)
+    assert _build_approved()["ok"] is True
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert db.get(SqhDossier, ready.id).status == "created" and executor.approved_waiting(db) == []
+
+
+def test_approving_a_card_whose_dossier_is_not_ready_is_recorded(clean) -> None:
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossiers.enqueue(db, url=URL, actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+    ready = _process(T0)
+    with without_org_data_isolation(), SessionLocal() as db:
+        db.get(SqhDossier, ready.id).status = "failed"
+        db.commit()
+        owner = db.get(User, clean["owner"])
+        out = cards.decide_card(db, card_id=ready.card_ref, decision="approve", actor=owner, channel="web")
+        db.commit()
+        assert out.execution["ok"] is False and "不是「待批」" in out.execution["note"]
+        card = db.scalar(select(SqhCard).where(SqhCard.ref == ready.card_ref))
+        assert card.status == "approved" and "执行失败" in (card.decision_reason or "")
+    assert _build_approved() is None
 
 
 def test_blocked_page_marks_blocked_and_raises_one_alert(clean) -> None:

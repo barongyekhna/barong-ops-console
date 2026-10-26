@@ -29,7 +29,7 @@ from .constants import (
     LA,
     dossier_daily_limit,
 )
-from .models import SqhDossier
+from .models import SqhCard, SqhDossier
 
 logger = logging.getLogger(__name__)
 _X = SKIP_ORG_DATA_ISOLATION
@@ -126,6 +126,8 @@ def redo(db: Session, *, dossier_id: int, actor: Any) -> tuple[SqhDossier, bool,
         raise DossierError("这份还在整理中,等它做完再说。")
     if old.status == "created":
         raise DossierError("这份已经建进 K 了,不能重做;要改去 K 里改。")
+    if old.card_ref in building_refs(db, [old]):  # 卡批了、worker 正在建:这时驳卡驳不动,档案却会被标驳回、没人去建
+        raise DossierError("这份已经批了,正在建进 K;建完要改去 K 里改。")
     if old.status == "ready" and old.card_ref:
         cards.decide_card(db, card_id=old.card_ref, decision="reject", actor=actor, channel="web", reason=REDO_REASON)
         db.refresh(old)
@@ -345,7 +347,15 @@ def process_next(
 # ---------------------------------------------------------------- 展示
 
 
-def summary_payload(d: SqhDossier) -> dict[str, Any]:
+def building_refs(db: Session, rows: list[SqhDossier]) -> set[str]:
+    """这些档案里哪些卡已经批了、worker 还在建(档案还是 ready):界面显示「已批,建档中」。"""
+    refs = [d.card_ref for d in rows if d.status == "ready" and d.card_ref]
+    if not refs:
+        return set()
+    return set(db.scalars(select(SqhCard.ref).where(SqhCard.ref.in_(refs), SqhCard.status == "approved"), execution_options=_X))
+
+
+def summary_payload(d: SqhDossier, *, building: bool = False) -> dict[str, Any]:
     draft = d.draft or {}
     name = ((draft.get("fields") or {}).get("name_zh") or {}).get("value") or (d.capture or {}).get("title_zh")
     return {
@@ -353,6 +363,7 @@ def summary_payload(d: SqhDossier) -> dict[str, Any]:
         "offer_id": d.offer_id,
         "source_url": d.source_url,
         "status": d.status,
+        "building": building,
         "title": name,
         "flagged_count": d.flagged_count,
         "cost_usd": float(d.cost_usd or 0),
@@ -365,5 +376,5 @@ def summary_payload(d: SqhDossier) -> dict[str, Any]:
     }
 
 
-def detail_payload(d: SqhDossier) -> dict[str, Any]:
-    return {**summary_payload(d), "capture": d.capture or {}, "draft": d.draft or {}}
+def detail_payload(d: SqhDossier, *, building: bool = False) -> dict[str, Any]:
+    return {**summary_payload(d, building=building), "capture": d.capture or {}, "draft": d.draft or {}}

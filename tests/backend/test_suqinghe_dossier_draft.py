@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.app.modules.agent_series.suqinghe import dossier, dossiers, executor, worker_main
+from backend.app.modules.agent_series.suqinghe import cards, dossier, dossiers, executor, worker_main
 from backend.app.modules.agent_series.suqinghe.sourcing_1688 import parse_capture
 from backend.app.modules.k_series.product_knowledge.schemas import ProductKnowledgeCreate
 
@@ -199,10 +199,13 @@ def test_queue_reply_wording() -> None:
 
 def test_decided_text_reports_execution() -> None:
     card = SimpleNamespace(ref="a3f9", title="建 K 档案:包子", status="approved", decided_via="web")
-    ok = worker_main.decided_text(card, changed=True, decision="approve", execution={"ok": True, "note": "建好了:K 产品 TOY-001"})
-    assert "TOY-001" in ok
-    bad = worker_main.decided_text(card, changed=True, decision="approve", execution={"ok": False, "note": "回读不一致"})
+    # 10-26 起批了只排上,worker 几秒内建:C19 里先回「这就建」,没建成另发一条(build_failed_text)
+    queued = worker_main.decided_text(card, changed=True, decision="approve", execution={"ok": True, "queued": True, "note": cards.BUILD_QUEUED_NOTE})
+    assert "#a3f9 批了" in queued and "建进 K" in queued
+    bad = worker_main.decided_text(card, changed=True, decision="approve", execution={"ok": False, "note": "档案 #3 状态是 failed,不是「待批」,不建。"})
     assert "没做成" in bad
+    failed = worker_main.build_failed_text({"ok": False, "card_ref": "a3f9", "note": "建档回读不一致:英文名没写对"})
+    assert failed.startswith("#a3f9 批了,但建进 K 没成") and "回读不一致" in failed
 
 
 def test_package_fact_never_leaks_into_age_and_origin_levels_do_not_conflict(capture) -> None:

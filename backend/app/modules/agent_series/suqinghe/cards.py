@@ -169,51 +169,32 @@ def decide_card(
     return DecideOutcome(card=card, changed=changed, execution=execution)
 
 
-def _after_dossier_decision(db: Session, card: SqhCard, *, decision: str, actor: User) -> dict[str, Any]:
-    """「建 K 档案」卡决定之后:驳 → 档案标 rejected;批 → 先把「已批」落库,再真的去建。
+BUILD_QUEUED_NOTE = "我这就把它建进 K,几秒钟;建好在档案柜里能看到 SKU。"
 
-    ``create_product`` 会自己 commit,所以必须先提交卡的状态;执行失败不能让卡悄悄停在
-    「已批」——档案标 failed、写记忆和流水,卡的决定原因后面补一句「执行失败:…」。
+
+def _after_dossier_decision(db: Session, card: SqhCard, *, decision: str, actor: User) -> dict[str, Any]:
+    """「建 K 档案」卡决定之后:驳 → 档案标 rejected;批 → 只落「已批」,真的去建交给 worker(executor.build_approved)。
+
+    10-26:原来在这个请求里同步建 —— K 建档 + 从 1688 CDN 一张张下参考图,老板点一下「批」要等 3–9 秒。
+    档案不在「待批」(没得建)照样记一笔执行失败,别让卡悄悄停在「已批」。
     """
-    from .executor import ExecutorError, create_k_from_dossier
+    from .executor import record_failure
     from .models import SqhDossier
 
     dossier_id = (card.evidence or {}).get("dossier_id") if isinstance(card.evidence, dict) else None
     if not dossier_id:
         return {"ok": False, "note": "卡上没有档案号,没法执行。"}
+    dossier = db.get(SqhDossier, int(dossier_id), execution_options=SKIP_ORG_DATA_ISOLATION)
     if decision == "reject":
-        dossier = db.get(SqhDossier, int(dossier_id), execution_options=SKIP_ORG_DATA_ISOLATION)
         if dossier is not None and dossier.status == "ready":
             dossier.status = "rejected"
             db.add(dossier)
             db.flush()
         return {"ok": True, "note": "档案已驳回,不建。"}
-
-    db.commit()
-    try:
-        result = create_k_from_dossier(db, int(dossier_id), actor)
-    except Exception as exc:  # noqa: BLE001 —— 任何失败都要记账,不许吞
-        db.rollback()
-        message = str(exc)[:500] or exc.__class__.__name__
-        dossier = db.get(SqhDossier, int(dossier_id), execution_options=SKIP_ORG_DATA_ISOLATION)
-        if dossier is not None and dossier.status != "created":
-            dossier.status = "failed"
-            dossier.error = message
-            db.add(dossier)
-        db.execute(
-            update(SqhCard)
-            .where(SqhCard.id == card.id)
-            .values(decision_reason=((card.decision_reason or "") + f" 执行失败:{message}").strip()[:2000]),
-            execution_options=SKIP_ORG_DATA_ISOLATION,
-        )
-        memory.record(db, kind="observation", subject=f"建 K 档案失败 #{card.ref}", body=message,
-                      refs={"card_ref": card.ref, "dossier_id": int(dossier_id)})
-        memory.log_activity(db, f"#{card.ref} 批了但建档没成:{message[:120]}", kind="error")
-        db.commit()
-        db.refresh(card)
-        return {"ok": False, "note": message}
-    db.refresh(card)
-    return {"ok": True, "note": result.note, "k_product_id": result.k_product_id, "sku": result.sku, "created": result.created}
+    if dossier is None or dossier.status != "ready":
+        state = "不存在" if dossier is None else f"状态是 {dossier.status}"
+        return record_failure(db, card=card, dossier_id=int(dossier_id), message=f"档案 #{dossier_id} {state},不是「待批」,不建。")
+    return {"ok": True, "queued": True, "note": BUILD_QUEUED_NOTE}
 
 
 def _transition(db: Session, card: SqhCard, *, status: str, actor: User, channel: str, reason: str | None) -> bool:

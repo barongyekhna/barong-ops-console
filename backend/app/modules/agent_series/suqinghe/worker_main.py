@@ -34,7 +34,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, cards, dossiers, memory, office, snapshot
+from . import brain, cards, dossiers, executor, memory, office, snapshot
 from .constants import (
     AGENT_USERNAME,
     HEARTBEAT_INTERVAL_SECONDS,
@@ -154,6 +154,10 @@ def decided_text(card: Any, *, changed: bool, decision: str, execution: dict[str
     if decision == "approve":
         return f"收到,#{card.ref}「{card.title}」批了。影子期我先记下,不动手。"
     return f"收到,#{card.ref} 驳了,原因我记住了,同类的不再提。"
+
+
+def build_failed_text(outcome: dict[str, Any]) -> str:
+    return f"#{outcome['card_ref']} 批了,但建进 K 没成:{outcome['note']}。我记下了,你看一眼。"
 
 
 # ---------------------------------------------------------------- 状态小工具
@@ -287,6 +291,27 @@ class SuqingheWorker:
         if cid:
             self.owner_conversations[owner_id] = cid
         return cid
+
+    def build_approved(self) -> bool:
+        """老板批了的「建 K 档案」卡,在这里真的建(K 建档 + 下参考图是慢活,不放在点「批」的请求里)。
+
+        一轮一单;暂停时也照做 —— 这是老板亲口批的。没建成就「出事就说」:在 C19 告诉批卡的人。
+        """
+        db = SessionLocal()
+        try:
+            waiting = executor.approved_waiting(db, limit=1)
+            if not waiting:
+                return False
+            dossier, card = waiting[0]
+            approver = str(card.decided_by_user_id or "")
+            outcome = executor.build_approved(db, dossier, card)
+            if not outcome["ok"] and approver and (self.online or self.connect()):
+                cid = self._owner_conversation(approver)
+                if cid:
+                    self.client.send_message(cid, text=build_failed_text(outcome), client_message_id=f"sqh-build-{uuid.uuid4().hex[:20]}")
+            return True
+        finally:
+            db.close()
 
     def poll_chat(self) -> bool:
         if not self.online:
@@ -452,6 +477,11 @@ class SuqingheWorker:
                 else:
                     _heartbeat(success=True)
                 next_tick = time.monotonic() + loop_seconds()
+            built = False
+            try:
+                built = self.build_approved()
+            except Exception:  # noqa: BLE001 —— 建档出错不能拖垮整个循环;没记上账的下一轮还会再捡到
+                _LOGGER.exception("批了的档案建 K 出错")
             busy = False
             try:
                 busy = self.poll_chat()
@@ -460,7 +490,7 @@ class SuqingheWorker:
             except httpx.HTTPError as exc:
                 _LOGGER.warning("控制台暂时够不着: %s", exc)
                 self.online = False
-            if not busy:
+            if not busy and not built:
                 _sleep_interruptible(_chat_poll_seconds(), should_stop)
 
 
