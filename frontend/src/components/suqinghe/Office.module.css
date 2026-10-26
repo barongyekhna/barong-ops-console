@@ -510,6 +510,7 @@
 }
 
 .row input,
+.row select,
 .rejectForm textarea {
   flex: 1 1 140px;
   min-width: 0;
@@ -524,6 +525,11 @@
 
 .row input.narrow {
   flex: 0 1 70px;
+}
+
+.row select.narrow {
+  flex: 0 1 120px;
+  min-width: 0;
 }
 
 .rejectForm {

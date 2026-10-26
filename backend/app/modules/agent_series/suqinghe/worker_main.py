@@ -6,6 +6,7 @@
 3. 洛杉矶早上 7 点以后、今天还没出过计划:快照 → 对账(没了的事作废卡)→ 计划 → 审批卡(一件事只发一张,见 cards.settle_issues)。
 4. 老板在办公室「交代一句」的事:记下、回执,影子期不执行。
 5. 主动开口四规矩:一天最多一条、洛杉矶 8–22 点、只在有待审卡时、静音期内不说、同一天不重复。
+6. 她建进 K 的产品往下推(pipeline.py):关键词 → 风险词 → 卖点 →(价格卡)→ …;在另一个线程里一件一件干。
 
 C19 每 AGENT_CHAT_POLL_SECONDS(默认 3 秒)听一次:只回老板的私聊。
 
@@ -34,7 +35,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, cards, dossiers, executor, memory, office, snapshot
+from . import brain, cards, dossiers, executor, memory, office, pipeline, snapshot
 from .constants import (
     AGENT_USERNAME,
     HEARTBEAT_INTERVAL_SECONDS,
@@ -155,6 +156,8 @@ def decided_text(card: Any, *, changed: bool, decision: str, execution: dict[str
         return f"#{card.ref} 批了,但我没做成:{execution.get('note', '')}。我记下了,你看一眼。"
     if decision == "approve":
         return f"收到,#{card.ref}「{card.title}」批了。影子期我先记下,不动手。"
+    if execution is not None and execution.get("note"):
+        return f"收到,#{card.ref} 驳了。{execution['note']}"
     return f"收到,#{card.ref} 驳了,原因我记住了,同类的不再提。"
 
 
@@ -281,6 +284,8 @@ class SuqingheWorker:
         self._morning_day: date | None = None
         self._morning_attempts = 0
         self._morning_last: datetime | None = None
+        # 第②步:K 流水线在另一个线程里一件一件推(一步能跑十几分钟,不能卡住聊天和批卡建档)
+        self.pipeline = pipeline.Runner()
 
     # ---- C19 ----
 
@@ -461,6 +466,8 @@ class SuqingheWorker:
             handle_dictations(db)
             # 1688 → K 档案:一轮最多一单,节流在 dossiers.process_next 里。
             dossiers.process_next(db, now=now)
+            # 建进 K 的产品往下推:线程闲着就派下一件(暂停时上面已经 return,不派新活)
+            self.pipeline.maybe_start(db)
             try:
                 self.maybe_remind(db)
             except (ConsoleAuthError, httpx.HTTPError) as exc:

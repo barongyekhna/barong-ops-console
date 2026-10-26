@@ -10,7 +10,7 @@ import {
   STATE_LABEL,
   VIA_LABEL,
   DOSSIER_IN_PROGRESS,
-  DOSSIER_STATUS_LABEL,
+  dossierStatusOf,
   getDossier,
   getDossiers,
   getMemory,
@@ -962,7 +962,7 @@ function CabinetPanel({
 }) {
   const [items, setItems] = useState<DossierSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const inProgress = (items ?? []).some((item) => DOSSIER_IN_PROGRESS.includes(item.status));
+  const inProgress = (items ?? []).some((item) => DOSSIER_IN_PROGRESS.includes(item.status) || item.building);
 
   useEffect(() => {
     let alive = true;
@@ -999,8 +999,8 @@ function CabinetPanel({
             <button onClick={() => setFocus(item.id)} type="button">
               <span className={styles.dossierTitle}>{item.title || `1688 · ${item.offer_id}`}</span>
               <span className={styles.dossierMeta}>
-                <span className={styles.dossierStatus} data-status={item.status}>
-                  {DOSSIER_STATUS_LABEL[item.status] ?? item.status}
+                <span className={styles.dossierStatus} data-status={dossierStatusOf(item).key}>
+                  {dossierStatusOf(item).label}
                 </span>
                 {item.flagged_count > 0 ? <span className={styles.flagBadge}>标红 {item.flagged_count}</span> : null}
                 {typeof item.cost_usd === "number" && item.cost_usd > 0 ? <span>${item.cost_usd.toFixed(3)}</span> : null}
@@ -1034,7 +1034,7 @@ function DossierView({
   const [error, setError] = useState<string | null>(null);
   const [redoing, setRedoing] = useState(false);
   const [redoNote, setRedoNote] = useState<string | null>(null);
-  const inProgress = detail ? DOSSIER_IN_PROGRESS.includes(detail.status) : true;
+  const inProgress = detail ? DOSSIER_IN_PROGRESS.includes(detail.status) || Boolean(detail.building) : true;
   // 草稿 → 界面那一层是纯函数(dossier-view.ts),用真档案测过;这里只管画。
   const view = useMemo(() => buildDossierView(detail?.draft), [detail]);
 
@@ -1086,8 +1086,8 @@ function DossierView({
           <section className={partStyles.section}>
             <h3>{detail.title || `1688 · ${detail.offer_id}`}</h3>
             <p className={styles.dossierHead}>
-              <span className={styles.dossierStatus} data-status={detail.status}>
-                {DOSSIER_STATUS_LABEL[detail.status] ?? detail.status}
+              <span className={styles.dossierStatus} data-status={dossierStatusOf(detail).key}>
+                {dossierStatusOf(detail).label}
               </span>
               {detail.flagged_count > 0 ? <span className={styles.flagBadge}>标红 {detail.flagged_count}</span> : null}
               {typeof detail.cost_usd === "number" && detail.cost_usd > 0 ? <span>花了 ${detail.cost_usd.toFixed(3)}</span> : null}
@@ -1104,19 +1104,21 @@ function DossierView({
               {view.reading.ignored ? <small>{view.reading.ignored}</small> : null}
             </p>
             {detail.status === "failed" && detail.error ? <p className={partStyles.error}>没整理成:{detail.error}</p> : null}
-            {inProgress ? <p className={partStyles.muted}>她还在整理，这里每 5 秒刷新一次。</p> : null}
+            {inProgress ? (
+              <p className={partStyles.muted}>{detail.building ? "批了，她正在建进 K，" : "她还在整理，"}这里每 5 秒刷新一次。</p>
+            ) : null}
             {view.version < 2 && !inProgress && detail.status !== "created" ? (
               <p className={styles.oldRulesNote}>
                 这份是按旧规则整理的(10-26 之前){canCommand ? ",点「重新整理」按新规则重做。" : ",老板可以让她按新规则重做。"}
               </p>
             ) : null}
             <div className={partStyles.inlineActions}>
-              {detail.card_ref && detail.status === "ready" ? (
+              {detail.card_ref && detail.status === "ready" && !detail.building ? (
                 <button className={partStyles.primary} onClick={onOpenInbox} type="button">
                   去收件筐批（#{detail.card_ref}）
                 </button>
               ) : null}
-              {canCommand && REDO_STATUSES.includes(detail.status) ? (
+              {canCommand && REDO_STATUSES.includes(detail.status) && !detail.building ? (
                 <button disabled={redoing} onClick={redo} type="button">
                   {redoing ? "重新排队…" : "重新整理"}
                 </button>

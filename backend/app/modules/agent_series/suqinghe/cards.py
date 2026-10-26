@@ -26,7 +26,7 @@ from ....core.roles import is_owner_role
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import memory
-from .constants import CARD_CHANNELS, DOSSIER_CARD_KIND
+from .constants import CARD_CHANNELS, DOSSIER_CARD_KIND, PLAN_CARD_KINDS
 from .models import SqhCard
 
 # 重算指纹的函数:evidence["recheck"]["type"] → fn(db, recheck) -> 指纹。
@@ -168,6 +168,11 @@ def decide_card(
     execution = None
     if changed and card.kind == DOSSIER_CARD_KIND:
         execution = _after_dossier_decision(db, card, decision=decision, actor=actor)
+    elif changed:
+        from . import pipeline  # 流水线要用 cards 建卡,这里晚一点再导
+
+        if card.kind in pipeline.PIPELINE_CARD_KINDS:
+            execution = pipeline.after_decision(db, card, decision=decision)
     return DecideOutcome(card=card, changed=changed, execution=execution)
 
 
@@ -237,10 +242,10 @@ def _issue_of(card: SqhCard) -> str | None:
 
 
 def _open_plan_cards(db: Session) -> list[SqhCard]:
-    # 档案卡按档案号管,不走这一套
+    # 只管早间计划出的卡;档案卡、K 流水线的卡各有各的管法
     return list(
         db.scalars(
-            select(SqhCard).where(SqhCard.kind != DOSSIER_CARD_KIND, SqhCard.status.in_(_OPEN)),
+            select(SqhCard).where(SqhCard.kind.in_(PLAN_CARD_KINDS), SqhCard.status.in_(_OPEN)),
             execution_options=SKIP_ORG_DATA_ISOLATION,
         )
     )

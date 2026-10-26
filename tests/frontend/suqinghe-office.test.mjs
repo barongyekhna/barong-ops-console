@@ -209,3 +209,22 @@ test("office phone embeds the C19 private chat with her and pings on new message
   assert.match(scene, /useChatPing\(openPanel === "phone"\)/);
   assert.match(scene, /styles\.phoneDot/);
 });
+
+
+test("批了还在建进 K 的那几秒显示「已批，建档中」,并且继续刷新、不再给批/重新整理按钮", () => {
+  assert.match(api, /building\?: boolean;/);
+  assert.match(api, /if \(item\.building && item\.status === "ready"\) return \{ key: "building", label: "已批，建档中" \}/);
+  assert.match(scene, /data-status=\{dossierStatusOf\(item\)\.key\}/);
+  assert.match(scene, /data-status=\{dossierStatusOf\(detail\)\.key\}/);
+  assert.match(scene, /DOSSIER_IN_PROGRESS\.includes\(item\.status\) \|\| item\.building/);
+  assert.match(scene, /detail\.status === "ready" && !detail\.building/);
+  assert.match(scene, /REDO_STATUSES\.includes\(detail\.status\) && !detail\.building/);
+  assert.match(sceneCss, /\.dossierStatus\[data-status="building"\]/);
+});
+
+test("白板定目标:跟踪的数从下拉里选,只给后端认得的键", () => {
+  assert.match(api, /\{ value: "published_products", label: "店里发布的品数" \}/);
+  assert.match(parts, /GOAL_METRICS\.map/);
+  assert.doesNotMatch(parts, /placeholder="指标"/);
+  assert.match(read("backend/app/modules/agent_series/suqinghe/snapshot.py"), /metric\.get\("metric"\) == "published_products"/);
+});

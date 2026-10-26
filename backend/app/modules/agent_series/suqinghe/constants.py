@@ -35,6 +35,9 @@ DOSSIER_STATUSES = ("queued", "fetching", "reading", "ready", "blocked", "failed
 # 还在处理中的档案:同一个 offer 再交一次,不重复排队。
 DOSSIER_ACTIVE_STATUSES = ("queued", "fetching", "reading", "ready")
 DOSSIER_CARD_KIND = "create_k_dossier"
+# 早间计划出的卡(brain.PLAN_FORMAT 里的 kind 加上 plan)。只有这几种按「快照里那件事」去重、对账(cards.settle_issues);
+# 档案卡按档案号管,K 流水线的卡(pipeline.py)按产品和步骤管。
+PLAN_CARD_KINDS = ("product_blocker", "plan", "ops_alert", "goal", "other")
 
 
 def dossier_daily_limit() -> int:

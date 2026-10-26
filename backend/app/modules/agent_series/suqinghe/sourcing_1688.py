@@ -803,11 +803,14 @@ def read_detail_images(
     triage: bool | None = None,
     meter: CostMeter | None = None,
     usage_label: str | None = None,
+    prompt: str | None = None,
+    clean: Callable[..., dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
     """详情长图 → 切段 →(可选分拣)→ 逐段转录。预算闸按台账实数,超预算就停。
 
     读图档和要不要分拣见 ``reader_settings``;Claude 当天额度用完被降级时立刻停——
     降级档读不了图,读出来的东西不能当事实用。
+    默认抄规格事实;``prompt`` + ``clean`` 换掉就是抄别的(卖点素材,见 material.py),回答一律放在 {"facts": [...]} 里。
     """
     from ...k_series.product_knowledge.constants import TARGET_ORGANIZATION_NAME
 
@@ -821,7 +824,8 @@ def read_detail_images(
     router = (router_factory or _default_router_factory)(db)
     if meter is None:
         meter = ledger_meter(label) if router_factory is None else (lambda: None)
-    prompt = extract_prompt(capture)
+    prompt = prompt or extract_prompt(capture)
+    clean = clean or _clean_fact
     facts: list[dict[str, Any]] = []
     seen = read = failed = 0
     estimated = 0.0
@@ -882,7 +886,7 @@ def read_detail_images(
                 continue
             read += 1
             for fact in extracted.get("facts") or []:
-                cleaned = _clean_fact(fact, image_index=image_index, segment_index=segment_index)
+                cleaned = clean(fact, image_index=image_index, segment_index=segment_index)
                 if cleaned:
                     facts.append(cleaned)
     total = spent()

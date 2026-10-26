@@ -746,7 +746,8 @@
 
 .dossierStatus[data-status="queued"],
 .dossierStatus[data-status="fetching"],
-.dossierStatus[data-status="reading"] {
+.dossierStatus[data-status="reading"],
+.dossierStatus[data-status="building"] {
   border-color: var(--color-warning);
   color: var(--color-warning);
 }

@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import styles from "./Office.module.css";
-import { addGoal, controlOffice, decideCard, instructOffice, patchGoal, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
+import { GOAL_METRICS, addGoal, controlOffice, decideCard, instructOffice, patchGoal, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
 
 /** 场景视图和列表视图共用的零件:审批卡、指挥控件、几个格式化小工具。 */
 
@@ -204,7 +204,13 @@ export function GoalForm({ busy, run }: { busy: boolean; run: Runner }) {
       }}
     >
       <input aria-label="新目标" onChange={(event) => setGoalText(event.target.value)} placeholder="新目标，如：店里做到 30 个品" value={goalText} />
-      <input aria-label="指标（可选）" className={styles.narrow} onChange={(event) => setMetric(event.target.value)} placeholder="指标" value={metric} />
+      <select aria-label="跟踪哪个数（可选）" className={styles.narrow} onChange={(event) => setMetric(event.target.value)} value={metric}>
+        {GOAL_METRICS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
       <input aria-label="目标值（可选）" className={styles.narrow} inputMode="decimal" onChange={(event) => setTarget(event.target.value)} placeholder="数值" value={target} />
       <button disabled={busy || goalText.trim().length < 2} type="submit">
         加目标

@@ -17,14 +17,14 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from . import memory, persona
-from .constants import MAX_CARDS_PER_DAY, USAGE_LABEL, daily_claude_budget_usd
+from .constants import MAX_CARDS_PER_DAY, PLAN_CARD_KINDS, USAGE_LABEL, daily_claude_budget_usd
 
 logger = logging.getLogger(__name__)
 
 AI_MODULE_ID = "k.product_knowledge"
 PLAN_TIMEOUT_SECONDS = 180.0
 CHAT_TIMEOUT_SECONDS = 60.0
-CARD_KINDS = ("product_blocker", "plan", "ops_alert", "goal", "other")
+CARD_KINDS = PLAN_CARD_KINDS
 
 PLAN_FORMAT = (
     "只输出一个 JSON 对象,不要别的文字:\n"
@@ -72,7 +72,7 @@ def plan_role(db: Session) -> str:
     return "judge"
 
 
-def _execute(role: str, messages: list[dict[str, Any]], *, timeout: float) -> dict[str, Any]:
+def _execute(role: str, messages: list[dict[str, Any]], *, timeout: float, usage_label: str = USAGE_LABEL) -> dict[str, Any]:
     from ....db.session import SessionLocal
     from ....services.ai_provider_router import AIExecutionRouter
     from ...k_series.product_knowledge.constants import TARGET_ORGANIZATION_NAME
@@ -85,7 +85,7 @@ def _execute(role: str, messages: list[dict[str, Any]], *, timeout: float) -> di
             payload={"messages": messages, "response_format": {"type": "json_object"}},
             org=TARGET_ORGANIZATION_NAME,
             module_id=AI_MODULE_ID,
-            usage_label=USAGE_LABEL,
+            usage_label=usage_label,
         )
     finally:
         provider_db.close()

@@ -83,6 +83,12 @@ export function decideCard(ref: string, decision: "approve" | "reject", reason?:
   });
 }
 
+/** 白板上能跟踪进度的数。后端快照只认这些键(snapshot.goals_section),别让老板手打英文键名。 */
+export const GOAL_METRICS: { value: string; label: string }[] = [
+  { value: "", label: "不跟踪" },
+  { value: "published_products", label: "店里发布的品数" },
+];
+
 export function addGoal(text: string, metric?: string, target?: number) {
   return apiRequest<OfficeGoal>(`${BASE}/goals`, {
     body: { text, metric: metric || null, target: target ?? null },
@@ -148,6 +154,8 @@ export type DossierSummary = {
   cost_usd: number | null;
   card_ref: string | null;
   k_product_id: string | null;
+  /** 卡批了、worker 还在建进 K(几秒钟);档案状态这时还是 ready。 */
+  building?: boolean;
   created_at: string;
   error?: string | null;
   source_url?: string;
@@ -192,6 +200,12 @@ export const DOSSIER_STATUS_LABEL: Record<DossierStatus, string> = {
 };
 
 export const DOSSIER_IN_PROGRESS: DossierStatus[] = ["queued", "fetching", "reading"];
+
+/** 档案柜里显示的状态:批了还在建的那几秒显示「已批，建档中」,别让老板以为没批上。 */
+export function dossierStatusOf(item: Pick<DossierSummary, "status" | "building">): { key: string; label: string } {
+  if (item.building && item.status === "ready") return { key: "building", label: "已批，建档中" };
+  return { key: item.status, label: DOSSIER_STATUS_LABEL[item.status] ?? item.status };
+}
 
 export const MEMORY_KIND_LABEL: Record<string, string> = {
   plan: "计划",

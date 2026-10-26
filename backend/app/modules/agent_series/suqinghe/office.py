@@ -84,9 +84,10 @@ def _claude_spend_today(db: Session) -> float | None:
         value = db.execute(
             text(
                 "SELECT COALESCE(SUM(cost_usd),0) FROM ai_usage_ledger "
-                "WHERE usage_day = (now() AT TIME ZONE 'UTC')::date AND module = :m"
+                "WHERE usage_day = (now() AT TIME ZONE 'UTC')::date AND (module = :m OR module LIKE :sub)"
             ),
-            {"m": USAGE_LABEL},
+            # suqinghe.k = 她推 K 流水线时自己的判断(主关键词、风险词);分开记是为了不撞档案读图的预算表
+            {"m": USAGE_LABEL, "sub": f"{USAGE_LABEL}.%"},
             execution_options=_X,
         ).scalar()
         return round(float(value or 0), 4)
