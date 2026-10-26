@@ -226,5 +226,5 @@ test("白板定目标:跟踪的数从下拉里选,只给后端认得的键", () 
   assert.match(api, /\{ value: "published_products", label: "店里发布的品数" \}/);
   assert.match(parts, /GOAL_METRICS\.map/);
   assert.doesNotMatch(parts, /placeholder="指标"/);
-  assert.match(read("backend/app/modules/agent_series/suqinghe/snapshot.py"), /metric\.get\("metric"\) == "published_products"/);
+  // 「后端真认这个键」在后端测试里核(test_suqinghe_runtime):前端镜像构建时没有 backend/ 目录
 });

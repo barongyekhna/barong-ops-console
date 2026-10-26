@@ -118,6 +118,29 @@ def _snap(**overrides: Any) -> dict[str, Any]:
     return snap
 
 
+def test_whiteboard_metric_choices_are_ones_the_snapshot_tracks() -> None:
+    """白板「跟踪哪个数」是前端下拉(office-api.ts 的 GOAL_METRICS),快照只认得 published_products。
+
+    放在后端测试里核:前端镜像构建时只有 frontend/、tests/frontend/,读不到后端文件(10-26 演练发版时栽过)。
+    """
+    import re
+    from pathlib import Path
+
+    api = (Path(__file__).resolve().parents[2] / "frontend/src/components/suqinghe/office-api.ts").read_text(encoding="utf-8")
+    block = api[api.index("export const GOAL_METRICS"):]
+    block = block[: block.index("];")]
+    values = [v for v in re.findall(r'value: "([^"]*)"', block) if v]
+    assert values == ["published_products"]
+    goal = SimpleNamespace(id=1, text="30 个品", metric={"metric": values[0], "target": 30}, status="active", created_at=None)
+    products = {"by_stage": {"published": 7}}
+
+    class FakeDB:
+        def scalars(self, *args, **kwargs):
+            return [goal]
+
+    assert snapshot.goals_section(FakeDB(), products)[0]["current"] == 7
+
+
 def test_her_own_products_are_reported_but_not_raised_as_issues() -> None:
     import json
 
