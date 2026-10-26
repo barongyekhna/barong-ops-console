@@ -157,20 +157,10 @@ export type DossierSummary = {
   reply?: string;
 };
 
-// kind 以后端为准:writer = 英文名是按事实改写的,classifier = 类目是判定出来的;认不出的照原样显示。
-export type DraftSource = { kind: "page_json" | "page_text" | "image" | "writer" | "classifier" | "precedent" | (string & {}); ref?: string; raw?: string };
-
-export type DraftField = {
-  value: unknown;
-  unit?: string | null;
-  sources?: DraftSource[];
-  status: "ok" | "conflict" | "missing" | "needs_owner";
-  note?: string;
-};
-
+/** draft 的结构由后端定(dossier.py,有版本号);界面只经 dossier-view.ts 读它,这里不再猜字段。 */
 export type DossierDetail = DossierSummary & {
   capture: Record<string, unknown>;
-  draft: Record<string, DraftField | unknown>;
+  draft: unknown;
 };
 
 export function submitDossier(url: string) {
@@ -183,6 +173,11 @@ export function getDossiers(limit = 30) {
 
 export function getDossier(id: number) {
   return apiRequest<DossierDetail>(`${BASE}/dossiers/${encodeURIComponent(String(id))}`);
+}
+
+/** 老板点「重新整理」:旧档案作废(待批的卡按驳回处理),同一个链接按新规则重排。返回新排的那份。 */
+export function redoDossier(id: number) {
+  return apiRequest<DossierSummary>(`${BASE}/dossiers/${encodeURIComponent(String(id))}/redo`, { method: "POST" });
 }
 
 export const DOSSIER_STATUS_LABEL: Record<DossierStatus, string> = {

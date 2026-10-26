@@ -9,7 +9,7 @@
 分三层,方便测试:
 - ``parse_capture`` 纯函数:给 HTML / 页面文本 / 详情描述,吐出 ``Capture``,不联网;
 - ``fetch_offer`` 联网:开页面、取详情描述,再交给 ``parse_capture``;
-- ``read_detail_images`` 看图:详情长图切段 → Haiku 分拣 → Opus 逐段转录。
+- ``read_detail_images`` 看图:详情长图切段 →(可选分拣)→ 逐段转录;读图档见 ``reader_settings``。
 
 家规:读不到就空着,不猜。页面里没有的字段一律 None,零值(1688 用 0 表示没填)也算没有。
 """
@@ -19,11 +19,14 @@ from __future__ import annotations
 import base64
 import io
 import json
+import os
 import re
+import time
 import urllib.request
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -35,22 +38,29 @@ REFERER = "https://detail.1688.com/"
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 IMAGE_HOST_SUFFIX = ".alicdn.com"
 
-# 看图费用的保守估算(路由不回传 token 用量,这里按单次调用估):
-# fast(Haiku 5.5)分拣一段 ≈ 1.6k 输入 + 少量输出,按 $0.001 记(实际约 $0.0003);
-# judge(Opus 5.5)转录一段 ≈ 1.6k 输入 + 思考与输出约 2k,按 $0.05 记。
-FAST_CALL_EST_USD = 0.001
-JUDGE_CALL_EST_USD = 0.05
+# 看图花费:预算闸按台账实数算(ai_usage_ledger,每次调用都记 token 和美元)。
+# 这几个数只用来预估「下一次调用大概多少钱」,以及台账读不到时兜底——
+# 10-26 之前整份花费都按估算记($0.05/次 Opus),是实际的 3 倍多,读到 9/17 段就被自己的估算撞停。
+# 实测(10-26 台账,带商品背景的提示词):Haiku 5.5 一段约 $0.0004,Opus 5.5 一段约 $0.012。
+CALL_EST_USD = {"fast": 0.001, "judge": 0.02, "writer": 0.02}
 
 # 数字描述的是哪一层:同一个「重量」,单品 200 克和一整盒 2500 克不是矛盾(10-23 首测踩到)。
 FACT_SCOPES = ("item", "inner_pack", "carton", "unknown")
+# 这条事实说的是谁:this = 这件商品;other = 兼容机型表、同店别的型号、对比图里的别家(10-26 电池那单
+# 把一张「18V/21V/24V、4.0Ah/6.0Ah」的别款电池图全当成了本品参数);unsure = 看不出。
+FACT_SUBJECTS = ("this", "other", "unsure")
 
 FACT_FIELDS = (
     "material",
     "dimensions",
     "weight",
     "capacity",
+    "voltage",
     "power",
-    "battery",
+    "battery_type",
+    "charging",
+    "runtime",
+    "cycle_life",
     "age_range",
     "package_includes",
     "color_options",
@@ -117,7 +127,13 @@ class Capture:
     gallery_images: list[str] = field(default_factory=list)
     detail_url: str | None = None
     detail_images: list[str] = field(default_factory=list)
+    # 详情描述取不到时写原因。之前取不到就悄悄当成「卖家没放图」(10-26 电钻一单),老板根本不知道少读了一块。
+    detail_error: str | None = None
     category_zh: str | None = None
+    # 1688 两种定价:sku = 每个规格各有价(skuInfoMap),页面那两个价只是最低/最高;
+    # range = 所有规格同价、按件数分档(阶梯价)。10-26 之前把 sku 定价的区间当成了阶梯价。
+    price_mode: str | None = None
+    price_range: list[float] = field(default_factory=list)
     blocked: bool = False
     block_reason: str | None = None
 
@@ -328,6 +344,19 @@ def parse_capture(*, url: str, html: str, text: str, desc_js: str | None) -> Cap
             pack[">".join(names)] = row
             pack.setdefault(names[0], row)
 
+    # 定价方式 + 每个规格的价:按规格定价的商品,价格在 skuInfoMap(按规格名索引),tradeModel.skuMap 里没有。
+    price_model_main = _dig(data, "mainPrice", "fields", "priceModel") or {}
+    trade_price_model = trade.get("offerPriceModel") if isinstance(trade.get("offerPriceModel"), dict) else {}
+    sku_param = _dig(data, "Root", "fields", "dataJson", "orderParamModel", "orderParam", "skuParam") or {}
+    mode_raw = (
+        price_model_main.get("priceDisplayType")
+        or trade_price_model.get("priceDisplayType")
+        or sku_param.get("skuPriceType")
+    )
+    capture.price_mode = {"skuPrice": "sku", "rangePrice": "range"}.get(str(mode_raw or ""))
+    sku_info = _dig(data, "Root", "fields", "dataJson", "skuModel", "skuInfoMap") or {}
+    sku_info = sku_info if isinstance(sku_info, dict) else {}
+
     skus: list[dict[str, Any]] = []
     sku_rows = trade.get("skuMap")
     if isinstance(sku_rows, dict):
@@ -335,7 +364,8 @@ def parse_capture(*, url: str, html: str, text: str, desc_js: str | None) -> Cap
     for row in sku_rows or []:
         if not isinstance(row, dict):
             continue
-        name = str(row.get("specAttrs") or "").replace("&gt;", ">").strip()
+        raw_name = str(row.get("specAttrs") or "")
+        name = raw_name.replace("&gt;", ">").strip()
         if not name:
             continue
         weights = pack_by_id.get(str(row.get("skuId"))) or pack.get(name) or {}
@@ -344,8 +374,15 @@ def parse_capture(*, url: str, html: str, text: str, desc_js: str | None) -> Cap
             (image_by_name[part.strip()] for part in name.split(">") if part.strip() in image_by_name), None
         )
         # skuMap 里的 priceAmount 含义不明(实测 12 而阶梯价是 3.30),不当价格用;
-        # 只认显式的 price / discountPrice。
-        price = _positive_number(row.get("discountPrice")) or _positive_number(row.get("price"))
+        # 只认显式的 price / discountPrice:先看这一行,再看 skuInfoMap 里同名的那条。
+        info = sku_info.get(raw_name) or sku_info.get(name) or {}
+        info = info if isinstance(info, dict) else {}
+        price = (
+            _positive_number(row.get("discountPrice"))
+            or _positive_number(row.get("price"))
+            or _positive_number(info.get("discountPrice"))
+            or _positive_number(info.get("price"))
+        )
         skus.append(
             {
                 "name": name,
@@ -376,21 +413,40 @@ def parse_capture(*, url: str, html: str, text: str, desc_js: str | None) -> Cap
             )
     capture.skus = skus
 
-    # 阶梯价
-    tiers: list[dict[str, Any]] = []
-    price_model = trade.get("offerPriceModel") if isinstance(trade.get("offerPriceModel"), dict) else {}
-    raw_tiers = price_model.get("currentPricesWithOnePiece") or price_model.get("currentPrices") or trade.get("disPriceRanges") or []
-    for entry in raw_tiers:
+    # 价格:按规格定价 → 页面上那两个价是「最低—最高」区间,不是阶梯;阶梯定价 → 按件数分档。
+    shown_prices = (
+        price_model_main.get("currentPricesWithOnePiece")
+        or price_model_main.get("currentPrices")
+        or trade_price_model.get("currentPricesWithOnePiece")
+        or trade_price_model.get("currentPrices")
+        or trade.get("disPriceRanges")
+        or []
+    )
+    entries: list[tuple[int | None, float]] = []
+    for entry in shown_prices:
         entry = _resolve_ref(root or {}, entry)
         if not isinstance(entry, dict):
             continue
-        qty = _positive_int(entry.get("beginAmount"))
         price = _positive_number(entry.get("price") or entry.get("discountPrice"))
-        if qty and price and not any(t["min_qty"] == qty for t in tiers):
-            tiers.append({"min_qty": qty, "price_cny": price})
+        if price:
+            entries.append((_positive_int(entry.get("beginAmount")), price))
+    tiers: list[dict[str, Any]] = []
+    if capture.price_mode == "sku":
+        sku_prices = [s["price_cny"] for s in skus if s.get("price_cny")]
+        pool = sku_prices or [price for _, price in entries]
+        capture.price_range = [min(pool), max(pool)] if pool else []
+    else:
+        for qty, price in entries:
+            if qty and not any(t["min_qty"] == qty for t in tiers):
+                tiers.append({"min_qty": qty, "price_cny": price})
     capture.price_tiers = sorted(tiers, key=lambda t: t["min_qty"])
 
-    capture.moq = _positive_int(trade.get("beginAmount")) or (capture.price_tiers[0]["min_qty"] if capture.price_tiers else None)
+    first_qty = next((qty for qty, _ in entries if qty), None)
+    capture.moq = (
+        _positive_int(trade.get("beginAmount"))
+        or (capture.price_tiers[0]["min_qty"] if capture.price_tiers else None)
+        or first_qty
+    )
     unit = trade.get("unit") or _dig(data, "productTitle", "fields", "unit")
     capture.unit = str(unit) if unit else None
     sold = re.search(r'"saledCount":\s*(\d+)', html or "")
@@ -467,6 +523,12 @@ def _render_page(url: str, timeout_s: float) -> tuple[str, str, str, str]:
                     break
                 except Exception:  # noqa: BLE001 —— "page is navigating" 时等一下再取
                     page.wait_for_timeout(1000)
+            if html and not text:
+                # 10-26 实测:HTML 拿到了、inner_text 三次都失败 → 页面文字是空的,供应商年限/所在地跟着丢。
+                try:
+                    text = page.evaluate("() => (document.body ? document.body.innerText : '')") or ""
+                except Exception:  # noqa: BLE001 —— 文字只是兜底来源,取不到不挡主数据
+                    text = ""
             return page.url, page.title(), html, text
         finally:
             browser.close()
@@ -485,12 +547,36 @@ def fetch_offer(url: str, *, timeout_s: float = 25) -> Capture:
         return Capture(offer_id=offer_id, url=target, title_zh=title or None, blocked=True, block_reason=reason)
     capture = parse_capture(url=target, html=html, text=text, desc_js=None)
     if capture.detail_url:
-        try:
-            desc = _http_get_text(capture.detail_url)
-        except Exception:  # noqa: BLE001 —— 详情描述取不到不影响主数据,只是没有详情图
-            desc = None
+        desc, error = fetch_detail_description(capture.detail_url)
         capture.detail_images = _desc_images(desc)
+        capture.detail_error = error
+    else:
+        capture.detail_error = "页面里没找到详情描述的地址"
     return capture
+
+
+def fetch_detail_description(
+    url: str,
+    *,
+    get: Callable[[str], str] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    attempts: int = 3,
+) -> tuple[str | None, str | None]:
+    """取详情描述(里面是详情长图的地址)。返回 (内容, 取不到的原因)。
+
+    取不到不影响主数据,但**必须说出来**:10-26 电钻那单第一次取失败,被当成「卖家没放图」,
+    档案上一个字没提,整块详情图没读。
+    """
+    get = get or _http_get_text
+    last = ""
+    for attempt in range(max(1, attempts)):
+        try:
+            return get(url), None
+        except Exception as exc:  # noqa: BLE001 —— 网络抖动重试,最后把原因带回去
+            last = f"{exc.__class__.__name__}: {str(exc)[:120]}".strip(": ")
+            if attempt + 1 < attempts:
+                sleep(2.0 * (attempt + 1))
+    return None, f"详情图清单取了 {attempts} 次都没取到({last})"
 
 
 # ---------------------------------------------------------------- 看图
@@ -546,22 +632,78 @@ def download_image(url: str, *, timeout: float = 20.0) -> bytes | None:
 
 _TRIAGE_PROMPT = (
     "这是一个 1688 商品详情页长图的其中一段。判断它是否包含可抄录的商品事实:"
-    "参数表、尺寸图、重量、材质、容量/功率/电池、适用年龄、包装清单/配件、颜色款式表、认证。"
+    "参数表、尺寸图、重量、材质、容量/电压/功率/电池、适用年龄、包装清单/配件、颜色款式表、认证。"
     "纯氛围图、模特图、营销口号不算。"
     'Only reply JSON: {"useful": true|false, "kind": "specs|size|package|material|certification|colors|none"}'
 )
 
-_EXTRACT_PROMPT = (
-    "你在抄录 1688 商品详情图里**印着的**商品事实。只抄图上真实出现的文字和数字,"
-    "看不清、图上没有的一律不写,绝不推测、不换算、不补全。\n"
-    "Transcribe ONLY facts literally printed in this image segment. Never guess, convert or infer.\n"
-    'Reply JSON only: {"facts": [{"field": one of '
-    + json.dumps(list(FACT_FIELDS))
-    + ', "value": "as printed", "unit": "as printed or empty", "raw_text": "the exact printed text", '
-    '"scope": "item|inner_pack|carton|unknown", "confidence": "high|medium|low"}]}. Empty list if nothing.\n'
-    "scope 说明数字描述的是哪一层:item=单个产品本身;inner_pack=一个销售包装(单盒/单袋,买家收到的那一份);"
-    "carton=批发外箱/装箱信息;unknown=图上看不出。例如「一个约200克」是 item,「一大盒约2500克」是 inner_pack 或 carton。"
+_EXTRACT_RULES = (
+    "你在读一张 1688 商品详情长图的其中一段,任务是抄录图上**印着的、关于这件商品本身**的规格事实。\n\n"
+    "规则:\n"
+    "1. 只抄图上真实印着的文字和数字;看不清、图上没有的不写;不推测、不换算、不补全。\n"
+    "2. 每条事实标 subject:this = 这件商品(或它的某个规格/SKU);other = 别的商品"
+    "(兼容机型表、同店其他型号或其他容量、对比图里的别家、示意用的其他产品);unsure = 看不出。\n"
+    "3. 事实只属于某一个 SKU 时(比如某个容量、某个颜色),variant 填那个 SKU 的名字(照上面的列表原样写);"
+    "适用于整件商品就留空。\n"
+    "4. value 只写规格值本身,要短(不超过 30 个字),例如「12V」「2000mAh」「阻燃ABS」「84×48×40」。"
+    "广告语、口号、形容词(稳定性高、足容不虚标、超长续航、品质保证、工业级)一律不抄。\n"
+    "5. 尺寸:整体外形尺寸作为**一条**事实,长×宽×高写在一起(如「84×48×40」,unit 写 mm 或 cm);"
+    "尺寸图上零件的单个标注(按钮直径、接口宽度)不抄。\n"
+    "6. 重量和尺寸标 scope:item = 单个产品本身;inner_pack = 一个销售包装(买家收到的那一份);"
+    "carton = 批发外箱/装箱信息;unknown = 看不出。例如「一个约200克」是 item,「一大盒约2500克」是 inner_pack 或 carton。\n"
+    "7. field 只能是:" + "、".join(FACT_FIELDS) + "。电压写 voltage,容量写 capacity,电芯/电池类型写 battery_type,"
+    "充电接口或充电时间写 charging,续航/使用时间写 runtime,循环次数写 cycle_life,认证写 certification,"
+    "包装清单/配件写 package_includes,颜色款式写 color_options。\n\n"
+    "Transcribe ONLY facts literally printed in this image segment about THIS product. Never guess, convert or infer.\n"
+    'Reply JSON only: {"facts": [{"field": "...", "value": "as printed", "unit": "as printed or empty", '
+    '"raw_text": "the exact printed text", "subject": "this|other|unsure", "variant": "SKU name or empty", '
+    '"scope": "item|inner_pack|carton|unknown", "confidence": "high|medium|low"}]}. Empty list if nothing.'
 )
+
+
+def product_context(capture: Capture | dict[str, Any]) -> str:
+    """给读图模型的背景:这件商品是什么、有哪些规格、页面属性表写了什么——它才分得清图上哪些是本品。"""
+    data = capture if isinstance(capture, dict) else capture.to_dict()
+    title = str(data.get("title_zh") or "").strip() or "(没拿到)"
+    skus = [str(s.get("name") or "").strip() for s in data.get("skus") or [] if isinstance(s, dict)]
+    attrs = [
+        f"{a.get('name')}:{a.get('value')}"
+        for a in (data.get("attributes") or [])[:30]
+        if isinstance(a, dict) and a.get("name") and a.get("value")
+    ]
+    return (
+        "这件商品(来自 1688 页面数据,帮你判断图上哪些是它、哪些不是):\n"
+        f"标题:{title[:120]}\n"
+        f"规格选项(SKU):{'、'.join(s for s in skus[:40] if s) or '(只有一个规格)'}\n"
+        f"页面属性表:{';'.join(attrs)[:1500] or '(没有)'}"
+    )
+
+
+def extract_prompt(capture: Capture | dict[str, Any]) -> str:
+    return product_context(capture) + "\n\n" + _EXTRACT_RULES
+
+
+# 10-26 三个真链接(电池 / 灭蚊灯 / 电钻,共 65 段)同一批图段对比,标准答案是逐段人工看图定的:
+#   Opus 5.5    关键参数 18/18,3 处会造成假标红(电芯隔离膜、挂钩、全铜电机当材质),$0.76
+#   Sonnet 5.5  关键参数 17/18(漏纸盒尺寸),0 处,$0.31
+#   Haiku 5.5   关键参数 18/18,0 处(小错都自标把握低,合并时不标红),$0.02
+# 三个都把「别款电池图」标成了别的商品、都没上「别家工具上的 20V」的当 —— 管用的是提示词里的商品背景。
+# 所以默认 fast(Haiku 5.5),不分拣、每段直接读。
+DEFAULT_READER_ROLE = "fast"
+
+
+def reader_settings() -> tuple[str, bool]:
+    """读详情图用哪个档、要不要先分拣。换档只改环境变量 SQH_1688_READER_ROLE,不动代码。
+
+    分拣只在读图档比分拣档贵的时候才划算:SQH_1688_TRIAGE=auto(默认)= 读图档不是 fast 才分拣。
+    """
+    role = os.getenv("SQH_1688_READER_ROLE", DEFAULT_READER_ROLE).strip().lower() or DEFAULT_READER_ROLE
+    return role, _triage_for(role)
+
+
+def _triage_for(role: str) -> bool:
+    triage_env = os.getenv("SQH_1688_TRIAGE", "auto").strip().lower()
+    return role != "fast" if triage_env in {"", "auto"} else triage_env in {"1", "true", "yes", "on"}
 
 
 def _data_url(segment: bytes) -> str:
@@ -604,6 +746,52 @@ def _default_router_factory(db: Any) -> Any:
     return AIExecutionRouter(db, timeout_seconds=180.0, total_budget_seconds=240.0)
 
 
+CostMeter = Callable[[], "float | None"]
+
+
+def ledger_meter(label: str, since: datetime | None = None) -> CostMeter:
+    """台账实数:从 ``since`` 到现在、记在 ``label`` 名下的 AI 花费。读不到返回 None(调用方退回估算)。
+
+    她所有的 AI 调用都在同一个 worker 线程里排队做,读图期间不会混进别的活的花费。
+    """
+    start = since or datetime.now(UTC)
+
+    def spent() -> float | None:
+        from sqlalchemy import text as sql_text
+
+        from ....db.session import SessionLocal
+
+        try:
+            with SessionLocal() as session:
+                value = session.execute(
+                    sql_text("SELECT COALESCE(SUM(cost_usd), 0) FROM ai_usage_ledger WHERE module = :m AND created_at >= :t"),
+                    {"m": label, "t": start},
+                ).scalar()
+            return float(value or 0)
+        except Exception:  # noqa: BLE001 —— 台账读不到就按估算走,不挡读图
+            return None
+
+    return spent
+
+
+def _clean_fact(fact: Any, *, image_index: int, segment_index: int) -> dict[str, Any] | None:
+    if not isinstance(fact, dict) or not str(fact.get("value") or "").strip():
+        return None
+    field_name = str(fact.get("field") or "other")
+    return {
+        "field": field_name if field_name in FACT_FIELDS else "other",
+        "value": str(fact.get("value")).strip(),
+        "unit": str(fact.get("unit") or "").strip(),
+        "raw_text": str(fact.get("raw_text") or "").strip(),
+        "subject": fact.get("subject") if fact.get("subject") in FACT_SUBJECTS else "unsure",
+        "variant": str(fact.get("variant") or "").strip()[:120],
+        "scope": fact.get("scope") if fact.get("scope") in FACT_SCOPES else "unknown",
+        "image_index": image_index,
+        "segment_index": segment_index,
+        "confidence": fact.get("confidence") if fact.get("confidence") in {"high", "medium", "low"} else "low",
+    }
+
+
 def read_detail_images(
     db: Any,
     capture: Capture | dict[str, Any],
@@ -611,28 +799,56 @@ def read_detail_images(
     budget_usd: float = 0.50,
     download: Callable[[str], bytes | None] | None = None,
     router_factory: Callable[[Any], Any] | None = None,
+    reader_role: str | None = None,
+    triage: bool | None = None,
+    meter: CostMeter | None = None,
+    usage_label: str | None = None,
 ) -> dict[str, Any]:
-    """详情长图 → 切段 → Haiku 分拣 → Opus 转录。费用按单次调用保守估算,超预算就停。"""
+    """详情长图 → 切段 →(可选分拣)→ 逐段转录。预算闸按台账实数,超预算就停。
+
+    读图档和要不要分拣见 ``reader_settings``;Claude 当天额度用完被降级时立刻停——
+    降级档读不了图,读出来的东西不能当事实用。
+    """
     from ...k_series.product_knowledge.constants import TARGET_ORGANIZATION_NAME
 
     from .constants import USAGE_LABEL
 
+    label = usage_label or USAGE_LABEL
+    role = (reader_role or reader_settings()[0]).strip().lower()
+    # 要不要分拣跟着实际用的读图档走(调用方指定了档,就按指定的档算)。
+    do_triage = _triage_for(role) if triage is None else triage
     download = download or download_image
     router = (router_factory or _default_router_factory)(db)
+    if meter is None:
+        meter = ledger_meter(label) if router_factory is None else (lambda: None)
+    prompt = extract_prompt(capture)
     facts: list[dict[str, Any]] = []
-    seen = read = 0
-    cost = 0.0
+    seen = read = failed = 0
+    estimated = 0.0
     stopped: str | None = None
+    basis = "estimate"
 
-    def call(role: str, prompt: str, segment: bytes) -> dict[str, Any]:
+    def spent() -> float:
+        nonlocal basis
+        real = meter()
+        if real is None:
+            return estimated
+        basis = "ledger"
+        return real
+
+    def call(call_role: str, text: str, segment: bytes) -> dict[str, Any]:
+        nonlocal estimated
+        estimated += CALL_EST_USD.get(call_role, CALL_EST_USD["judge"])
         result = router.execute(
-            provider=role,
+            provider=call_role,
             task_type="chat",
-            payload=_payload(prompt, segment),
+            payload=_payload(text, segment),
             org=TARGET_ORGANIZATION_NAME,
             module_id="k.product_knowledge",
-            usage_label=USAGE_LABEL,
+            usage_label=label,
         )
+        if isinstance(result, dict) and result.get("_ai_degraded"):
+            raise _Degraded()
         return _as_json(result)
 
     # 排队流水线里存库的是 to_dict() 后的字典,直接调用时是 Capture;两种都认。
@@ -642,64 +858,64 @@ def read_detail_images(
             break
         data = download(url)
         if not data:
+            failed += 1  # 图床上没了(404)或者太大;跳过,但要记个数给老板看
             continue
         try:
             segments = slice_image(data)
         except Exception:  # noqa: BLE001 —— 坏图跳过
+            failed += 1
             continue
         for segment_index, segment in enumerate(segments):
-            if cost + FAST_CALL_EST_USD > budget_usd:
+            next_cost = CALL_EST_USD.get(role, CALL_EST_USD["judge"]) + (CALL_EST_USD["fast"] if do_triage else 0.0)
+            if spent() + next_cost > budget_usd:
                 stopped = "budget"
                 break
             seen += 1
-            cost += FAST_CALL_EST_USD
             try:
-                triage = call("fast", _TRIAGE_PROMPT, segment)
-            except Exception:  # noqa: BLE001 —— 分拣失败当作没用,继续下一段
-                continue
-            if not triage.get("useful"):
-                continue
-            if cost + JUDGE_CALL_EST_USD > budget_usd:
-                stopped = "budget"
+                if do_triage and not call("fast", _TRIAGE_PROMPT, segment).get("useful"):
+                    continue
+                extracted = call(role, prompt, segment)
+            except _Degraded:
+                stopped = "degraded"
                 break
-            cost += JUDGE_CALL_EST_USD
-            try:
-                extracted = call("judge", _EXTRACT_PROMPT, segment)
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001 —— 一段读失败跳过,继续下一段
                 continue
             read += 1
             for fact in extracted.get("facts") or []:
-                if not isinstance(fact, dict) or not str(fact.get("value") or "").strip():
-                    continue
-                field_name = str(fact.get("field") or "other")
-                facts.append(
-                    {
-                        "field": field_name if field_name in FACT_FIELDS else "other",
-                        "value": str(fact.get("value")).strip(),
-                        "unit": str(fact.get("unit") or "").strip(),
-                        "raw_text": str(fact.get("raw_text") or "").strip(),
-                        "scope": fact.get("scope") if fact.get("scope") in FACT_SCOPES else "unknown",
-                        "image_index": image_index,
-                        "segment_index": segment_index,
-                        "confidence": fact.get("confidence") if fact.get("confidence") in {"high", "medium", "low"} else "low",
-                    }
-                )
+                cleaned = _clean_fact(fact, image_index=image_index, segment_index=segment_index)
+                if cleaned:
+                    facts.append(cleaned)
+    total = spent()
     return {
         "facts": facts,
         "segments_seen": seen,
         "segments_read": read,
-        "cost_usd": round(cost, 4),
+        "images_failed": failed,
+        "cost_usd": round(total, 4),
+        "cost_basis": basis,
+        "reader_role": role,
+        "triage": do_triage,
         "stopped_reason": stopped,
     }
+
+
+class _Degraded(RuntimeError):
+    """Claude 额度用完、这次调用被降级了。"""
 
 
 __all__ = [
     "Capture",
     "FACT_FIELDS",
     "FACT_SCOPES",
+    "FACT_SUBJECTS",
     "detect_blocked",
     "download_image",
+    "extract_prompt",
+    "fetch_detail_description",
     "fetch_offer",
+    "ledger_meter",
+    "product_context",
+    "reader_settings",
     "normalize_image_url",
     "offer_url",
     "parse_capture",

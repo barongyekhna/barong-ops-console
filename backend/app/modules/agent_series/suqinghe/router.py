@@ -213,6 +213,25 @@ def submit_dossier(body: DossierBody, db: Session = Depends(get_db), owner: User
     }
 
 
+@router.post("/dossiers/{dossier_id}/redo")
+def redo_dossier(dossier_id: int, db: Session = Depends(get_db), owner: User = Depends(require_owner)) -> dict[str, Any]:
+    try:
+        dossier, created, position = dossiers.redo(db, dossier_id=dossier_id, actor=owner)
+    except dossiers.DossierError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail={"code": "SQH_DOSSIER_REDO_REFUSED", "message": str(exc)}) from exc
+    except cards.CardError as exc:
+        db.rollback()
+        raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
+    db.commit()
+    return {
+        **dossiers.summary_payload(dossier),
+        "created": created,
+        "position": position,
+        "reply": dossiers.queue_reply(position, created=created, status=dossier.status),
+    }
+
+
 @router.get("/dossiers")
 def list_dossiers(
     limit: int = Query(default=30, ge=1, le=100),

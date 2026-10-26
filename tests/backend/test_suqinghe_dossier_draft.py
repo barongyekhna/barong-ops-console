@@ -199,3 +199,189 @@ def test_category_note_distinguishes_offline_from_no_match() -> None:
         None, "x", lambda db, t: SimpleNamespace(status="none", chosen=None, shortlist_size=0, hint=SimpleNamespace(keywords_en=["squishy toy"]))
     )
     assert "squishy toy" in none["note"] and "候选 0 个" in none["note"]
+
+
+# ---------------------------------------------------------------- 10-26 第二版:只抄本品、按规格、真矛盾才标红
+
+BATTERY = FIXTURE / "offer_643348607768"
+DRILL = FIXTURE / "offer_888786557113"
+
+
+def _real_capture(base: Path) -> dict:
+    offer = base.name.split("_")[1]
+    text = base.with_suffix(".txt")
+    return parse_capture(
+        url=f"https://detail.1688.com/offer/{offer}.html",
+        html=base.with_suffix(".html").read_text(encoding="utf-8"),
+        text=text.read_text(encoding="utf-8") if text.exists() else "",
+        desc_js=base.with_suffix(".desc.txt").read_text(encoding="utf-8"),
+    ).to_dict()
+
+
+def _fact(field: str, value: str, unit: str = "", *, subject: str = "this", confidence: str = "high",
+          image: int = 0, segment: int = 0, scope: str = "unknown", raw: str | None = None) -> dict:
+    return {"field": field, "value": value, "unit": unit, "raw_text": raw or value, "subject": subject, "variant": "",
+            "scope": scope, "confidence": confidence, "image_index": image, "segment_index": segment}
+
+
+def _draft_with(capture: dict, facts: list[dict], **read) -> dict:
+    image_read = {"facts": facts, "segments_seen": 5, "segments_read": 5, "cost_usd": 0.01, "stopped_reason": None, **read}
+    return dossier.build_draft(None, capture, image_read, writer=_writer, classifier=_classifier("high"))
+
+
+def test_other_products_and_slogans_never_become_specs() -> None:
+    # 电池那单:一张别款电池图(18V/21V/24V、6.0Ah)+ 一句广告语,第一版全进了「说法不一」。
+    facts = [
+        _fact("voltage", "12V", "V", image=3),
+        _fact("voltage", "21V", "V", subject="other", image=13),
+        _fact("voltage", "18V", "V", subject="other", image=13),
+        _fact("capacity", "6.0Ah", "Ah", subject="other", image=13),
+        _fact("battery_type", "全新A品电芯,足容不虚标,400-500次循环,稳定性高,品质保证", image=7),
+    ]
+    draft = _draft_with(_real_capture(BATTERY), facts)
+    voltage = draft["specs"]["voltage"]
+    assert voltage["status"] == "ok" and voltage["value"] == "12" and voltage["unit"] == "V"
+    assert not voltage.get("alternatives")
+    assert draft["image_read"]["ignored_other"] == 3 and draft["image_read"]["ignored_narrative"] == 1
+    assert not any(f["status"] == "conflict" for f in draft["flagged"])
+
+
+def test_capacity_comes_per_variant_from_sku_names() -> None:
+    facts = [_fact("capacity", "2000mAh", "mAh", image=4), _fact("capacity", "4000mAh", "mAh", image=9)]
+    draft = _draft_with(_real_capture(BATTERY), facts)
+    capacity = draft["specs"]["capacity"]
+    assert capacity["status"] == "ok"
+    assert capacity["value"] == "1300mAh / 1500mAh / 2000mAh / 2500mAh"
+    assert capacity["per_variant"]["2000mah"] == "2000mAh" and "12V直充充电器" not in capacity["per_variant"]
+    assert [a["value"] for a in capacity["alternatives"]] == ["4000"]  # 对不上任何规格的,列出来不标红
+    by_name = {v["name_zh"]: v for v in draft["variants"]}
+    assert by_name["1300mah"]["specs"]["capacity"] == "1300mAh" and by_name["1300mah"]["cost_price_cny"] == 16.99
+    assert "capacity" not in by_name["12V直充充电器"]["specs"]
+
+
+def test_dimension_drawing_labels_merge_and_part_labels_are_dropped() -> None:
+    capture = {"attributes": [], "title_zh": "电池"}
+    # 同一段里分开标的 40 / 48 / 84 mm → 一条 84×48×40;四个以上的单独标注是零件尺寸,不要。
+    facts = [_fact("dimensions", v, "", image=10) for v in ("40mm", "48mm", "84mm")]
+    facts += [_fact("dimensions", v, "MM", image=12) for v in ("35", "16", "140", "119")]
+    stats: dict = {}
+    specs, _ = dossier.merge_specs(capture, facts, stats=stats)
+    dims = specs["dimensions"]
+    assert dims["status"] == "ok" and dims["value"] == "84×48×40" and dims["unit"] == "mm"
+    assert stats["ignored_drawing"] == 4
+    # 同一段已有完整的长×宽×高,单个标注就是多余的
+    facts = [_fact("dimensions", "153*40*40", "mm", image=13), _fact("dimensions", "35", "MM", image=13)]
+    specs, _ = dossier.merge_specs(capture, facts, stats=(stats := {}))
+    assert specs["dimensions"]["value"] == "153*40*40" and stats["ignored_drawing"] == 1
+
+
+def test_title_vs_attribute_is_a_real_conflict_and_consult_service_is_a_placeholder() -> None:
+    # 电钻:标题 12V,属性表「额定电压范围:交流220V」(充电器输入)—— 不替老板选;「外形尺寸:咨询客服」不是尺寸。
+    draft = _draft_with(_real_capture(DRILL), [])
+    voltage = draft["specs"]["voltage"]
+    assert voltage["status"] == "conflict"
+    assert {c["value"] for c in voltage["candidates"]} == {"交流220", "12"}
+    assert draft["specs"]["dimensions"]["status"] == "missing" and "咨询客服" in draft["specs"]["dimensions"]["note"]
+    assert dossier.is_placeholder("咨询客服") and dossier.is_placeholder("以实际为准") and not dossier.is_placeholder("尼龙+PS")
+
+
+def test_strong_image_fact_conflicts_with_page_but_weak_one_is_only_listed() -> None:
+    capture = {"attributes": [{"name": "材质", "value": "铝合金", "source": "page_json"}], "title_zh": "驱蚊露营灯"}
+    strong, _ = dossier.merge_specs(capture, [_fact("material", "尼龙+PS", image=13)])
+    assert strong["material"]["status"] == "conflict"
+    assert [c["value"] for c in strong["material"]["candidates"]] == ["铝合金", "尼龙+PS"]
+    weak, _ = dossier.merge_specs(capture, [_fact("material", "尼龙+PS", confidence="low", image=13)])
+    assert weak["material"]["status"] == "ok" and weak["material"]["value"] == "铝合金"
+    assert weak["material"]["alternatives"][0]["value"] == "尼龙+PS"
+    unsure, _ = dossier.merge_specs(capture, [_fact("material", "尼龙+PS", subject="unsure", image=13)])
+    assert unsure["material"]["status"] == "ok"
+
+
+def test_same_value_written_differently_is_not_a_conflict() -> None:
+    capture = {"attributes": [{"name": "重量", "value": "0.166kg", "source": "page_json"}], "title_zh": "电池"}
+    facts = [
+        _fact("weight", "166", "g", image=11, scope="item"),
+        _fact("material", "ABS阻燃外壳", image=9),
+        _fact("material", "阻燃ABS材料", image=11),
+        _fact("voltage", "12V", "V", image=3),
+        _fact("voltage", "12V V", "", image=11),
+        _fact("cycle_life", "500", "次", image=6),
+        _fact("cycle_life", "400-500", "次", image=7),
+        _fact("cycle_life", "500+", "", image=11),
+    ]
+    specs, _ = dossier.merge_specs(capture, facts)
+    for key in ("weight", "material", "voltage", "cycle_life"):
+        assert specs[key]["status"] == "ok", (key, specs[key])
+    assert specs["voltage"]["value"] == "12" and specs["voltage"]["unit"] == "V"
+
+
+def test_union_fields_list_at_most_four_values() -> None:
+    capture = {"attributes": [{"name": "产品认证", "value": "MSDS、ce、UN38.3", "source": "page_json"}], "title_zh": "电池"}
+    facts = [_fact("certification", v, image=14) for v in ("CE", "UN38.3 Test Report", "EMC", "UL 1642", "FCC Part 15", "RoHS")]
+    specs, _ = dossier.merge_specs(capture, facts)
+    cert = specs["certification"]
+    assert cert["status"] == "ok" and cert["value"].startswith("MSDS、ce、UN38.3")
+    assert len(cert["value"].split("、")) == 3 + 3  # 页面那条本身带 3 个 + 另外 3 种
+    assert [a["value"] for a in cert["alternatives"]] == ["RoHS"]
+    assert all("UN38.3 Test Report" not in v for v in cert["value"].split("、"))  # 和页面的 UN38.3 是同一个
+
+
+def test_color_from_bracketed_sku_names() -> None:
+    capture = {"attributes": [{"name": "颜色", "value": "AH06光棍驱蚊露营灯[黑色]、AH06光棍驱蚊露营灯[绿色]", "source": "page_json"}]}
+    specs, _ = dossier.merge_specs(capture, [])
+    assert specs["color"]["value"] == "黑色、绿色"
+
+
+def test_pricing_for_sku_priced_offer_and_retail_note() -> None:
+    draft = _draft_with(_real_capture(BATTERY), [])
+    assert draft["pricing"]["mode"] == "sku" and draft["pricing"]["range_cny"] == [9.0, 49.0]
+    assert draft["pricing"]["text"] == "按规格 ¥9–¥49"
+    assert "按规格 ¥9–¥49" in draft["fields"]["retail_price"]["note"]
+    assert draft["price_tiers"] == []
+
+
+def test_reading_problems_are_flagged_not_hidden() -> None:
+    capture = {**_real_capture(DRILL), "detail_error": "详情图清单取了 3 次都没取到(TimeoutError)"}
+    draft = _draft_with(capture, [])
+    flag = next(f for f in draft["flagged"] if f["path"] == "detail_images")
+    assert "取了 3 次" in flag["note"] and "重新整理" in flag["note"]
+    budget = _draft_with(_real_capture(BATTERY), [], stopped_reason="budget", segments_seen=9)
+    assert any(f["path"] == "detail_images" and "预算" in f["note"] for f in budget["flagged"])
+    degraded = _draft_with(_real_capture(BATTERY), [], stopped_reason="degraded")
+    assert any(f["path"] == "detail_images" and "额度" in f["note"] for f in degraded["flagged"])
+    fine = _draft_with(_real_capture(BATTERY), [])
+    assert not any(f["path"] == "detail_images" for f in fine["flagged"])
+    assert all(f.get("label") for f in fine["flagged"])
+
+
+def test_reading_text_on_card() -> None:
+    assert dossiers.reading_text({"detail_error": "x"}) == "详情图没取到(规格只来自页面)"
+    assert dossiers.reading_text({"images": 0}) == "卖家的详情里没有图片"
+    text = dossiers.reading_text({"images": 11, "segments_seen": 16, "images_failed": 1, "stopped_reason": "budget"})
+    assert text == "详情图 11 张,读了 16 段,1 张打不开(到单份预算上限停了)"
+
+
+@pytest.mark.parametrize(
+    ("name", "head"),
+    [
+        ("3-in-1 Outdoor Mosquito Repellent Camping Light with Flashlight and Tripod", "light"),
+        ("Portable Camping Shower, 5 Gallon", "shower"),
+        ("12V Lithium Battery for Cordless Drill and Screwdriver Power Tools", "battery"),
+        ("Squishy Dumpling Stress Relief Toys (12 Pack)", "toy"),
+        ("Glass Boxes", "box"),
+        ("", None),
+    ],
+)
+def test_head_noun(name: str, head: str | None) -> None:
+    assert dossier.head_noun(name) == head
+
+
+def test_precedent_needs_the_same_head_noun() -> None:
+    # 10-26 灭蚊露营灯被照着店里的露营淋浴器判成了「便携淋浴」:英文名里都有 camping / outdoor。
+    lamp = "3-in-1 Outdoor Mosquito Repellent Camping Light with Flashlight"
+    showers = [("499", "Portable Camping Shower Outdoor", "SHW-001"), ("499", "Outdoor Camping Shower Bag", "SHW-002")]
+    assert dossier.precedent_from_rows(lamp, showers) is None
+    lights = [("2370", "Camping Lantern Light", "LGT-002"), ("2370", "LED Camping Light", "LGT-001")]
+    assert dossier.precedent_from_rows(lamp, showers + lights) == ("2370", 2, "LGT-001")
+    split = lights + [("9999", "Camping String Light", "LGT-003"), ("9999", "Tent Light", "LGT-004")]
+    assert dossier.precedent_from_rows(lamp, split) is None  # 两个类目打平,不算先例

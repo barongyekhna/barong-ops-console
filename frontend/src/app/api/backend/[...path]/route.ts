@@ -1477,6 +1477,10 @@ function isAllowedSuqinghePath(method: string, path: string[]) {
     if (path.length === 2) {
       return path[1] === "goals" || path[1] === "control" || path[1] === "instruct" || path[1] === "dossiers";
     }
+    if (path.length === 4 && path[1] === "dossiers") {
+      // 档案柜里的「重新整理」:旧档案作废、同一个链接按新规则重排
+      return SUQINGHE_DOSSIER_ID_PATTERN.test(path[2]) && path[3] === "redo";
+    }
     return (
       path.length === 4 &&
       path[1] === "cards" &&

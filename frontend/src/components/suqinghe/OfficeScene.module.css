@@ -965,3 +965,48 @@
     animation: none;
   }
 }
+
+/* ---- 档案详情(10-26 第二版):头部一行、读图情况、旧规则提示、说法不一的小表 ---- */
+.dossierHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.dossierHead a {
+  color: var(--color-primary);
+  font-size: 13px;
+}
+
+.readingLine {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.readingLine em {
+  margin-left: 8px;
+  font-style: normal;
+  font-weight: 600;
+  color: var(--color-warning);
+}
+
+.readingLine small {
+  display: block;
+}
+
+.oldRulesNote {
+  padding: 6px 10px;
+  border-left: 3px solid var(--color-warning);
+  border-radius: 4px;
+  color: var(--color-text);
+  font-size: 13px;
+}
+
+.choiceBlock {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+}

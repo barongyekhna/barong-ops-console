@@ -145,42 +145,78 @@ def test_slice_image_respects_max_segments() -> None:
     assert len(s.slice_image(_image(1000, 60000), max_segments=24)) == 24
 
 
+_FACTS_REPLY = (
+    '```json\n{"facts":[{"field":"weight","value":"200","unit":"g","raw_text":"重量200g","subject":"this","confidence":"high"},'
+    '{"field":"bogus","value":"x","unit":"","raw_text":"x","confidence":"weird"},{"field":"material","value":"","unit":""},'
+    '{"field":"voltage","value":"18V","unit":"V","raw_text":"18V","subject":"other","variant":"","confidence":"high"}]}\n```'
+)
+
+
 class _StubRouter:
-    def __init__(self, useful: list[bool]) -> None:
+    """分拣和抄录按提示词区分(读图档可以是任何一档);degraded_after = 第几次调用起回降级标记。"""
+
+    def __init__(self, useful: list[bool], *, degraded_after: int | None = None) -> None:
         self.useful = list(useful)
         self.calls: list[tuple[str, str]] = []
+        self.prompts: list[str] = []
+        self.degraded_after = degraded_after
 
     def execute(self, *, provider, task_type, payload, org, module_id, usage_label):
         assert usage_label == "suqinghe" and module_id == "k.product_knowledge"
         content = payload["messages"][0]["content"]
         assert content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
         self.calls.append((provider, task_type))
-        if provider == "fast":
+        self.prompts.append(content[0]["text"])
+        if self.degraded_after is not None and len(self.calls) > self.degraded_after:
+            return {"content": '{"facts": []}', "_ai_degraded": True}
+        if content[0]["text"] == s._TRIAGE_PROMPT:
             return {"useful": self.useful.pop(0) if self.useful else False, "kind": "specs"}
-        return {"content": '```json\n{"facts":[{"field":"weight","value":"200","unit":"g","raw_text":"重量200g","confidence":"high"},{"field":"bogus","value":"x","unit":"","raw_text":"x","confidence":"weird"},{"field":"material","value":"","unit":""}]}\n```'}
+        return {"content": _FACTS_REPLY}
 
 
 def _capture_with(images: int) -> s.Capture:
     return s.Capture(offer_id="1", url=URL, detail_images=[f"https://cbu01.alicdn.com/img/ibank/{i}.jpg" for i in range(images)])
 
 
-def test_read_detail_images_triages_then_extracts() -> None:
+def test_read_detail_images_triages_then_extracts_when_reader_is_expensive() -> None:
     router = _StubRouter([False, True, True])
     out = s.read_detail_images(
         None,
         _capture_with(3),
         download=lambda url: _image(800, 600),
         router_factory=lambda db: router,
+        reader_role="judge",
     )
-    assert out["segments_seen"] == 3 and out["segments_read"] == 2
+    assert out["segments_seen"] == 3 and out["segments_read"] == 2 and out["triage"] is True
     assert [p for p, _ in router.calls] == ["fast", "fast", "judge", "fast", "judge"]
     weights = [f for f in out["facts"] if f["field"] == "weight"]
     assert [(f["image_index"], f["segment_index"]) for f in weights] == [(1, 0), (2, 0)]
-    # 未知字段归到 other,置信度不认识就记 low,空值丢掉。
+    # 未知字段归到 other,置信度不认识就记 low,空值丢掉;subject 照抄,没给就是 unsure。
     others = [f for f in out["facts"] if f["field"] == "other"]
-    assert others and all(f["confidence"] == "low" for f in others)
+    assert others and all(f["confidence"] == "low" and f["subject"] == "unsure" for f in others)
     assert not any(f["field"] == "material" for f in out["facts"])
+    assert {f["subject"] for f in out["facts"] if f["field"] == "voltage"} == {"other"}
     assert out["stopped_reason"] is None
+
+
+def test_read_detail_images_default_reader_is_haiku_reading_every_segment(monkeypatch) -> None:
+    monkeypatch.delenv("SQH_1688_READER_ROLE", raising=False)
+    monkeypatch.delenv("SQH_1688_TRIAGE", raising=False)
+    router = _StubRouter([])
+    out = s.read_detail_images(None, _capture_with(3), download=lambda url: _image(800, 600), router_factory=lambda db: router)
+    assert [p for p, _ in router.calls] == ["fast", "fast", "fast"]
+    assert out["reader_role"] == "fast" and out["triage"] is False and out["segments_read"] == 3
+    assert all(prompt != s._TRIAGE_PROMPT for prompt in router.prompts)
+
+
+def test_reader_settings_env(monkeypatch) -> None:
+    monkeypatch.delenv("SQH_1688_READER_ROLE", raising=False)
+    monkeypatch.delenv("SQH_1688_TRIAGE", raising=False)
+    assert s.reader_settings() == ("fast", False)
+    monkeypatch.setenv("SQH_1688_READER_ROLE", "judge")
+    assert s.reader_settings() == ("judge", True)
+    monkeypatch.setenv("SQH_1688_TRIAGE", "off")
+    assert s.reader_settings() == ("judge", False)
 
 
 def test_read_detail_images_accepts_stored_dict() -> None:
@@ -191,33 +227,58 @@ def test_read_detail_images_accepts_stored_dict() -> None:
         _capture_with(3).to_dict(),
         download=lambda url: _image(800, 600),
         router_factory=lambda db: router,
+        reader_role="judge",
     )
     assert out["segments_seen"] == 3 and out["segments_read"] == 2
 
 
-def test_read_detail_images_stops_at_budget() -> None:
-    router = _StubRouter([True] * 20)
+def test_read_detail_images_budget_uses_real_spend_from_meter() -> None:
+    # 预算闸看台账实数:10-26 之前按 $0.05/次 估,实际只有 1/3,读到 9/17 段就被自己的估算撞停。
+    readings = [0.0, 0.1, 0.2, 0.5]
+
+    def meter() -> float:
+        return readings.pop(0) if len(readings) > 1 else readings[0]
+
+    router = _StubRouter([])
     out = s.read_detail_images(
-        None,
-        _capture_with(20),
-        budget_usd=0.12,
-        download=lambda url: _image(800, 600),
-        router_factory=lambda db: router,
+        None, _capture_with(20), budget_usd=0.5, download=lambda url: _image(800, 600),
+        router_factory=lambda db: router, meter=meter, reader_role="fast",
     )
-    assert out["stopped_reason"] == "budget"
-    assert out["cost_usd"] <= 0.12
-    assert out["segments_read"] == 2
+    assert out["stopped_reason"] == "budget" and out["segments_seen"] == 3
+    assert out["cost_basis"] == "ledger" and out["cost_usd"] == 0.5
 
 
-def test_read_detail_images_skips_failed_downloads() -> None:
+def test_read_detail_images_falls_back_to_estimate_without_ledger() -> None:
+    router = _StubRouter([True] * 40)
+    out = s.read_detail_images(
+        None, _capture_with(40), budget_usd=0.12, download=lambda url: _image(800, 600),
+        router_factory=lambda db: router, reader_role="judge",
+    )
+    assert out["stopped_reason"] == "budget" and out["cost_basis"] == "estimate"
+    assert out["cost_usd"] <= 0.12 and out["segments_read"] == 5
+
+
+def test_read_detail_images_stops_when_claude_is_degraded() -> None:
+    # Claude 当天额度用完会被降级给 DeepSeek —— 降级档读不了图,读出来的不能当事实。
+    router = _StubRouter([], degraded_after=1)
+    out = s.read_detail_images(
+        None, _capture_with(4), download=lambda url: _image(800, 600), router_factory=lambda db: router, reader_role="fast",
+    )
+    assert out["stopped_reason"] == "degraded" and out["segments_read"] == 1
+    assert len([f for f in out["facts"] if f["field"] == "weight"]) == 1
+
+
+def test_read_detail_images_counts_failed_downloads() -> None:
     router = _StubRouter([True])
     out = s.read_detail_images(
         None,
         _capture_with(2),
         download=lambda url: None if url.endswith("0.jpg") else _image(500, 500),
         router_factory=lambda db: router,
+        reader_role="judge",
     )
     assert out["segments_seen"] == 1 and out["facts"][0]["image_index"] == 1
+    assert out["images_failed"] == 1
 
 
 def test_download_image_rejects_foreign_hosts() -> None:
@@ -263,3 +324,67 @@ def test_multi_dimension_sku_matches_image_and_weight_by_id() -> None:
     assert sku["name"] == "灰色猫咪>不含磁贴"
     assert sku["image_url"] == "https://cbu01.alicdn.com/img/ibank/cat.jpg"
     assert sku["weight_g"] == 35 and sku["length_cm"] == 5.5 and sku["width_cm"] is None
+
+
+# ---------------------------------------------------------------- 10-26 真链接:按规格定价、读图背景、详情描述重试
+
+BATTERY = Path(__file__).parent / "fixtures" / "sqh1688" / "offer_643348607768"
+DRILL = Path(__file__).parent / "fixtures" / "sqh1688" / "offer_888786557113"
+
+
+def _parse(base: Path) -> s.Capture:
+    offer = base.name.split("_")[1]
+    text = base.with_suffix(".txt")
+    return s.parse_capture(
+        url=f"https://detail.1688.com/offer/{offer}.html",
+        html=base.with_suffix(".html").read_text(encoding="utf-8"),
+        text=text.read_text(encoding="utf-8") if text.exists() else "",
+        desc_js=base.with_suffix(".desc.txt").read_text(encoding="utf-8"),
+    )
+
+
+def test_sku_priced_offer_reads_each_sku_price_and_has_no_fake_tiers() -> None:
+    # 按规格定价:页面上那两个价(¥9 / ¥49)是最低—最高,不是阶梯。之前只留下了一个 ¥9。
+    battery = _parse(BATTERY)
+    assert battery.price_mode == "sku"
+    assert {sku["name"]: sku["price_cny"] for sku in battery.skus} == {
+        "2000mah": 39.0, "12V直充充电器": 9.0, "2500mah": 49.0, "1500mah": 29.0, "1300mah": 16.99,
+    }
+    assert battery.price_tiers == [] and battery.price_range == [9.0, 49.0] and battery.moq == 3
+    assert len(battery.detail_images) == 19
+
+    drill = _parse(DRILL)
+    assert drill.price_mode == "sku" and drill.price_tiers == []
+    assert {sku["name"]: sku["price_cny"] for sku in drill.skus} == {"两电一充套装": 76.0, "裸机": 36.0, "一电一充套装": 66.0}
+    assert drill.moq == 1 and drill.supplier.get("years")
+
+
+def test_range_priced_offer_keeps_tiers(capture: s.Capture) -> None:
+    assert capture.price_mode == "range"
+    assert capture.price_range == [] and len(capture.price_tiers) == 3
+    assert all(sku["price_cny"] is None for sku in capture.skus)  # 阶梯价商品:规格不单独定价
+
+
+def test_extract_prompt_tells_the_model_what_this_product_is() -> None:
+    prompt = s.extract_prompt(_parse(BATTERY).to_dict())
+    assert "12v手电钻电池" in prompt and "2000mah" in prompt and "12V直充充电器" in prompt
+    assert "产品认证:MSDS、ce、UN38.3" in prompt
+    assert "subject" in prompt and "other" in prompt and "兼容机型" in prompt
+
+
+def test_fetch_detail_description_retries_then_says_why() -> None:
+    calls: list[str] = []
+
+    def flaky(url: str) -> str:
+        calls.append(url)
+        if len(calls) < 2:
+            raise TimeoutError("timed out")
+        return "var offer_details={}"
+
+    assert s.fetch_detail_description("u", get=flaky, sleep=lambda _: None) == ("var offer_details={}", None)
+
+    def down(url: str) -> str:
+        raise TimeoutError("timed out")
+
+    desc, error = s.fetch_detail_description("u", get=down, sleep=lambda _: None, attempts=3)
+    assert desc is None and "3 次" in error and "TimeoutError" in error

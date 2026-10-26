@@ -1,0 +1,509 @@
+{
+ "version": 2,
+ "offer_id": "773137484620",
+ "source_url": "https://detail.1688.com/offer/773137484620.html",
+ "fields": {
+  "name_zh": {
+   "value": "跨境户外灭蚊灯3合1强光手电筒长续航支架驱蚊灯暖光氛围露营灯",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_text",
+     "ref": "商品标题",
+     "raw": "跨境户外灭蚊灯3合1强光手电筒长续航支架驱蚊灯暖光氛围露营灯"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "name_en": {
+   "value": "3-in-1 Outdoor Mosquito Repellent Camping Light with Flashlight and Tripod",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "writer",
+     "ref": "据事实改写",
+     "raw": ""
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "product_type": {
+   "value": "variable_product",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "SKU 列表",
+     "raw": "2 个 SKU"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "moq": {
+   "value": 2,
+   "unit": "盒",
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "起批量",
+     "raw": "2"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "retail_price": {
+   "value": null,
+   "unit": "USD",
+   "sources": [],
+   "status": "needs_owner",
+   "note": "1688 只有进价(≥2件 ¥28.5),美国售价请老板定"
+  },
+  "package_includes": {
+   "value": [
+    "Tripod stand",
+    "USB-C charging cable"
+   ],
+   "unit": null,
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 6 · 第 1 段",
+     "raw": "自带三脚架配件"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "配件：三脚支架、type-c充电线"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "category": {
+   "value": {
+    "google_category_id": "6295",
+    "name": "Power Tool Batteries",
+    "path": "Hardware > Tool Accessories > Power Tool Batteries",
+    "name_zh": "电动工具电池",
+    "confidence": "high"
+   },
+   "unit": null,
+   "sources": [
+    {
+     "kind": "classifier",
+     "ref": "殷承岳的类目判定",
+     "raw": "电动工具用的锂电池"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  }
+ },
+ "specs": {
+  "material": {
+   "value": null,
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "属性「材质」",
+     "raw": "铝合金"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "材质：尼龙+PS"
+    }
+   ],
+   "status": "conflict",
+   "note": "说法不一:铝合金 / 尼龙+PS",
+   "candidates": [
+    {
+     "value": "铝合金",
+     "unit": null,
+     "sources": [
+      {
+       "kind": "page_json",
+       "ref": "属性「材质」",
+       "raw": "铝合金"
+      }
+     ]
+    },
+    {
+     "value": "尼龙+PS",
+     "unit": null,
+     "sources": [
+      {
+       "kind": "image",
+       "ref": "详情图 14 · 第 2 段",
+       "raw": "材质：尼龙+PS"
+      }
+     ]
+    }
+   ]
+  },
+  "dimensions": {
+   "value": "153×40×40",
+   "unit": "mm",
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "产品尺寸：153*40*40 mm"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "weight": {
+   "value": "148",
+   "unit": "g",
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "产品净重：148g"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 15 · 第 1 段",
+     "raw": "净重: 148g"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "color": {
+   "value": "黑色、绿色",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "属性「颜色」",
+     "raw": "AH06光棍驱蚊露营灯[黑色]、AH06光棍驱蚊露营灯[绿色]"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "capacity": {
+   "value": null,
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "属性「电池容量」",
+     "raw": "1200"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 1 段",
+     "raw": "电池容量：内置18650*1锂电池3000mah"
+    }
+   ],
+   "status": "conflict",
+   "note": "说法不一:1200 / 3000 mAh",
+   "candidates": [
+    {
+     "value": "1200",
+     "unit": null,
+     "sources": [
+      {
+       "kind": "page_json",
+       "ref": "属性「电池容量」",
+       "raw": "1200"
+      }
+     ]
+    },
+    {
+     "value": "3000",
+     "unit": "mAh",
+     "sources": [
+      {
+       "kind": "image",
+       "ref": "详情图 14 · 第 1 段",
+       "raw": "电池容量：内置18650*1锂电池3000mah"
+      }
+     ]
+    }
+   ],
+   "alternatives": [
+    {
+     "value": "1500",
+     "unit": "mAh",
+     "sources": [
+      {
+       "kind": "image",
+       "ref": "详情图 11 · 第 1 段",
+       "raw": "...500mah(数字部分被画面边缘裁切)"
+      },
+      {
+       "kind": "image",
+       "ref": "详情图 11 · 第 2 段",
+       "raw": "1500"
+      }
+     ],
+     "why": "把握不大,或看不出是不是本品"
+    }
+   ]
+  },
+  "power": {
+   "value": "10",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "属性「功率」",
+     "raw": "10"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "charging": {
+   "value": "Type-c、连接笔记本充电、用车载电源充电",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 1 · 第 2 段",
+     "raw": "Type-c快充"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 12 · 第 1 段",
+     "raw": "采用TYPE-C快充接口"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "充电方式：type-c快充"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 12 · 第 1 段",
+     "raw": "连接笔记本充电"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 12 · 第 1 段",
+     "raw": "用车载电源充电"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "runtime": {
+   "value": "3-5",
+   "unit": "小时",
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "续航：3-5小时"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "certification": {
+   "value": "QB/T2198、GB7000",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "产品执行标准：QB/T2198、GB7000"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "battery_type": {
+   "value": "内置18650*1锂电池、18650锂电池",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 1 段",
+     "raw": "电池容量：内置18650*1锂电池3000mah"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "电池容量：内置18650*1锂电池3000mah"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 11 · 第 1 段",
+     "raw": "内置1节*18650锂电池"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "weight_pack": {
+   "value": "256.2",
+   "unit": "g",
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "全套重量：256.2g"
+    },
+    {
+     "kind": "image",
+     "ref": "详情图 15 · 第 1 段",
+     "raw": "毛重：256.2g"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "dimensions_pack": {
+   "value": "186×110×45",
+   "unit": "mm",
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 14 · 第 2 段",
+     "raw": "纸盒尺寸：186*110*45.mm"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  }
+ },
+ "variants": [
+  {
+   "sku_id": "5357538820703",
+   "name_zh": "AH06光棍驱蚊露营灯[黑色]",
+   "name_en": "Option 1",
+   "cost_price_cny": null,
+   "weight_g": 260.0,
+   "dims_cm": [
+    15.0,
+    4.0,
+    4.0
+   ],
+   "image_url": null,
+   "specs": {}
+  },
+  {
+   "sku_id": "5357538820704",
+   "name_zh": "AH06光棍驱蚊露营灯[绿色]",
+   "name_en": "Option 2",
+   "cost_price_cny": null,
+   "weight_g": null,
+   "dims_cm": null,
+   "image_url": null,
+   "specs": {}
+  }
+ ],
+ "pricing": {
+  "mode": "tiers",
+  "tiers": [
+   {
+    "min_qty": 2,
+    "price_cny": 28.5
+   }
+  ],
+  "range_cny": [],
+  "moq": 2,
+  "unit": "盒",
+  "text": "≥2件 ¥28.5"
+ },
+ "price_tiers": [
+  {
+   "min_qty": 2,
+   "price_cny": 28.5
+  }
+ ],
+ "reference_images": [
+  "https://cbu01.alicdn.com/img/ibank/O1CN01Vq2umn1liGel5FBpP_!!971994852-0-cib.jpg",
+  "https://cbu01.alicdn.com/img/ibank/O1CN01n3bw3A1liGeqXsETo_!!971994852-0-cib.jpg",
+  "https://cbu01.alicdn.com/img/ibank/O1CN01hI9GmH1liGen4mQq9_!!971994852-0-cib.jpg"
+ ],
+ "other_attributes": [
+  {
+   "name": "光源形式",
+   "value": "LED"
+  },
+  {
+   "name": "电源形式",
+   "value": "充电"
+  },
+  {
+   "name": "加印LOGO",
+   "value": "可以"
+  },
+  {
+   "name": "发电方式",
+   "value": "手摇"
+  },
+  {
+   "name": "加工定制",
+   "value": "否"
+  },
+  {
+   "name": "360度旋转",
+   "value": "是"
+  },
+  {
+   "name": "配置充电器",
+   "value": "是"
+  },
+  {
+   "name": "最大射程",
+   "value": "50米以下"
+  }
+ ],
+ "supplier": {
+  "name": "杭州鑫耀照明有限公司",
+  "type": "factory",
+  "years": 17,
+  "location": "浙江杭州",
+  "shop_url": "https://rxkm518.1688.com"
+ },
+ "image_read": {
+  "images": 15,
+  "segments_seen": 28,
+  "segments_read": 28,
+  "images_failed": 0,
+  "stopped_reason": null,
+  "reader_role": "judge",
+  "cost_usd": 0.0102,
+  "cost_basis": "ledger",
+  "facts": 43,
+  "ignored_other": 0,
+  "ignored_narrative": 1,
+  "ignored_drawing": 0,
+  "detail_error": null
+ },
+ "flagged": [
+  {
+   "path": "retail_price",
+   "label": "美国售价",
+   "status": "needs_owner",
+   "note": "1688 只有进价(≥2件 ¥28.5),美国售价请老板定"
+  },
+  {
+   "path": "specs.material",
+   "label": "材质",
+   "status": "conflict",
+   "note": "说法不一:铝合金 / 尼龙+PS"
+  },
+  {
+   "path": "specs.capacity",
+   "label": "容量",
+   "status": "conflict",
+   "note": "说法不一:1200 / 3000 mAh"
+  }
+ ],
+ "flagged_count": 3,
+ "summary_zh": "跨境户外灭蚊灯3合1强光手电筒长续航支架驱蚊灯暖光氛围露营灯:2 个规格,整理出规格 10 项;标红 3 项(说法不一 2、没找到 0、要老板定 1)。"
+}

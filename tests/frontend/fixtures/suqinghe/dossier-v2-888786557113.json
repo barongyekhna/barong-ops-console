@@ -1,0 +1,321 @@
+{
+ "version": 2,
+ "offer_id": "888786557113",
+ "source_url": "https://detail.1688.com/offer/888786557113.html",
+ "fields": {
+  "name_zh": {
+   "value": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_text",
+     "ref": "商品标题",
+     "raw": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "name_en": {
+   "value": "12V Cordless Brushless Drill Driver, Variable Speed, Keyless Chuck",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "writer",
+     "ref": "据事实改写",
+     "raw": ""
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "product_type": {
+   "value": "variable_product",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "SKU 列表",
+     "raw": "3 个 SKU"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "moq": {
+   "value": 1,
+   "unit": "件",
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "起批量",
+     "raw": "1"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  },
+  "retail_price": {
+   "value": null,
+   "unit": "USD",
+   "sources": [],
+   "status": "needs_owner",
+   "note": "1688 只有进价(按规格 ¥36–¥76),美国售价请老板定"
+  },
+  "package_includes": {
+   "value": null,
+   "unit": null,
+   "sources": [],
+   "status": "missing",
+   "note": "页面和详情图里都没找到包装清单"
+  },
+  "category": {
+   "value": {
+    "google_category_id": "6295",
+    "name": "Power Tool Batteries",
+    "path": "Hardware > Tool Accessories > Power Tool Batteries",
+    "name_zh": "电动工具电池",
+    "confidence": "high"
+   },
+   "unit": null,
+   "sources": [
+    {
+     "kind": "classifier",
+     "ref": "殷承岳的类目判定",
+     "raw": "电动工具用的锂电池"
+    }
+   ],
+   "status": "ok",
+   "note": ""
+  }
+ },
+ "specs": {
+  "dimensions": {
+   "value": null,
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "属性「外形尺寸」",
+     "raw": "咨询客服"
+    }
+   ],
+   "status": "missing",
+   "note": "卖家只写了「咨询客服」这类占位,要问供应商或看图"
+  },
+  "voltage": {
+   "value": null,
+   "unit": null,
+   "sources": [
+    {
+     "kind": "page_json",
+     "ref": "属性「额定电压范围」",
+     "raw": "交流220V"
+    },
+    {
+     "kind": "page_text",
+     "ref": "商品标题",
+     "raw": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持"
+    }
+   ],
+   "status": "conflict",
+   "note": "说法不一:交流220 V / 12 V",
+   "candidates": [
+    {
+     "value": "交流220",
+     "unit": "V",
+     "sources": [
+      {
+       "kind": "page_json",
+       "ref": "属性「额定电压范围」",
+       "raw": "交流220V"
+      }
+     ]
+    },
+    {
+     "value": "12",
+     "unit": "V",
+     "sources": [
+      {
+       "kind": "page_text",
+       "ref": "商品标题",
+       "raw": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持"
+      }
+     ]
+    }
+   ]
+  },
+  "battery_type": {
+   "value": "A品电芯",
+   "unit": null,
+   "sources": [
+    {
+     "kind": "image",
+     "ref": "详情图 6 · 第 1 段",
+     "raw": "A品电芯聚能升级"
+    }
+   ],
+   "status": "ok",
+   "note": "",
+   "alternatives": [
+    {
+     "value": "电力强劲 持久续航",
+     "unit": null,
+     "sources": [
+      {
+       "kind": "image",
+       "ref": "详情图 2 · 第 1 段",
+       "raw": "电力强劲 持久续航"
+      }
+     ],
+     "why": "把握不大,或看不出是不是本品"
+    }
+   ]
+  }
+ },
+ "variants": [
+  {
+   "sku_id": "5901389135831",
+   "name_zh": "两电一充套装",
+   "name_en": "Option 1",
+   "cost_price_cny": 76.0,
+   "weight_g": 2000.0,
+   "dims_cm": null,
+   "image_url": null,
+   "specs": {}
+  },
+  {
+   "sku_id": "5901389135829",
+   "name_zh": "裸机",
+   "name_en": "Option 2",
+   "cost_price_cny": 36.0,
+   "weight_g": 2000.0,
+   "dims_cm": null,
+   "image_url": null,
+   "specs": {}
+  },
+  {
+   "sku_id": "5901389135830",
+   "name_zh": "一电一充套装",
+   "name_en": "Option 3",
+   "cost_price_cny": 66.0,
+   "weight_g": 2000.0,
+   "dims_cm": null,
+   "image_url": null,
+   "specs": {}
+  }
+ ],
+ "pricing": {
+  "mode": "sku",
+  "tiers": [],
+  "range_cny": [
+   36.0,
+   76.0
+  ],
+  "moq": 1,
+  "unit": "件",
+  "text": "按规格 ¥36–¥76"
+ },
+ "price_tiers": [],
+ "reference_images": [
+  "https://cbu01.alicdn.com/img/ibank/O1CN01qePYBo1m4Fmd338pk_!!2219078414900-0-cib.jpg",
+  "https://cbu01.alicdn.com/img/ibank/O1CN01Yj8EdS1m4FkwQmmuh_!!2219078414900-0-cib.jpg",
+  "https://cbu01.alicdn.com/img/ibank/O1CN01uY1qZu1m4Fkw0Gvgx_!!2219078414900-0-cib.jpg"
+ ],
+ "other_attributes": [
+  {
+   "name": "电源类型",
+   "value": "充电式-锂电"
+  },
+  {
+   "name": "电钻的角向",
+   "value": "直向"
+  },
+  {
+   "name": "电钻结构",
+   "value": "充电式"
+  },
+  {
+   "name": "钻头夹持方式",
+   "value": "自锁夹头"
+  },
+  {
+   "name": "适用范围",
+   "value": "家装、安装，装修、木材钻孔"
+  },
+  {
+   "name": "正反转向",
+   "value": "有"
+  },
+  {
+   "name": "系列",
+   "value": "手电钻"
+  },
+  {
+   "name": "盘径",
+   "value": "10"
+  },
+  {
+   "name": "电钻能否调速",
+   "value": "无极调速"
+  },
+  {
+   "name": "类型",
+   "value": "手电钻"
+  },
+  {
+   "name": "马达类型",
+   "value": "无刷马达"
+  }
+ ],
+ "supplier": {
+  "name": "南通温德姆电动工具有限公司",
+  "type": "factory",
+  "years": 2,
+  "location": "江苏南通",
+  "shop_url": "https://shop64v3b87b17350.1688.com"
+ },
+ "image_read": {
+  "images": 11,
+  "segments_seen": 16,
+  "segments_read": 16,
+  "images_failed": 0,
+  "stopped_reason": null,
+  "reader_role": "judge",
+  "cost_usd": 0.0049,
+  "cost_basis": "ledger",
+  "facts": 16,
+  "ignored_other": 0,
+  "ignored_narrative": 0,
+  "ignored_drawing": 0,
+  "detail_error": null
+ },
+ "flagged": [
+  {
+   "path": "retail_price",
+   "label": "美国售价",
+   "status": "needs_owner",
+   "note": "1688 只有进价(按规格 ¥36–¥76),美国售价请老板定"
+  },
+  {
+   "path": "package_includes",
+   "label": "包装清单",
+   "status": "missing",
+   "note": "页面和详情图里都没找到包装清单"
+  },
+  {
+   "path": "specs.dimensions",
+   "label": "尺寸(单品)",
+   "status": "missing",
+   "note": "卖家只写了「咨询客服」这类占位,要问供应商或看图"
+  },
+  {
+   "path": "specs.voltage",
+   "label": "电压",
+   "status": "conflict",
+   "note": "说法不一:交流220 V / 12 V"
+  }
+ ],
+ "flagged_count": 4,
+ "summary_zh": "12V家用多功能手电钻冲击钻充电锂电钻起子机螺丝刀套装手持:3 个规格,整理出规格 1 项;标红 4 项(说法不一 1、没找到 2、要老板定 1)。"
+}

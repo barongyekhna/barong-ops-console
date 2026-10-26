@@ -111,6 +111,32 @@ def enqueue(db: Session, *, url: str, actor_user_id: str | None, channel: str) -
     return dossier, True, _queue_position(db, dossier)
 
 
+REDO_REASON = "重新整理:规则更新后按新规则再做一遍"
+
+
+def redo(db: Session, *, dossier_id: int, actor: Any) -> tuple[SqhDossier, bool, int]:
+    """老板点「重新整理」:旧档案作废(待批的卡按驳回处理、写明原因),同一个链接重新排队。
+
+    建进 K 的不能重做(要改去 K 里改);还在整理中的等它做完。
+    """
+    old = db.get(SqhDossier, dossier_id, execution_options=_X)
+    if old is None:
+        raise DossierError("没有这份档案。")
+    if old.status in ("queued", "fetching", "reading"):
+        raise DossierError("这份还在整理中,等它做完再说。")
+    if old.status == "created":
+        raise DossierError("这份已经建进 K 了,不能重做;要改去 K 里改。")
+    if old.status == "ready" and old.card_ref:
+        cards.decide_card(db, card_id=old.card_ref, decision="reject", actor=actor, channel="web", reason=REDO_REASON)
+        db.refresh(old)
+    if old.status == "ready":  # 没有卡的待批档案(理论上不会有)也不能挡着重排
+        old.status = "rejected"
+        db.add(old)
+        db.flush()
+    memory.log_activity(db, f"老板让档案 #{old.id}({old.offer_id})按新规则重新整理。", kind="intake")
+    return enqueue(db, url=old.source_url, actor_user_id=str(getattr(actor, "id", "") or "") or None, channel="web")
+
+
 def queue_reply(position: int, *, created: bool, status: str) -> str:
     if not created:
         labels = {"queued": "已经在排队了", "fetching": "正在打开页面", "reading": "正在读详情图", "ready": "已经整理好了,在办公室收件筐等你批"}
@@ -152,6 +178,31 @@ def _throttle_state(db: Session, now: datetime) -> tuple[datetime | None, int]:
 FetchFn = Callable[[str], Any]
 ReadFn = Callable[[Session, dict[str, Any]], dict[str, Any]]
 BuildFn = Callable[[Session, dict[str, Any], dict[str, Any]], dict[str, Any]]
+SpentFn = Callable[[datetime | None], "float | None"]
+
+
+def _ledger_spent(since: datetime | None) -> float | None:
+    from .constants import USAGE_LABEL
+    from .sourcing_1688 import ledger_meter
+
+    return ledger_meter(USAGE_LABEL, since)() if since else None
+
+
+def reading_text(reading: dict[str, Any]) -> str:
+    """审批卡上的一句话:详情图读得怎么样。"""
+    if reading.get("detail_error"):
+        return "详情图没取到(规格只来自页面)"
+    images = int(reading.get("images") or 0)
+    if not images:
+        return "卖家的详情里没有图片"
+    text = f"详情图 {images} 张,读了 {int(reading.get('segments_seen') or 0)} 段"
+    if reading.get("images_failed"):
+        text += f",{int(reading['images_failed'])} 张打不开"
+    if reading.get("stopped_reason") == "budget":
+        text += "(到单份预算上限停了)"
+    elif reading.get("stopped_reason") == "degraded":
+        text += "(Claude 额度用完停了)"
+    return text
 
 
 def _defaults() -> tuple[FetchFn, ReadFn, BuildFn]:
@@ -199,8 +250,12 @@ def process_next(
     fetch: FetchFn | None = None,
     read: ReadFn | None = None,
     build: BuildFn | None = None,
+    spent: SpentFn | None = None,
 ) -> SqhDossier | None:
-    """处理一单排队的档案。没有可做的(或被节流)返回 None。"""
+    """处理一单排队的档案。没有可做的(或被节流)返回 None。
+
+    ``spent(开始时间)`` 返回这单的台账实数花费;注入假的抓取/读图时不传,就用读图那边报的数。
+    """
     now = now or datetime.now(UTC)
     dossier = db.scalar(
         select(SqhDossier).where(SqhDossier.status == "queued").order_by(SqhDossier.id).limit(1),
@@ -215,9 +270,12 @@ def process_next(
     if fetch is None or read is None or build is None:
         d_fetch, d_read, d_build = _defaults()
         fetch, read, build = fetch or d_fetch, read or d_read, build or d_build
+        spent = spent or _ledger_spent
 
     dossier.status = "fetching"
     dossier.fetched_at = now
+    # 花费从真正开始抓页面这一刻算起:同一轮里先做的早晨计划、回老板的话(也调 Claude)不能算进这单。
+    cost_since = datetime.now(UTC)
     _set_activity(db, "thinking", f"在读 1688:{dossier.offer_id}")
     memory.log_activity(db, f"打开 1688 页面 {dossier.offer_id}。", kind="fetch")
     db.commit()  # 出网前放掉事务(8 秒 idle-in-transaction 上限)
@@ -245,7 +303,9 @@ def process_next(
         dossier = db.get(SqhDossier, dossier.id, execution_options=_X)
         dossier.draft = draft
         dossier.flagged_count = int(draft.get("flagged_count") or 0)
-        dossier.cost_usd = round(float(image_read.get("cost_usd") or 0), 4)
+        # 花费记台账实数(读图 + 英文名,整单从开始到现在);台账读不到才用读图那边的数。
+        real_cost = spent(cost_since) if spent else None
+        dossier.cost_usd = round(float(real_cost if real_cost is not None else image_read.get("cost_usd") or 0), 4)
         dossier.status = "ready"
         title = (draft.get("fields", {}).get("name_zh", {}) or {}).get("value") or capture.get("title_zh") or dossier.offer_id
         card, _ = cards.create_card(
@@ -257,7 +317,7 @@ def process_next(
                 f"{draft.get('summary_zh', '')} 批了我就建进 K(先建成单品草稿,不上架);"
                 "售价得老板定,标红的几项也请过目。"
             ),
-            why=f"1688 offer {dossier.offer_id},详情图读了 {image_read.get('segments_read', 0)}/{image_read.get('segments_seen', 0)} 段,花了 ${dossier.cost_usd}。",
+            why=f"1688 offer {dossier.offer_id},{reading_text(draft.get('image_read') or {})},花了 ${dossier.cost_usd}。",
             if_not="不批就停在草稿,不会进 K。",
             reversible=True,
             confidence="medium" if dossier.flagged_count else "high",

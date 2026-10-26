@@ -17,11 +17,11 @@ import {
   getSnapshot,
   getSnapshots,
   officeErrorMessage,
+  redoDossier,
   submitDossier,
   type DossierDetail,
+  type DossierStatus,
   type DossierSummary,
-  type DraftField,
-  type DraftSource,
   type MemoryItem,
   type MemoryKind,
   type OfficeRead,
@@ -35,6 +35,7 @@ import { useAuth } from "@/components/auth-provider";
 
 import { OfficeChat } from "./OfficeChat";
 import { CardItem, GoalForm, GoalList, InstructForm, PauseButton, minutesAgo, pickEasterLine, timeText, type Runner } from "./OfficeParts";
+import { buildDossierView, type SourceLine, type ValueRow } from "./dossier-view";
 
 /**
  * 苏青禾的 2.5D 办公室场景。
@@ -380,7 +381,7 @@ function PanelContent({
     case "bookshelf":
       return <BookshelfPanel />;
     case "cabinet":
-      return <CabinetPanel focus={dossierFocus} onOpenInbox={() => onOpenPanel("inbox")} setFocus={setDossierFocus} />;
+      return <CabinetPanel canCommand={canCommand} focus={dossierFocus} onOpenInbox={() => onOpenPanel("inbox")} setFocus={setDossierFocus} />;
     case "whiteboard":
       return <WhiteboardPanel busy={busy} canCommand={canCommand} office={office} run={run} />;
     case "calendar":
@@ -949,10 +950,12 @@ function DossierLinkForm({ busy, onSubmitted }: { busy: boolean; run: Runner; on
 }
 
 function CabinetPanel({
+  canCommand,
   focus,
   setFocus,
   onOpenInbox,
 }: {
+  canCommand: boolean;
   focus: number | null;
   setFocus: (id: number | null) => void;
   onOpenInbox: () => void;
@@ -981,7 +984,7 @@ function CabinetPanel({
   }, [inProgress]);
 
   if (focus !== null) {
-    return <DossierView id={focus} onBack={() => setFocus(null)} onOpenInbox={onOpenInbox} />;
+    return <DossierView canCommand={canCommand} id={focus} onBack={() => setFocus(null)} onOpenInbox={onOpenInbox} onRedone={setFocus} />;
   }
   return (
     <>
@@ -1000,7 +1003,7 @@ function CabinetPanel({
                   {DOSSIER_STATUS_LABEL[item.status] ?? item.status}
                 </span>
                 {item.flagged_count > 0 ? <span className={styles.flagBadge}>标红 {item.flagged_count}</span> : null}
-                {typeof item.cost_usd === "number" ? <span>${item.cost_usd.toFixed(3)}</span> : null}
+                {typeof item.cost_usd === "number" && item.cost_usd > 0 ? <span>${item.cost_usd.toFixed(3)}</span> : null}
                 <time>{timeText(item.created_at)}</time>
               </span>
             </button>
@@ -1011,91 +1014,29 @@ function CabinetPanel({
   );
 }
 
-const FIELD_LABEL: Record<string, string> = {
-  title_zh: "中文原标题",
-  product_name_en: "英文品名",
-  product_type: "产品类型",
-  google_category: "建议的谷歌类目",
-  category: "建议的谷歌类目",
-  material: "材质",
-  dimensions: "尺寸（单品）",
-  weight: "重量（单品）",
-  dimensions_pack: "尺寸（单个包装）",
-  weight_pack: "重量（单个包装）",
-  dimensions_carton: "外箱尺寸",
-  weight_carton: "外箱重量",
-  color: "颜色",
-  package_includes: "包装清单",
-  package: "包装",
-  moq: "起批量",
-  unit: "单位",
-  origin: "产地",
-  ship_from: "发货地",
-  age_range: "适用年龄",
-  brand: "品牌",
-  regular_price: "售价",
-  sale_price: "售价",
-  supplier: "供应商",
-  certifications: "认证",
-  power: "功率",
-  voltage: "电压",
-  battery: "电池",
-  capacity: "容量",
-  features: "功能卖点",
-  specs: "规格",
-  variants: "变体",
-  price_tiers: "阶梯价",
-  reference_images: "参考图",
-};
+/** 哪些状态能「重新整理」:待批、没整理成、被拦、已驳回。建进 K 的要去 K 里改;还在整理的等它做完。 */
+const REDO_STATUSES: DossierStatus[] = ["ready", "failed", "blocked", "rejected"];
 
-const FIELD_STATUS_LABEL: Record<DraftField["status"], string> = {
-  ok: "",
-  conflict: "来源对不上",
-  missing: "没找到",
-  needs_owner: "要老板定",
-};
-
-const SOURCE_KIND_LABEL: Record<string, string> = {
-  page_json: "页面数据",
-  page_text: "页面文字",
-  image: "图片",
-  writer: "按事实改写",
-  classifier: "类目判定",
-  precedent: "店里先例",
-};
-
-const SPECIAL_KEYS = new Set(["variants", "price_tiers", "reference_images"]);
-
-type AnyRec = Record<string, unknown>;
-const asRec = (value: unknown): value is AnyRec => Boolean(value) && typeof value === "object" && !Array.isArray(value);
-
-export function isDraftField(value: unknown): value is DraftField {
-  return asRec(value) && typeof value.status === "string" && "value" in value;
-}
-
-/** 草稿里的值 → 一行人话。对象展开成「键：值」,绝不原样摊 JSON。 */
-export function plainValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.map(plainValue).join("、");
-  if (asRec(value)) {
-    return Object.entries(value)
-      .filter(([, inner]) => inner !== null && inner !== undefined && inner !== "")
-      .map(([key, inner]) => `${FIELD_LABEL[key] ?? key}：${plainValue(inner)}`)
-      .join("；");
-  }
-  return "—";
-}
-
-function sourceText(source: DraftSource): string {
-  const where = source.kind === "image" && source.ref ? `${SOURCE_KIND_LABEL.image} · ${source.ref}` : SOURCE_KIND_LABEL[source.kind] ?? source.kind;
-  return source.raw ? `${where}：「${source.raw}」` : where;
-}
-
-function DossierView({ id, onBack, onOpenInbox }: { id: number; onBack: () => void; onOpenInbox: () => void }) {
+function DossierView({
+  id,
+  canCommand,
+  onBack,
+  onOpenInbox,
+  onRedone,
+}: {
+  id: number;
+  canCommand: boolean;
+  onBack: () => void;
+  onOpenInbox: () => void;
+  onRedone: (id: number) => void;
+}) {
   const [detail, setDetail] = useState<DossierDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [redoing, setRedoing] = useState(false);
+  const [redoNote, setRedoNote] = useState<string | null>(null);
   const inProgress = detail ? DOSSIER_IN_PROGRESS.includes(detail.status) : true;
+  // 草稿 → 界面那一层是纯函数(dossier-view.ts),用真档案测过;这里只管画。
+  const view = useMemo(() => buildDossierView(detail?.draft), [detail]);
 
   useEffect(() => {
     let alive = true;
@@ -1116,11 +1057,22 @@ function DossierView({ id, onBack, onOpenInbox }: { id: number; onBack: () => vo
     };
   }, [id, inProgress]);
 
-  const draft = detail?.draft ?? {};
-  const fields = Object.entries(draft).filter(([key]) => !SPECIAL_KEYS.has(key));
-  const variants = listOf(draft.variants);
-  const tiers = listOf(draft.price_tiers);
-  const images = listOf(draft.reference_images).map((item) => (typeof item === "string" ? item : asRec(item) ? String(item.url ?? "") : "")).filter(Boolean);
+  const redo = () => {
+    if (!detail || redoing) return;
+    setRedoing(true);
+    setRedoNote(null);
+    redoDossier(detail.id)
+      .then((next) => {
+        setRedoNote(next.reply ?? "重新排上了。");
+        onRedone(next.id);
+      })
+      .catch((err: unknown) => setRedoNote(officeErrorMessage(err, "没能重新整理")))
+      .finally(() => setRedoing(false));
+  };
+
+  const okBasics = view.basics.filter((row) => row.status === "ok");
+  const okSpecs = view.specs.filter((row) => row.status === "ok");
+  const hasVariantSpecs = view.variants.some((row) => row.specs !== "—");
 
   return (
     <>
@@ -1133,19 +1085,44 @@ function DossierView({ id, onBack, onOpenInbox }: { id: number; onBack: () => vo
         <>
           <section className={partStyles.section}>
             <h3>{detail.title || `1688 · ${detail.offer_id}`}</h3>
-            <p>
+            <p className={styles.dossierHead}>
               <span className={styles.dossierStatus} data-status={detail.status}>
                 {DOSSIER_STATUS_LABEL[detail.status] ?? detail.status}
               </span>
-              {detail.flagged_count > 0 ? <span className={styles.flagBadge}> 标红 {detail.flagged_count}</span> : null}
-              {typeof detail.cost_usd === "number" ? ` · 花了 $${detail.cost_usd.toFixed(3)}` : ""}
+              {detail.flagged_count > 0 ? <span className={styles.flagBadge}>标红 {detail.flagged_count}</span> : null}
+              {typeof detail.cost_usd === "number" && detail.cost_usd > 0 ? <span>花了 ${detail.cost_usd.toFixed(3)}</span> : null}
+              {detail.source_url ? (
+                <a href={detail.source_url} rel="noreferrer" target="_blank">
+                  1688 原页面 ↗
+                </a>
+              ) : null}
             </p>
+            {view.summary ? <p>{view.summary}</p> : null}
+            <p className={styles.readingLine}>
+              {view.reading.text}
+              {view.reading.problem ? <em>{view.reading.problem}</em> : null}
+              {view.reading.ignored ? <small>{view.reading.ignored}</small> : null}
+            </p>
+            {detail.status === "failed" && detail.error ? <p className={partStyles.error}>没整理成:{detail.error}</p> : null}
             {inProgress ? <p className={partStyles.muted}>她还在整理，这里每 5 秒刷新一次。</p> : null}
-            {detail.card_ref && detail.status === "ready" ? (
-              <button className={partStyles.primary} onClick={onOpenInbox} type="button">
-                去收件筐批（#{detail.card_ref}）
-              </button>
+            {view.version < 2 && !inProgress && detail.status !== "created" ? (
+              <p className={styles.oldRulesNote}>
+                这份是按旧规则整理的(10-26 之前){canCommand ? ",点「重新整理」按新规则重做。" : ",老板可以让她按新规则重做。"}
+              </p>
             ) : null}
+            <div className={partStyles.inlineActions}>
+              {detail.card_ref && detail.status === "ready" ? (
+                <button className={partStyles.primary} onClick={onOpenInbox} type="button">
+                  去收件筐批（#{detail.card_ref}）
+                </button>
+              ) : null}
+              {canCommand && REDO_STATUSES.includes(detail.status) ? (
+                <button disabled={redoing} onClick={redo} type="button">
+                  {redoing ? "重新排队…" : "重新整理"}
+                </button>
+              ) : null}
+            </div>
+            {redoNote ? <p className={partStyles.muted}>{redoNote}</p> : null}
             {detail.k_product_id ? (
               <p>
                 已建进 K：<a href="/products">去 K 系列看</a>（产品 {detail.k_product_id}）
@@ -1153,70 +1130,122 @@ function DossierView({ id, onBack, onOpenInbox }: { id: number; onBack: () => vo
             ) : null}
           </section>
 
-          {fields.length > 0 ? (
+          {view.attention.length > 0 ? (
             <section className={partStyles.section}>
-              <h3>字段</h3>
+              <h3>要你看的（{view.attention.length}）</h3>
               <div className={styles.fieldTable}>
-                {fields.map(([key, raw]) => (
-                  <FieldRow field={raw} key={key} label={FIELD_LABEL[key] ?? key} />
+                {view.attention.map((row) => (
+                  <DossierRow key={`attention-${row.key}`} row={row} />
                 ))}
               </div>
             </section>
           ) : null}
 
-          {variants.length > 0 ? (
+          {okBasics.length > 0 ? (
             <section className={partStyles.section}>
-              <h3>变体（{variants.length}）</h3>
-              <div className={styles.scrollX}>
-                <table className={styles.dossierTable}>
-                  <thead>
-                    <tr>
-                      <th>名称</th>
-                      <th>进价 ¥</th>
-                      <th>重量 g</th>
-                      <th>尺寸</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {variants.map((item, index) => {
-                      const row = asRec(item) ? item : {};
-                      return (
-                        <tr key={index}>
-                          <td>{plainValue(unwrap(row.name))}</td>
-                          <td>{plainValue(unwrap(row.cost_cny ?? row.price_cny ?? row.price))}</td>
-                          <td>{plainValue(unwrap(row.weight_g ?? row.weight))}</td>
-                          <td>{plainValue(unwrap(row.dimensions))}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <h3>基本信息</h3>
+              <div className={styles.fieldTable}>
+                {okBasics.map((row) => (
+                  <DossierRow key={row.key} row={row} />
+                ))}
               </div>
             </section>
           ) : null}
 
-          {tiers.length > 0 ? (
+          {okSpecs.length > 0 ? (
             <section className={partStyles.section}>
-              <h3>阶梯价（1688 进价，仅供参考）</h3>
-              <ul className={partStyles.list}>
-                {tiers.map((item, index) => {
-                  const row = asRec(item) ? item : {};
-                  return (
-                    <li key={index}>
-                      <span>≥ {plainValue(row.begin_amount ?? row.beginAmount)} 件</span>
-                      <span>¥{plainValue(row.price)}</span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <h3>规格</h3>
+              <div className={styles.fieldTable}>
+                {okSpecs.map((row) => (
+                  <DossierRow key={row.key} row={row} />
+                ))}
+              </div>
             </section>
           ) : null}
 
-          {images.length > 0 ? (
+          {view.variants.length > 0 ? (
             <section className={partStyles.section}>
-              <h3>参考图（{images.length}）</h3>
+              <h3>规格 / 变体（{view.variants.length}）</h3>
+              <div className={styles.scrollX}>
+                <table className={styles.dossierTable}>
+                  <thead>
+                    <tr>
+                      <th>1688 规格名</th>
+                      <th>英文</th>
+                      <th>进价</th>
+                      {hasVariantSpecs ? <th>参数</th> : null}
+                      <th>包装重量</th>
+                      <th>包装尺寸</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {view.variants.map((row, index) => (
+                      <tr key={`${row.nameZh}-${index}`}>
+                        <td>{row.nameZh}</td>
+                        <td>{row.nameEn}</td>
+                        <td>{row.cost}</td>
+                        {hasVariantSpecs ? <td>{row.specs}</td> : null}
+                        <td>{row.packWeight}</td>
+                        <td>{row.packDims}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className={partStyles.muted}>包装重量和尺寸来自 1688「包装信息」,是一件的发货包装,不是产品本身。</p>
+            </section>
+          ) : null}
+
+          <section className={partStyles.section}>
+            <h3>进价（1688，仅供参考）</h3>
+            <p>{view.pricing.text}</p>
+            {view.pricing.tiers.length > 1 ? (
+              <ul className={partStyles.list}>
+                {view.pricing.tiers.map((tier) => (
+                  <li key={tier.qty}>
+                    <span>≥ {tier.qty} 件</span>
+                    <span>{tier.price}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+
+          {view.otherAttributes.length > 0 ? (
+            <section className={partStyles.section}>
+              <h3>页面上的其他属性</h3>
+              <div className={styles.fieldTable}>
+                {view.otherAttributes.map((attr) => (
+                  <div className={styles.fieldRow} data-status="ok" key={attr.name}>
+                    <span className={styles.fieldLabel}>{attr.name}</span>
+                    <span className={styles.fieldValue}>{attr.value}</span>
+                    <span />
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {view.supplier ? (
+            <section className={partStyles.section}>
+              <h3>供应商</h3>
+              <p>
+                {view.supplier.name}
+                {view.supplier.detail ? <small className={styles.fieldNote}>{view.supplier.detail}</small> : null}
+                {view.supplier.url ? (
+                  <a href={view.supplier.url} rel="noreferrer" target="_blank">
+                    店铺 ↗
+                  </a>
+                ) : null}
+              </p>
+            </section>
+          ) : null}
+
+          {view.images.length > 0 ? (
+            <section className={partStyles.section}>
+              <h3>参考图（{view.images.length}）</h3>
               <div className={styles.refImages}>
-                {images.slice(0, 12).map((url) => (
+                {view.images.slice(0, 12).map((url) => (
                   <a href={url} key={url} rel="noreferrer" target="_blank">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img alt="参考图" loading="lazy" referrerPolicy="no-referrer" src={url} />
@@ -1231,42 +1260,73 @@ function DossierView({ id, onBack, onOpenInbox }: { id: number; onBack: () => vo
   );
 }
 
-function unwrap(value: unknown): unknown {
-  return isDraftField(value) ? value.value : value;
+function sourceText(source: SourceLine): string {
+  return source.raw ? `${source.where}：「${source.raw}」` : source.where;
 }
 
-function listOf(value: unknown): unknown[] {
-  const inner = unwrap(value);
-  return Array.isArray(inner) ? inner : [];
-}
-
-function FieldRow({ label, field }: { label: string; field: unknown }) {
+/** 一行:标签 | 值(+ 标红原因)| 出处按钮。说法不一的直接摊一张「说法 / 谁说的」小表。 */
+function DossierRow({ row }: { row: ValueRow }) {
   const [open, setOpen] = useState(false);
-  const parsed: DraftField = isDraftField(field) ? field : { value: field, status: "ok" };
-  const sources = parsed.sources ?? [];
-  const flag = FIELD_STATUS_LABEL[parsed.status];
+  const conflict = row.status === "conflict" && row.candidates.length > 0;
+  const extra = row.sources.length + row.alternatives.length + row.perVariant.length;
   return (
-    <div className={styles.fieldRow} data-status={parsed.status}>
-      <span className={styles.fieldLabel}>{label}</span>
+    <div className={styles.fieldRow} data-status={row.status}>
+      <span className={styles.fieldLabel}>{row.label}</span>
       <span className={styles.fieldValue}>
-        {plainValue(parsed.value)}
-        {parsed.unit ? ` ${parsed.unit}` : ""}
-        {flag ? <em className={styles.fieldFlag}>{flag}</em> : null}
-        {parsed.note ? <small className={styles.fieldNote}>{parsed.note}</small> : null}
+        {conflict ? null : row.value}
+        {row.statusLabel ? <em className={styles.fieldFlag}>{row.statusLabel}</em> : null}
+        {row.note && !conflict ? <small className={styles.fieldNote}>{row.note}</small> : null}
       </span>
-      {sources.length > 0 ? (
+      {extra > 0 && !conflict ? (
         <button className={styles.sourceToggle} onClick={() => setOpen((value) => !value)} type="button">
-          {open ? "收起来源" : `来源 ${sources.length}`}
+          {open ? "收起" : `出处 ${row.sources.length}`}
         </button>
       ) : (
         <span />
       )}
+      {conflict ? (
+        <div className={styles.choiceBlock}>
+          <table className={styles.dossierTable}>
+            <thead>
+              <tr>
+                <th>说法</th>
+                <th>谁说的</th>
+              </tr>
+            </thead>
+            <tbody>
+              {row.candidates.map((choice, index) => (
+                <tr key={index}>
+                  <td>{choice.value}</td>
+                  <td>{choice.sources.map(sourceText).join("；") || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {row.alternatives.length > 0 ? (
+            <small className={styles.fieldNote}>
+              另外还有(把握低,不算数):{row.alternatives.map((alt) => alt.value).join("、")}
+            </small>
+          ) : null}
+        </div>
+      ) : null}
       {open ? (
-        <ul className={styles.sourceList}>
-          {sources.map((source, index) => (
-            <li key={index}>{sourceText(source)}</li>
-          ))}
-        </ul>
+        <div className={styles.choiceBlock}>
+          {row.perVariant.length > 0 ? (
+            <small className={styles.fieldNote}>按规格:{row.perVariant.map(([name, value]) => `${name} = ${value}`).join("；")}</small>
+          ) : null}
+          {row.sources.length > 0 ? (
+            <ul className={styles.sourceList}>
+              {row.sources.map((source, index) => (
+                <li key={index}>{sourceText(source)}</li>
+              ))}
+            </ul>
+          ) : null}
+          {row.alternatives.length > 0 ? (
+            <small className={styles.fieldNote}>
+              其他说法(不标红):{row.alternatives.map((alt) => (alt.why ? `${alt.value}(${alt.why})` : alt.value)).join("；")}
+            </small>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

@@ -177,16 +177,22 @@ test("丢 1688 链接的输入框只给老板;收件筐里的建档卡能跳到�
   assert.match(scene, /onOpenDossier=\{onOpenDossier\}/);
 });
 
-test("档案详情不把原始 JSON 摊出来:字段逐行、来源可展开、标红分颜色", () => {
+test("档案详情不把原始 JSON 摊出来:只经 dossier-view 读草稿、标红分颜色、老板能重新整理", () => {
   const view = scene.slice(scene.indexOf("function DossierView"));
   assert.ok(!view.includes("JSON.stringify"), "dossier detail must not dump JSON");
-  assert.match(scene, /export function plainValue/);
+  // 草稿 → 界面这一层在 dossier-view.ts(纯函数,suqinghe-dossier-view.test.mjs 用真档案测);组件里不再自己猜字段
+  assert.match(view, /buildDossierView\(detail\?\.draft\)/);
+  assert.ok(!/draft\.(variants|price_tiers|fields|specs)/.test(view), "组件不该直接翻 draft 的字段");
   for (const status of ["conflict", "missing", "needs_owner"]) {
     assert.match(sceneCss, new RegExp(`\\.fieldRow\\[data-status="${status}"\\]`));
   }
-  assert.match(scene, /page_json: "页面数据"/);
-  assert.match(scene, /page_text: "页面文字"/);
+  const dossierView = read("frontend/src/components/suqinghe/dossier-view.ts");
+  assert.match(dossierView, /page_json: "页面数据"/);
+  assert.match(dossierView, /page_text: "页面文字"/);
   assert.match(scene, /去收件筐批/);
+  assert.match(view, /canCommand && REDO_STATUSES\.includes\(detail\.status\)/);
+  assert.match(api, /export function redoDossier\(id: number\)/);
+  assert.match(api, /\/dossiers\/\$\{encodeURIComponent\(String\(id\)\)\}\/redo`, \{ method: "POST" \}/);
 });
 
 test("office phone embeds the C19 private chat with her and pings on new messages", () => {

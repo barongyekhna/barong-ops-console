@@ -1,0 +1,434 @@
+{
+ "specs": {
+  "power": {
+   "note": "来源说法不一:21 V;18 V;24 V",
+   "unit": null,
+   "value": null,
+   "status": "conflict",
+   "sources": [
+    {
+     "raw": "21V Li-ion",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "18V Li-ion LITHIUM-ION",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "24V",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    }
+   ]
+  },
+  "weight": {
+   "note": "",
+   "unit": "g",
+   "value": "166",
+   "status": "ok",
+   "sources": [
+    {
+     "raw": "电池净重:166g",
+     "ref": "详情图 12 · 第 1 段",
+     "kind": "image"
+    }
+   ]
+  },
+  "battery": {
+   "note": "来源说法不一:12 V;Li-ion;工业级高性能锂电池;18650;A品动力电芯;500 次;全新A品电芯,足容,400-500次循环,稳定性高 次;锂电工具电池;18650动力电芯;500+;12V V;6.0 Ah;10 pcs;4.0 AH;4000 mAh",
+   "unit": null,
+   "value": null,
+   "status": "conflict",
+   "sources": [
+    {
+     "raw": "12V",
+     "ref": "详情图 4 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "Li-ion",
+     "ref": "详情图 4 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "工业级高性能锂电池 HIGH PERFORMANCE LITHIUM BATTERY",
+     "ref": "详情图 4 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "18650全新电芯足容不虚标，高循环次数",
+     "ref": "详情图 7 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "A品动力电芯 A-GRADE POWER BATTERY CELL",
+     "ref": "详情图 7 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "循环使用可达500次",
+     "ref": "详情图 7 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "全新A品电芯 足容,400-500次循环,稳定性高",
+     "ref": "详情图 8 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "电池类型:锂电工具电池",
+     "ref": "详情图 12 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "电池电压:12V",
+     "ref": "详情图 12 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "电芯类型:18650动力电芯",
+     "ref": "详情图 12 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "循环次数:500+",
+     "ref": "详情图 12 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "12V",
+     "ref": "详情图 13 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "Li-ion",
+     "ref": "详情图 13 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "6.0Ah",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "10 pcs",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "4.0AH",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "4000mAh",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    }
+   ]
+  },
+  "material": {
+   "note": "来源说法不一:隔离膜、防爆膜、铝塑包装膜;全新ABS阻燃外壳;阻燃ABS材料;LI-ION BATTERY;RECHARGEABLE LITHIUM ION BATTERY",
+   "unit": null,
+   "value": null,
+   "status": "conflict",
+   "sources": [
+    {
+     "raw": "隔离膜 防爆膜 铝塑包装膜",
+     "ref": "详情图 7 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "全新ABS阻燃外壳",
+     "ref": "详情图 10 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "阻燃ABS材料",
+     "ref": "详情图 10 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "材料组成:阻燃ABS材料",
+     "ref": "详情图 12 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "LI-ION BATTERY",
+     "ref": "详情图 14 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "RECHARGEABLE LITHIUM ION BATTERY",
+     "ref": "详情图 15 · 第 1 段",
+     "kind": "image"
+    }
+   ]
+  },
+  "dimensions": {
+   "note": "来源说法不一:40 mm;48 mm;84 mm",
+   "unit": null,
+   "value": null,
+   "status": "conflict",
+   "sources": [
+    {
+     "raw": "40mm",
+     "ref": "详情图 11 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "48mm",
+     "ref": "详情图 11 · 第 1 段",
+     "kind": "image"
+    },
+    {
+     "raw": "84mm",
+     "ref": "详情图 11 · 第 1 段",
+     "kind": "image"
+    }
+   ]
+  }
+ },
+ "fields": {
+  "moq": {
+   "note": "",
+   "unit": "个",
+   "value": 3,
+   "status": "ok",
+   "sources": [
+    {
+     "raw": "3",
+     "ref": "起批量",
+     "kind": "page_json"
+    }
+   ]
+  },
+  "name_en": {
+   "note": "",
+   "unit": null,
+   "value": "12V Lithium Battery for Cordless Drill and Screwdriver Power Tools",
+   "status": "ok",
+   "sources": [
+    {
+     "raw": "",
+     "ref": "据事实改写(Opus)",
+     "kind": "writer"
+    }
+   ]
+  },
+  "name_zh": {
+   "note": "",
+   "unit": null,
+   "value": "12v手电钻电池 高倍率手枪钻螺丝刀通用款大容量电动工具锂电池",
+   "status": "ok",
+   "sources": [
+    {
+     "raw": "12v手电钻电池 高倍率手枪钻螺丝刀通用款大容量电动工具锂电池",
+     "ref": "商品标题",
+     "kind": "page_text"
+    }
+   ]
+  },
+  "category": {
+   "note": "",
+   "unit": null,
+   "value": {
+    "name": "Power Tool Batteries",
+    "path": "Hardware > Tool Accessories > Power Tool Batteries",
+    "name_zh": "电动工具电池",
+    "confidence": "high",
+    "google_category_id": "6295"
+   },
+   "status": "ok",
+   "sources": [
+    {
+     "raw": "产品是12V手电钻/螺丝刀用的锂电池包，属于电动工具电池配件，6295正是「电动工具电池」叶子类目。6292是充电器、4716是整机套装，均不符。",
+     "ref": "殷承岳的类目判定",
+     "kind": "classifier"
+    }
+   ]
+  },
+  "product_type": {
+   "note": "",
+   "unit": null,
+   "value": "variable_product",
+   "status": "ok",
+   "sources": [
+    {
+     "raw": "5 个 SKU",
+     "ref": "SKU 列表",
+     "kind": "page_json"
+    }
+   ]
+  },
+  "retail_price": {
+   "note": "1688 只有进价(≥3件 ¥9.0),美国售价请老板定",
+   "unit": "USD",
+   "value": null,
+   "status": "needs_owner",
+   "sources": []
+  },
+  "package_includes": {
+   "note": "页面和详情图里都没找到包装清单",
+   "unit": null,
+   "value": null,
+   "status": "missing",
+   "sources": []
+  }
+ },
+ "flagged": [
+  {
+   "note": "1688 只有进价(≥3件 ¥9.0),美国售价请老板定",
+   "path": "retail_price",
+   "status": "needs_owner"
+  },
+  {
+   "note": "页面和详情图里都没找到包装清单",
+   "path": "package_includes",
+   "status": "missing"
+  },
+  {
+   "note": "来源说法不一:12 V;Li-ion;工业级高性能锂电池;18650;A品动力电芯;500 次;全新A品电芯,足容,400-500次循环,稳定性高 次;锂电工具电池;18650动力电芯;500+;12V V;6.0 Ah;10 pcs;4.0 AH;4000 mAh",
+   "path": "specs.battery",
+   "status": "conflict"
+  },
+  {
+   "note": "来源说法不一:隔离膜、防爆膜、铝塑包装膜;全新ABS阻燃外壳;阻燃ABS材料;LI-ION BATTERY;RECHARGEABLE LITHIUM ION BATTERY",
+   "path": "specs.material",
+   "status": "conflict"
+  },
+  {
+   "note": "来源说法不一:40 mm;48 mm;84 mm",
+   "path": "specs.dimensions",
+   "status": "conflict"
+  },
+  {
+   "note": "来源说法不一:21 V;18 V;24 V",
+   "path": "specs.power",
+   "status": "conflict"
+  }
+ ],
+ "version": 1,
+ "offer_id": "643348607768",
+ "supplier": {
+  "name": "湖南来美电子科技有限公司",
+  "type": "factory",
+  "years": 7,
+  "location": "广东佛山",
+  "shop_url": "https://shop050j9p25815y0.1688.com"
+ },
+ "variants": [
+  {
+   "sku_id": "4795232306799",
+   "dims_cm": [
+    13.0,
+    9.0,
+    8.0
+   ],
+   "name_en": "2000mAh",
+   "name_zh": "2000mah",
+   "weight_g": 170.0,
+   "image_url": null,
+   "cost_price_cny": null
+  },
+  {
+   "sku_id": "5054465747860",
+   "dims_cm": [
+    13.0,
+    9.0,
+    8.0
+   ],
+   "name_en": "12V Direct Charger",
+   "name_zh": "12V直充充电器",
+   "weight_g": 80.0,
+   "image_url": null,
+   "cost_price_cny": null
+  },
+  {
+   "sku_id": "4795232306800",
+   "dims_cm": [
+    13.0,
+    9.0,
+    8.0
+   ],
+   "name_en": "2500mAh",
+   "name_zh": "2500mah",
+   "weight_g": 165.0,
+   "image_url": null,
+   "cost_price_cny": null
+  },
+  {
+   "sku_id": "4795232306798",
+   "dims_cm": [
+    13.0,
+    9.0,
+    8.0
+   ],
+   "name_en": "1500mAh",
+   "name_zh": "1500mah",
+   "weight_g": 175.0,
+   "image_url": null,
+   "cost_price_cny": null
+  },
+  {
+   "sku_id": "4813865331950",
+   "dims_cm": [
+    13.0,
+    9.0,
+    8.0
+   ],
+   "name_en": "1300mAh",
+   "name_zh": "1300mah",
+   "weight_g": 160.0,
+   "image_url": null,
+   "cost_price_cny": null
+  }
+ ],
+ "image_read": {
+  "segments_read": 9,
+  "segments_seen": 17,
+  "stopped_reason": "budget"
+ },
+ "source_url": "https://detail.1688.com/offer/643348607768.html",
+ "summary_zh": "12v手电钻电池 高倍率手枪钻螺丝刀通用款大容量电动工具锂电:5 个 SKU,规格 5 项;标红 6 项(说法不一 4、没找到 1、要老板定 1)。",
+ "price_tiers": [
+  {
+   "min_qty": 3,
+   "price_cny": 9.0
+  }
+ ],
+ "flagged_count": 6,
+ "other_attributes": [
+  {
+   "name": "产品认证",
+   "value": "MSDS、ce、UN38.3"
+  },
+  {
+   "name": "存储温度",
+   "value": "5-50"
+  },
+  {
+   "name": "保护功能",
+   "value": "过充保护、温控保护、过放保护"
+  },
+  {
+   "name": "使用范围",
+   "value": "除草机、电动工具储能、手持电钻、无线水枪、充电扳手"
+  },
+  {
+   "name": "充电工作温度",
+   "value": "5-40"
+  },
+  {
+   "name": "放电工作温度",
+   "value": "5-40"
+  }
+ ],
+ "reference_images": [
+  "https://cbu01.alicdn.com/img/ibank/O1CN013LAeID1oCbrPhpMyu_!!2208532485189-0-cib.jpg",
+  "https://cbu01.alicdn.com/img/ibank/O1CN017qqRES1oCbrGlxkko_!!2208532485189-0-cib.jpg",
+  "https://cbu01.alicdn.com/img/ibank/O1CN01eIDajC1oCbrPjwsxR_!!2208532485189-0-cib.jpg"
+ ]
+}

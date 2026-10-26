@@ -199,3 +199,31 @@ def test_blocked_page_marks_blocked_and_raises_one_alert(clean) -> None:
         assert result.status == "blocked" and "登录" in (result.error or "")
         alerts = db.scalars(select(SqhCard).where(SqhCard.kind == "ops_alert")).all()
         assert len(alerts) == 1 and alerts[0].title == "1688 把我拦住了"
+
+
+def test_redo_rejects_old_card_and_requeues_same_link(clean, auth_client: TestClient) -> None:
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossiers.enqueue(db, url=URL, actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+    ready = _process(T0)
+    assert ready is not None and ready.status == "ready" and ready.card_ref
+
+    _login(auth_client, REGULAR)
+    assert auth_client.post(f"/api/app/suqinghe/dossiers/{ready.id}/redo").status_code == 403
+
+    _login(auth_client, OWNER)
+    resp = auth_client.post(f"/api/app/suqinghe/dossiers/{ready.id}/redo")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["created"] is True and body["status"] == "queued" and body["id"] != ready.id and body["offer_id"] == OFFER
+
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert db.get(SqhDossier, ready.id).status == "rejected"
+        card = db.scalar(select(SqhCard).where(SqhCard.ref == ready.card_ref))
+        assert card.status == "rejected" and card.decision_reason == dossiers.REDO_REASON
+
+    # 还在排队的不能再重做;不存在的 404 也不给,统一 422 说清楚
+    again = auth_client.post(f"/api/app/suqinghe/dossiers/{body['id']}/redo")
+    assert again.status_code == 422 and "整理中" in again.json()["detail"]["message"]
+    missing = auth_client.post("/api/app/suqinghe/dossiers/999999/redo")
+    assert missing.status_code == 422 and "没有这份档案" in missing.json()["detail"]["message"]
