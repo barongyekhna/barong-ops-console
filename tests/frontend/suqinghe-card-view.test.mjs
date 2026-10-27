@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { isAllowedBackendProxyPath } from "../../frontend/src/app/api/backend/[...path]/route.ts";
-import { PRICE_CARD_KIND, REVIEW_CARD_KIND, kMediaThumbnailUrl, pct, priceCardView, reviewCardView, usd } from "../../frontend/src/components/suqinghe/card-view.ts";
+import { CANDIDATE_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND, candidateCardView, candidateImageUrl, kMediaThumbnailUrl, pct, priceCardView, reviewCardView, usd } from "../../frontend/src/components/suqinghe/card-view.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const load = (name) => JSON.parse(readFileSync(path.join(here, "fixtures", "suqinghe", name), "utf8"));
@@ -73,5 +73,31 @@ test("缩略图地址走前端代理已经放行的 K 媒体路径;卡片正文�
 test("坏的 evidence 不画,不炸", () => {
   assert.equal(priceCardView(null), null);
   assert.equal(priceCardView({ variants: [] }), null);
+});
+
+test("选品卡:图走后端代理、进价折美元、美国同类价、风险一条一条,1688 链接只认 detail 页", () => {
+  const candidate = JSON.parse(read("tests/frontend/fixtures/suqinghe/card-candidate.json"));
+  assert.equal(candidate.kind, CANDIDATE_CARD_KIND);
+  const view = candidateCardView(candidate.evidence);
+  assert.ok(view);
+  assert.match(view.titleZh, /套锅/);
+  assert.equal(view.category, "Camping & Hiking > Camping Cookware & Dinnerware");
+  assert.equal(view.priceCny, 23);
+  assert.equal(view.goodsUsd, 3.19);
+  assert.equal(view.moq, 1);
+  assert.equal(view.monthlySales, 400);
+  assert.match(view.competitors, /中位 \$27\.99/);
+  assert.match(view.reason, /起订 1/);
+  assert.equal(view.risks.length, 2);
+  assert.equal(view.sourceUrl, "https://detail.1688.com/offer/888700112233.html");
+  assert.equal(view.hasImage, true);
+  assert.equal(candidateImageUrl(candidate.ref), "/api/backend/suqinghe/cards/c0de/image");
+  // 卡上的话由后端定,前端不再拼一遍
+  assert.match(candidate.conclusion, /进价 ¥23\.0\(≈\$3\.19\)/);
+  assert.match(candidate.why, /重量/);
+  const noLink = candidateCardView({ ...candidate.evidence, source_url: "https://evil.example/x", image_url: "" });
+  assert.equal(noLink.sourceUrl, "");
+  assert.equal(noLink.hasImage, false);
+  assert.equal(candidateCardView({ title_zh: "" }), null);
   assert.equal(reviewCardView("x"), null);
 });

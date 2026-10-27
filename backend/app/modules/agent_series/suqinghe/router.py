@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -255,3 +255,21 @@ def get_dossier(dossier_id: int, db: Session = Depends(get_db), user: User = Dep
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "SQH_DOSSIER_NOT_FOUND", "message": "没有这份档案。"})
     return dossiers.detail_payload(row, building=row.card_ref in dossiers.building_refs(db, [row]))
+
+
+@router.get("/cards/{ref}/image")
+def card_image(ref: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
+    """选品卡上的候选图:经 F 的图片缓存回源阿里 CDN(绕防盗链、落盘)。谁能看办公室,谁就能看图。"""
+    from ...f_series.enrichment import images as f_images
+    from .constants import CANDIDATE_CARD_KIND
+
+    del user
+    card = cards.find_card(db, ref)
+    evidence = card.evidence if card is not None and isinstance(card.evidence, dict) else {}
+    if card is None or card.kind != CANDIDATE_CARD_KIND or not evidence.get("image_url"):
+        raise HTTPException(status_code=404, detail={"code": "SQH_CARD_IMAGE_NOT_FOUND", "message": "这张卡没有图。"})
+    try:
+        data, media_type = f_images.get_candidate_image(str(evidence.get("f_candidate_id") or card.ref), str(evidence["image_url"]), "thumb")
+    except f_images.FImageUnavailableError as exc:
+        raise HTTPException(status_code=404, detail={"code": "SQH_CARD_IMAGE_UNAVAILABLE", "message": str(exc)}) from exc
+    return Response(content=data, media_type=media_type, headers={"Cache-Control": "private, max-age=604800, immutable"})

@@ -187,9 +187,12 @@ def create_k_from_dossier(db: Session, dossier_id: int, actor: User | None) -> E
     scope = _scope(db)
     existing = _existing_product(db, workspace_key=scope.workspace_key, offer_id=str(dossier.offer_id))
     if existing is not None:
+        from . import picks
+
         dossier.status = "created"
         dossier.k_product_id = str(existing.id)
         db.add(dossier)
+        picks.mark_imported(db, dossier, str(existing.id))  # 选品卡来的档案:F 候选记上去向
         db.commit()
         return ExecutorResult(dossier.id, str(existing.id), False, existing.sku, _reference_count(db, existing.id),
                               f"这个 1688 商品之前已经建进 K 了(SKU {existing.sku}),没有重复建。")
@@ -229,11 +232,14 @@ def create_k_from_dossier(db: Session, dossier_id: int, actor: User | None) -> E
     if problems:
         raise ExecutorError("建档回读不一致:" + "、".join(problems) + f"(K 产品 {fresh.id} 已建,请老板看一眼)")
 
+    from . import picks
+
     dossier = db.get(SqhDossier, dossier_id, execution_options=SKIP_ORG_DATA_ISOLATION)
     dossier.status = "created"
     dossier.k_product_id = str(fresh.id)
     dossier.draft = {**(dossier.draft or {}), "k_result": {"sku": fresh.sku, "reference_images": actual_refs, "url_count": len(urls)}}
     db.add(dossier)
+    picks.mark_imported(db, dossier, str(fresh.id))  # 选品卡来的档案:F 候选记上去向(imported_to_k + K 产品 id)
     note = f"建好了:K 产品 {fresh.sku}," + (f"参考图 {actual_refs} 张" if actual_refs else "没挂上参考图")
     memory.log_activity(db, f"档案 #{dossier.id} {note}", kind="execute")
     memory.record(

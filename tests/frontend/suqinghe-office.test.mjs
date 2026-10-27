@@ -73,6 +73,11 @@ test("代理白名单放行办公室的各个接口,别的形状不放", () => {
   assert.ok(!allowed("DELETE", "suqinghe/goals/12"));
   assert.ok(!allowed("POST", "suqinghe/cards/../decide"));
   assert.ok(!allowed("POST", "suqinghe/memory"));
+  // 选品卡的候选图:只放行 GET cards/<短号>/image
+  assert.ok(allowed("GET", "suqinghe/cards/a3f9/image"));
+  assert.ok(!allowed("GET", "suqinghe/cards/a3f9/decide"));
+  assert.ok(!allowed("POST", "suqinghe/cards/a3f9/image"));
+  assert.ok(!allowed("GET", "suqinghe/cards/zz/image"));
 });
 
 test("书柜和日历是只读接口:GET 放行,日期只认 YYYY-MM-DD", () => {

@@ -1471,6 +1471,10 @@ function isAllowedSuqinghePath(method: string, path: string[]) {
     if (path.length === 3 && path[1] === "dossiers") {
       return SUQINGHE_DOSSIER_ID_PATTERN.test(path[2]);
     }
+    if (path.length === 4 && path[1] === "cards") {
+      // 选品卡上的候选图:后端经 F 的图片缓存回源阿里 CDN
+      return SUQINGHE_CARD_REF_PATTERN.test(path[2]) && path[3] === "image";
+    }
     return path.length === 3 && path[1] === "snapshots" && SUQINGHE_SNAPSHOT_DATE_PATTERN.test(path[2]);
   }
   if (method === "POST") {

@@ -35,7 +35,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, cards, dossiers, executor, memory, office, pipeline, snapshot
+from . import brain, cards, dossiers, executor, memory, office, picks, pipeline, snapshot
 from .constants import (
     AGENT_USERNAME,
     HEARTBEAT_INTERVAL_SECONDS,
@@ -55,6 +55,8 @@ MAX_ANSWERED_KEEP = 2000
 SPEAK_START_HOUR = 8
 MORNING_MAX_ATTEMPTS = 3
 MORNING_RETRY_MINUTES = 30
+PICK_MAX_ATTEMPTS = 2  # 第⑥步挑新品:一天最多试两次(挑成了第二次只是白查一下),两次至少隔半小时
+PICK_RETRY_MINUTES = 30
 SPEAK_END_HOUR = 22
 CHANNEL_LABELS = {"web": "网页", "c19": "C19", "mcp": "MCP"}
 
@@ -284,6 +286,9 @@ class SuqingheWorker:
         self._morning_day: date | None = None
         self._morning_attempts = 0
         self._morning_last: datetime | None = None
+        self._pick_day: date | None = None
+        self._pick_attempts = 0
+        self._pick_last: datetime | None = None
         # 第②步:K 流水线在另一个线程里一件一件推(一步能跑十几分钟,不能卡住聊天和批卡建档)
         self.pipeline = pipeline.Runner()
 
@@ -453,6 +458,19 @@ class SuqingheWorker:
         self._morning_last = now
         return True
 
+    def _pick_attempt_allowed(self, now: datetime) -> bool:
+        """挑新品同理:一天最多 PICK_MAX_ATTEMPTS 次,两次之间至少隔 PICK_RETRY_MINUTES 分钟(每次都要调一次模型)。"""
+        today = la_date(now)
+        if self._pick_day != today:
+            self._pick_day, self._pick_attempts, self._pick_last = today, 0, None
+        if self._pick_attempts >= PICK_MAX_ATTEMPTS:
+            return False
+        if self._pick_last is not None and now - self._pick_last < timedelta(minutes=PICK_RETRY_MINUTES):
+            return False
+        self._pick_attempts += 1
+        self._pick_last = now
+        return True
+
     def tick(self) -> None:
         db = SessionLocal()
         try:
@@ -466,6 +484,9 @@ class SuqingheWorker:
             handle_dictations(db)
             # 1688 → K 档案:一轮最多一单,节流在 dossiers.process_next 里。
             dossiers.process_next(db, now=now)
+            # 第⑥步:早间计划排完后去找货池里挑今天的新品(一天几张卡、攒多了不发,都在 picks 里管)
+            if picks.should_pick(now=now, last_plan=office.get_state(db).last_plan_date) and self._pick_attempt_allowed(now):
+                picks.run_picks(db, now=now)
             # 建进 K 的产品往下推:线程闲着就派下一件(暂停时上面已经 return,不派新活)
             self.pipeline.maybe_start(db)
             try:

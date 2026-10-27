@@ -26,7 +26,7 @@ from ....core.roles import is_owner_role
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import memory
-from .constants import CARD_CHANNELS, DOSSIER_CARD_KIND, PLAN_CARD_KINDS
+from .constants import CANDIDATE_CARD_KIND, CARD_CHANNELS, DOSSIER_CARD_KIND, PLAN_CARD_KINDS
 from .models import SqhCard
 
 # 重算指纹的函数:evidence["recheck"]["type"] → fn(db, recheck) -> 指纹。
@@ -169,10 +169,12 @@ def decide_card(
     if changed and card.kind == DOSSIER_CARD_KIND:
         execution = _after_dossier_decision(db, card, decision=decision, actor=actor)
     elif changed:
-        from . import pipeline  # 流水线要用 cards 建卡,这里晚一点再导
+        from . import picks, pipeline  # 流水线和选品都要用 cards 建卡,这里晚一点再导
 
         if card.kind in pipeline.PIPELINE_CARD_KINDS:
             execution = pipeline.after_decision(db, card, decision=decision)
+        elif card.kind == CANDIDATE_CARD_KIND:
+            execution = picks.after_decision(db, card, decision=decision, actor=actor)
     return DecideOutcome(card=card, changed=changed, execution=execution)
 
 

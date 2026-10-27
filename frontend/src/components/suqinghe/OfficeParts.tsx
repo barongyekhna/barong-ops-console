@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import styles from "./Office.module.css";
-import { PRICE_CARD_KIND, REVIEW_CARD_KIND, pct, priceCardView, reviewCardView, usd } from "./card-view";
+import { CANDIDATE_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND, candidateCardView, candidateImageUrl, pct, priceCardView, reviewCardView, usd } from "./card-view";
 import { GOAL_METRICS, addGoal, controlOffice, decideCard, instructOffice, patchGoal, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
 
 /** 场景视图和列表视图共用的零件:审批卡、指挥控件、几个格式化小工具。 */
@@ -74,6 +74,7 @@ export function CardItem({
         <strong>{card.title}</strong>
       </button>
       <p>{card.conclusion}</p>
+      {card.kind === CANDIDATE_CARD_KIND ? <CandidateCardBody card={card} /> : null}
       {card.kind === PRICE_CARD_KIND ? <PriceCardBody evidence={card.evidence} /> : null}
       {card.kind === REVIEW_CARD_KIND ? <ReviewCardBody evidence={card.evidence} /> : null}
       {dossierId !== null && onOpenDossier ? (
@@ -148,6 +149,43 @@ export function CardItem({
         )
       ) : null}
     </article>
+  );
+}
+
+/** 选品卡:图 + 进价/起订/月销 + 美国同类价 + 风险,批之前一眼看得到;原页去 1688 看。 */
+function CandidateCardBody({ card }: { card: OfficeCard }) {
+  const view = candidateCardView(card.evidence);
+  if (!view) return null;
+  return (
+    <div className={styles.cardBody}>
+      <div className={styles.candidateRow}>
+        {view.hasImage ? <img alt="" className={styles.candidateThumb} loading="lazy" src={candidateImageUrl(card.ref)} /> : null}
+        <div>
+          <strong className={styles.preLine}>{view.titleZh}</strong>
+          {view.category ? <small className={styles.muted}>{view.category}</small> : null}
+          <ul className={styles.bulletList}>
+            <li>
+              进价 {view.priceCny === null ? "—" : `¥${view.priceCny}`}
+              {view.goodsUsd !== null ? `(≈${usd(view.goodsUsd)})` : ""},起订 {view.moq ?? "—"},月销 {view.monthlySales ?? "—"}
+            </li>
+            <li>{view.competitors}</li>
+            {view.reason ? <li>{view.reason}</li> : null}
+          </ul>
+        </div>
+      </div>
+      {view.risks.length > 0 ? (
+        <ul className={styles.questionList}>
+          {view.risks.map((risk) => (
+            <li key={risk}>风险:{risk}</li>
+          ))}
+        </ul>
+      ) : null}
+      {view.sourceUrl ? (
+        <a className={styles.linkButton} href={view.sourceUrl} rel="noopener noreferrer" target="_blank">
+          去 1688 看原页 →
+        </a>
+      ) : null}
+    </div>
   );
 }
 

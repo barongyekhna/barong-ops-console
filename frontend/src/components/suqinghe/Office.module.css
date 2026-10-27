@@ -771,6 +771,29 @@
   gap: 6px;
 }
 
+/* 选品卡:左图右字 */
+.candidateRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.candidateRow > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.candidateThumb {
+  width: 96px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--color-muted);
+  background: var(--color-panel-base);
+}
+
 .thumbGrid figure {
   margin: 0;
   display: grid;

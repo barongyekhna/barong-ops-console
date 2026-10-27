@@ -143,6 +143,59 @@ export function reviewCardView(evidence: unknown): ReviewCardView | null {
   };
 }
 
+export const CANDIDATE_CARD_KIND = "candidate";
+
+/** 选品卡上的候选图:后端经 F 的图片缓存回源阿里 CDN,前端不直连 1688。 */
+export function candidateImageUrl(ref: string): string {
+  return `/api/backend/suqinghe/cards/${encodeURIComponent(ref)}/image`;
+}
+
+export type CandidateCardView = {
+  titleZh: string;
+  category: string;
+  priceCny: number | null;
+  goodsUsd: number | null;
+  moq: number | null;
+  monthlySales: number | null;
+  competitors: string;
+  reason: string;
+  risks: string[];
+  sourceUrl: string;
+  hasImage: boolean;
+};
+
+const DETAIL_1688 = /^https:\/\/detail\.1688\.com\/offer\/\d+\.html/;
+
+export function candidateCardView(evidence: unknown): CandidateCardView | null {
+  if (!isRec(evidence)) return null;
+  const titleZh = text(evidence.title_zh);
+  if (!titleZh) return null;
+  const comp = isRec(evidence.competitors) ? evidence.competitors : {};
+  const n = num(comp.n) ?? 0;
+  const competitors =
+    n > 0
+      ? `美国同类「${text(comp.query)}」${n} 个:中位 $${num(comp.median)},一半在 $${num(comp.p25)}–$${num(comp.p75)}`
+      : `美国同类价没拿到${text(comp.error) ? `(${text(comp.error)})` : ""}`;
+  const path = text(evidence.category_path)
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const sourceUrl = text(evidence.source_url);
+  return {
+    titleZh,
+    category: path.slice(-2).join(" > "),
+    priceCny: num(evidence.price_cny),
+    goodsUsd: num(evidence.goods_usd),
+    moq: num(evidence.moq),
+    monthlySales: num(evidence.monthly_sales),
+    competitors,
+    reason: text(evidence.reason),
+    risks: strings(evidence.risks),
+    sourceUrl: DETAIL_1688.test(sourceUrl) ? sourceUrl : "",
+    hasImage: Boolean(text(evidence.image_url)),
+  };
+}
+
 export function usd(value: number | null): string {
   return value === null ? "—" : `$${value.toFixed(2)}`;
 }

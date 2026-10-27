@@ -1,0 +1,49 @@
+{
+  "id": 901,
+  "ref": "c0de",
+  "kind": "candidate",
+  "title": "选品:户外用品亚马逊热卖户外套锅1-2人锅具便携野营炊",
+  "conclusion": "1688 进价 ¥23.0(≈$3.19),起订 1,月销 400;美国同类(camping cookware set)中位 $27.99,一半在 $19.99–$39.99。批了我就开详情页建档(先建草稿、不上架),建档卡再给你过目。",
+  "why": "1–2 人套锅,起订 1、月销 400,轻小件,店里还没有炊具。\n风险:铝材质和涂层要核实；带餐具,刀叉是否算刀具要看一眼\n重量和尺寸 1688 列表里没有,批了我开页面核实再算运费。",
+  "if_not": "不批就算了,这个品我不再提。",
+  "confidence": "medium",
+  "evidence": {
+    "f_candidate_id": "3b1c0a52-9f1e-4c7a-8d2e-5a6b7c8d9e0f",
+    "offer_id": "888700112233",
+    "source_url": "https://detail.1688.com/offer/888700112233.html",
+    "image_url": "https://cbu01.alicdn.com/img/ibank/O1CN01example.jpg",
+    "title_zh": "户外用品亚马逊热卖户外套锅1-2人锅具便携野营炊具带餐具DS-101",
+    "category_path": "Sporting Goods > Outdoor Recreation > Camping & Hiking > Camping Cookware & Dinnerware",
+    "profile_product_en": "Camping Cookware Set",
+    "price_cny": 23.0,
+    "goods_usd": 3.19,
+    "moq": 1,
+    "monthly_sales": 400,
+    "score": 69,
+    "reason": "1–2 人套锅,起订 1、月销 400,轻小件,店里还没有炊具。",
+    "risks": [
+      "铝材质和涂层要核实",
+      "带餐具,刀叉是否算刀具要看一眼"
+    ],
+    "us_query": "camping cookware set",
+    "competitors": {
+      "query": "camping cookware set",
+      "n": 18,
+      "min": 12.99,
+      "p25": 19.99,
+      "median": 27.99,
+      "p75": 39.99,
+      "max": 89.0
+    },
+    "recheck": {
+      "type": "candidate",
+      "f_candidate_id": "3b1c0a52-9f1e-4c7a-8d2e-5a6b7c8d9e0f"
+    }
+  },
+  "reversible": true,
+  "status": "pending",
+  "decided_via": null,
+  "decision_reason": null,
+  "decided_at": null,
+  "created_at": "2026-10-27T14:05:00+00:00"
+}

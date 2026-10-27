@@ -51,6 +51,23 @@ def dossier_daily_limit() -> int:
 DOSSIER_MIN_GAP_SECONDS = 60
 DOSSIER_IMAGE_BUDGET_USD = 0.5
 
+# 第⑥步:她自己找货。先从 F 系列(找货页)的候选池里挑,一天最多发几张「选品」卡;老板没处理的攒到上限就不再发。
+CANDIDATE_CARD_KIND = "candidate"
+
+
+def picks_per_day() -> int:
+    try:
+        return max(0, int(os.getenv("SQH_PICKS_PER_DAY", "3")))
+    except ValueError:
+        return 3
+
+
+def picks_max_pending() -> int:
+    try:
+        return max(1, int(os.getenv("SQH_PICKS_MAX_PENDING", "6")))
+    except ValueError:
+        return 6
+
 
 def _env_float(name: str, default: float) -> float:
     try:
