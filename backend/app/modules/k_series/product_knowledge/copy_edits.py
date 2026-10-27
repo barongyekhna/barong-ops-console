@@ -26,7 +26,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from .brand_guard import SITE_BRAND, blacklist_violations, normalized_brand_terms
 from .buyer_display import contains_cjk
 from .evidence_guard import (
@@ -106,6 +105,9 @@ def _text_problems(field: str, value: str, *, limit: int, brand_terms: list[str]
 
 
 def _latest_execution(db: Session, product_id: Any) -> KProductKnowledgeWorkflowExecution | None:
+    # 晚导入:data_isolation 和 db.session 互相引用,这个模块单独被 import 时(发版冒烟逐模块 import)先引它会撞循环导入
+    from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
+
     return db.scalar(
         select(KProductKnowledgeWorkflowExecution)
         .where(KProductKnowledgeWorkflowExecution.product_id == product_id)
