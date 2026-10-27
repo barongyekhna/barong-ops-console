@@ -4,15 +4,13 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 
 import styles from "./Office.module.css";
 import {
-  CARD_STATUS_LABEL,
   STATE_LABEL,
-  VIA_LABEL,
   officeErrorMessage,
   portraitFor,
   type OfficeRead,
   type OfficeState,
 } from "./office-api";
-import { CardItem, GoalList, OwnerControls, minutesAgo, pickEasterLine, timeText } from "./OfficeParts";
+import { GoalList, Inbox, OwnerControls, minutesAgo, pickEasterLine, timeText } from "./OfficeParts";
 import { OfficeScene } from "./OfficeScene";
 
 const POSITION_KEY = "suqinghe-office-position";
@@ -343,31 +341,9 @@ export function OfficeWindow({
             </section>
 
             <section className={styles.section}>
-              <h3>等老板批的卡（{office.pending_cards.length}）</h3>
-              {office.pending_cards.length === 0 ? <p className={styles.muted}>暂时没有要批的。</p> : null}
-              {office.pending_cards.map((card) => (
-                <CardItem busy={busy} canCommand={canCommand} card={card} key={card.ref} run={run} />
-              ))}
+              <h3>收件筐（待审 {office.pending_cards.length}）</h3>
+              <Inbox busy={busy} canCommand={canCommand} office={office} run={run} />
             </section>
-
-            {office.recent_cards.length > 0 ? (
-              <section className={styles.section}>
-                <h3>最近定下的</h3>
-                <ul className={styles.list}>
-                  {office.recent_cards.map((card) => (
-                    <li key={card.ref}>
-                      <span>
-                        #{card.ref} {card.title}
-                      </span>
-                      <span className={styles.tag} data-status={card.status}>
-                        {CARD_STATUS_LABEL[card.status] ?? card.status}
-                        {card.decided_via ? ` · ${VIA_LABEL[card.decided_via] ?? card.decided_via}` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
 
             <section className={styles.section}>
               <h3>流水</h3>

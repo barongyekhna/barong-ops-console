@@ -259,17 +259,33 @@ def get_dossier(dossier_id: int, db: Session = Depends(get_db), user: User = Dep
 
 @router.get("/cards/{ref}/image")
 def card_image(ref: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
-    """选品卡上的候选图:经 F 的图片缓存回源阿里 CDN(绕防盗链、落盘)。谁能看办公室,谁就能看图。"""
+    """卡上的缩略图(10-27 起每种卡都有):选品卡走 F 的图片缓存回源阿里 CDN;带 K 产品的卡走 K 的媒资缩略图;
+    带档案的卡走档案里的参考图。谁能看办公室,谁就能看图(和选品图同规矩,不过 K 的权限门)。"""
+    from fastapi.responses import FileResponse
+
     from ...f_series.enrichment import images as f_images
-    from .constants import CANDIDATE_CARD_KIND
 
     del user
     card = cards.find_card(db, ref)
-    evidence = card.evidence if card is not None and isinstance(card.evidence, dict) else {}
-    if card is None or card.kind != CANDIDATE_CARD_KIND or not evidence.get("image_url"):
+    source = cards.image_source(db, card) if card is not None else None
+    if source is None:
         raise HTTPException(status_code=404, detail={"code": "SQH_CARD_IMAGE_NOT_FOUND", "message": "这张卡没有图。"})
+    kind, payload = source
+    if kind == "k_asset":
+        from ...k_series.product_knowledge.router import _ensure_media_asset_derivative
+
+        try:
+            path = _ensure_media_asset_derivative(payload, kind="thumbnail", max_side=320)
+        except HTTPException as exc:
+            raise HTTPException(status_code=404, detail={"code": "SQH_CARD_IMAGE_UNAVAILABLE", "message": str(exc.detail)[:200]}) from exc
+        db.add(payload)
+        db.commit()
+        response = FileResponse(path=path, content_disposition_type="inline", filename=path.name, media_type="image/webp" if path.suffix == ".webp" else payload.mime_type)
+        response.headers["Cache-Control"] = "private, max-age=86400"
+        return response
+    cache_key, url = payload
     try:
-        data, media_type = f_images.get_candidate_image(str(evidence.get("f_candidate_id") or card.ref), str(evidence["image_url"]), "thumb")
+        data, media_type = f_images.get_candidate_image(cache_key, url, "thumb")
     except f_images.FImageUnavailableError as exc:
         raise HTTPException(status_code=404, detail={"code": "SQH_CARD_IMAGE_UNAVAILABLE", "message": str(exc)}) from exc
     return Response(content=data, media_type=media_type, headers={"Cache-Control": "private, max-age=604800, immutable"})

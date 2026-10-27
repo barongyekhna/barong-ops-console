@@ -10,7 +10,6 @@ import {
   PRICE_CARD_KIND,
   REVIEW_CARD_KIND,
   candidateCardView,
-  candidateImageUrl,
   copyCardView,
   marketCardView,
   pct,
@@ -18,7 +17,8 @@ import {
   reviewCardView,
   usd,
 } from "./card-view";
-import { GOAL_METRICS, addGoal, controlOffice, decideCard, instructOffice, patchGoal, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
+import { cardImageUrl, confidenceLabel, familyMeta, familyOf, groupCards, summaryOf, waitedText } from "./card-kinds";
+import { CARD_STATUS_LABEL, GOAL_METRICS, VIA_LABEL, addGoal, controlOffice, decideCard, instructOffice, patchGoal, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
 
 /** 场景视图和列表视图共用的零件:审批卡、指挥控件、几个格式化小工具。 */
 
@@ -63,65 +63,18 @@ export function dossierIdOf(card: OfficeCard): number | null {
   return Number.isFinite(id) && id > 0 ? id : null;
 }
 
-export function CardItem({
-  card,
-  canCommand,
-  busy,
-  run,
-  onOpenDossier,
-}: {
-  card: OfficeCard;
-  canCommand: boolean;
-  busy: boolean;
-  run: Runner;
-  onOpenDossier?: (id: number) => void;
-}) {
-  const dossierId = dossierIdOf(card);
-  const [expanded, setExpanded] = useState(false);
+/* ---------------------------------------------------------------- 卡(10-27 重做):纸片 → 卷宗
+ * 收件筐按家族分组,每张卡是一张米白纸片(家族色条 + 戳记 + 缩略图 + 一行基本信息 + 批/驳);
+ * 点纸片铺成一页卷宗:她的结论、为什么、这张卡的正文(价目表/评分表/全文/拆解…)、不做会怎样、能不能撤回、原始证据。
+ */
+
+function DecideBar({ card, canCommand, busy, run, onDecided }: { card: OfficeCard; canCommand: boolean; busy: boolean; run: Runner; onDecided?: () => void }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
-
+  const meta = familyMeta(card.kind);
+  if (card.status !== "pending") return null;
   return (
-    <article className={styles.card}>
-      <button className={styles.cardHead} onClick={() => setExpanded((value) => !value)} type="button">
-        <span className={styles.cardRef}>#{card.ref}</span>
-        <strong>{card.title}</strong>
-      </button>
-      <p>{card.conclusion}</p>
-      {card.kind === CANDIDATE_CARD_KIND ? <CandidateCardBody card={card} /> : null}
-      {card.kind === PRICE_CARD_KIND ? <PriceCardBody evidence={card.evidence} /> : null}
-      {card.kind === REVIEW_CARD_KIND ? <ReviewCardBody evidence={card.evidence} /> : null}
-      {card.kind === COPY_CARD_KIND ? <CopyCardBody evidence={card.evidence} /> : null}
-      {card.kind === MARKET_CARD_KIND ? <MarketCardBody evidence={card.evidence} /> : null}
-      {dossierId !== null && onOpenDossier ? (
-        <button className={styles.linkButton} onClick={() => onOpenDossier(dossierId)} type="button">
-          看档案 →
-        </button>
-      ) : null}
-      {expanded ? (
-        <dl className={styles.cardDetail}>
-          {card.why ? (
-            <>
-              <dt>为什么</dt>
-              <dd className={styles.preLine}>{card.why}</dd>
-            </>
-          ) : null}
-          {card.if_not ? (
-            <>
-              <dt>不做会怎样</dt>
-              <dd>{card.if_not}</dd>
-            </>
-          ) : null}
-          <dt>能不能撤回</dt>
-          <dd>{card.reversible ? "能" : "不能"}</dd>
-          <dt>把握</dt>
-          <dd>{card.confidence === "high" ? "高" : card.confidence === "low" ? "低" : "中"}</dd>
-          <dt>证据</dt>
-          <dd>
-            <pre>{JSON.stringify(card.evidence, null, 2)}</pre>
-          </dd>
-        </dl>
-      ) : null}
+    <div className={styles.sheetActions} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()} role="presentation">
       {canCommand ? (
         rejecting ? (
           <form
@@ -133,6 +86,7 @@ export function CardItem({
                 if (ok) {
                   setRejecting(false);
                   setReason("");
+                  onDecided?.();
                 }
               });
             }}
@@ -155,8 +109,13 @@ export function CardItem({
           </form>
         ) : (
           <div className={styles.inlineActions}>
-            <button className={styles.primary} disabled={busy} onClick={() => void run("批准失败", () => decideCard(card.ref, "approve"))} type="button">
-              批
+            <button
+              className={styles.primary}
+              disabled={busy}
+              onClick={() => void run("批准失败", () => decideCard(card.ref, "approve")).then((ok) => ok && onDecided?.())}
+              type="button"
+            >
+              {meta.needsDecision ? "批" : "知道了"}
             </button>
             <button disabled={busy} onClick={() => setRejecting(true)} type="button">
               驳
@@ -164,8 +123,241 @@ export function CardItem({
           </div>
         )
       ) : null}
+    </div>
+  );
+}
+
+function CardThumb({ card, large }: { card: OfficeCard; large?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  const meta = familyMeta(card.kind);
+  return (
+    <div className={large ? styles.dossierThumb : styles.sheetThumb} data-family={meta.family}>
+      {failed ? (
+        <span aria-hidden="true">{meta.icon}</span>
+      ) : (
+        <img alt="" loading="lazy" onError={() => setFailed(true)} src={cardImageUrl(card.ref)} />
+      )}
+    </div>
+  );
+}
+
+/** 紧凑的一张纸片:谁、什么卡、关键数字,能批能驳;点正文打开卷宗。 */
+export function CardSheet({
+  card,
+  canCommand,
+  busy,
+  run,
+  onOpen,
+}: {
+  card: OfficeCard;
+  canCommand: boolean;
+  busy: boolean;
+  run: Runner;
+  onOpen: () => void;
+}) {
+  const meta = familyMeta(card.kind);
+  const summary = summaryOf(card);
+  const pending = card.status === "pending";
+  return (
+    <article className={styles.sheet} data-family={meta.family} data-status={card.status}>
+      <button className={styles.sheetOpen} onClick={onOpen} type="button">
+        <CardThumb card={card} />
+        <div className={styles.sheetMain}>
+          <div className={styles.sheetTitleRow}>
+            <span className={styles.stamp} data-family={meta.family}>
+              {meta.icon} {meta.label}
+            </span>
+            <strong className={styles.sheetTitle}>{summary.headline}</strong>
+            <span className={styles.cardRef}>#{card.ref}</span>
+          </div>
+          {summary.facts.length > 0 ? <p className={styles.sheetFacts}>{summary.facts.join(" · ")}</p> : null}
+          <p className={styles.sheetMeta}>
+            {pending ? (
+              <>
+                <span>{confidenceLabel(card.confidence)}</span>
+                <span>{waitedText(card.created_at)}</span>
+                <span className={styles.muted}>{meta.ask}</span>
+              </>
+            ) : (
+              <>
+                <span className={styles.tag} data-status={card.status}>
+                  {CARD_STATUS_LABEL[card.status] ?? card.status}
+                  {card.decided_via ? ` · ${VIA_LABEL[card.decided_via] ?? card.decided_via}` : ""}
+                </span>
+                {card.decision_reason ? <span>原因:{card.decision_reason}</span> : null}
+                <span>{timeText(card.decided_at)}</span>
+              </>
+            )}
+          </p>
+        </div>
+      </button>
+      <DecideBar busy={busy} canCommand={canCommand} card={card} run={run} />
     </article>
   );
+}
+
+/** 卷宗:这张卡的全部——她的结论、为什么、正文、不做会怎样、能不能撤回、原始证据,页底能批能驳。 */
+export function CardDossier({
+  card,
+  canCommand,
+  busy,
+  run,
+  onBack,
+  onOpenDossier,
+}: {
+  card: OfficeCard;
+  canCommand: boolean;
+  busy: boolean;
+  run: Runner;
+  onBack: () => void;
+  onOpenDossier?: (id: number) => void;
+}) {
+  const meta = familyMeta(card.kind);
+  const summary = summaryOf(card);
+  const dossierId = dossierIdOf(card);
+  const [showRaw, setShowRaw] = useState(false);
+  return (
+    <div className={styles.dossierPage} data-family={meta.family}>
+      <button className={styles.linkButton} onClick={onBack} type="button">
+        ← 回收件筐
+      </button>
+      <header className={styles.dossierHead}>
+        <CardThumb card={card} large />
+        <div>
+          <span className={styles.stamp} data-family={meta.family}>
+            {meta.icon} {meta.label}卡 · #{card.ref}
+          </span>
+          <h3>{summary.headline}</h3>
+          <p className={styles.sheetFacts}>{summary.facts.join(" · ")}</p>
+          <p className={styles.sheetMeta}>
+            <span>{confidenceLabel(card.confidence)}</span>
+            <span>{card.status === "pending" ? waitedText(card.created_at) : `${CARD_STATUS_LABEL[card.status] ?? card.status} ${timeText(card.decided_at)}`}</span>
+            <span>{card.reversible ? "能撤回" : "不能撤回"}</span>
+          </p>
+        </div>
+      </header>
+      <section className={styles.dossierSection}>
+        <h4>她的结论</h4>
+        <p>{card.conclusion}</p>
+      </section>
+      {card.why ? (
+        <section className={styles.dossierSection}>
+          <h4>为什么</h4>
+          <dl className={styles.cardDetail}>
+            <dt>她的理由</dt>
+            <dd className={styles.preLine}>{card.why}</dd>
+          </dl>
+        </section>
+      ) : null}
+      <section className={styles.dossierSection}>
+        <h4>这张卡的正文</h4>
+        {card.kind === CANDIDATE_CARD_KIND ? <CandidateCardBody card={card} /> : null}
+        {card.kind === PRICE_CARD_KIND ? <PriceCardBody evidence={card.evidence} /> : null}
+        {card.kind === REVIEW_CARD_KIND ? <ReviewCardBody evidence={card.evidence} /> : null}
+        {card.kind === COPY_CARD_KIND ? <CopyCardBody evidence={card.evidence} /> : null}
+        {card.kind === MARKET_CARD_KIND ? <MarketCardBody evidence={card.evidence} /> : null}
+        {familyOf(card.kind) === "dossier" || familyOf(card.kind) === "alert" ? <p className={styles.muted}>{meta.ask}</p> : null}
+      </section>
+      {card.if_not ? (
+        <section className={styles.dossierSection}>
+          <h4>不做会怎样</h4>
+          <p>{card.if_not}</p>
+        </section>
+      ) : null}
+      {card.decision_reason ? (
+        <section className={styles.dossierSection}>
+          <h4>你当时说的</h4>
+          <p>{card.decision_reason}</p>
+        </section>
+      ) : null}
+      {dossierId !== null && onOpenDossier ? (
+        <button className={styles.linkButton} onClick={() => onOpenDossier(dossierId)} type="button">
+          看档案 →
+        </button>
+      ) : null}
+      <DecideBar busy={busy} canCommand={canCommand} card={card} onDecided={onBack} run={run} />
+      <button className={styles.linkButton} onClick={() => setShowRaw((value) => !value)} type="button">
+        {showRaw ? "收起原始证据" : "原始证据"}
+      </button>
+      {showRaw ? <pre className={styles.rawEvidence}>{JSON.stringify(card.evidence, null, 2)}</pre> : null}
+    </div>
+  );
+}
+
+/** 收件筐:按家族分组的纸片 + 最近定下的;点开一张就在这块面板里铺成卷宗。 */
+export function Inbox({
+  office,
+  canCommand,
+  busy,
+  run,
+  onOpenDossier,
+}: {
+  office: OfficeRead;
+  canCommand: boolean;
+  busy: boolean;
+  run: Runner;
+  onOpenDossier?: (id: number) => void;
+}) {
+  const [focusRef, setFocusRef] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const focused = focusRef ? [...office.pending_cards, ...office.recent_cards].find((card) => card.ref === focusRef) ?? null : null;
+  if (focused) {
+    return <CardDossier busy={busy} canCommand={canCommand} card={focused} onBack={() => setFocusRef(null)} onOpenDossier={onOpenDossier} run={run} />;
+  }
+  const groups = groupCards(office.pending_cards);
+  return (
+    <div className={styles.inbox}>
+      {groups.length === 0 ? <p className={styles.muted}>收件筐是空的，暂时没有要批的。</p> : null}
+      {groups.map(({ meta, cards }) => (
+        <section className={styles.inboxGroup} data-family={meta.family} key={meta.family}>
+          <button className={styles.groupTab} onClick={() => setCollapsed((value) => ({ ...value, [meta.family]: !value[meta.family] }))} type="button">
+            <span>
+              {meta.icon} {meta.label}
+            </span>
+            <span className={styles.groupCount}>{cards.length}</span>
+            <small>{meta.needsDecision ? "要你批" : "只看,不用批"}</small>
+            <span className={styles.caret}>{collapsed[meta.family] ? "▸" : "▾"}</span>
+          </button>
+          {collapsed[meta.family]
+            ? null
+            : cards.map((card) => <CardSheet busy={busy} canCommand={canCommand} card={card} key={card.ref} onOpen={() => setFocusRef(card.ref)} run={run} />)}
+        </section>
+      ))}
+      {!canCommand && office.pending_cards.length > 0 ? <p className={styles.muted}>只有老板能批这些卡。</p> : null}
+      {office.recent_cards.length > 0 ? (
+        <section className={styles.inboxGroup} data-family="done">
+          <div className={styles.groupTab} data-static="true">
+            <span>🗂️ 最近定下的</span>
+            <span className={styles.groupCount}>{office.recent_cards.length}</span>
+          </div>
+          {office.recent_cards.map((card) => (
+            <CardSheet busy={busy} canCommand={false} card={card} key={card.ref} onOpen={() => setFocusRef(card.ref)} run={run} />
+          ))}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+/** 旧入口(场景里的收件筐面板还在逐张调它):一张纸片,点开在原地铺开卷宗。 */
+export function CardItem({
+  card,
+  canCommand,
+  busy,
+  run,
+  onOpenDossier,
+}: {
+  card: OfficeCard;
+  canCommand: boolean;
+  busy: boolean;
+  run: Runner;
+  onOpenDossier?: (id: number) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (expanded) {
+    return <CardDossier busy={busy} canCommand={canCommand} card={card} onBack={() => setExpanded(false)} onOpenDossier={onOpenDossier} run={run} />;
+  }
+  return <CardSheet busy={busy} canCommand={canCommand} card={card} onOpen={() => setExpanded(true)} run={run} />;
 }
 
 /** 选品卡:图 + 进价/起订/月销 + 美国同类价 + 风险,批之前一眼看得到;原页去 1688 看。 */
@@ -175,7 +367,6 @@ function CandidateCardBody({ card }: { card: OfficeCard }) {
   return (
     <div className={styles.cardBody}>
       <div className={styles.candidateRow}>
-        {view.hasImage ? <img alt="" className={styles.candidateThumb} loading="lazy" src={candidateImageUrl(card.ref)} /> : null}
         <div>
           <strong className={styles.preLine}>{view.titleZh}</strong>
           {view.category ? <small className={styles.muted}>{view.category}</small> : null}

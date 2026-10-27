@@ -894,3 +894,348 @@
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------- 卡片重做(10-27):收件筐分组、纸片、卷宗。颜色只用全局令牌,家族色落到 --family 这个局部变量 */
+.inbox {
+  display: grid;
+  gap: 14px;
+  position: relative;
+}
+
+.inbox::before {
+  content: "";
+  position: absolute;
+  inset: -12px -14px;
+  background: url("/assets/agents/suqinghe/office/inbox_bg.webp") center / cover no-repeat;
+  opacity: 0.14;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.inbox > * {
+  position: relative;
+  z-index: 1;
+}
+
+.inboxGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.inboxGroup[data-family="dossier"],
+.sheet[data-family="dossier"],
+.stamp[data-family="dossier"],
+.sheetThumb[data-family="dossier"],
+.dossierThumb[data-family="dossier"],
+.dossierPage[data-family="dossier"] {
+  --family: var(--color-info);
+}
+
+.inboxGroup[data-family="price"],
+.sheet[data-family="price"],
+.stamp[data-family="price"],
+.sheetThumb[data-family="price"],
+.dossierThumb[data-family="price"],
+.dossierPage[data-family="price"] {
+  --family: var(--color-phoenix);
+}
+
+.inboxGroup[data-family="copy"],
+.sheet[data-family="copy"],
+.stamp[data-family="copy"],
+.sheetThumb[data-family="copy"],
+.dossierThumb[data-family="copy"],
+.dossierPage[data-family="copy"] {
+  --family: var(--color-primary);
+}
+
+.inboxGroup[data-family="review"],
+.sheet[data-family="review"],
+.stamp[data-family="review"],
+.sheetThumb[data-family="review"],
+.dossierThumb[data-family="review"],
+.dossierPage[data-family="review"] {
+  --family: var(--color-warning);
+}
+
+.inboxGroup[data-family="pick"],
+.sheet[data-family="pick"],
+.stamp[data-family="pick"],
+.sheetThumb[data-family="pick"],
+.dossierThumb[data-family="pick"],
+.dossierPage[data-family="pick"] {
+  --family: var(--color-success);
+}
+
+.inboxGroup[data-family="alert"],
+.sheet[data-family="alert"],
+.stamp[data-family="alert"],
+.sheetThumb[data-family="alert"],
+.dossierThumb[data-family="alert"],
+.dossierPage[data-family="alert"] {
+  --family: var(--color-error);
+}
+
+.inboxGroup[data-family="market"],
+.sheet[data-family="market"],
+.stamp[data-family="market"],
+.sheetThumb[data-family="market"],
+.dossierThumb[data-family="market"],
+.dossierPage[data-family="market"],
+.inboxGroup[data-family="done"] {
+  --family: var(--color-muted);
+}
+
+.groupTab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-left: 6px solid var(--family, var(--color-primary));
+  border-radius: 0 10px 10px 0;
+  background: var(--color-elevated);
+  color: var(--color-text-strong);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupTab[data-static="true"] {
+  cursor: default;
+}
+
+.groupTab small {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.groupTab .caret {
+  margin-left: auto;
+  color: var(--color-muted);
+}
+
+.groupCount {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--family, var(--color-primary));
+  color: var(--color-on-primary);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 纸片:米白、轻阴影、左侧家族色条;定下的灰一档 */
+.sheet {
+  position: relative;
+  display: grid;
+  gap: 0;
+  border-left: 6px solid var(--family, var(--color-primary));
+  border-radius: 4px 10px 10px 4px;
+  background: var(--color-surface-solid);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 6px 16px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.sheet[data-status="approved"],
+.sheet[data-status="rejected"],
+.sheet[data-status="stale"],
+.sheet[data-status="expired"] {
+  opacity: 0.78;
+}
+
+.sheetOpen {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheetOpen:hover {
+  background: var(--color-surface-muted);
+}
+
+.sheetThumb,
+.dossierThumb {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+  background: var(--color-panel-base);
+  border: 1px solid var(--color-line);
+  overflow: hidden;
+  font-size: 28px;
+}
+
+.dossierThumb {
+  width: 120px;
+  height: 120px;
+  font-size: 44px;
+}
+
+.sheetThumb img,
+.dossierThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.sheetMain {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sheetTitleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sheetTitle {
+  color: var(--color-text-strong);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.sheetFacts {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.sheetMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+
+.sheetActions {
+  padding: 0 10px 10px 92px;
+}
+
+.sheetActions:empty {
+  display: none;
+}
+
+/* 家族戳记:像盖在纸角的章;悬停时盖一下(彩蛋) */
+.stamp {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1.5px solid var(--family, var(--color-primary));
+  border-radius: 4px;
+  color: var(--family, var(--color-primary));
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transform: rotate(-2deg);
+  transition: transform 0.18s ease;
+}
+
+.sheet:hover .stamp,
+.dossierHead:hover .stamp {
+  transform: rotate(2deg) scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp,
+  .sheet:hover .stamp,
+  .dossierHead:hover .stamp {
+    transform: none;
+    transition: none;
+  }
+}
+
+/* 卷宗:一页,顶上大图 + 标题,下面一节一节 */
+.dossierPage {
+  display: grid;
+  gap: 12px;
+  padding: 2px 0 8px;
+  border-top: 4px solid var(--family, var(--color-primary));
+}
+
+.dossierHead {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.dossierHead h3 {
+  margin: 6px 0 4px;
+  font-size: 16px;
+  color: var(--color-text-strong);
+}
+
+.dossierSection {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--color-surface-solid);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.dossierSection h4 {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+}
+
+.dossierSection p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.rawEvidence {
+  margin: 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  border-radius: 8px;
+  background: var(--color-panel-base);
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .sheetOpen {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .sheetThumb {
+    width: 56px;
+    height: 56px;
+  }
+
+  .sheetActions {
+    padding-left: 10px;
+  }
+
+  .dossierHead {
+    grid-template-columns: 80px minmax(0, 1fr);
+  }
+
+  .dossierThumb {
+    width: 80px;
+    height: 80px;
+  }
+}

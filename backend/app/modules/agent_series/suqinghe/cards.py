@@ -299,6 +299,69 @@ def settle_issues(db: Session, *, live: set[str], readable: set[str], today: str
     return counts
 
 
+def image_source(db: Session, card: SqhCard) -> tuple[str, Any] | None:
+    """这张卡的缩略图从哪来(10-27 卡片重做:每种卡都给一张图)。
+    返回 ("f", (cache_key, url)) 走 F 的图片缓存回源 CDN;("k_asset", 媒资行) 走 K 的缩略图派生;None = 没图。
+    - 选品卡:候选图;
+    - 带 K 产品的卡(价格/文案/审核/卡住/拆解/早间的产品卡):产品的一张图——可用的主图 → 最新暂存出图第 1 张 → 参考图;
+    - 带档案的卡(建档卡、1688 被拦的提醒卡):档案里的第一张参考图(1688 CDN)。"""
+    from uuid import UUID
+
+    from ...k_series.product_knowledge.models import KProductKnowledgeMediaAsset as A
+    from .constants import CANDIDATE_CARD_KIND, DOSSIER_CARD_KIND
+    from .models import SqhDossier
+
+    evidence = card.evidence if isinstance(card.evidence, dict) else {}
+    if card.kind == CANDIDATE_CARD_KIND:
+        url = str(evidence.get("image_url") or "")
+        return ("f", (str(evidence.get("f_candidate_id") or card.ref), url)) if url else None
+    recheck = evidence.get("recheck") if isinstance(evidence.get("recheck"), dict) else {}
+    product_raw = evidence.get("k_product_id") or recheck.get("product_id")
+    if product_raw:
+        try:
+            product_id = UUID(str(product_raw))
+        except ValueError:
+            product_id = None
+        if product_id is not None:
+            rows = list(
+                db.scalars(
+                    select(A).where(A.product_id == product_id, A.asset_type == "image", A.status != "removed", A.object_key.is_not(None)),
+                    execution_options=SKIP_ORG_DATA_ISOLATION,
+                )
+            )
+
+            def rank(row: Any) -> tuple[int, str]:
+                meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+                if row.status == "available" and row.asset_role == "main":
+                    tier = 0
+                elif row.status == "available" and row.asset_role not in {"reference"}:
+                    tier = 1
+                elif row.status == "staged":
+                    tier = 2 + min(int(meta.get("position") or 9), 9)
+                elif row.asset_role == "reference":
+                    tier = 20
+                else:
+                    tier = 30
+                return (tier, str(getattr(row, "created_at", "") or ""))
+
+            if rows:
+                return ("k_asset", min(rows, key=rank))
+    dossier_raw = evidence.get("dossier_id")
+    if dossier_raw and (card.kind == DOSSIER_CARD_KIND or not product_raw):
+        try:
+            dossier = db.get(SqhDossier, int(dossier_raw), execution_options=SKIP_ORG_DATA_ISOLATION)
+        except (TypeError, ValueError):
+            dossier = None
+        if dossier is not None:
+            draft = dossier.draft if isinstance(dossier.draft, dict) else {}
+            capture = dossier.capture if isinstance(dossier.capture, dict) else {}
+            for raw in [*(draft.get("reference_images") or []), *(capture.get("gallery_images") or [])]:
+                url = raw.get("url") if isinstance(raw, dict) else raw
+                if isinstance(url, str) and url.startswith("https://"):
+                    return ("f", (f"dossier-{dossier.id}", url))
+    return None
+
+
 def pending_cards(db: Session, *, limit: int = 50) -> list[SqhCard]:
     return list(
         db.scalars(
