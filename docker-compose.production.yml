@@ -648,6 +648,8 @@ services:
       SQH_DAILY_CLAUDE_USD: "2"
     volumes:
       - console_agent_memory_data:/var/lib/barong/agent-memory
+      # 10-27:批档案后 K 建档在这个进程里做(d1fdd7f 起),参考图写进 k-media;不挂这个卷图就留在容器里,后端和出图都看不到
+      - console_k_media_data:/var/lib/barong/k-media
     command:
       - python
       - -m
