@@ -16,6 +16,7 @@ from backend.app.modules.agent_series.suqinghe import cards, dossier as dossier_
 from backend.app.modules.agent_series.suqinghe.models import SqhCard, SqhDossier
 from backend.app.modules.agent_series.suqinghe.sourcing_1688 import parse_capture
 from backend.app.modules.k_series.product_knowledge.models import (
+    KProductKnowledgeAIEvent,
     KProductKnowledgeAttribute,
     KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
@@ -70,7 +71,8 @@ def clean(people, monkeypatch):  # noqa: F811
         with without_org_data_isolation(), SessionLocal() as db:
             db.execute(delete(SqhDossier))
             ids = select(KProductKnowledgeProduct.id).where(KProductKnowledgeProduct.source_system == "1688")
-            for child in (KProductKnowledgeMediaAsset, KProductKnowledgeAttribute, KProductKnowledgeVariant):
+            # AI 事件是 K 批卖点/生成时记的审计行(10-27 文案测试真调 K 的卖点审批后出现),外键挂在产品上,先删
+            for child in (KProductKnowledgeMediaAsset, KProductKnowledgeAttribute, KProductKnowledgeVariant, KProductKnowledgeAIEvent):
                 db.execute(delete(child).where(child.product_id.in_(ids)))
             db.execute(delete(KProductKnowledgeProduct).where(KProductKnowledgeProduct.source_system == "1688"))
             db.commit()

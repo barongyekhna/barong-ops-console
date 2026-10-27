@@ -196,6 +196,81 @@ export function candidateCardView(evidence: unknown): CandidateCardView | null {
   };
 }
 
+export const COPY_CARD_KIND = "k_copy";
+
+export type CopySection = { heading: string; body: string };
+export type CopyFaq = { question: string; answer: string };
+
+/** 文案卡(10-27):老板看全文——她读过改过的那版,加上她的中文摘要、改了什么、拿不准什么。 */
+export type CopyCardView = {
+  h1: string;
+  seoTitle: string;
+  metaDescription: string;
+  urlSlug: string;
+  headline: string;
+  subheadline: string;
+  shortDescription: string;
+  bullets: string[];
+  sections: CopySection[];
+  conversion: string;
+  faq: CopyFaq[];
+  summaryZh: string;
+  notes: string[];
+  unsure: string[];
+  changed: string[];
+  adjusted: string[];
+  historyUnclear: string;
+  held: string[];
+  hype: string[];
+  flagged: string[];
+  missingInputs: string[];
+  briefPaused: boolean;
+};
+
+export function copyCardView(evidence: unknown): CopyCardView | null {
+  if (!isRec(evidence)) return null;
+  const copy = isRec(evidence.copy) ? evidence.copy : {};
+  const seo = isRec(copy.seo) ? copy.seo : {};
+  const check = isRec(evidence.check) ? evidence.check : {};
+  const sections: CopySection[] = list(copy.sections)
+    .filter(isRec)
+    .map((s) => ({ heading: text(s.heading), body: text(s.body) }))
+    .filter((s) => s.heading || s.body);
+  const faq: CopyFaq[] = list(copy.faq)
+    .filter(isRec)
+    .map((f) => ({ question: text(f.question), answer: text(f.answer) }))
+    .filter((f) => f.question);
+  const h1 = text(seo.h1);
+  const headline = text(copy.headline);
+  if (!h1 && !headline && sections.length === 0) return null;
+  return {
+    h1,
+    seoTitle: text(seo.title),
+    metaDescription: text(seo.meta_description),
+    urlSlug: text(seo.url_slug),
+    headline,
+    subheadline: text(copy.subheadline),
+    shortDescription: text(copy.short_description),
+    bullets: strings(copy.bullets),
+    sections,
+    conversion: text(copy.conversion_support_block),
+    faq,
+    summaryZh: text(check.summary_zh),
+    notes: strings(check.notes),
+    unsure: strings(check.unsure),
+    changed: strings(check.changed),
+    adjusted: list(check.adjusted)
+      .filter(isRec)
+      .map((a) => `${text(a.field)}:想改成「${text(a.wanted)}」,K 核证据后留的是「${text(a.got)}」`),
+    historyUnclear: text(evidence.history_unclear),
+    held: strings(evidence.held_certifications),
+    hype: strings(evidence.hype),
+    flagged: strings(evidence.flagged),
+    missingInputs: strings(copy.missing_inputs),
+    briefPaused: evidence.brief_paused === true,
+  };
+}
+
 export function usd(value: number | null): string {
   return value === null ? "—" : `$${value.toFixed(2)}`;
 }

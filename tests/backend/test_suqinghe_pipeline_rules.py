@@ -117,7 +117,9 @@ def test_stand_in_request_carries_the_org_k_reads() -> None:
 
 
 PRICED = {"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved", "price_applied": True, "shipping_set": True}
-READY = {**PRICED, "copy_ok": True, "brief_ok": True, "render_requested": True, "staged": 9}
+# 文案三件事(10-27)之后:走到作图指令要文案读过、老板批过
+COPY_DONE = {**PRICED, "copy_ok": True, "copy_checked": True, "copy_approved": True}
+READY = {**COPY_DONE, "brief_ok": True, "render_requested": True, "staged": 9}
 
 
 @pytest.mark.parametrize(
@@ -127,10 +129,10 @@ READY = {**PRICED, "copy_ok": True, "brief_ok": True, "render_requested": True, 
         ({**PRICED, "copy_job": "running"}, None),
         ({**PRICED, "copy_job": "failed", "copy_failures": 1}, "copy"),
         ({**PRICED, "copy_job": "failed", "copy_failures": 2}, "block:copy"),
-        ({**PRICED, "copy_ok": True}, "image_brief"),
-        ({**PRICED, "copy_ok": True, "brief_job": "pending"}, None),
-        ({**PRICED, "copy_ok": True, "brief_job": "failed", "brief_failures": 2}, "block:image_brief"),
-        ({**PRICED, "copy_ok": True, "brief_ok": True}, "render"),
+        ({**COPY_DONE}, "image_brief"),
+        ({**COPY_DONE, "brief_job": "pending"}, None),
+        ({**COPY_DONE, "brief_job": "failed", "brief_failures": 2}, "block:image_brief"),
+        ({**COPY_DONE, "brief_ok": True}, "render"),
         ({**READY, "render_active": True}, None),
         ({**READY, "audit_active": True}, None),  # 出完图 K 自己跑品牌审查,等它
         ({**READY}, "review_card"),
@@ -150,3 +152,146 @@ READY = {**PRICED, "copy_ok": True, "brief_ok": True, "render_requested": True, 
 )
 def test_after_the_price_copy_images_review_then_publish(overrides, expected) -> None:
     assert next_step(_view(**overrides)) == expected
+
+
+# ---------------------------------------------------------------- 文案三件事(10-27):读稿 → 文案卡 → 批/驳 → (作图指令先停)
+
+CHECKED = {**PRICED, "copy_ok": True, "copy_checked": True}
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({**PRICED, "copy_ok": True}, "copy_check"),  # K 写完先读一遍
+        ({**CHECKED}, "copy_card"),
+        ({**CHECKED, "copy_card": "pending"}, None),
+        ({**CHECKED, "copy_card": "stale"}, "copy_card"),
+        ({**CHECKED, "copy_card": "rejected"}, "copy_rework"),
+        ({**CHECKED, "copy_card": "approved"}, "copy_card"),  # 批过的是旧版(文案后来又变了,读过了),重新给他看
+        ({**CHECKED, "copy_card": "approved", "copy_approved": True, "brief_paused": True}, None),  # 作图指令先停:到这就停
+        ({**CHECKED, "copy_card": "approved", "copy_approved": True}, "image_brief"),
+        ({**CHECKED, "copy_card": "approved", "copy_approved": True, "brief_ok": True}, "render"),
+        ({**PRICED, "copy_ok": True, "copy_checked": False, "copy_card": "approved", "copy_approved": True}, "copy_check"),  # 没读过的版本不能往下
+    ],
+)
+def test_copy_is_read_then_carded_then_images_wait_for_the_switch(overrides, expected) -> None:
+    assert next_step(_view(**overrides)) == expected
+
+
+def test_review_card_rules_still_assume_the_copy_was_approved() -> None:
+    """READY 那组用例带着「文案读过、老板批过」:去掉任一个都到不了审核卡,这里钉死这个前提。"""
+    assert next_step(_view(**READY)) == "review_card"
+    assert next_step(_view(**{**READY, "copy_checked": False})) == "copy_check"
+    assert next_step(_view(**{**READY, "copy_approved": False})) == "copy_card"
+
+
+def test_copy_text_only_keeps_what_the_buyer_sees() -> None:
+    from backend.app.modules.agent_series.suqinghe import copywork
+
+    view = copywork.copy_text(
+        {
+            "product_page_copy": {
+                "above_the_fold": {"headline": " Rinse  clean ", "subheadline": None, "short_description": "Two sentences. Here."},
+                "key_bullets": ["A", "", "B"],
+                "chunk_sections": [{"heading": "H", "body": "B"}, "junk", {"heading": "", "body": ""}],
+                "conversion_support_block": "C",
+                "specifications_html_table": "<table>secret</table>",
+            },
+            "seo": {"h1": "H1", "title": "T | Barong Yekhna", "meta_description": "M", "url_slug": "s"},
+            "page_faq": [{"question": "Q?", "answer": "A.", "evidence_refs": ["x"]}],
+            "missing_inputs": ["no warranty data"],
+            "coverage": {"rate": 0.75},
+            "evidence_digest": "abc",
+        }
+    )
+    assert view["headline"] == "Rinse clean" and view["subheadline"] == "" and view["bullets"] == ["A", "B"]
+    assert view["sections"] == [{"heading": "H", "body": "B"}, {"heading": "", "body": ""}]
+    assert view["faq"] == [{"question": "Q?", "answer": "A."}] and view["coverage_rate"] == 0.75
+    assert "specifications_html_table" not in json.dumps(view) and "evidence_digest" not in json.dumps(view)
+    assert copywork.copy_text(None)["sections"] == []
+
+
+def test_parse_check_keeps_only_well_formed_in_range_english_edits() -> None:
+    from backend.app.modules.agent_series.suqinghe import copywork
+
+    check = copywork.parse_check(
+        {
+            "summary_zh": "卖的是便携淋浴",
+            "edits": {
+                "headline": "Rinse off anywhere",
+                "subheadline": "",
+                "short_description": "带中文的不能要",
+                "chunk_sections": [{"index": 1, "body": "New body"}, {"index": 9, "body": "out of range"}, {"index": 1, "heading": "dup index ignored"}, {"index": "0", "body": "bad index"}, {"index": 0}],
+                "seo": {"h1": "Portable Camping Shower – Off-Grid Rinses", "url_slug": None, "bogus": "x"},
+                "page_faq": [{"index": 0, "answer": "Set the pump in water."}, {"index": 2, "answer": "no such"}],
+            },
+            "notes": ["钩子改成买家结果", 42, ""],
+            "unsure": "not a list",
+        },
+        sections=2,
+        faqs=1,
+    )
+    assert check["summary_zh"] == "卖的是便携淋浴"
+    assert check["edits"] == {
+        "headline": "Rinse off anywhere",
+        "chunk_sections": [{"index": 1, "body": "New body"}],
+        "seo": {"h1": "Portable Camping Shower – Off-Grid Rinses"},
+        "page_faq": [{"index": 0, "answer": "Set the pump in water."}],
+    }
+    assert check["notes"] == ["钩子改成买家结果", "42"] and check["unsure"] == []
+    assert copywork.parse_check("garbage", sections=0, faqs=0) == {"summary_zh": "", "edits": {}, "notes": [], "unsure": []}
+
+
+def test_parse_rework_binds_bullet_changes_to_known_ids() -> None:
+    from backend.app.modules.agent_series.suqinghe import copywork
+
+    rw = copywork.parse_rework(
+        {
+            "edits": {"seo": {"h1": "Shorter title"}},
+            "bullet_edits": [{"id": "bp2", "text": "Battery powers several showers per charge"}, {"id": "bp9", "text": "unknown id"}, {"id": "bp1", "text": "中文"}],
+            "drop_points": ["bp3", "bp2", "bp3", "nope"],
+            "unclear": "  第二段太长  ",
+        },
+        sections=3,
+        faqs=0,
+        point_ids={"bp1", "bp2", "bp3"},
+    )
+    assert rw["edits"] == {"seo": {"h1": "Shorter title"}}
+    assert rw["bullet_edits"] == [{"id": "bp2", "text": "Battery powers several showers per charge"}]
+    assert rw["drop_points"] == ["bp3"]  # 改过措辞的 bp2 不能同时被去掉
+    assert rw["unclear"] == "第二段太长"
+
+
+def test_strip_edits_removes_exactly_what_k_bounced() -> None:
+    from backend.app.modules.agent_series.suqinghe import copywork
+
+    edits = {
+        "headline": "H",
+        "conversion_support_block": "C",
+        "chunk_sections": [{"index": 0, "heading": "h0", "body": "b0"}, {"index": 2, "body": "b2"}],
+        "seo": {"title": "T", "h1": "H1"},
+        "page_faq": [{"index": 0, "answer": "A0"}, {"index": 1, "answer": "A1"}],
+    }
+    out = copywork.strip_edits(edits, ["above_the_fold.headline", "chunk_sections[0].body", "chunk_sections[2].body", "seo.title", "page_faq[1].answer", "conversion_support_block"])
+    assert out == {"chunk_sections": [{"index": 0, "heading": "h0"}], "seo": {"h1": "H1"}, "page_faq": [{"index": 0, "answer": "A0"}]}
+    assert edits["chunk_sections"][0]["body"] == "b0"  # 原样不动
+    assert copywork.strip_edits({"seo": {"title": "T"}}, ["seo.title"]) == {}
+
+
+def test_image_brief_pause_switch_defaults_on() -> None:
+    from backend.app.modules.agent_series.suqinghe import constants
+
+    import os
+
+    saved = os.environ.pop("SQH_IMAGE_BRIEF_PAUSED", None)
+    try:
+        assert constants.image_brief_paused() is True
+        os.environ["SQH_IMAGE_BRIEF_PAUSED"] = "0"
+        assert constants.image_brief_paused() is False
+        os.environ["SQH_IMAGE_BRIEF_PAUSED"] = "1"
+        assert constants.image_brief_paused() is True
+    finally:
+        if saved is None:
+            os.environ.pop("SQH_IMAGE_BRIEF_PAUSED", None)
+        else:
+            os.environ["SQH_IMAGE_BRIEF_PAUSED"] = saved

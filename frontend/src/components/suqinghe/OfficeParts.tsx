@@ -3,7 +3,19 @@
 import { useState, type FormEvent } from "react";
 
 import styles from "./Office.module.css";
-import { CANDIDATE_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND, candidateCardView, candidateImageUrl, pct, priceCardView, reviewCardView, usd } from "./card-view";
+import {
+  CANDIDATE_CARD_KIND,
+  COPY_CARD_KIND,
+  PRICE_CARD_KIND,
+  REVIEW_CARD_KIND,
+  candidateCardView,
+  candidateImageUrl,
+  copyCardView,
+  pct,
+  priceCardView,
+  reviewCardView,
+  usd,
+} from "./card-view";
 import { GOAL_METRICS, addGoal, controlOffice, decideCard, instructOffice, patchGoal, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
 
 /** 场景视图和列表视图共用的零件:审批卡、指挥控件、几个格式化小工具。 */
@@ -77,6 +89,7 @@ export function CardItem({
       {card.kind === CANDIDATE_CARD_KIND ? <CandidateCardBody card={card} /> : null}
       {card.kind === PRICE_CARD_KIND ? <PriceCardBody evidence={card.evidence} /> : null}
       {card.kind === REVIEW_CARD_KIND ? <ReviewCardBody evidence={card.evidence} /> : null}
+      {card.kind === COPY_CARD_KIND ? <CopyCardBody evidence={card.evidence} /> : null}
       {dossierId !== null && onOpenDossier ? (
         <button className={styles.linkButton} onClick={() => onOpenDossier(dossierId)} type="button">
           看档案 →
@@ -293,6 +306,81 @@ function ReviewCardBody({ evidence }: { evidence: unknown }) {
       {view.hype.length > 0 ? <p className={styles.muted}>卖家的宣传语我没用:{view.hype.join("、")}</p> : null}
       {view.flagged.length > 0 ? <p className={styles.muted}>档案里还没定的:{view.flagged.join("、")}</p> : null}
       {view.prices.length > 0 ? <p className={styles.muted}>价格:{view.prices.join("、")}</p> : null}
+    </div>
+  );
+}
+
+/** 文案卡(10-27):全文摆出来——标题、钩子、短描述、卖点、段落、收尾、FAQ、SEO;前面是她的中文摘要和改了什么、拿不准什么。 */
+function CopyCardBody({ evidence }: { evidence: unknown }) {
+  const view = copyCardView(evidence);
+  if (!view) return null;
+  return (
+    <div className={styles.cardBody}>
+      {view.summaryZh ? <p className={styles.preLine}>{view.summaryZh}</p> : null}
+      {view.notes.length > 0 ? (
+        <ul className={styles.bulletList}>
+          {view.notes.map((note) => (
+            <li key={note}>我改了:{note}</li>
+          ))}
+        </ul>
+      ) : null}
+      {view.adjusted.length > 0 ? (
+        <ul className={styles.bulletList}>
+          {view.adjusted.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      ) : null}
+      {view.unsure.length > 0 ? (
+        <ul className={styles.questionList}>
+          {view.unsure.map((item) => (
+            <li key={item}>要你定:{item}</li>
+          ))}
+        </ul>
+      ) : null}
+      {view.historyUnclear ? <p className={styles.warnLine}>你上次说的这部分我对不上:{view.historyUnclear}</p> : null}
+      <div className={styles.copyPage} lang="en">
+        {view.h1 ? <strong className={styles.reviewTitle}>{view.h1}</strong> : null}
+        {view.headline ? <p className={styles.copyHeadline}>{view.headline}</p> : null}
+        {view.subheadline ? <p className={styles.muted}>{view.subheadline}</p> : null}
+        {view.shortDescription ? <p>{view.shortDescription}</p> : null}
+        {view.bullets.length > 0 ? (
+          <ul className={styles.bulletList}>
+            {view.bullets.map((bullet) => (
+              <li key={bullet}>{bullet}</li>
+            ))}
+          </ul>
+        ) : null}
+        {view.sections.map((section, index) => (
+          <section key={`${index}-${section.heading}`}>
+            {section.heading ? <h4>{section.heading}</h4> : null}
+            {section.body ? <p>{section.body}</p> : null}
+          </section>
+        ))}
+        {view.conversion ? <p>{view.conversion}</p> : null}
+        {view.faq.length > 0 ? (
+          <dl className={styles.copyFaq}>
+            {view.faq.map((item) => (
+              <div key={item.question}>
+                <dt>{item.question}</dt>
+                <dd>{item.answer}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+        {view.seoTitle || view.metaDescription || view.urlSlug ? (
+          <p className={styles.muted}>
+            SEO:{view.seoTitle}
+            {view.metaDescription ? ` · ${view.metaDescription}` : ""}
+            {view.urlSlug ? ` · /${view.urlSlug}` : ""}
+          </p>
+        ) : null}
+      </div>
+      {view.held.length > 0 ? <p className={styles.muted}>没写进卖点的认证说法(有证书再放):{view.held.join(";")}</p> : null}
+      {view.hype.length > 0 ? <p className={styles.muted}>卖家的宣传语我没用:{view.hype.join("、")}</p> : null}
+      {view.flagged.length > 0 ? <p className={styles.muted}>档案里还没定的:{view.flagged.join("、")}</p> : null}
+      {view.missingInputs.length > 0 ? <p className={styles.muted}>K 没依据所以没写的:{view.missingInputs.join(";")}</p> : null}
+      {view.briefPaused ? <p className={styles.muted}>作图指令按你的安排先不动,文案批了她停在这等。</p> : null}
     </div>
   );
 }

@@ -3,10 +3,15 @@
 她建进 K 的产品(档案 created),她自己按顺序往下推,和运营在 K 里点按钮一样(k_ops.KHands,身份是批建档卡的老板):
 
   卖点素材 → 主关键词 → 关键词(K 工作流:富化 → SERP → 两道筛,停在风险词)→ 风险词(她判)
-  → 卖点(K 生成 → 她批)→【价格卡,老板批】→ 文案 → 作图指令 → 出图(K 自动品牌审查)
-  →【审核卡,老板批】→ 保存图片 → 推上独立站(草稿,P 的上架)→ 回读 Woo
+  → 卖点(K 生成 → 她批)→【价格卡,老板批】→ 文案(K 写)→ 她读稿改稿 →【文案卡,老板批】
+  → 作图指令 → 出图(K 自动品牌审查)→【审核卡,老板批】→ 保存图片 → 推上独立站(草稿,P 的上架)→ 回读 Woo
 
 价格卡排在文案前面:K 写文案按变体的包装数量写,颜色变体的主图要变体参考图——变体和售价得先定。
+
+文案三件事(10-27 补完,copywork.py):K 写完她先读一遍(事实对不对得上档案和卖点、没证书的认证、美制单位、夸张词、通不通顺),
+能改的经 K 的「按意见改」接口直接改(K 再过一遍证据校验),改不了的标在文案卡上;老板驳回写一句意见,她翻成具体改动——
+改措辞走同一个接口,改卖点原文走卖点审批(K 逐条核证据,文案跟着重写)。
+作图指令那一段 10-27 起先停(老板另有打算,constants.image_brief_paused):文案批了就停在那,开关放开再接着出作图指令、出图。
 
 每一步做没做完、下一步干什么,一律从 K 自己的状态推出来(next_step 是纯函数),不另记一套进度。
 她自己的判断(主关键词、风险词怎么判、卖点素材)记在档案 draft["pipeline"] / draft["material"] 里,卡上给老板看。
@@ -36,8 +41,8 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, k_ops, material, memory, pricing
-from .constants import USAGE_LABEL
+from . import cards, copywork, k_ops, material, memory, pricing
+from .constants import COPY_CARD_KIND, USAGE_LABEL, image_brief_paused
 from .models import SqhCard, SqhDossier
 
 logger = logging.getLogger(__name__)
@@ -47,7 +52,7 @@ PIPELINE_USAGE_LABEL = f"{USAGE_LABEL}.k"
 BLOCKED_CARD_KIND = "k_blocked"
 PRICE_CARD_KIND = "k_price"
 REVIEW_CARD_KIND = "k_review"
-PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND)
+PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND, PRICE_CARD_KIND, COPY_CARD_KIND, REVIEW_CARD_KIND)
 ACTIVE_JOB = {"pending", "running"}
 # 审核卡上的暂存图留多久(K 的暂存图 24 小时没人保存就回收;老板不一定当天看)
 REVIEW_HOLD_DAYS = 14
@@ -67,6 +72,9 @@ STEP_LABELS = {
     "price_card": "出价格卡",
     "apply_price": "按批的价改变体、选运费模板",
     "copy": "写文案",
+    "copy_check": "读稿改稿",
+    "copy_card": "出文案卡",
+    "copy_rework": "按老板的意见改文案",
     "image_brief": "出作图指令",
     "render": "出图",
     "render_retry": "补出没出成的图",
@@ -102,6 +110,10 @@ class View:
     copy_ok: bool = False  # 文案在,而且证据快照和现在的卖点/规格对得上(P 门禁同一判据)
     copy_job: str | None = None
     copy_failures: int = 0
+    copy_checked: bool = False  # 现在这版文案她读过了(读稿记号的指纹 = 文案指纹)
+    copy_card: str | None = None  # 最近一张文案卡的状态
+    copy_approved: bool = False  # 老板批的正是现在这版文案
+    brief_paused: bool = False  # 作图指令那一段先停(老板拍板),文案批了就停在那
     brief_ok: bool = False  # 作图指令在,而且是照现在这版文案出的
     brief_job: str | None = None
     brief_failures: int = 0
@@ -148,11 +160,21 @@ def next_step(view: View) -> str | None:
 
 
 def _next_after_price(view: View) -> str | None:
-    """价定了以后:文案 → 作图指令 → 出图 → 审核卡 →(老板批)→ 保存 → 推上去 → 回读。"""
+    """价定了以后:文案 → 她读稿改稿 → 文案卡 →(老板批)→ 作图指令 → 出图 → 审核卡 →(老板批)→ 保存 → 推上去 → 回读。"""
     if view.copy_job in ACTIVE_JOB:
         return None
     if not view.copy_ok:
         return "block:copy" if view.copy_job == "failed" and view.copy_failures >= MAX_STEP_FAILURES else "copy"
+    if not view.copy_checked:
+        return "copy_check"
+    if not view.copy_approved:
+        if view.copy_card == "pending":
+            return None  # 等老板看文案卡
+        if view.copy_card == "rejected":
+            return "copy_rework"
+        return "copy_card"  # 没发过 / 作废 / 过期 / 批过的是旧版(文案后来又变了)
+    if view.brief_paused:
+        return None  # 作图指令先停(老板拍板),文案批了就停在这
     if view.brief_job in ACTIVE_JOB:
         return None
     if not view.brief_ok:
@@ -267,10 +289,15 @@ def _later_view(db: Session, product: Any, pipe: dict[str, Any], jobs: dict[str,
         upload = db.execute(
             text("SELECT status FROM p_upload_jobs WHERE job_id = :j"), {"j": publish["job_id"]}, execution_options=SKIP_ORG_DATA_ISOLATION
         ).scalar()
+    copy_digest = _digest(copy) if copy else None
     return {
         "copy_ok": bool(copy) and not _evidence_gate_blockers(product),
         "copy_job": (jobs.get("marketing_copy") or {}).get("status"),
         "copy_failures": k_ops.failed_attempts(db, product.id, "marketing_copy", since=reset.get("copy")),
+        "copy_checked": copy_digest is not None and (pipe.get("copy_check") or {}).get("digest") == copy_digest,
+        "copy_card": _card_status(db, (pipe.get("copy_card") or {}).get("card_ref")),
+        "copy_approved": copy_digest is not None and (pipe.get("copy_approved") or {}).get("digest") == copy_digest,
+        "brief_paused": image_brief_paused(),
         "brief_ok": bool(brief) and brief_mark.get("copy_digest") == _digest(copy),
         "brief_job": (jobs.get("image_brief") or {}).get("status"),
         "brief_failures": k_ops.failed_attempts(db, product.id, "image_brief", since=reset.get("image_brief")),
@@ -809,6 +836,244 @@ def _step_copy(ctx: Ctx) -> str:
     return "文案排进 K 的队列了(Claude 写,一两分钟)"
 
 
+# ---------------------------------------------------------------- 文案:她读稿改稿 → 文案卡 → 按老板的意见改(10-27)
+
+COPY_JUDGE_TIMEOUT_SECONDS = 180.0  # 整页文案进、整页改动出,比判关键词慢
+
+
+def _apply_copy_edits(ctx: Ctx, edits: dict[str, Any], *, reason: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """经 K 的「按意见改」接口改文案。K 逐条退回的字段去掉再交一次;返回 (K 的回执 {changed, adjusted}, 退回的条目)。"""
+    rejected: list[dict[str, Any]] = []
+    for attempt in range(2):
+        if not edits:
+            break
+        try:
+            out = ctx.hands.edit_copy(ctx.product.id, edits=edits, reason=reason)
+        except k_ops.KOpError as exc:
+            detail = exc.detail if isinstance(exc.detail, dict) else {}
+            items = [i for i in detail.get("items") or [] if isinstance(i, dict) and i.get("field")]
+            if exc.code != "MARKETING_COPY_EDIT_INVALID" or not items or attempt:
+                raise
+            rejected = [{"field": str(i["field"]), "error": str(i.get("error") or "")[:200]} for i in items]
+            edits = copywork.strip_edits(edits, [r["field"] for r in rejected])
+            continue
+        ctx.db.refresh(ctx.product)
+        return {
+            "changed": [str(c) for c in (getattr(out, "changed", None) or [])],
+            "adjusted": [dict(a) for a in (getattr(out, "adjusted", None) or []) if isinstance(a, dict)],
+        }, rejected
+    return {"changed": [], "adjusted": []}, rejected
+
+
+def _copy_context(ctx: Ctx) -> tuple[dict[str, Any], dict[str, Any], list[str], list[str], list[str]]:
+    """文案卡和读稿共用的材料:档案 draft、流水线记号、没证书的认证、卖家宣传语、档案里没定的。"""
+    draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
+    pipe = _pipe(ctx.dossier)
+    held = [str(x) for x in (pipe.get("selling_points") or {}).get("held_certifications") or []]
+    hype = [r["text"] for r in (draft.get("material") or {}).get("hype") or [] if isinstance(r, dict)]
+    flagged = [f"{f.get('path')}({f.get('status')})" for f in draft.get("flagged") or [] if isinstance(f, dict)]
+    return draft, pipe, held, hype, flagged
+
+
+def _points_with_ids(product: Any) -> list[dict[str, Any]]:
+    return [{**b, "id": str(b.get("id") or f"bp{i}")} for i, b in enumerate(_bullets(product.selling_points_approved_json), start=1)]
+
+
+def _step_copy_check(ctx: Ctx) -> str:
+    """K 写完的文案她先读一遍:能改的经 K 的接口直接改,改不了的、拿不准的记下来上文案卡。"""
+    from .brain import parse_json
+
+    product, dossier = ctx.product, ctx.dossier
+    _, pipe, held, hype, flagged = _copy_context(ctx)
+    view = copywork.copy_text(product.marketing_copy_json)
+    if not (view["headline"] or view["sections"] or view["seo"].get("h1")):
+        raise StepError("K 的文案是空的,没法读")
+    points = _points_with_ids(product)
+    boss_note = str(pipe.get("copy_boss_note") or "") or None
+    extra = copywork.check_prompt_extra(view, points, main_keyword=pipe.get("main_keyword"), held=held, hype=hype, flagged=flagged, boss_note=boss_note)
+    result = _judge(ctx.db, copywork.COPY_CHECK_ASK, _product_brief(dossier, product), extra, timeout=COPY_JUDGE_TIMEOUT_SECONDS)
+    data = parse_json(result)
+    if not isinstance(data, dict):
+        raise StepError("读稿的结果不是 JSON,这版没动")
+    check = copywork.parse_check(data, sections=len(view["sections"]), faqs=len(view["faq"]))
+    applied, rejected = _apply_copy_edits(ctx, check["edits"], reason="苏青禾读稿:" + ";".join(check["notes"])[:400])
+    notes = [
+        *check["notes"],
+        *[f"想改 {r['field']},K 不认:{r['error']}" for r in rejected],
+        *[f"改了 {a.get('field')},K 核证据后又收了回去" for a in applied["adjusted"]],
+    ]
+    _save_pipe(
+        dossier,
+        copy_check={
+            "digest": _digest(product.marketing_copy_json),
+            "summary_zh": check["summary_zh"],
+            "notes": notes[:14],
+            "unsure": check["unsure"],
+            "changed": applied["changed"],
+            "adjusted": applied["adjusted"],
+            "at": datetime.now(UTC).isoformat(),
+        },
+        copy_boss_note=None,
+    )
+    n = len(applied["changed"])
+    return f"文案读了一遍:改了 {n} 处" + (f",{len(check['unsure'])} 处要老板定" if check["unsure"] else "") + (",没什么要改的" if not n and not check["unsure"] else "")
+
+
+def _step_copy_card(ctx: Ctx) -> str:
+    product, dossier = ctx.product, ctx.dossier
+    _, pipe, held, hype, flagged = _copy_context(ctx)
+    view = copywork.copy_text(product.marketing_copy_json)
+    check = pipe.get("copy_check") if isinstance(pipe.get("copy_check"), dict) else {}
+    mark = pipe.get("copy_card") if isinstance(pipe.get("copy_card"), dict) else {}
+    history = [h for h in mark.get("history") or [] if isinstance(h, dict)]
+    last_unclear = str((history[-1].get("unclear") if history else "") or "")
+    points = [{"id": p["id"], "text": str(p.get("text") or "")} for p in _points_with_ids(product)]
+    paused = image_brief_paused()
+    notes = [str(n) for n in check.get("notes") or []]
+    unsure = [str(u) for u in check.get("unsure") or []]
+    adjusted = [a for a in check.get("adjusted") or [] if isinstance(a, dict)]
+    lines = [
+        str(check.get("summary_zh") or ""),
+        *[f"我改了:{n}" for n in notes],
+        *[f"要你定:{u}" for u in unsure],
+        *([f"你上次说的这部分我对不上:{last_unclear}"] if last_unclear else []),
+        *([f"没写进卖点的认证说法(有证书再放):{';'.join(held)[:200]}"] if held else []),
+        *([f"卖家的宣传语我没用:{'、'.join(hype)[:200]}"] if hype else []),
+        *([f"档案里还没定的:{'、'.join(flagged)[:200]}"] if flagged else []),
+        *([f"K 没依据所以没写的:{';'.join(view['missing_inputs'])[:300]}"] if view["missing_inputs"] else []),
+    ]
+    card, _ = cards.create_card(
+        ctx.db,
+        dedupe_key=f"k_copy:{product.id}:{datetime.now(UTC).isoformat()}",
+        kind=COPY_CARD_KIND,
+        title=f"{product.sku} 文案审核"[:60],
+        conclusion=(
+            "文案我读过、改过了,全文在卡片里。批了我就把这版锁定"
+            + ("——作图指令按你的安排先不动,你说开始我再出。" if paused else ",接着出作图指令、出图。")
+            + "不行就驳回,写哪句要怎么改,我照着改。"
+        ),
+        why="\n".join(line for line in lines if line),
+        if_not="这个品停在文案这一步,不出图、不上架。",
+        reversible=True,
+        confidence="medium" if (unsure or last_unclear or adjusted) else "high",
+        evidence=copywork.card_evidence(
+            dossier_id=dossier.id,
+            product_id=str(product.id),
+            sku=product.sku,
+            main_keyword=pipe.get("main_keyword"),
+            view=view,
+            points=points,
+            check=check,
+            history_unclear=last_unclear,
+            held=held,
+            hype=hype,
+            flagged=flagged,
+            brief_paused=paused,
+            copy_digest=_digest(product.marketing_copy_json),
+            card_kind=COPY_CARD_KIND,
+        ),
+    )
+    _save_pipe(dossier, copy_card={"card_ref": card.ref, "at": datetime.now(UTC).isoformat(), "history": history})
+    return f"文案卡 #{card.ref} 发了" + (f",{len(unsure)} 处要老板定" if unsure else "")
+
+
+def _copy_fingerprint(db: Session, recheck: dict[str, Any]) -> str:
+    """文案卡建好之后,文案或卖点有人动过 → 卡作废重出(老板批的得是他看到的那一版)。"""
+    from ...k_series.product_knowledge.models import KProductKnowledgeProduct as P
+
+    try:
+        product = db.get(P, UUID(str(recheck.get("product_id"))), execution_options=SKIP_ORG_DATA_ISOLATION)
+    except (TypeError, ValueError):
+        product = None
+    if product is None:
+        return cards.fingerprint({"missing": True})
+    return cards.fingerprint({"copy": _digest(product.marketing_copy_json), "points": _digest(product.selling_points_approved_json)})
+
+
+cards.register_fingerprinter(COPY_CARD_KIND, _copy_fingerprint)
+
+
+def _step_copy_rework(ctx: Ctx) -> str:
+    """老板驳了文案卡:他的话翻成具体改动。改措辞经 K 的接口;改卖点原文或去掉卖点走卖点审批(K 逐条核证据,文案跟着重写)。"""
+    from .brain import parse_json
+
+    product, dossier = ctx.product, ctx.dossier
+    pipe = _pipe(dossier)
+    mark = pipe.get("copy_card") if isinstance(pipe.get("copy_card"), dict) else {}
+    card = ctx.db.scalar(select(SqhCard).where(SqhCard.ref == str(mark.get("card_ref"))), execution_options=SKIP_ORG_DATA_ISOLATION) if mark.get("card_ref") else None
+    reason = ((card.decision_reason if card else "") or "").strip()
+    if not reason:
+        raise StepError("文案卡被驳了但没留原因,不知道改什么")
+    view = copywork.copy_text(product.marketing_copy_json)
+    points = _points_with_ids(product)
+    result = _judge(ctx.db, copywork.COPY_REWORK_ASK, _product_brief(dossier, product), copywork.rework_prompt_extra(view, points, reason), timeout=COPY_JUDGE_TIMEOUT_SECONDS)
+    data = parse_json(result)
+    rw = copywork.parse_rework(data if isinstance(data, dict) else {}, sections=len(view["sections"]), faqs=len(view["faq"]), point_ids={p["id"] for p in points})
+    done: list[str] = []
+    unclear = [rw["unclear"]] if rw["unclear"] else []
+    touched_points = False
+    if rw["drop_points"] or rw["bullet_edits"]:
+        new_text = {e["id"]: e["text"] for e in rw["bullet_edits"]}
+        bullets = [
+            {
+                **{k: b.get(k) for k in ("id", "category", "text", "text_zh", "importance_score", "evidence", "evidence_excerpt")},
+                "text": new_text.get(b["id"], b.get("text")),
+                "review_decision": "reject" if b["id"] in rw["drop_points"] else ("edit" if b["id"] in new_text else "approve"),
+            }
+            for b in points
+        ]
+        if not any(x["review_decision"] != "reject" for x in bullets):
+            raise StepError("按老板的意见去掉这些卖点后一条不剩,没法写文案")
+        seo = [str(x) for x in (product.selling_points_approved_json or {}).get("seo_keywords") or []]
+        try:
+            ctx.hands.approve_selling_points(product.id, bullets=bullets, seo_keywords=seo)
+        except k_ops.KOpError as exc:
+            errors = rejected_indexes(exc.detail)
+            if not errors or not new_text:
+                raise
+            # 改过措辞的那几条 K 核不上证据:退回原文再交一次,在新文案卡上告诉老板
+            for index, why in errors.items():
+                if index < len(bullets) and bullets[index]["review_decision"] == "edit":
+                    unclear.append(f"卖点 {bullets[index]['id']} 改成「{bullets[index]['text']}」K 核不上证据({str(why)[:80]}),没改")
+                    bullets[index]["text"] = points[index].get("text")
+                    bullets[index]["review_decision"] = "approve"
+            ctx.hands.approve_selling_points(product.id, bullets=bullets, seo_keywords=seo)
+        touched_points = True
+        if rw["drop_points"]:
+            done.append(f"去掉卖点 {'、'.join(rw['drop_points'])}")
+        edited = [b["id"] for b in bullets if b["review_decision"] == "edit"]
+        if edited:
+            done.append(f"卖点 {'、'.join(edited)} 改了措辞")
+        if done:
+            done[-1] += "(文案照新卖点重写,写好我再读一遍给你看)"
+    applied: dict[str, Any] = {"changed": [], "adjusted": []}
+    if rw["edits"] and not touched_points:  # 动了卖点,文案反正要重写,这版的措辞改了也白改——老板的话带到下一版读稿时看
+        applied, rejected = _apply_copy_edits(ctx, rw["edits"], reason=f"老板:{reason}")
+        if applied["changed"]:
+            done.append("改了 " + "、".join(applied["changed"]))
+        unclear += [f"想改 {r['field']},K 不认:{r['error']}" for r in rejected]
+    if not done and not unclear:
+        raise StepError(f"老板的意见我对不上要改哪里:{reason[:200]}")
+    history = [*[h for h in mark.get("history") or [] if isinstance(h, dict)], {"card_ref": mark.get("card_ref"), "reason": reason, "did": done, "unclear": "; ".join(unclear)[:400]}]
+    updates: dict[str, Any] = {"copy_card": {"card_ref": None, "history": history}}
+    if touched_points:
+        updates["copy_boss_note"] = reason[:400]
+    else:
+        # 这版就是她刚按老板的话改的,不用再读一遍;读稿记号跟上新指纹
+        prev = pipe.get("copy_check") if isinstance(pipe.get("copy_check"), dict) else {}
+        updates["copy_check"] = {
+            **prev,
+            "digest": _digest(product.marketing_copy_json),
+            "notes": [f"按你说的:{d}" for d in done],
+            "unsure": [],
+            "changed": applied["changed"],
+            "adjusted": applied["adjusted"],
+            "at": datetime.now(UTC).isoformat(),
+        }
+    _save_pipe(dossier, **updates)
+    return ";".join(done) + (f";这部分我对不上,在新文案卡上再问你:{'; '.join(unclear)[:160]}" if unclear else "")
+
+
 def _step_image_brief(ctx: Ctx) -> str:
     ctx.hands.generate_image_brief(ctx.product.id)
     # 作图指令是照文案出的:记下这版文案,文案换了指令就得重出
@@ -1100,6 +1365,9 @@ STEPS = {
     "price_card": _step_price_card,
     "apply_price": _step_apply_price,
     "copy": _step_copy,
+    "copy_check": _step_copy_check,
+    "copy_card": _step_copy_card,
+    "copy_rework": _step_copy_rework,
     "image_brief": _step_image_brief,
     "render": _step_render,
     "render_retry": _step_render_retry,
@@ -1231,6 +1499,15 @@ def after_decision(db: Session, card: SqhCard, *, decision: str) -> dict[str, An
         if decision == "approve":
             return {"ok": True, "note": "好,我这就保存图片、推上独立站(落草稿),推好了在 WP 后台能看到。"}
         return {"ok": True, "note": "收到,我照你说的改,改好再给你看。"}
+    if card.kind == COPY_CARD_KIND:
+        if decision == "approve":
+            # 批的是卡上那版(指纹核过):记下指纹,文案后来再变就得重新给他看
+            _save_pipe(dossier, copy_approved={"digest": evidence.get("copy_digest"), "card_ref": card.ref, "at": datetime.now(UTC).isoformat()})
+            db.flush()
+            if image_brief_paused():
+                return {"ok": True, "note": "好,文案就按这版定了。作图指令按你的安排先不动,你说开始我再出。"}
+            return {"ok": True, "note": "好,文案定了,我接着出作图指令、出图。"}
+        return {"ok": True, "note": "收到,我照你说的改文案,改好再给你看。"}
     step = str(evidence.get("step") or "")
     failures = dict(_pipe(dossier).get("failures") or {})
     failures.pop(step, None)
@@ -1293,6 +1570,7 @@ class Runner:
 
 __all__ = [
     "BLOCKED_CARD_KIND",
+    "COPY_CARD_KIND",
     "PIPELINE_CARD_KINDS",
     "PRICE_CARD_KIND",
     "REVIEW_CARD_KIND",

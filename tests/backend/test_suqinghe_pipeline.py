@@ -361,3 +361,152 @@ def test_review_card_holds_its_images_then_rework_then_publish(built, monkeypatc
         db.execute(delete(KProductKnowledgeMediaAsset).where(KProductKnowledgeMediaAsset.product_id == product_id, KProductKnowledgeMediaAsset.status == "staged"))
         db.execute(delete(SqhCard).where(SqhCard.kind == pipeline.REVIEW_CARD_KIND))
         db.commit()
+
+
+def test_copy_is_read_fixed_carded_and_reworked_before_images(built, monkeypatch: pytest.MonkeyPatch) -> None:
+    """文案三件事(10-27):K 写完她读稿改稿(经 K 的改稿接口,K 退回的去掉再交)→ 文案卡全文给老板 → 驳回按意见改 →
+    改卖点原文走卖点审批(文案作废重写,老板的话带到下一版读稿)→ 批了锁定这版;作图指令那段先停,开关放开才往下。"""
+    from backend.app.modules.k_series.product_knowledge.workflow_engine import _image_brief_evidence_digest
+    from tests.backend.test_k_copy_edits import _copy, _verified_point
+
+    dossier_id, product_id, owner = built
+    monkeypatch.setenv("SQH_IMAGE_BRIEF_PAUSED", "1")
+    points = [
+        _verified_point("bp1", "Delivers a strong 2.11 GPM flow rate for a thorough rinse."),
+        _verified_point("bp2", "Built-in 7800 mAh rechargeable battery powers multiple showers per charge."),
+    ]
+
+    def plant_copy() -> None:
+        with without_org_data_isolation(), SessionLocal() as db:
+            product = db.get(KProductKnowledgeProduct, product_id)
+            product.product_name_en = "Portable Camping Shower"
+            product.faq_research_json = None
+            product.selling_points_approved_json = {"review_status": "approved", "bullets": [dict(p) for p in points], "seo_keywords": ["portable camping shower"]}
+            copy = _copy()
+            copy["evidence_digest"] = _image_brief_evidence_digest(product)
+            product.marketing_copy_json = copy
+            db.commit()
+
+    plant_copy()
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossier = db.get(SqhDossier, dossier_id)
+        dossier.draft = {**dossier.draft, "pipeline": {"main_keyword": "portable camping shower", "selling_points": {"held_certifications": ["UL 1642"]}}}
+        db.commit()
+    # 文案前面那几道门(素材、关键词、卖点、价格卡)在视图上打桩成「都过了」;文案这几个字段照旧从 K 和档案里读真的
+    import dataclasses
+
+    real_build_view = pipeline.build_view
+    monkeypatch.setattr(
+        pipeline,
+        "build_view",
+        lambda db, dossier, product: dataclasses.replace(
+            real_build_view(db, dossier, product),
+            material_done=True,
+            execution_status="blocked",
+            execution_step="marketing_copy_generation",
+            risk_approved=True,
+            sp_approved=True,
+            price_card="approved",
+            price_applied=True,
+            shipping_set=True,
+        ),
+    )
+    try:
+        assert _pick() == (dossier_id, "copy_check")
+
+        # 她读稿:改钩子和一条 FAQ;副标题里写了 free shipping,K 退回那一条,其余照改
+        asks: list[str] = []
+
+        def reader(db, ask, brief, extra, **kw):
+            asks.append(extra)
+            return {
+                "summary_zh": "卖便携淋浴,主打流量和续航",
+                "edits": {
+                    "headline": "Rinse off anywhere, no plumbing needed",
+                    "subheadline": "Strong flow with free shipping on every order",
+                    "page_faq": [{"index": 0, "answer": "Set the submersible pump into a bucket or stream and it draws water on its own."}],
+                },
+                "notes": ["钩子改成买家结果"],
+                "unsure": ["bp2 的 7800 mAh 要核对"],
+            }
+
+        monkeypatch.setattr(pipeline, "_judge", reader)
+        out = pipeline.run_step(dossier_id, "copy_check")
+        assert out["ok"] and "改了 2 处" in out["note"] and "1 处要老板定" in out["note"], out
+        assert "UL 1642" in asks[-1] and "bp1: Delivers" in asks[-1]
+        check = _pipe(dossier_id)["copy_check"]
+        assert check["changed"] == ["above_the_fold.headline", "page_faq[0].answer"]
+        assert any("subheadline" in n and "K 不认" in n and "运费" in n for n in check["notes"]), check["notes"]
+        with without_org_data_isolation(), SessionLocal() as db:
+            copy = db.get(KProductKnowledgeProduct, product_id).marketing_copy_json
+            assert copy["product_page_copy"]["above_the_fold"]["headline"] == "Rinse off anywhere, no plumbing needed"
+            assert copy["product_page_copy"]["above_the_fold"]["subheadline"] == "A rechargeable camping shower with strong flow."  # 被退回的那条没动
+            assert copy["product_page_copy"]["key_bullets"] == [p["text"] for p in points]
+            assert copy["revisions"][-1]["source"] == "suqinghe_review" and copy["revisions"][-1]["actor_user_id"] == str(owner)
+
+        assert _pick() == (dossier_id, "copy_card")
+        assert pipeline.run_step(dossier_id, "copy_card")["ok"]
+        ref = _pipe(dossier_id)["copy_card"]["card_ref"]
+        with without_org_data_isolation(), SessionLocal() as db:
+            card = db.scalar(select(SqhCard).where(SqhCard.ref == ref))
+            assert card.kind == pipeline.COPY_CARD_KIND and card.status == "pending" and card.confidence == "medium"
+            ev = card.evidence
+            assert ev["copy"]["headline"] == "Rinse off anywhere, no plumbing needed" and ev["copy"]["faq"][0]["answer"].startswith("Set the submersible pump")
+            assert ev["copy"]["bullets"] == [p["text"] for p in points] and ev["points"][1]["id"] == "bp2"
+            assert ev["check"]["unsure"] == ["bp2 的 7800 mAh 要核对"] and ev["brief_paused"] is True
+            assert "UL 1642" in card.why and "要你定" in card.why and "作图指令按你的安排先不动" in card.conclusion
+        assert _pick() is None  # 等老板
+
+        # 驳回,只说标题:她翻成 seo.h1 的改动,这版她刚改的不用再读,直接重出文案卡
+        assert "改文案" in _decide(ref, "reject", owner, reason="标题改成 Portable Camping Shower – Rechargeable Battery")["note"]
+        assert _pick() == (dossier_id, "copy_rework")
+        monkeypatch.setattr(
+            pipeline,
+            "_judge",
+            lambda db, ask, brief, extra, **kw: {"edits": {"seo": {"h1": "Portable Camping Shower – Rechargeable Battery"}}, "bullet_edits": [], "drop_points": [], "unclear": ""},
+        )
+        out = pipeline.run_step(dossier_id, "copy_rework")
+        assert out["ok"] and "seo.h1" in out["note"], out
+        pipe = _pipe(dossier_id)
+        assert pipe["copy_card"]["card_ref"] is None and pipe["copy_card"]["history"][0]["reason"].startswith("标题改成")
+        assert _pick() == (dossier_id, "copy_card")
+        assert pipeline.run_step(dossier_id, "copy_card")["ok"]
+        ref2 = _pipe(dossier_id)["copy_card"]["card_ref"]
+        assert ref2 != ref
+        with without_org_data_isolation(), SessionLocal() as db:
+            h1 = db.scalar(select(SqhCard).where(SqhCard.ref == ref2)).evidence["copy"]["seo"]["h1"]
+            assert h1.lower().startswith("portable camping shower") and "rechargeable battery" in h1.lower(), h1
+
+        # 再驳,这次说的是卖点:去掉 bp2 → 走卖点审批,文案证据过期要重写;老板的话留给下一版读稿
+        _decide(ref2, "reject", owner, reason="第二条卖点不要,电池续航没实测")
+        monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: {"edits": {}, "bullet_edits": [], "drop_points": ["bp2"], "unclear": ""})
+        out = pipeline.run_step(dossier_id, "copy_rework")
+        assert out["ok"] and "去掉卖点 bp2" in out["note"] and "重写" in out["note"], out
+        with without_org_data_isolation(), SessionLocal() as db:
+            product = db.get(KProductKnowledgeProduct, product_id)
+            assert [b["text"] for b in product.selling_points_approved_json["bullets"]] == [points[0]["text"]]
+        assert _pick() == (dossier_id, "copy")  # 文案跟不上卖点了,K 重写
+        assert _pipe(dossier_id)["copy_boss_note"].startswith("第二条卖点不要")
+
+        # K 重写好了(这里直接种一版):她再读一遍,读稿时看得到老板上一版的意见
+        points.pop()
+        plant_copy()
+        assert _pick() == (dossier_id, "copy_check")
+        asks.clear()
+        monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: asks.append(extra) or {"summary_zh": "重写后的版本没问题", "edits": {}, "notes": [], "unsure": []})
+        out = pipeline.run_step(dossier_id, "copy_check")
+        assert out["ok"] and "没什么要改的" in out["note"], out
+        assert "第二条卖点不要" in asks[-1] and _pipe(dossier_id).get("copy_boss_note") is None
+        assert pipeline.run_step(dossier_id, "copy_card")["ok"]
+        ref3 = _pipe(dossier_id)["copy_card"]["card_ref"]
+
+        # 批了:锁定这版;作图指令先停,放开开关才往下
+        assert "先不动" in _decide(ref3, "approve", owner)["note"]
+        assert _pipe(dossier_id)["copy_approved"]["card_ref"] == ref3
+        assert _pick() is None
+        monkeypatch.setenv("SQH_IMAGE_BRIEF_PAUSED", "0")
+        assert _pick() == (dossier_id, "image_brief")
+    finally:
+        with without_org_data_isolation(), SessionLocal() as db:
+            db.execute(delete(SqhCard).where(SqhCard.kind == pipeline.COPY_CARD_KIND))
+            db.commit()

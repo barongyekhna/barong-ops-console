@@ -9,7 +9,20 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { isAllowedBackendProxyPath } from "../../frontend/src/app/api/backend/[...path]/route.ts";
-import { CANDIDATE_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND, candidateCardView, candidateImageUrl, kMediaThumbnailUrl, pct, priceCardView, reviewCardView, usd } from "../../frontend/src/components/suqinghe/card-view.ts";
+import {
+  CANDIDATE_CARD_KIND,
+  COPY_CARD_KIND,
+  PRICE_CARD_KIND,
+  REVIEW_CARD_KIND,
+  candidateCardView,
+  candidateImageUrl,
+  copyCardView,
+  kMediaThumbnailUrl,
+  pct,
+  priceCardView,
+  reviewCardView,
+  usd,
+} from "../../frontend/src/components/suqinghe/card-view.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const load = (name) => JSON.parse(readFileSync(path.join(here, "fixtures", "suqinghe", name), "utf8"));
@@ -100,4 +113,48 @@ test("选品卡:图走后端代理、进价折美元、美国同类价、风险�
   assert.equal(noLink.hasImage, false);
   assert.equal(candidateCardView({ title_zh: "" }), null);
   assert.equal(reviewCardView("x"), null);
+});
+
+test("文案卡:全文一字不少(标题/钩子/短描述/卖点/段落/收尾/FAQ/SEO),她的中文摘要、改了什么、拿不准什么分开摆;作图指令暂停有提示", () => {
+  const copy = load("card-copy.json");
+  assert.equal(copy.kind, COPY_CARD_KIND);
+  assert.equal(COPY_CARD_KIND, "k_copy");
+  const view = copyCardView(copy.evidence);
+  assert.ok(view);
+  assert.equal(view.h1, "Portable Camping Shower – Rechargeable off-grid rinses");
+  assert.match(view.seoTitle, /\| Barong Yekhna$/);
+  assert.equal(view.urlSlug, "portable-camping-shower-kit");
+  assert.equal(view.headline, "Rinse clean wherever the trail takes you");
+  assert.match(view.shortDescription, /2\.11 GPM/);
+  assert.equal(view.bullets.length, 14);
+  assert.equal(view.sections.length, 5);
+  assert.ok(view.sections.every((s) => s.heading && s.body));
+  assert.match(view.conversion, /van life/);
+  assert.equal(view.faq.length, 6);
+  assert.ok(view.faq[0].question.endsWith("?") && view.faq[0].answer.length > 20);
+  // 她的说明和英文正文分开:中文摘要、改了什么、K 收回去的、拿不准的
+  assert.match(view.summaryZh, /便携露营淋浴/);
+  assert.deepEqual(view.notes, ["钩子从产品名改成买家结果(Rinse off anywhere)", "FAQ 第 1 条答案收短到两句"]);
+  assert.equal(view.unsure.length, 1);
+  assert.match(view.adjusted[0], /^seo\.h1:想改成「Portable Camping Shower – Heats Water Fast」/);
+  assert.deepEqual(view.held, ["IPX7 防水(卖家自填)"]);
+  assert.deepEqual(view.hype, ["Best seller in 2026"]);
+  assert.equal(view.briefPaused, true);
+  // 内部字段不进卡:证据指纹、规格表 HTML
+  assert.equal(JSON.stringify(copy.evidence.copy).includes("specifications_html_table"), false);
+  // 坏的 evidence 不画,不炸
+  assert.equal(copyCardView(null), null);
+  assert.equal(copyCardView({ copy: { seo: {} } }), null);
+});
+
+test("文案卡的正文由 OfficeParts 按 kind 画;K 的改稿接口进了代理白名单(PUT,别的形状不放)", () => {
+  const parts = read("frontend/src/components/suqinghe/OfficeParts.tsx");
+  assert.match(parts, /card\.kind === COPY_CARD_KIND \? <CopyCardBody/);
+  assert.match(parts, /lang="en"/);
+  const uuid = "01234567-89ab-4def-8123-456789abcdef";
+  assert.equal(isAllowedBackendProxyPath("PUT", ["k", "products", uuid, "marketing-copy"]), true);
+  assert.equal(isAllowedBackendProxyPath("POST", ["k", "products", uuid, "marketing-copy"]), false);
+  assert.equal(isAllowedBackendProxyPath("GET", ["k", "products", uuid, "marketing-copy"]), false);
+  assert.equal(isAllowedBackendProxyPath("PUT", ["k", "products", "not-a-uuid", "marketing-copy"]), false);
+  assert.equal(isAllowedBackendProxyPath("PUT", ["k", "products", uuid, "marketing-copy", "x"]), false);
 });

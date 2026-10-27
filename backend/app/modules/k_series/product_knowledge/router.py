@@ -4366,6 +4366,95 @@ def product_knowledge_update_faq(
     )
 
 
+# ---- 文案按意见改(2026-10-27):逐字段改措辞,改完再过一遍 K 的校验链;卖点原文和规格表不在这里改 ----
+
+
+class MarketingCopySectionEdit(BaseModel):
+    index: int = Field(ge=0, le=30)
+    heading: str | None = Field(default=None, max_length=400)
+    body: str | None = Field(default=None, max_length=4000)
+
+
+class MarketingCopyFaqEdit(BaseModel):
+    index: int = Field(ge=0, le=30)
+    answer: str = Field(min_length=1, max_length=2000)
+
+
+class MarketingCopySeoEdit(BaseModel):
+    title: str | None = Field(default=None, max_length=300)
+    meta_description: str | None = Field(default=None, max_length=600)
+    h1: str | None = Field(default=None, max_length=300)
+    url_slug: str | None = Field(default=None, max_length=200)
+
+
+class MarketingCopyEdits(BaseModel):
+    headline: str | None = Field(default=None, max_length=400)
+    subheadline: str | None = Field(default=None, max_length=600)
+    short_description: str | None = Field(default=None, max_length=2000)
+    conversion_support_block: str | None = Field(default=None, max_length=2000)
+    chunk_sections: list[MarketingCopySectionEdit] = Field(default_factory=list, max_length=30)
+    seo: MarketingCopySeoEdit | None = None
+    page_faq: list[MarketingCopyFaqEdit] = Field(default_factory=list, max_length=30)
+
+
+class MarketingCopyEditRequest(BaseModel):
+    edits: MarketingCopyEdits
+    reason: str | None = Field(default=None, max_length=1000)
+    source: str = Field(default="manual_review", max_length=100)
+
+
+class MarketingCopyEditResponse(BaseModel):
+    changed: list[str]
+    adjusted: list[dict[str, Any]]
+    marketing_copy: dict[str, Any]
+
+
+@router.put(
+    "/products/{product_id}/marketing-copy",
+    response_model=MarketingCopyEditResponse,
+)
+def product_knowledge_edit_marketing_copy(
+    product_id: UUID,
+    payload: MarketingCopyEditRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> MarketingCopyEditResponse:
+    from .copy_edits import CopyEditError, apply_copy_edits
+
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    try:
+        out = apply_copy_edits(
+            db,
+            product,
+            payload.edits.model_dump(exclude_none=True),
+            actor_user_id=str(getattr(user, "id", "") or "") or None,
+            reason=payload.reason,
+            source=payload.source,
+        )
+    except CopyEditError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=_structured_execution_error_detail(
+                reason="invalid_state" if exc.status_code == 409 else "validation_failed",
+                code=exc.code,
+                message=exc.message,
+                module_id=MODULE_KEY,
+                extra={"items": exc.items} if exc.items else None,
+            ),
+        ) from exc
+    db.commit()
+    return MarketingCopyEditResponse(changed=out["changed"], adjusted=out["adjusted"], marketing_copy=out["marketing_copy"])
+
+
 # ---------------------------------------------------------------------------
 # 兼容 re-export（2026-09-03 起，剥 service 层时保留）
 # ---------------------------------------------------------------------------

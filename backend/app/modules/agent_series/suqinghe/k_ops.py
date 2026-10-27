@@ -165,6 +165,16 @@ class KHands:
 
         return _call(k.product_knowledge_generate_copy, product_id=product_id, **self._ctx())
 
+    def edit_copy(self, product_id: UUID, *, edits: dict[str, Any], reason: str, source: str = "suqinghe_review") -> Any:
+        """K 的「按意见改文案」(10-27):逐字段改措辞,K 自己再过一遍证据校验;卖点原文和规格表不在这里改。
+
+        改不了的字段 K 用 422 逐条退回(detail.items[].field / error),由流水线决定去掉那几项再交一次还是报给老板。
+        """
+        from ...k_series.product_knowledge import router as k
+
+        payload = k.MarketingCopyEditRequest(edits=k.MarketingCopyEdits(**edits), reason=reason[:1000], source=source)
+        return _call(k.product_knowledge_edit_marketing_copy, product_id=product_id, payload=payload, **self._ctx())
+
     def generate_image_brief(self, product_id: UUID) -> Any:
         from ...k_series.product_knowledge import router as k
 

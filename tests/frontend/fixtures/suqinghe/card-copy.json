@@ -1,0 +1,193 @@
+{
+  "ref": "c0bb",
+  "kind": "k_copy",
+  "title": "PSPE-001 文案审核",
+  "conclusion": "文案我读过、改过了,全文在卡片里。批了我就把这版锁定——作图指令按你的安排先不动,你说开始我再出。不行就驳回,写哪句要怎么改,我照着改。",
+  "why": "",
+  "if_not": "这个品停在文案这一步,不出图、不上架。",
+  "reversible": true,
+  "confidence": "medium",
+  "status": "pending",
+  "evidence": {
+    "dossier_id": 7,
+    "k_product_id": "0f0f0f0f-0000-4000-8000-000000000001",
+    "sku": "PSPE-001",
+    "main_keyword": "portable camping shower",
+    "copy": {
+      "headline": "Rinse clean wherever the trail takes you",
+      "subheadline": "A rechargeable camping shower with strong flow, flexible control, and easy water access.",
+      "short_description": "Take a portable camping shower to off-grid campsites, outdoor work areas, and multi-day trips. The 2.11 GPM pump, 7800 mAh rechargeable battery, and 6.5-foot hose help you rinse thoroughly without relying on fixed plumbing.",
+      "bullets": [
+        "Delivers a strong 2.11 GPM flow rate for a thorough rinse, even when water pressure is limited.",
+        "Complete 7-piece kit includes the main unit, 6.5 ft. water hose, multi-function shower head, suction-cup holder, shower puff, USB-C charging cable, and instruction manual.",
+        "Built-in 7800 mAh rechargeable battery provides enough power for multiple showers per charge, perfect for multi-day off-grid trips.",
+        "IPX8 waterproof rating means the main unit is fully submersible.",
+        "Integrated digital temperature display and tri-color LED battery level indicator let you check water warmth and remaining power at a glance.",
+        "Certified to CE, RoHS, and IPX8 standards, meeting rigorous environmental requirements.",
+        "USB-C rechargeable and the included cable lets you top up the battery from a power bank, car charger, or solar panel.",
+        "Bottom suction pump works in as little as 0.39 inch of water, so you can pull from shallow buckets, collapsible basins, or natural sources.",
+        "6.5-foot PVC hose gives you extra reach from the water source to your shower spot without needing to reposition the pump.",
+        "Available in Blue, Orange, and Gray to match your camping gear or personal style.",
+        "Runs for 90+ minutes of continuous use on a single charge, enough for multiple rinses across a multi-day trip.",
+        "Recharges fully in about 2 hours over USB-C, so it is ready again fast between trips.",
+        "Stepless flow control on the shower head lets you fine-tune the spray from a gentle trickle to full pressure.",
+        "A one-touch stop button pauses the water instantly to save battery and water between rinses."
+      ],
+      "sections": [
+        {
+          "heading": "A portable outdoor shower built for off-grid routines",
+          "body": "Enjoy a dependable rinse at camp, on a multi-day trip, or anywhere fixed plumbing is unavailable. The 2.11 GPM pump delivers strong flow even when water pressure is limited, while the bottom suction system works in as little as 0.39 inch of water."
+        },
+        {
+          "heading": "Fine-tune every rinse with comfortable control",
+          "body": "Adjust the spray continuously from a gentle trickle to full pressure using the shower head's stepless flow control. A one-touch stop button pauses water instantly between rinses, helping you control water use and battery use during outdoor showers."
+        },
+        {
+          "heading": "Rechargeable power for camping and van life shower setups",
+          "body": "The 7800 mAh rechargeable battery provides 90 minutes of continuous use and recharges fully in about 2 hours over USB-C. Use it as a battery-powered camping shower for off-grid camping, a van life shower setup, or outdoor rinses between activities."
+        },
+        {
+          "heading": "What makes this portable camping shower kit easy to use?",
+          "body": "The 6.5-foot PVC hose gives you reach from the water source to your shower spot without repositioning the pump. The digital water temperature display and tri-color LED battery indicator let you check warmth and remaining power at a glance, while the included suction-cup holder keeps the shower head within reach."
+        },
+        {
+          "heading": "What is the best portable shower for camping when you need a complete kit?",
+          "body": "For shoppers comparing the best portable shower for camping, this complete set combines the pump, hose, shower head, holder, shower puff, charging cable, and instruction manual in one package. If you are comparing portable camping shower cost, consider the included components and rechargeable convenience alongside the pump performance."
+        }
+      ],
+      "conversion_support_block": "This portable camping shower is a strong fit for campers, van life travelers, and anyone who needs a flexible outdoor rinse away from fixed plumbing. The complete kit, adjustable spray, rechargeable power, and included holder make setup straightforward from the first use.",
+      "seo": {
+        "title": "Rechargeable Portable Camping Shower Kit | Barong Yekhna",
+        "meta_description": "Take a rechargeable portable camping shower off-grid with strong 2.11 GPM flow, adjustable spray control, and a complete camping shower kit.",
+        "h1": "Portable Camping Shower – Rechargeable off-grid rinses",
+        "url_slug": "portable-camping-shower-kit"
+      },
+      "faq": [
+        {
+          "question": "How does this portable camping shower pump draw water?",
+          "answer": "There's no tap to connect. Set the submersible pump directly into your water source — a bucket, collapsible basin, lake, or stream — and its bottom-suction pump draws from as little as 0.39 inch of water, then pushes it through the 6.5-foot hose to the shower head at a steady 2.11 GPM."
+        },
+        {
+          "question": "Does this portable camping shower heat the water?",
+          "answer": "No — it's a pump, not a water heater. The built-in digital display shows the temperature of the water you supply, but the unit does not warm it. For a warm rinse, fill your bucket with sun-warmed or kettle-heated water and the pump delivers it at full flow."
+        },
+        {
+          "question": "How long does the battery last, and how do you recharge it?",
+          "answer": "The 7800 mAh battery runs 90+ minutes of continuous spray — enough for multiple rinses on a multi-day trip — and recharges fully in about 2 hours over USB-C. Top it up from a power bank, car charger, or solar panel, and a tri-color LED shows the remaining charge at a glance."
+        },
+        {
+          "question": "Can you adjust the water flow and pause it between rinses?",
+          "answer": "Yes. A stepless dial on the shower head fine-tunes the spray from a gentle trickle to full pressure, and a one-touch stop button pauses the water instantly so you save both battery and water while you lather up."
+        },
+        {
+          "question": "Is the pump waterproof enough to sit in the water?",
+          "answer": "Yes. The main unit is rated IPX8 and is fully submersible, so it's built to sit right in your bucket or basin while it runs. It's certified to CE, RoHS, and IPX8 waterproof standards."
+        },
+        {
+          "question": "What's included in the portable camping shower kit?",
+          "answer": "It's a complete 7-piece kit: the main pump unit, a 6.5-foot hose, a multi-function shower head, a suction-cup shower head holder, a shower puff, a USB-C charging cable, and an instruction manual. The pump packs down small at 2.76 inches wide and 5.12 inches tall."
+        }
+      ],
+      "missing_inputs": [
+        "No verified product-specific claims were available for exact water temperature range or heating performance, so none were included.",
+        "No verified warranty, return, shipping, price, or stock details were available, so none were included.",
+        "No verified independent test data or customer reviews were available, so no review or first-hand performance claims were added.",
+        "The phrase 'fully submersible' was omitted because the approved IPX8 point was marked for editing; the page uses only the verified IPX8 rating and certification wording."
+      ],
+      "coverage_rate": 0.9
+    },
+    "points": [
+      {
+        "id": "bp1",
+        "text": "Delivers a strong 2.11 GPM flow rate for a thorough rinse, even when water pressure is limited."
+      },
+      {
+        "id": "bp2",
+        "text": "Complete 7-piece kit includes the main unit, 6.5 ft. water hose, multi-function shower head, suction-cup holder, shower puff, USB-C charging cable, and instruction manual."
+      },
+      {
+        "id": "bp3",
+        "text": "Built-in 7800 mAh rechargeable battery provides enough power for multiple showers per charge, perfect for multi-day off-grid trips."
+      },
+      {
+        "id": "bp4",
+        "text": "IPX8 waterproof rating means the main unit is fully submersible."
+      },
+      {
+        "id": "bp5",
+        "text": "Integrated digital temperature display and tri-color LED battery level indicator let you check water warmth and remaining power at a glance."
+      },
+      {
+        "id": "bp6",
+        "text": "Certified to CE, RoHS, and IPX8 standards, meeting rigorous environmental requirements."
+      },
+      {
+        "id": "bp7",
+        "text": "USB-C rechargeable and the included cable lets you top up the battery from a power bank, car charger, or solar panel."
+      },
+      {
+        "id": "bp8",
+        "text": "Bottom suction pump works in as little as 0.39 inch of water, so you can pull from shallow buckets, collapsible basins, or natural sources."
+      },
+      {
+        "id": "bp9",
+        "text": "6.5-foot PVC hose gives you extra reach from the water source to your shower spot without needing to reposition the pump."
+      },
+      {
+        "id": "bp10",
+        "text": "Available in Blue, Orange, and Gray to match your camping gear or personal style."
+      },
+      {
+        "id": "bp11",
+        "text": "Runs for 90+ minutes of continuous use on a single charge, enough for multiple rinses across a multi-day trip."
+      },
+      {
+        "id": "bp12",
+        "text": "Recharges fully in about 2 hours over USB-C, so it is ready again fast between trips."
+      },
+      {
+        "id": "bp13",
+        "text": "Stepless flow control on the shower head lets you fine-tune the spray from a gentle trickle to full pressure."
+      },
+      {
+        "id": "bp14",
+        "text": "A one-touch stop button pauses the water instantly to save battery and water between rinses."
+      }
+    ],
+    "check": {
+      "summary_zh": "这页卖的是便携露营淋浴:主打 2.11 GPM 的强水流、7800 mAh 充电续航和 6.5 英尺软管,配件齐全。整体读下来像美国人写的,事实都对得上卖点。",
+      "notes": [
+        "钩子从产品名改成买家结果(Rinse off anywhere)",
+        "FAQ 第 1 条答案收短到两句"
+      ],
+      "unsure": [
+        "bp3 的「multiple showers per charge」没有具体次数,要不要留"
+      ],
+      "changed": [
+        "above_the_fold.headline",
+        "page_faq[0].answer"
+      ],
+      "adjusted": [
+        {
+          "field": "seo.h1",
+          "wanted": "Portable Camping Shower – Heats Water Fast",
+          "got": "Portable Camping Shower – Rechargeable off-grid rinses"
+        }
+      ]
+    },
+    "history_unclear": "",
+    "held_certifications": [
+      "IPX7 防水(卖家自填)"
+    ],
+    "hype": [
+      "Best seller in 2026"
+    ],
+    "flagged": [],
+    "brief_paused": true,
+    "copy_digest": "cac6fc7a6653ce0c",
+    "recheck": {
+      "type": "k_copy",
+      "product_id": "0f0f0f0f-0000-4000-8000-000000000001"
+    }
+  }
+}

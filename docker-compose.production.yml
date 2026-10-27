@@ -646,6 +646,8 @@ services:
       AGENT_CHAT_POLL_SECONDS: "3"
       SQH_LOOP_SECONDS: "60"
       SQH_DAILY_CLAUDE_USD: "2"
+      # 10-27 老板拍板:作图指令那一段先停(他另有打算)。文案批了她停在那等;要放开改成 "0" 再 rm -f -s + up -d --no-deps
+      SQH_IMAGE_BRIEF_PAUSED: "1"
     volumes:
       - console_agent_memory_data:/var/lib/barong/agent-memory
       # 10-27:批档案后 K 建档在这个进程里做(d1fdd7f 起),参考图写进 k-media;不挂这个卷图就留在容器里,后端和出图都看不到

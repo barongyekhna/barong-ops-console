@@ -38,7 +38,7 @@ def _registered() -> set[tuple[str, str]]:
 
 def test_route_count_is_pinned() -> None:
     """路由总数的基准。改了要有意识地改这个数字。"""
-    assert len(_registered()) == 83, sorted(_registered())
+    assert len(_registered()) == 84, sorted(_registered())
 
 
 def test_every_dual_path_alias_is_still_registered() -> None:
@@ -151,6 +151,7 @@ EXPECTED_ROUTES: tuple[tuple[str, str], ...] = (
     ('POST', '/k/selling-points/generate'),
     ('POST', '/k/serp/search'),
     ('PUT', '/k/products/{product_id}/faq'),
+    ('PUT', '/k/products/{product_id}/marketing-copy'),
     ('PUT', '/k/products/{product_id}/image-plates/{asset_id}/mask'),
     ('PUT', '/k/products/{product_id}/operating-model'),
 )
@@ -229,6 +230,7 @@ COMPAT_SURFACE: tuple[str, ...] = (
     "logger",
     "product_knowledge_brief_image_add",
     "product_knowledge_create",
+    "product_knowledge_edit_marketing_copy",
     "product_knowledge_list_image_plates",
     "product_knowledge_render_rework",
     "product_knowledge_update_faq",

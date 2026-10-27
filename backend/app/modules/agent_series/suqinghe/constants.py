@@ -51,6 +51,15 @@ def dossier_daily_limit() -> int:
 DOSSIER_MIN_GAP_SECONDS = 60
 DOSSIER_IMAGE_BUDGET_USD = 0.5
 
+# 第②步补完(10-27):K 写完文案她先读稿改稿,再发「文案卡」给老板看全文;驳了按老板的意见改。
+COPY_CARD_KIND = "k_copy"
+
+
+def image_brief_paused() -> bool:
+    """作图指令那一段先停(10-27 老板拍板:他另有打算)。文案批了就停在那,等开关放开再接着出作图指令、出图。"""
+    return os.getenv("SQH_IMAGE_BRIEF_PAUSED", "1").strip().lower() not in {"0", "false", "no", "off", ""}
+
+
 # 第⑥步:她自己找货。先从 F 系列(找货页)的候选池里挑,一天最多发几张「选品」卡;老板没处理的攒到上限就不再发。
 CANDIDATE_CARD_KIND = "candidate"
 

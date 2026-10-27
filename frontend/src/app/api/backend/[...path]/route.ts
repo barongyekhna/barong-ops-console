@@ -2634,6 +2634,16 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "PUT";
   }
 
+  // 文案按意见改（2026-10-27）：逐字段改措辞，后端再过一遍 K 的证据校验；苏青禾读稿改稿走同一个口。
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "marketing-copy"
+  ) {
+    return method === "PUT";
+  }
+
   if (
     path.length === 5 &&
     path[1] === "products" &&
