@@ -125,9 +125,11 @@ def check_prompt_extra(
     hype: list[str],
     flagged: list[str],
     boss_note: str | None = None,
+    priorities: list[str] | None = None,
 ) -> str:
     parts = [
         f"主关键词:{main_keyword or '(没定)'}",
+        *([f"买家最在乎的(从同类商品页上拆出来的,只核对文案有没有讲到、顺序对不对;不能据此加事实):{';'.join(priorities)[:400]}"] if priorities else []),
         *([f"老板上一版文案的意见(这版是照它改了卖点后重写的,读的时候对着看):{boss_note[:400]}"] if boss_note else []),
         *([f"没证书、不能写进文案的认证说法:{';'.join(held)[:400]}"] if held else []),
         *([f"卖家的宣传语(别用):{'、'.join(hype)[:300]}"] if hype else []),

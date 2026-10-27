@@ -25,6 +25,7 @@ def _view(**overrides) -> View:
         sp_failures=0,
         sp_candidates=False,
         sp_approved=False,
+        market_done=True,  # 竞品拆解(10-27)默认当做过了;专门的用例再把它关掉
     )
     base.update(overrides)
     return View(**base)
@@ -295,3 +296,21 @@ def test_image_brief_pause_switch_defaults_on() -> None:
             os.environ.pop("SQH_IMAGE_BRIEF_PAUSED", None)
         else:
             os.environ["SQH_IMAGE_BRIEF_PAUSED"] = saved
+
+
+# ---------------------------------------------------------------- 竞品拆解(10-27):建档后、跑关键词前;驳了拆解卡重跑关键词
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ({"market_done": False}, "market"),  # 素材收完先看同类页
+        ({"market_done": False, "material_done": False}, "material"),  # 素材还没收,先收素材
+        ({"market_done": False, "execution_status": "blocked", "execution_step": "risk_term_review_manual"}, "risk_review"),  # 已经跑过关键词的老品不回头补
+        ({"keywords_rerun": True, "execution_status": "blocked", "execution_step": "risk_term_review_manual"}, "keywords_retry"),  # 驳了拆解卡:重跑
+        ({"keywords_rerun": True, "execution_status": "running", "execution_minutes": 3}, None),  # K 还在跑,等它
+        ({"keywords_rerun": True}, "keywords"),  # 还没跑过关键词,正常开跑(自然不带种子)
+    ],
+)
+def test_market_research_sits_between_material_and_keywords(overrides, expected) -> None:
+    assert next_step(_view(**overrides)) == expected

@@ -150,6 +150,10 @@ export function candidateImageUrl(ref: string): string {
   return `/api/backend/suqinghe/cards/${encodeURIComponent(ref)}/image`;
 }
 
+/** 评分卡(10-27):六个维度各自的分、满分、依据、出处;没拿到数据的维度标出来。 */
+export type ScoreDim = { key: string; label: string; pts: number; max: number; why: string; source: string; missing: boolean };
+export type ScoreView = { total: number; max: number; dims: ScoreDim[]; missing: string[]; weightClass: string; amazon: string; keepa: string };
+
 export type CandidateCardView = {
   titleZh: string;
   category: string;
@@ -162,7 +166,48 @@ export type CandidateCardView = {
   risks: string[];
   sourceUrl: string;
   hasImage: boolean;
+  score: ScoreView | null;
 };
+
+const WEIGHT_LABEL: Record<string, string> = { light: "轻小件", medium: "中等", heavy: "大件重件" };
+
+export function scoreView(evidence: Rec): ScoreView | null {
+  const score = isRec(evidence.scorecard) ? evidence.scorecard : null; // evidence.score 是 F 池的分,评分卡在 scorecard
+  if (!score) return null;
+  const dims: ScoreDim[] = list(score.dims)
+    .filter(isRec)
+    .map((d) => ({
+      key: text(d.key),
+      label: text(d.label),
+      pts: num(d.pts) ?? 0,
+      max: num(d.max) ?? 0,
+      why: text(d.why),
+      source: text(d.source),
+      missing: d.missing === true,
+    }))
+    .filter((d) => d.label);
+  if (dims.length === 0) return null;
+  const amazon = isRec(evidence.amazon) ? evidence.amazon : {};
+  const wall = num(amazon.review_wall_max);
+  const share = num(amazon.single_brand_share);
+  const amazonText = text(amazon.error)
+    ? `亚马逊没查到(${text(amazon.error)})`
+    : amazon.valid === false
+      ? "亚马逊结果和关键词对不上,没用"
+      : `亚马逊首页:前三名最高评论 ${wall ?? "?"} 条${share !== null ? `,单一品牌占 ${Math.round(share * 100)}%` : ""}${text(amazon.dominant_brand) ? `(${text(amazon.dominant_brand)})` : ""}`;
+  const keepa = list(evidence.keepa).filter(isRec);
+  const sales = keepa.map((k) => num(k.monthly_sales)).filter((v): v is number => v !== null);
+  const keepaText = sales.length > 0 ? `前 ${sales.length} 名月销 ${sales.map((v) => Math.round(v)).join(" / ")} 件` : "月销没拿到";
+  return {
+    total: num(score.total) ?? 0,
+    max: num(score.max) ?? 100,
+    dims,
+    missing: strings(score.missing),
+    weightClass: WEIGHT_LABEL[text(evidence.weight_class)] ?? "",
+    amazon: amazonText,
+    keepa: keepaText,
+  };
+}
 
 const DETAIL_1688 = /^https:\/\/detail\.1688\.com\/offer\/\d+\.html/;
 
@@ -193,6 +238,72 @@ export function candidateCardView(evidence: unknown): CandidateCardView | null {
     risks: strings(evidence.risks),
     sourceUrl: DETAIL_1688.test(sourceUrl) ? sourceUrl : "",
     hasImage: Boolean(text(evidence.image_url)),
+    score: scoreView(evidence),
+  };
+}
+
+export const MARKET_CARD_KIND = "market";
+
+export type MarketPage = { domain: string; title: string; price: number | null; bullets: number; faq: number; images: number | null; highlight: string; ok: boolean; error: string };
+export type MarketPriority = { what: string; why: string };
+
+/** 竞品拆解卡(10-27):读了哪几家、买家最在乎什么、我们有无、四簇关键词、缺的事实。给老板看,不用批。 */
+export type MarketCardView = {
+  query: string;
+  pages: MarketPage[];
+  priceBand: string;
+  priorities: MarketPriority[];
+  has: string[];
+  missing: string[];
+  gaps: string[];
+  keywords: { label: string; items: string[] }[];
+  competitors: string[];
+  note: string;
+};
+
+const CLUSTER_LABEL: [string, string][] = [
+  ["category", "品类词"],
+  ["attribute", "属性词"],
+  ["scene", "场景词"],
+  ["question", "问题句"],
+];
+
+export function marketCardView(evidence: unknown): MarketCardView | null {
+  if (!isRec(evidence)) return null;
+  const pages: MarketPage[] = list(evidence.pages)
+    .filter(isRec)
+    .map((p) => ({
+      domain: text(p.domain),
+      title: text(p.title),
+      price: num(p.price),
+      bullets: num(p.bullets) ?? 0,
+      faq: num(p.faq) ?? 0,
+      images: num(p.image_count),
+      highlight: text(p.highlight),
+      ok: p.ok === true,
+      error: text(p.error),
+    }))
+    .filter((p) => p.domain);
+  const priorities: MarketPriority[] = list(evidence.priorities)
+    .filter(isRec)
+    .map((p) => ({ what: text(p.what), why: text(p.why) }))
+    .filter((p) => p.what);
+  if (pages.length === 0 && priorities.length === 0) return null;
+  const prices = pages.map((p) => p.price).filter((v): v is number => v !== null);
+  const ours = isRec(evidence.ours) ? evidence.ours : {};
+  const kw = isRec(evidence.keywords) ? evidence.keywords : {};
+  const comp = isRec(evidence.competitors) ? evidence.competitors : {};
+  return {
+    query: text(evidence.query),
+    pages,
+    priceBand: prices.length > 0 ? `$${Math.min(...prices).toFixed(0)}–$${Math.max(...prices).toFixed(0)}` : "",
+    priorities,
+    has: strings(ours.has),
+    missing: strings(ours.missing),
+    gaps: strings(evidence.gaps),
+    keywords: CLUSTER_LABEL.map(([key, label]) => ({ label, items: strings(kw[key]) })).filter((c) => c.items.length > 0),
+    competitors: [...strings(comp.brands), ...strings(comp.domains)],
+    note: text(evidence.note),
   };
 }
 

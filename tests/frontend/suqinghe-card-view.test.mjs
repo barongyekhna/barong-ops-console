@@ -12,12 +12,14 @@ import { isAllowedBackendProxyPath } from "../../frontend/src/app/api/backend/[.
 import {
   CANDIDATE_CARD_KIND,
   COPY_CARD_KIND,
+  MARKET_CARD_KIND,
   PRICE_CARD_KIND,
   REVIEW_CARD_KIND,
   candidateCardView,
   candidateImageUrl,
   copyCardView,
   kMediaThumbnailUrl,
+  marketCardView,
   pct,
   priceCardView,
   reviewCardView,
@@ -157,4 +159,55 @@ test("文案卡的正文由 OfficeParts 按 kind 画;K 的改稿接口进了代�
   assert.equal(isAllowedBackendProxyPath("GET", ["k", "products", uuid, "marketing-copy"]), false);
   assert.equal(isAllowedBackendProxyPath("PUT", ["k", "products", "not-a-uuid", "marketing-copy"]), false);
   assert.equal(isAllowedBackendProxyPath("PUT", ["k", "products", uuid, "marketing-copy", "x"]), false);
+});
+
+test("选品卡带评分:五个维度各有分、满分、依据,没拿到的标出来,亚马逊和 Keepa 的数据写成人话;老卡没评分照样画", () => {
+  const scored = load("card-candidate-scored.json");
+  assert.equal(scored.kind, CANDIDATE_CARD_KIND);
+  const view = candidateCardView(scored.evidence);
+  assert.ok(view && view.score);
+  assert.deepEqual(
+    view.score.dims.map((d) => d.label),
+    ["账算得过", "有人买", "竞争", "和工厂的关系", "合规物流"],
+  );
+  assert.equal(view.score.max, 100);
+  assert.equal(
+    view.score.total,
+    view.score.dims.reduce((sum, d) => sum + d.pts, 0),
+  );
+  assert.ok(view.score.dims.every((d) => d.max > 0 && d.why && d.source));
+  assert.equal(view.score.weightClass, "轻小件");
+  assert.match(view.score.amazon, /前三名最高评论 1800 条/);
+  assert.match(view.score.keepa, /月销 900 \/ 400 件/);
+  assert.match(scored.why, /按估计重量/);
+  // 10-27 之前发的选品卡没有 score:视图里是 null,不炸
+  const old = load("card-candidate.json");
+  assert.equal(candidateCardView(old.evidence).score, null);
+});
+
+test("竞品拆解卡:读了哪几家(没读到的标原因)、买家最在乎什么、我们有无、缺的事实、四簇关键词、竞品、价格带;卡上写明不用批", () => {
+  const market = load("card-market.json");
+  assert.equal(market.kind, MARKET_CARD_KIND);
+  assert.equal(MARKET_CARD_KIND, "market");
+  assert.match(market.conclusion, /不用批/);
+  const view = marketCardView(market.evidence);
+  assert.ok(view);
+  assert.equal(view.query, "hiking map compass");
+  assert.equal(view.pages.length, 3);
+  assert.equal(view.pages[2].ok, false);
+  assert.match(view.pages[2].error, /被拦/);
+  assert.equal(view.priceBand, "$12–$15");
+  assert.equal(view.priorities.length, 3);
+  assert.match(view.priorities[0].what, /充液/);
+  assert.deepEqual(view.missing, ["是否充液", "磁偏角调节"]);
+  assert.equal(view.gaps.length, 2);
+  assert.deepEqual(
+    view.keywords.map((c) => c.label),
+    ["品类词", "属性词", "场景词", "问题句"],
+  );
+  assert.deepEqual(view.competitors, ["Suunto", "Silva", "shop-a.com", "shop-b.com"]);
+  assert.equal(marketCardView({ pages: [], priorities: [] }), null);
+  const parts = read("frontend/src/components/suqinghe/OfficeParts.tsx");
+  assert.match(parts, /card\.kind === MARKET_CARD_KIND \? <MarketCardBody/);
+  assert.match(parts, /view\.score \? \(/);
 });

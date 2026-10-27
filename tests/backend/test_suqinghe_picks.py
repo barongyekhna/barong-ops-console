@@ -80,16 +80,60 @@ def _f(cid: str) -> FCategoryCandidate:
         return row
 
 
-def _judge_picking(ids: list[str], *, query: str = "camping cookware set"):
+def _judge_picking(ids: list[str], *, query: str = "camping cookware set", flags: list[str] | None = None, weight_class: str = "light"):
     def judge(db, ask, extra):
         assert "候选:" in extra and "店里已有的品" in extra and "老板对之前选品卡的决定" in extra
-        return {"picks": [{"id": cid, "reason": "起订 1、月销 300,轻小件。", "risks": ["铝材质要核实是否阳极氧化"], "us_query": query} for cid in ids]}
+        assert "工厂能力" in ask and "weight_class" in ask and "factory_fit" in ask
+        return {
+            "picks": [
+                {
+                    "id": cid,
+                    "reason": "起订 1、月销 300,轻小件。",
+                    "risks": ["铝材质要核实是否阳极氧化"],
+                    "us_query": query,
+                    "weight_class": weight_class,
+                    "flags": list(flags or []),
+                    "factory_fit": {"pts": 12, "why": "锅具能自己配套、换包装"},
+                }
+                for cid in ids
+            ]
+        }
 
     return judge
 
 
 def _shopping_ok(db, query):
-    return {"query": query, "n": 12, "min": 9.99, "p25": 15.0, "median": 22.5, "p75": 29.0, "max": 60.0, "samples": [{"title": "x", "price": 22.5}]}
+    return {"query": query, "n": 12, "min": 12.99, "p25": 25.0, "median": 32.5, "p75": 40.0, "max": 80.0, "samples": [{"title": "x", "price": 32.5}]}
+
+
+def _amazon_ok(db, query):
+    return {
+        "keyword": query,
+        "valid": True,
+        "review_wall_max": 250,
+        "single_brand_share": 0.3,
+        "dominant_brand": None,
+        "new_entrant_ratio_est": 0.35,
+        "seller_count": 20,
+        "top": [{"asin": "B0TEST0001", "title": "Camping Cookware Set", "brand": "generic", "rating": 4.5, "ratings_total": 250}, {"asin": "B0TEST0002", "title": "Cook Set", "brand": "x", "rating": 4.3, "ratings_total": 120}],
+        "cache_hit": False,
+    }
+
+
+def _amazon_missing(db, query):
+    return {"keyword": query, "error": "Rainforest key 未绑定"}
+
+
+def _keepa_ok(db, asins):
+    return [{"asin": a, "monthly_sales": 450 - i * 150, "bsr": 1200, "reviews": 250, "rating": 4.5, "price": 29.99} for i, a in enumerate(asins)], None
+
+
+def _keepa_missing(db, asins):
+    return [], "Keepa 钥匙没绑"
+
+
+def _run(db, *, now, judge, shopping=_shopping_ok, amazon=_amazon_ok, keepa=_keepa_ok):
+    return picks.run_picks(db, now=now, judge=judge, shopping=shopping, amazon=amazon, keepa=keepa)
 
 
 # ---------------------------------------------------------------- 池子和解析
@@ -143,11 +187,11 @@ def test_card_text_reads_like_a_person_and_holds_the_weight_question() -> None:
     pick = picks.Pick(f_candidate_id=str(row.id), reason="起订 1,轻。", risks=("带磁",), us_query="camping cookware set")
     text = picks.build_card_text(row, pick, _shopping_ok(None, "camping cookware set"), picks.pricing.assumptions())
     assert text["title"].startswith("选品:")
-    assert "¥25.0" in text["conclusion"] and "$3.47" in text["conclusion"] and "中位 $22.5" in text["conclusion"]
+    assert "¥25.0" in text["conclusion"] and "$3.47" in text["conclusion"] and "中位 $32.5" in text["conclusion"]
     assert "重量" in text["why"] and "风险:带磁" in text["why"]
     assert text["evidence"]["offer_id"] == OFFER and text["evidence"]["recheck"] == {"type": CANDIDATE_CARD_KIND, "f_candidate_id": str(row.id)}
     assert "samples" not in text["evidence"]["competitors"]
-    assert text["confidence"] == "medium"  # 中位 22.5 / 进价 3.47 ≈ 6.5 倍,但有一条风险 → 中
+    assert text["confidence"] == "medium"  # 中位 32.5 / 进价 3.47 ≈ 9 倍,但有一条风险 → 中(没带评分卡时的老算法)
     no_risk = picks.Pick(f_candidate_id=str(row.id), reason="", risks=(), us_query="")
     assert picks.build_card_text(row, no_risk, {"query": "", "n": 0}, picks.pricing.assumptions())["confidence"] == "medium"
     assert picks.confidence_for(goods_usd=3.47, median=22.5, risks=0) == "high"
@@ -162,17 +206,24 @@ def test_run_picks_makes_cards_once_per_candidate_within_daily_quota(f_pool, mon
     now = datetime.now(UTC)  # 卡的 created_at 是库里的 now(),「今天」要按真实时间算
     cid, other = _add([_candidate(), _candidate(source_url="https://detail.1688.com/offer/777000333.html", score=70)])
     with without_org_data_isolation(), SessionLocal() as db:
-        first = picks.run_picks(db, now=now, judge=_judge_picking([cid, other]), shopping=_shopping_ok)
-        again = picks.run_picks(db, now=now, judge=_judge_picking([other]), shopping=_shopping_ok)
+        first = _run(db, now=now, judge=_judge_picking([cid, other]))
+        again = _run(db, now=now, judge=_judge_picking([other]))
         card = db.scalar(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND))
         assert first["cards"] == [card.ref] and first["skipped"] is None
         assert again == {"cards": [], "skipped": "today_done"}  # 一天的量到了
         assert card.status == "pending" and card.dedupe_key == f"candidate:{cid}"
-        assert card.evidence["f_candidate_id"] == cid and card.evidence["competitors"]["median"] == 22.5
+        assert card.evidence["f_candidate_id"] == cid and card.evidence["competitors"]["median"] == 32.5
         assert card.evidence["us_query"] == "camping cookware set"
+        # 评分卡在证据里:五个维度、合计、出处;亚马逊和 Keepa 的数据也带着
+        score = card.evidence["scorecard"]
+        assert [d["key"] for d in score["dims"]] == ["economics", "demand", "competition", "factory", "logistics"]
+        assert score["total"] == sum(d["pts"] for d in score["dims"]) >= 60 and score["vetoed"] == [] and score["missing"] == []
+        assert card.evidence["keepa"][0]["monthly_sales"] == 450 and card.evidence["amazon"]["review_wall_max"] == 250
+        assert "评分" in card.conclusion and "账算得过" in card.why and "有人买" in card.why and "按估计重量" in card.why
+        assert card.confidence == "high"
         assert card.data_fingerprint  # 老板在 F 页面上先处理了就作废
         # 第二天:同一个候选不再发(dedupe),另一个能发
-        tomorrow = picks.run_picks(db, now=now + timedelta(days=1), judge=_judge_picking([cid, other]), shopping=_shopping_ok)
+        tomorrow = _run(db, now=now + timedelta(days=1), judge=_judge_picking([cid, other]))
         refs = [c.ref for c in db.scalars(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND).order_by(SqhCard.id))]
         assert tomorrow["cards"] == refs[1:] and len(refs) == 2
 
@@ -182,20 +233,53 @@ def test_run_picks_stops_when_boss_has_too_many_pending(f_pool, monkeypatch) -> 
     cid, other = _add([_candidate(), _candidate(source_url="https://detail.1688.com/offer/777000444.html")])
     now = datetime.now(UTC)
     with without_org_data_isolation(), SessionLocal() as db:
-        assert picks.run_picks(db, now=now, judge=_judge_picking([cid]), shopping=_shopping_ok)["cards"]
-        assert picks.run_picks(db, now=now + timedelta(days=1), judge=_judge_picking([other]), shopping=_shopping_ok) == {"cards": [], "skipped": "pending_full"}
+        assert _run(db, now=now, judge=_judge_picking([cid]))["cards"]
+        assert _run(db, now=now + timedelta(days=1), judge=_judge_picking([other])) == {"cards": [], "skipped": "pending_full"}
 
 
 def test_run_picks_nothing_worth_and_judge_failure_are_logged_not_raised(f_pool) -> None:
     _add([_candidate()])
     with without_org_data_isolation(), SessionLocal() as db:
-        assert picks.run_picks(db, now=T0, judge=lambda db, ask, extra: {"picks": []}, shopping=_shopping_ok) == {"cards": [], "skipped": "nothing_worth"}
+        out = _run(db, now=T0, judge=lambda db, ask, extra: {"picks": []})
+        assert (out["cards"], out["skipped"]) == ([], "nothing_worth")
 
         def boom(db, ask, extra):
             raise RuntimeError("model down")
 
-        assert picks.run_picks(db, now=T0, judge=boom, shopping=_shopping_ok) == {"cards": [], "skipped": "judge_failed"}
+        assert _run(db, now=T0, judge=boom) == {"cards": [], "skipped": "judge_failed"}
         assert db.scalar(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND)) is None
+
+
+def test_red_lines_veto_and_low_scores_do_not_reach_the_boss(f_pool, monkeypatch) -> None:
+    """评分卡:她初筛标了液体 → 一票否决;分没过线 → 不发;数据没拿到 → 标出来、把握降低,但分够还是发。"""
+    from backend.app.modules.agent_series.suqinghe.models import SqhActivity
+
+    liquid, weak, blind = _add(
+        [
+            _candidate(),
+            _candidate(source_url="https://detail.1688.com/offer/777000555.html"),
+            _candidate(source_url="https://detail.1688.com/offer/777000666.html"),
+        ]
+    )
+    with without_org_data_isolation(), SessionLocal() as db:
+        out = _run(db, now=T0, judge=_judge_picking([liquid], flags=["liquid", "battery"]))
+        assert out["cards"] == [] and out["skipped"] == "nothing_passed" and out["scored"][0]["vetoed"]
+        assert db.scalar(select(SqhActivity).where(SqhActivity.kind == "pick", SqhActivity.text.like("否决:%液体%"))) is not None
+
+        monkeypatch.setenv("SQH_PICK_MIN_SCORE", "95")
+        out = _run(db, now=T0, judge=_judge_picking([weak]))
+        assert out["cards"] == [] and out["skipped"] == "nothing_passed" and 60 <= out["scored"][0]["total"] < 95
+        assert db.scalar(select(SqhActivity).where(SqhActivity.kind == "pick", SqhActivity.text.like("没过线:%"))) is not None
+        monkeypatch.delenv("SQH_PICK_MIN_SCORE")
+
+        out = _run(db, now=T0, judge=_judge_picking([blind]), amazon=_amazon_missing, keepa=_keepa_missing)
+        assert len(out["cards"]) == 1
+        card = db.scalar(select(SqhCard).where(SqhCard.dedupe_key == f"candidate:{blind}"))
+        score = card.evidence["scorecard"]
+        assert sorted(score["missing"]) == ["有人买", "竞争"] and card.confidence == "low"
+        assert "没拿到" in card.conclusion and "Rainforest key 未绑定" in card.why
+        # 评分卡里的「账」是按估计重量算的,卡上写明了
+        assert "按轻小件 0.3 公斤估运费" in card.why
 
 
 def test_should_pick_only_after_todays_morning_plan() -> None:
@@ -211,7 +295,7 @@ def test_should_pick_only_after_todays_morning_plan() -> None:
 def _pick_one(f_pool, **over: Any) -> tuple[str, str]:
     (cid,) = _add([_candidate(**over)])
     with without_org_data_isolation(), SessionLocal() as db:
-        out = picks.run_picks(db, now=T0, judge=_judge_picking([cid]), shopping=_shopping_ok)
+        out = _run(db, now=T0, judge=_judge_picking([cid]))
     return cid, out["cards"][0]
 
 

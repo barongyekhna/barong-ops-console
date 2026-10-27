@@ -499,39 +499,11 @@ def _http_get_text(url: str, *, timeout: float = 20.0) -> str:
 
 
 def _render_page(url: str, timeout_s: float) -> tuple[str, str, str, str]:
-    """在独立线程里跑同步 Playwright(调用方可能带着事件循环)。返回 (最终地址, 标题, html, 文本)。"""
-    from playwright.sync_api import sync_playwright
+    """在独立线程里跑同步 Playwright(调用方可能带着事件循环)。返回 (最终地址, 标题, html, 文本)。
+    10-27 起通用渲染搬到 common/webpage.render_raw(竞品页也用它);1688 这边保持中文 locale、滚 10 次、多等一会。"""
+    from ..common import webpage
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        try:
-            page = browser.new_page(locale="zh-CN", viewport={"width": 1366, "height": 900}, user_agent=DESKTOP_UA)
-            page.goto(url, wait_until="domcontentloaded", timeout=int(timeout_s * 1000))
-            page.wait_for_timeout(2500)
-            for _ in range(10):
-                try:
-                    page.mouse.wheel(0, 1200)
-                    page.wait_for_timeout(500)
-                except Exception:  # noqa: BLE001 —— 滚动时页面可能在重渲染,滚不了就停
-                    break
-            html, text = "", ""
-            for _ in range(3):
-                try:
-                    page.wait_for_load_state("domcontentloaded", timeout=5000)
-                    html = page.content()
-                    text = page.inner_text("body")
-                    break
-                except Exception:  # noqa: BLE001 —— "page is navigating" 时等一下再取
-                    page.wait_for_timeout(1000)
-            if html and not text:
-                # 10-26 实测:HTML 拿到了、inner_text 三次都失败 → 页面文字是空的,供应商年限/所在地跟着丢。
-                try:
-                    text = page.evaluate("() => (document.body ? document.body.innerText : '')") or ""
-                except Exception:  # noqa: BLE001 —— 文字只是兜底来源,取不到不挡主数据
-                    text = ""
-            return page.url, page.title(), html, text
-        finally:
-            browser.close()
+    return webpage.render_raw(url, timeout_s=timeout_s, locale="zh-CN", scroll=10, wait_ms=2500)
 
 
 def fetch_offer(url: str, *, timeout_s: float = 25) -> Capture:

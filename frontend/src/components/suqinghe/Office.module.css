@@ -765,6 +765,35 @@
   color: var(--color-warning);
 }
 
+/* 选品评分卡 / 竞品拆解卡(10-27):小表格,一行一个维度或一家店;没拿到数据的行压暗 */
+.scoreTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.scoreTable th,
+.scoreTable td {
+  padding: 3px 6px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-panel-base);
+}
+
+.scoreTable th {
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.scoreTable td:nth-child(2) {
+  white-space: nowrap;
+  color: var(--color-text-strong);
+}
+
+.scoreMissing td {
+  color: var(--color-muted);
+}
+
 /* 文案卡(10-27):英文全文一块,和她的中文说明分开;字号小一号,段落标题用强调色 */
 .copyPage {
   display: grid;

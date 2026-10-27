@@ -62,6 +62,52 @@ def image_brief_paused() -> bool:
 
 # 第⑥步:她自己找货。先从 F 系列(找货页)的候选池里挑,一天最多发几张「选品」卡;老板没处理的攒到上限就不再发。
 CANDIDATE_CARD_KIND = "candidate"
+# 竞品拆解卡(10-27):建档后跑关键词前,她读同类商品页拆出来的市场情报;给老板看,不用批,驳了撤掉重跑关键词。
+MARKET_CARD_KIND = "market"
+# 工厂能力(选品评分「和工厂的关系」那一维她照这个判;老板改一句话就能换)。
+FACTORY_BRIEF = (
+    "我们在吉林有自己的工厂:无固定品类,擅长组装(把外购零部件装成成品)、换外观(颜色/贴牌/包装)、做套装(几件配成一套);"
+    "注塑、冲压、电子件靠外协。能自己组装或配套的品比纯转卖值钱——以后能改款、能控成本。"
+)
+
+
+def pick_min_score() -> int:
+    """选品评分卡过线分(满分 100),低于它的不发卡。"""
+    try:
+        return max(0, min(100, int(os.getenv("SQH_PICK_MIN_SCORE", "60"))))
+    except ValueError:
+        return 60
+
+
+def weight_class_kg() -> dict[str, float]:
+    """F 池里没有真重量:按她判的轻/中/重估个计费重算运费(卡上写明是估的)。"""
+    out = {"light": 0.3, "medium": 1.0, "heavy": 2.5}
+    for key in out:
+        raw = os.getenv(f"SQH_WEIGHT_{key.upper()}_KG", "").strip()
+        if raw:
+            try:
+                out[key] = max(0.05, float(raw))
+            except ValueError:
+                pass
+    return out
+
+
+def market_enabled() -> bool:
+    """竞品拆解这一步的总开关(默认开)。关了流水线直接跳过这一步。"""
+    return os.getenv("SQH_MARKET_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+
+def market_pages() -> int:
+    """一次拆解最多读几家同类商品页。"""
+    try:
+        return max(3, min(12, int(os.getenv("SQH_MARKET_PAGES", "8"))))
+    except ValueError:
+        return 8
+
+
+def page_gap_seconds() -> float:
+    """两页之间隔多久(别像爬虫一样连打)。"""
+    return max(0.0, _env_float("SQH_PAGE_GAP_SECONDS", 3.0))
 
 
 def picks_per_day() -> int:

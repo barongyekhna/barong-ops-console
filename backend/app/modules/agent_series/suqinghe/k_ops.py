@@ -88,24 +88,25 @@ class KHands:
 
     # ---- 关键词:K 工作流(富化 → SERP → 两道筛 → 停在风险词)----
 
-    def start_keywords(self, product_id: UUID, *, main_keyword: str, seed_keywords: list[str]) -> Any:
-        """同步跑完才返回(富化最慢能到十几分钟);失败不抛,执行记录里是 blocked + 错误码。"""
+    def start_keywords(self, product_id: UUID, *, main_keyword: str, seed_keywords: list[str], competitors: list[str] | None = None) -> Any:
+        """同步跑完才返回(富化最慢能到十几分钟);失败不抛,执行记录里是 blocked + 错误码。
+        competitors(10-27 竞品拆解来的品牌/店名)只进 K 的 SERP 研究和风险词筛,不进任何买家可见内容。"""
         from ...k_series.product_knowledge import router as k
         from ...k_series.product_knowledge.schemas import ProductKnowledgeWorkflowStartRequest
 
         payload = ProductKnowledgeWorkflowStartRequest(
-            target_market="US", main_keyword=main_keyword, serp_query=main_keyword, seed_keywords=seed_keywords
+            target_market="US", main_keyword=main_keyword, serp_query=main_keyword, seed_keywords=seed_keywords[:50], competitors=list(competitors or [])[:50]
         )
         return _call(k.product_knowledge_workflow_start, product_id=product_id, payload=payload, **self._ctx())
 
-    def retry_keywords(self, product_id: UUID, *, step: str, main_keyword: str, seed_keywords: list[str]) -> Any:
+    def retry_keywords(self, product_id: UUID, *, step: str, main_keyword: str, seed_keywords: list[str], competitors: list[str] | None = None) -> Any:
         from ...k_series.product_knowledge import router as k
         from ...k_series.product_knowledge.schemas import ProductKnowledgeWorkflowControlRequest, ProductKnowledgeWorkflowStartRequest
 
         payload = ProductKnowledgeWorkflowControlRequest(
             step=step,
             workflow_payload=ProductKnowledgeWorkflowStartRequest(
-                target_market="US", main_keyword=main_keyword, serp_query=main_keyword, seed_keywords=seed_keywords
+                target_market="US", main_keyword=main_keyword, serp_query=main_keyword, seed_keywords=seed_keywords[:50], competitors=list(competitors or [])[:50]
             ),
         )
         return _call(k.product_knowledge_workflow_retry, product_id=product_id, payload=payload, **self._ctx())

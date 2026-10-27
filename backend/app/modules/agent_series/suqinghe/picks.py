@@ -29,8 +29,8 @@ from sqlalchemy.orm import Session
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from ...f_series.enrichment.models import FCategoryCandidate
-from . import cards, dossiers, memory, office, pricing
-from .constants import CANDIDATE_CARD_KIND, USAGE_LABEL, picks_max_pending, picks_per_day
+from . import amazon_signals, cards, dossiers, memory, office, pricing, scoring
+from .constants import CANDIDATE_CARD_KIND, FACTORY_BRIEF, USAGE_LABEL, pick_min_score, picks_max_pending, picks_per_day, weight_class_kg
 from .models import SqhCard, SqhDossier
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,9 @@ _HYPE_WORDS = {"best", "top", "cheap", "cheapest", "strongest", "rated", "no.1",
 
 JudgeFn = Callable[[Session, str, str], Any]
 ShoppingFn = Callable[[Session, str], dict[str, Any]]
+AmazonFn = Callable[[Session, str], dict[str, Any]]
+KeepaFn = Callable[[Session, list[str]], tuple[list[dict[str, Any]], str | None]]
+SHORTLIST_MAX = 6  # 初筛最多留几个去取数据打分(每个要查谷歌购物 + 亚马逊 + Keepa,别浪费额度)
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,10 @@ class Pick:
     reason: str
     risks: tuple[str, ...]
     us_query: str
+    weight_class: str = "medium"  # light / medium / heavy(她按常识判;F 池没有真重量)
+    flags: tuple[str, ...] = ()  # scoring.VETO_FLAGS / DEDUCT_FLAGS 里的词
+    factory_pts: int = 5  # 和工厂的关系 0–15
+    factory_why: str = ""
 
 
 # ---------------------------------------------------------------- 候选池
@@ -127,18 +134,24 @@ def candidate_line(row: FCategoryCandidate) -> str:
 
 
 _PICK_ASK = (
-    "你是独立站(面向美国买家)的运营总管,在给老板挑今天值得上架的新品候选。下面是找货池里按分数排好的 1688 候选,"
-    "只能从里面挑,最多挑 {limit} 个;宁缺毋滥,没有合适的就给空数组。\n"
+    "你是独立站(面向美国买家)的运营总管,在给老板初筛今天值得上架的新品候选。下面是找货池里按分数排好的 1688 候选,"
+    "只能从里面挑,最多留 {limit} 个(留下的我会再去查美国同类价、亚马逊销量和竞争,按评分卡打分,过线的才发给老板);"
+    "宁缺毋滥,没有合适的就给空数组。\n"
     "要的:露营户外、和店里已有的类目相近;起订量 1–2;轻小件(常识判断——帐篷、床垫、桌椅、炉具这类大件不要);"
-    "进价换成美元后在美国同类价里放得进 30% 以上毛利(美国同类价你先按常识估,卡上我会再比一遍)。\n"
+    "进价换成美元后在美国同类价里放得进 30% 以上毛利(美国同类价你先按常识估)。\n"
     "不要的:标题带别人的品牌或型号(Coleman、Stanley、Thermacell、YETI、Ozark Trail 这类);刀具、防身、武器;"
-    "需要 EPA/FDA 的(驱蚊药片、杀虫剂、入口的、医疗的);液体、气罐、压缩气体;定制、加印、定做;店里已经有的同类;"
+    "需要 EPA/FDA 的(驱蚊药片、杀虫剂、入口的、医疗的);液体、气罐、压缩气体;定制、加印、定做;儿童用品;店里已经有的同类;"
     "和老板之前驳过的那种类似的。\n"
-    "每个挑中的给:reason(一句中文,为什么值得,说人话、别夸);risks(一条一句中文:带电/锂电池、带磁、易碎、"
+    "工厂能力(判「和工厂的关系」用):" + FACTORY_BRIEF + "\n"
+    "每个留下的给:reason(一句中文,为什么值得,说人话、别夸);risks(一条一句中文:带电/锂电池、带磁、易碎、"
     "季节性、尺寸可能偏大、材质或认证要核实之类,没有就空数组);us_query(美国买家在 Google 搜这类东西的英文品类词,"
-    "2–4 个小写单词,不带品牌,用来查同类价)。\n"
-    'Reply JSON only: {{"picks": [{{"id": "<候选 id>", "reason": "...", "risks": ["..."], "us_query": "..."}}], '
-    '"note": "一句中文:这批候选整体怎么样(可空)"}}'
+    "2–4 个小写单词,不带品牌,用来查同类价和亚马逊);weight_class(light / medium / heavy,按常识估这件东西连包装的重量:"
+    "light 不到半公斤,medium 半公斤到两公斤,heavy 两公斤以上);flags(从这些词里选,没有就空数组:"
+    "battery 带电/锂电池、magnet 带磁、pressure 带压、fragile 易碎、seasonal 季节性、liquid 液体、gas 气罐、custom 定制加印、"
+    "epa_fda 需要 EPA/FDA、knife 刀具武器、child 儿童用品、brand 带别人品牌、oversize 大件);"
+    "factory_fit(pts 0–15:能自己组装/换外观/做套装 12–15,改改包装或配件 8–11,只能原样转卖 3–5;why 一句中文)。\n"
+    'Reply JSON only: {{"picks": [{{"id": "<候选 id>", "reason": "...", "risks": ["..."], "us_query": "...", "weight_class": "light", '
+    '"flags": [], "factory_fit": {{"pts": 10, "why": "..."}}}}], "note": "一句中文:这批候选整体怎么样(可空)"}}'
 )
 
 
@@ -195,7 +208,28 @@ def parse_picks(result: Any, *, pool_ids: set[str], limit: int, fallback_query: 
         reason = str(item.get("reason") or "").strip()[:200]
         risks = tuple(str(r).strip()[:120] for r in (item.get("risks") or []) if isinstance(r, str) and str(r).strip())[:6]
         query = _clean_query(item.get("us_query")) or _clean_query((fallback_query or {}).get(cid))
-        out.append(Pick(f_candidate_id=cid, reason=reason or "值得试一下。", risks=risks, us_query=query))
+        weight_class = str(item.get("weight_class") or "").strip().lower()
+        if weight_class not in scoring.WEIGHT_CLASSES:
+            weight_class = "medium"
+        known = set(scoring.VETO_FLAGS) | set(scoring.DEDUCT_FLAGS)
+        flags = tuple(dict.fromkeys(str(f).strip().lower() for f in (item.get("flags") or []) if isinstance(f, str) and str(f).strip().lower() in known))
+        fit = item.get("factory_fit") if isinstance(item.get("factory_fit"), dict) else {}
+        try:
+            factory_pts = max(0, min(15, int(round(float(fit.get("pts"))))))
+        except (TypeError, ValueError):
+            factory_pts = 5
+        out.append(
+            Pick(
+                f_candidate_id=cid,
+                reason=reason or "值得试一下。",
+                risks=risks,
+                us_query=query,
+                weight_class=weight_class,
+                flags=flags,
+                factory_pts=factory_pts,
+                factory_why=str(fit.get("why") or "").strip()[:200],
+            )
+        )
         if len(out) >= limit:
             break
     return out
@@ -229,8 +263,37 @@ def confidence_for(*, goods_usd: float | None, median: float | None, risks: int)
     return "medium"
 
 
-def build_card_text(row: FCategoryCandidate, pick: Pick, competitors: dict[str, Any], a: pricing.Assumptions) -> dict[str, Any]:
-    """卡上的话和证据(纯函数,测试直接验)。"""
+def score_candidate(
+    row: FCategoryCandidate,
+    pick: Pick,
+    *,
+    shopping: dict[str, Any],
+    amazon: dict[str, Any] | None,
+    keepa: list[dict[str, Any]] | None,
+    keepa_error: str | None,
+    a: pricing.Assumptions,
+) -> dict[str, Any]:
+    """评分卡(scoring.scorecard 的薄封装:从 F 候选和初筛结果里取字段)。"""
+    return scoring.scorecard(
+        title=row.title or "",
+        category_path=row.category_path,
+        profile_en=row.profile_product_en,
+        price_cny=float(row.price_cny) if row.price_cny is not None else None,
+        weight_class=pick.weight_class,
+        flags=pick.flags,
+        factory_pts=pick.factory_pts,
+        factory_why=pick.factory_why,
+        shopping=shopping,
+        amazon=amazon,
+        keepa=keepa,
+        keepa_error=keepa_error,
+        a=a,
+        kg_by_class=weight_class_kg(),
+    )
+
+
+def build_card_text(row: FCategoryCandidate, pick: Pick, competitors: dict[str, Any], a: pricing.Assumptions, card: dict[str, Any] | None = None, amazon: dict[str, Any] | None = None, keepa: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """卡上的话和证据(纯函数,测试直接验)。card = scoring.scorecard 的结果(没有就只按旧样子写)。"""
     price = float(row.price_cny) if row.price_cny is not None else None
     goods = round(price / a.usd_cny, 2) if price is not None else None
     sales = (row.score_json or {}).get("monthly_sales") if isinstance(row.score_json, dict) else None
@@ -240,19 +303,27 @@ def build_card_text(row: FCategoryCandidate, pick: Pick, competitors: dict[str, 
     else:
         comp_text = "美国同类价没拿到" + (f"({competitors.get('error')})" if competitors.get("error") else "(没有能查的英文词)")
     facts = f"1688 进价 ¥{price if price is not None else '?'}" + (f"(≈${goods:.2f})" if goods is not None else "") + f",起订 {row.moq or '?'},月销 {sales if sales is not None else '?'}"
-    conclusion = f"{facts};{comp_text}。批了我就开详情页建档(先建草稿、不上架),建档卡再给你过目。"
+    score_text = f"评分 {card['total']}/{card['max']}" + (f"(没拿到:{'、'.join(card['missing'])})" if card.get("missing") else "") + ";" if card else ""
+    conclusion = f"{score_text}{facts};{comp_text}。批了我就开详情页建档(先建草稿、不上架),建档卡再给你过目。"
     why = pick.reason
+    if card:
+        why += "\n" + "\n".join(scoring.lines(card))
     if pick.risks:
         why += "\n风险:" + "；".join(pick.risks)
-    why += "\n重量和尺寸 1688 列表里没有,批了我开页面核实再算运费。"
+    why += "\n重量和尺寸 1688 列表里没有,运费按估计重量算的;批了我开页面核实再算真账。"
     offer_id = offer_id_of(row.source_url) or ""
     return {
         "title": f"选品:{row.title[:24]}",
         "conclusion": conclusion,
         "why": why,
         "if_not": "不批就算了,这个品我不再提。",
-        "confidence": confidence_for(goods_usd=goods, median=competitors.get("median") if n > 0 else None, risks=len(pick.risks)),
+        "confidence": scoring.confidence(card) if card else confidence_for(goods_usd=goods, median=competitors.get("median") if n > 0 else None, risks=len(pick.risks)),
         "evidence": {
+            "scorecard": card,  # 评分卡(六维);下面的 score 是 F 池自己的分
+            "amazon": amazon,
+            "keepa": keepa or [],
+            "weight_class": pick.weight_class,
+            "flags": list(pick.flags),
             "f_candidate_id": str(row.id),
             "offer_id": offer_id,
             "source_url": row.source_url,
@@ -295,6 +366,26 @@ def _default_shopping(db: Session, query: str) -> dict[str, Any]:
     return pricing.fetch_shopping(db, query=query, org_id=org_id)
 
 
+def _default_amazon(db: Session, query: str) -> dict[str, Any]:
+    from .executor import ExecutorError, _scope
+
+    try:
+        org_id = _scope(db).workspace_key
+    except ExecutorError as exc:
+        return {"keyword": query, "error": str(exc)}
+    return amazon_signals.competition(db, org_id=org_id, keyword=query)
+
+
+def _default_keepa(db: Session, asins: list[str]) -> tuple[list[dict[str, Any]], str | None]:
+    from .executor import ExecutorError, _scope
+
+    try:
+        org_id = _scope(db).workspace_key
+    except ExecutorError as exc:
+        return [], str(exc)
+    return amazon_signals.keepa_top(db, org_id=org_id, asins=asins)
+
+
 def _set_activity(db: Session, activity: str, task: str) -> None:
     state = office.get_state(db)
     state.activity = activity
@@ -318,8 +409,16 @@ def pending_count(db: Session) -> int:
     return int(db.scalar(select(func.count()).select_from(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND, SqhCard.status == "pending"), execution_options=_X) or 0)
 
 
-def run_picks(db: Session, *, now: datetime | None = None, judge: JudgeFn | None = None, shopping: ShoppingFn | None = None) -> dict[str, Any]:
-    """挑一轮。返回 {"cards": [refs], "skipped": 原因 | None}。"""
+def run_picks(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    judge: JudgeFn | None = None,
+    shopping: ShoppingFn | None = None,
+    amazon: AmazonFn | None = None,
+    keepa: KeepaFn | None = None,
+) -> dict[str, Any]:
+    """挑一轮:初筛(她)→ 取数据(谷歌购物/亚马逊/Keepa)→ 评分卡 → 红线否决、过线的发卡。返回 {"cards": [refs], "skipped": 原因 | None, "scored": [...]}。"""
     now = now or datetime.now(UTC)
     quota = picks_per_day() - cards_today(db, now)
     if quota <= 0:
@@ -334,11 +433,14 @@ def run_picks(db: Session, *, now: datetime | None = None, judge: JudgeFn | None
     by_id = {str(row.id): row for row in rows}
     judge = judge or _default_judge
     shopping = shopping or _default_shopping
+    amazon = amazon or _default_amazon
+    keepa = keepa or _default_keepa
     _set_activity(db, "thinking", f"在找货池里挑今天的新品({len(rows)} 个候选)")
     db.commit()
     extra = "候选:\n" + "\n".join(candidate_line(row) for row in rows) + "\n\n" + _store_brief(db) + "\n\n" + _boss_history(db)
+    shortlist = min(SHORTLIST_MAX, max(quota, quota * 2))
     try:
-        result = judge(db, _PICK_ASK.format(limit=quota), extra)
+        result = judge(db, _PICK_ASK.format(limit=shortlist), extra)
     except Exception as exc:  # noqa: BLE001 —— 挑不成不拖垮 worker,写流水,下一次再挑
         logger.exception("picks judge failed")
         memory.log_activity(db, f"挑新品这一步没做成:{exc.__class__.__name__}: {str(exc)[:120]}", kind="error")
@@ -346,18 +448,37 @@ def run_picks(db: Session, *, now: datetime | None = None, judge: JudgeFn | None
         db.commit()
         return {"cards": [], "skipped": "judge_failed"}
     fallback = {cid: (row.profile_product_en or "") for cid, row in by_id.items()}
-    picks = parse_picks(result, pool_ids=set(by_id), limit=quota, fallback_query=fallback)
+    picks = parse_picks(result, pool_ids=set(by_id), limit=shortlist, fallback_query=fallback)
     if not picks:
         memory.log_activity(db, f"看了 {len(rows)} 个候选,今天没有值得发给老板的。", kind="pick")
         _set_activity(db, "working", "今天的候选都不够格,没发卡")
         db.commit()
-        return {"cards": [], "skipped": "nothing_worth"}
+        return {"cards": [], "skipped": "nothing_worth", "scored": []}
     a = pricing.assumptions()
+    min_score = pick_min_score()
     refs: list[str] = []
+    scored: list[dict[str, Any]] = []
     for pick in picks:
+        if len(refs) >= quota:
+            break
         row = by_id[pick.f_candidate_id]
+        _set_activity(db, "thinking", f"给候选打分:{row.title[:30]}")
+        db.commit()
         competitors = shopping(db, pick.us_query) if pick.us_query else {"query": "", "n": 0}
-        text = build_card_text(row, pick, competitors, a)
+        amz = amazon(db, pick.us_query) if pick.us_query else {"keyword": "", "error": "没有能查的英文词"}
+        asins = [t.get("asin") for t in (amz.get("top") or []) if isinstance(t, dict) and t.get("asin")] if isinstance(amz, dict) else []
+        keepa_rows, keepa_error = keepa(db, asins) if asins else ([], "亚马逊首页没拿到 ASIN")
+        card_score = score_candidate(row, pick, shopping=competitors, amazon=amz, keepa=keepa_rows, keepa_error=keepa_error, a=a)
+        scored.append({"f_candidate_id": pick.f_candidate_id, "total": card_score["total"], "vetoed": card_score["vetoed"]})
+        if card_score["vetoed"]:
+            memory.log_activity(db, f"否决:{row.title[:30]}——{'；'.join(card_score['vetoed'])[:150]}", kind="pick")
+            db.commit()
+            continue
+        if card_score["total"] < min_score:
+            memory.log_activity(db, f"没过线:{row.title[:30]} 评分 {card_score['total']}/{card_score['max']}(线 {min_score})" + (f",没拿到:{'、'.join(card_score['missing'])}" if card_score["missing"] else ""), kind="pick")
+            db.commit()
+            continue
+        text = build_card_text(row, pick, competitors, a, card_score, amazon=amz if isinstance(amz, dict) else None, keepa=keepa_rows)
         card, created = cards.create_card(
             db,
             dedupe_key=f"{CANDIDATE_CARD_KIND}:{row.id}",
@@ -372,11 +493,16 @@ def run_picks(db: Session, *, now: datetime | None = None, judge: JudgeFn | None
         )
         if created:
             refs.append(card.ref)
-            memory.log_activity(db, f"挑了一个候选:{row.title[:30]},卡 #{card.ref} 等老板看。", kind="pick")
+            memory.log_activity(db, f"挑了一个候选:{row.title[:30]},评分 {card_score['total']}/{card_score['max']},卡 #{card.ref} 等老板看。", kind="pick")
         db.commit()
+    if not refs:
+        memory.log_activity(db, f"初筛留了 {len(picks)} 个,打分后没有过线的(线 {min_score}),今天没发卡。", kind="pick")
+        _set_activity(db, "working", "今天的候选打分都没过线,没发卡")
+        db.commit()
+        return {"cards": [], "skipped": "nothing_passed", "scored": scored}
     _set_activity(db, "working", f"今天挑了 {len(refs)} 个新品候选,等老板看")
     db.commit()
-    return {"cards": refs, "skipped": None}
+    return {"cards": refs, "skipped": None, "scored": scored}
 
 
 def should_pick(*, now: datetime, last_plan: Any) -> bool:

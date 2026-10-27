@@ -1,0 +1,141 @@
+{
+  "ref": "c0de",
+  "kind": "candidate",
+  "title": "选品:DC361指南针比例尺地图尺多功能测绘罗盘指北针",
+  "conclusion": "评分 45/100;1688 进价 ¥4.4(≈$0.61),起订 1,月销 ?;美国同类(hiking map compass)中位 $10.99,一半在 $7.99–$28.0。批了我就开详情页建档(先建草稿、不上架),建档卡再给你过目。",
+  "why": "徒步用的带比例尺地图指南针,进价才几块钱,小件好发货。\n账算得过 0/30:进价 ¥4.4≈$0.61,按轻小件 0.3 公斤估运费 $6.53,保底价(30% 毛利)$7.99;美国同类 p25 $7.99,保底价是它的 100%\n有人买 20/20:亚马逊前 2 名月销合计约 1300 件(14/14);谷歌购物 35 个卖家在卖(+6)\n竞争 5/20:前三名最高评论 1800 条(3/12);新进入者(评论少的)占 20%(+2)\n和工厂的关系 8/15:能换外壳颜色、配挂绳做套装\n合规物流 12/15:带磁 -3\n合计 45/100\n风险:指针带磁,发货和申报要按带磁品处理\n重量和尺寸 1688 列表里没有,运费按估计重量算的;批了我开页面核实再算真账。",
+  "if_not": "不批就算了,这个品我不再提。",
+  "reversible": true,
+  "confidence": "low",
+  "status": "pending",
+  "evidence": {
+    "scorecard": {
+      "total": 45,
+      "max": 100,
+      "dims": [
+        {
+          "key": "economics",
+          "label": "账算得过",
+          "pts": 0,
+          "max": 30,
+          "why": "进价 ¥4.4≈$0.61,按轻小件 0.3 公斤估运费 $6.53,保底价(30% 毛利)$7.99;美国同类 p25 $7.99,保底价是它的 100%",
+          "source": "进价+估算运费 vs 谷歌购物 p25",
+          "missing": false
+        },
+        {
+          "key": "demand",
+          "label": "有人买",
+          "pts": 20,
+          "max": 20,
+          "why": "亚马逊前 2 名月销合计约 1300 件(14/14);谷歌购物 35 个卖家在卖(+6)",
+          "source": "Keepa 月销 + 谷歌购物",
+          "missing": false
+        },
+        {
+          "key": "competition",
+          "label": "竞争",
+          "pts": 5,
+          "max": 20,
+          "why": "前三名最高评论 1800 条(3/12);新进入者(评论少的)占 20%(+2)",
+          "source": "Rainforest 亚马逊搜索首页",
+          "missing": false
+        },
+        {
+          "key": "factory",
+          "label": "和工厂的关系",
+          "pts": 8,
+          "max": 15,
+          "why": "能换外壳颜色、配挂绳做套装",
+          "source": "她按工厂能力判",
+          "missing": false
+        },
+        {
+          "key": "logistics",
+          "label": "合规物流",
+          "pts": 12,
+          "max": 15,
+          "why": "带磁 -3",
+          "source": "她初筛时标的",
+          "missing": false
+        }
+      ],
+      "missing": [],
+      "vetoed": [],
+      "weight_class": "light",
+      "flags": [
+        "magnet"
+      ]
+    },
+    "amazon": {
+      "keyword": "hiking map compass",
+      "valid": true,
+      "review_wall_max": 1800,
+      "single_brand_share": 0.25,
+      "dominant_brand": null,
+      "new_entrant_ratio_est": 0.2,
+      "seller_count": 20,
+      "top": [
+        {
+          "asin": "B0AAA00001",
+          "title": "Orienteering Compass",
+          "brand": "x",
+          "rating": 4.6,
+          "ratings_total": 1800
+        }
+      ],
+      "cache_hit": false
+    },
+    "keepa": [
+      {
+        "asin": "B0AAA00001",
+        "monthly_sales": 900,
+        "bsr": 2100,
+        "reviews": 1800,
+        "rating": 4.6,
+        "price": 12.99
+      },
+      {
+        "asin": "B0AAA00002",
+        "monthly_sales": 400,
+        "bsr": 5000,
+        "reviews": 320,
+        "rating": 4.4,
+        "price": 9.99
+      }
+    ],
+    "weight_class": "light",
+    "flags": [
+      "magnet"
+    ],
+    "f_candidate_id": "09a9ab2f-5afe-4c7c-93f6-79488d9bdfec",
+    "offer_id": "680951592759",
+    "source_url": "https://detail.1688.com/offer/680951592759.html",
+    "image_url": "https://cbu01.alicdn.com/img/ibank/O1CN011rTSRB1q4UMT4CFVf_!!2914135442-0-cib.jpg",
+    "title_zh": "DC361指南针比例尺地图尺多功能测绘罗盘指北针野营户外便携式",
+    "category_path": "Sporting Goods > Outdoor Recreation > Camping & Hiking > Navigational Compasses",
+    "profile_product_en": "Survival Compass",
+    "price_cny": 4.4,
+    "goods_usd": 0.61,
+    "moq": 1,
+    "monthly_sales": null,
+    "score": 75,
+    "reason": "徒步用的带比例尺地图指南针,进价才几块钱,小件好发货。",
+    "risks": [
+      "指针带磁,发货和申报要按带磁品处理"
+    ],
+    "us_query": "hiking map compass",
+    "competitors": {
+      "query": "hiking map compass",
+      "n": 35,
+      "min": 5.99,
+      "p25": 7.99,
+      "median": 10.99,
+      "p75": 28.0,
+      "max": 58.5
+    },
+    "recheck": {
+      "type": "candidate",
+      "f_candidate_id": "09a9ab2f-5afe-4c7c-93f6-79488d9bdfec"
+    }
+  }
+}

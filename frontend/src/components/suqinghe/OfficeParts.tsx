@@ -6,11 +6,13 @@ import styles from "./Office.module.css";
 import {
   CANDIDATE_CARD_KIND,
   COPY_CARD_KIND,
+  MARKET_CARD_KIND,
   PRICE_CARD_KIND,
   REVIEW_CARD_KIND,
   candidateCardView,
   candidateImageUrl,
   copyCardView,
+  marketCardView,
   pct,
   priceCardView,
   reviewCardView,
@@ -90,6 +92,7 @@ export function CardItem({
       {card.kind === PRICE_CARD_KIND ? <PriceCardBody evidence={card.evidence} /> : null}
       {card.kind === REVIEW_CARD_KIND ? <ReviewCardBody evidence={card.evidence} /> : null}
       {card.kind === COPY_CARD_KIND ? <CopyCardBody evidence={card.evidence} /> : null}
+      {card.kind === MARKET_CARD_KIND ? <MarketCardBody evidence={card.evidence} /> : null}
       {dossierId !== null && onOpenDossier ? (
         <button className={styles.linkButton} onClick={() => onOpenDossier(dossierId)} type="button">
           看档案 →
@@ -186,6 +189,39 @@ function CandidateCardBody({ card }: { card: OfficeCard }) {
           </ul>
         </div>
       </div>
+      {view.score ? (
+        <table className={styles.scoreTable}>
+          <thead>
+            <tr>
+              <th>维度</th>
+              <th>分</th>
+              <th>依据</th>
+            </tr>
+          </thead>
+          <tbody>
+            {view.score.dims.map((dim) => (
+              <tr key={dim.key} className={dim.missing ? styles.scoreMissing : undefined}>
+                <td>{dim.label}</td>
+                <td>
+                  {dim.pts}/{dim.max}
+                </td>
+                <td>{dim.why}</td>
+              </tr>
+            ))}
+            <tr>
+              <td>合计</td>
+              <td>
+                {view.score.total}/{view.score.max}
+              </td>
+              <td>
+                {view.score.weightClass ? `按${view.score.weightClass}估运费;` : ""}
+                {view.score.amazon};{view.score.keepa}
+                {view.score.missing.length > 0 ? `;没拿到:${view.score.missing.join("、")}` : ""}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      ) : null}
       {view.risks.length > 0 ? (
         <ul className={styles.questionList}>
           {view.risks.map((risk) => (
@@ -381,6 +417,65 @@ function CopyCardBody({ evidence }: { evidence: unknown }) {
       {view.flagged.length > 0 ? <p className={styles.muted}>档案里还没定的:{view.flagged.join("、")}</p> : null}
       {view.missingInputs.length > 0 ? <p className={styles.muted}>K 没依据所以没写的:{view.missingInputs.join(";")}</p> : null}
       {view.briefPaused ? <p className={styles.muted}>作图指令按你的安排先不动,文案批了她停在这等。</p> : null}
+    </div>
+  );
+}
+
+/** 竞品拆解卡(10-27):读了哪几家、买家最在乎什么、我们有无、四簇关键词、缺的事实。给老板看,不用批。 */
+function MarketCardBody({ evidence }: { evidence: unknown }) {
+  const view = marketCardView(evidence);
+  if (!view) return null;
+  return (
+    <div className={styles.cardBody}>
+      {view.note ? <p className={styles.preLine}>{view.note}</p> : null}
+      {view.priorities.length > 0 ? (
+        <ol className={styles.bulletList}>
+          {view.priorities.map((p) => (
+            <li key={p.what}>
+              <strong>{p.what}</strong>
+              {p.why ? ` — ${p.why}` : ""}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {view.has.length > 0 ? <p className={styles.muted}>我们有、可以讲:{view.has.join("、")}</p> : null}
+      {view.missing.length > 0 ? <p className={styles.warnLine}>买家在乎但我们档案里没有:{view.missing.join("、")}</p> : null}
+      {view.gaps.length > 0 ? (
+        <ul className={styles.questionList}>
+          {view.gaps.map((gap) => (
+            <li key={gap}>要你或工厂补:{gap}</li>
+          ))}
+        </ul>
+      ) : null}
+      {view.pages.length > 0 ? (
+        <table className={styles.scoreTable}>
+          <thead>
+            <tr>
+              <th>店</th>
+              <th>价</th>
+              <th>卖点/问答/图</th>
+              <th>他们主打</th>
+            </tr>
+          </thead>
+          <tbody>
+            {view.pages.map((p) => (
+              <tr key={p.domain} className={p.ok ? undefined : styles.scoreMissing}>
+                <td>{p.domain}</td>
+                <td>{p.price === null ? "—" : usd(p.price)}</td>
+                <td>{p.ok ? `${p.bullets}/${p.faq}/${p.images ?? "?"}` : p.error || "没读到"}</td>
+                <td lang="en">{p.highlight}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+      {view.keywords.map((cluster) => (
+        <p key={cluster.label} className={styles.muted}>
+          {cluster.label}:<span lang="en">{cluster.items.join(" · ")}</span>
+        </p>
+      ))}
+      {view.competitors.length > 0 ? <p className={styles.muted}>竞品:{view.competitors.join("、")}</p> : null}
+      {view.priceBand ? <p className={styles.muted}>同类价格带 {view.priceBand}(搜「{view.query}」)</p> : null}
     </div>
   );
 }

@@ -1,0 +1,131 @@
+{
+  "ref": "ma11",
+  "kind": "market",
+  "title": "NAV-001 竞品拆解:2 家同类页",
+  "conclusion": "我读了 2 家美国网店的同类商品页,价格 $12–$14,拆出买家最在乎的 3 件事和 7 个关键词,已经用进关键词研究和卖点顺序。这张卡给你看,不用批;驳回我就撤掉这份市场信息、重跑关键词。",
+  "why": "买家最在乎 1:指针稳不稳、转得快不快(充液)——两家都把「充液舱」放第一条\n买家最在乎 2:有没有磁偏角调节——一家主打,评价里常问\n买家最在乎 3:比例尺和地图一起用方不方便——都配了 1:24000 刻度\n我们有、可以讲:带比例尺地图尺、便携\n买家在乎但我们档案里没有:是否充液、磁偏角调节\n要问你或工厂的:指南针是不是充液的(卖家页没写);有没有磁偏角调节\n竞品:Suunto、Silva、shop-a.com、shop-b.com\n同类都在卖「准、稳、快」,我们先把比例尺和便携讲清,充液要问工厂",
+  "if_not": "不驳就照这份情报往下做;驳了只影响关键词种子和卖点顺序,不碰事实。",
+  "reversible": true,
+  "confidence": "medium",
+  "status": "pending",
+  "evidence": {
+    "sku": "NAV-001",
+    "product_name": "Hiking Map Compass",
+    "query": "hiking map compass",
+    "pages": [
+      {
+        "url": "https://shop-a.com/compass",
+        "domain": "shop-a.com",
+        "title": "Map Compass with Scale Ruler",
+        "ok": true,
+        "price": 11.99,
+        "brand": "",
+        "bullets": 5,
+        "faq": 3,
+        "image_count": 7,
+        "highlight": "Liquid-filled capsule settles the needle in seconds",
+        "claims": [
+          "liquid-filled capsule",
+          "1:24000 scale ruler"
+        ],
+        "error": null
+      },
+      {
+        "url": "https://shop-b.com/compass",
+        "domain": "shop-b.com",
+        "title": "Orienteering Baseplate Compass",
+        "ok": true,
+        "price": 14.5,
+        "brand": "",
+        "bullets": 4,
+        "faq": 0,
+        "image_count": 5,
+        "highlight": "Declination adjustment for accurate bearings",
+        "claims": [],
+        "error": null
+      },
+      {
+        "url": "https://shop-c.com/compass",
+        "domain": "shop-c.com",
+        "title": "",
+        "ok": false,
+        "price": null,
+        "brand": "",
+        "bullets": 0,
+        "faq": 0,
+        "image_count": null,
+        "highlight": "",
+        "claims": [],
+        "error": "被拦(验证码/拒绝访问)"
+      }
+    ],
+    "priorities": [
+      {
+        "what": "指针稳不稳、转得快不快(充液)",
+        "why": "两家都把「充液舱」放第一条"
+      },
+      {
+        "what": "有没有磁偏角调节",
+        "why": "一家主打,评价里常问"
+      },
+      {
+        "what": "比例尺和地图一起用方不方便",
+        "why": "都配了 1:24000 刻度"
+      }
+    ],
+    "ours": {
+      "has": [
+        "带比例尺地图尺",
+        "便携"
+      ],
+      "missing": [
+        "是否充液",
+        "磁偏角调节"
+      ]
+    },
+    "bullet_order_hint": [
+      "liquid filled fast settling",
+      "declination adjustment",
+      "map scale ruler"
+    ],
+    "keywords": {
+      "category": [
+        "hiking map compass",
+        "orienteering compass"
+      ],
+      "attribute": [
+        "liquid filled compass",
+        "baseplate compass with ruler"
+      ],
+      "scene": [
+        "backpacking navigation",
+        "scout compass"
+      ],
+      "question": [
+        "how to use a compass with a map?"
+      ]
+    },
+    "competitors": {
+      "brands": [
+        "Suunto",
+        "Silva"
+      ],
+      "domains": [
+        "shop-a.com",
+        "shop-b.com"
+      ]
+    },
+    "gaps": [
+      "指南针是不是充液的(卖家页没写)",
+      "有没有磁偏角调节"
+    ],
+    "serp_keywords": [
+      "best compass for hiking",
+      "how to use a map compass"
+    ],
+    "note": "同类都在卖「准、稳、快」,我们先把比例尺和便携讲清,充液要问工厂",
+    "at": "2026-10-27T09:00:00+00:00",
+    "dossier_id": 9,
+    "k_product_id": "0f0f0f0f-0000-4000-8000-000000000009"
+  }
+}

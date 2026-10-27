@@ -648,6 +648,10 @@ services:
       SQH_DAILY_CLAUDE_USD: "2"
       # 10-27 老板拍板:作图指令那一段先停(他另有打算)。文案批了她停在那等;要放开改成 "0" 再 rm -f -s + up -d --no-deps
       SQH_IMAGE_BRIEF_PAUSED: "1"
+      # 10-27 选品评分卡 + 竞品拆解:过线分、拆解总开关、每次读几家同类页(各台账日上限 SQH_RAINFOREST_DAILY / SQH_KEEPA_DAILY / SQH_SERPER_SEARCH_DAILY / SQH_PAGE_FETCH_DAILY 默认 12/60/10/60)
+      SQH_PICK_MIN_SCORE: "60"
+      SQH_MARKET_ENABLED: "1"
+      SQH_MARKET_PAGES: "8"
     volumes:
       - console_agent_memory_data:/var/lib/barong/agent-memory
       # 10-27:批档案后 K 建档在这个进程里做(d1fdd7f 起),参考图写进 k-media;不挂这个卷图就留在容器里,后端和出图都看不到

@@ -41,8 +41,8 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, copywork, k_ops, material, memory, pricing
-from .constants import COPY_CARD_KIND, USAGE_LABEL, image_brief_paused
+from . import cards, copywork, k_ops, market, material, memory, pricing
+from .constants import COPY_CARD_KIND, MARKET_CARD_KIND, USAGE_LABEL, image_brief_paused, market_enabled
 from .models import SqhCard, SqhDossier
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,8 @@ PIPELINE_USAGE_LABEL = f"{USAGE_LABEL}.k"
 BLOCKED_CARD_KIND = "k_blocked"
 PRICE_CARD_KIND = "k_price"
 REVIEW_CARD_KIND = "k_review"
-PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND, PRICE_CARD_KIND, COPY_CARD_KIND, REVIEW_CARD_KIND)
+PIPELINE_CARD_KINDS = (BLOCKED_CARD_KIND, PRICE_CARD_KIND, COPY_CARD_KIND, REVIEW_CARD_KIND, MARKET_CARD_KIND)
+MARKET_MAX_ATTEMPTS = 2  # 拆解同类页试两次不成就跳过(不发「卡住」卡、不挡品)
 ACTIVE_JOB = {"pending", "running"}
 # 审核卡上的暂存图留多久(K 的暂存图 24 小时没人保存就回收;老板不一定当天看)
 REVIEW_HOLD_DAYS = 14
@@ -64,6 +65,7 @@ JUDGE_TIMEOUT_SECONDS = 120.0
 
 STEP_LABELS = {
     "material": "收卖点素材",
+    "market": "拆解同类商品页",
     "keywords": "跑关键词",
     "keywords_retry": "重跑关键词",
     "risk_review": "判风险词",
@@ -128,6 +130,8 @@ class View:
     dispatched: bool = False
     upload_status: str | None = None
     live_checked: bool = False
+    market_done: bool = False  # 竞品拆解做过了(done / skipped / 老板驳了);开关关着时视为做过
+    keywords_rerun: bool = False  # 老板驳了拆解卡:撤掉市场情报,关键词重跑一遍
 
 
 def next_step(view: View) -> str | None:
@@ -137,9 +141,12 @@ def next_step(view: View) -> str | None:
     if not view.material_done:
         return "material"
     if view.execution_status is None:
-        return "keywords"
+        # 建档之后、跑关键词之前:先看同类商品页(拆不了就跳过,不挡)。已经跑过关键词的老品不回头补。
+        return "market" if not view.market_done else "keywords"
     if view.execution_status in {"running", "created"}:
         return "keywords_retry" if (view.execution_minutes or 0) > RUNNING_STALE_MINUTES else None
+    if view.keywords_rerun:
+        return "keywords_retry"  # 老板驳了拆解卡,去掉种子和竞品名单重跑
     if not view.risk_approved:
         # 停在风险词 = 正常;停在别处(SERP、两道筛失败,blocked/failed 带错误码)= 重跑那一步
         return "risk_review" if view.execution_step in RISK_STEPS else "keywords_retry"
@@ -253,6 +260,8 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
         price_applied=_price_applied(db, product),
         shipping_set=bool((product.shipping_class or "").strip()),
         price_card=_card_status(db, (pipe.get("price") or {}).get("card_ref")),
+        market_done=(not market_enabled()) or str((pipe.get("market") or {}).get("status") or "") in {"done", "skipped", "rejected"},
+        keywords_rerun=bool(pipe.get("keywords_rerun")),
         **_later_view(db, product, pipe, jobs),
     )
 
@@ -591,6 +600,76 @@ def _drop_old_material(ctx: Ctx) -> None:
     ctx.db.flush()
 
 
+# ---------------------------------------------------------------- 竞品拆解(10-27):建档之后、跑关键词之前
+
+
+def _market_query(ctx: Ctx) -> str:
+    """搜同类用的英文词:选品卡上她定的 us_query → 已定的主关键词 → K 的英文名。"""
+    capture = ctx.dossier.capture if isinstance(ctx.dossier.capture, dict) else {}
+    ref = capture.get("pick_card_ref")
+    if ref:
+        card = ctx.db.scalar(select(SqhCard).where(SqhCard.ref == str(ref)), execution_options=SKIP_ORG_DATA_ISOLATION)
+        query = str(((card.evidence or {}) if card else {}).get("us_query") or "").strip()
+        if query:
+            return query
+    pipe = _pipe(ctx.dossier)
+    if pipe.get("main_keyword"):
+        return str(pipe["main_keyword"])
+    name = re.sub(r"[^a-z0-9 ]+", " ", str(ctx.product.product_name_en or "").lower())
+    return " ".join(name.split()[:5])
+
+
+def _market_info(dossier: SqhDossier) -> dict[str, Any]:
+    """做成了的拆解结果(老板驳了或跳过了就是空)。"""
+    mark = _pipe(dossier).get("market")
+    return mark if isinstance(mark, dict) and mark.get("status") == "done" else {}
+
+
+def _step_market(ctx: Ctx) -> str:
+    product, dossier = ctx.product, ctx.dossier
+    pipe = _pipe(dossier)
+    mark = pipe.get("market") if isinstance(pipe.get("market"), dict) else {}
+    # 第几次试:按流水线自己记的失败数(run_step 失败时会 rollback,这一步里存的记号留不下来)
+    attempts = int(((pipe.get("failures") or {}).get("market") or {}).get("count") or 0) + 1
+    query = _market_query(ctx)
+    try:
+        result = market.research(ctx.db, org_id=ctx.hands.org_id, query=query, brief=_product_brief(dossier, product))
+    except Exception as exc:  # noqa: BLE001 —— research 本不该抛;真抛了也当一次没做成
+        logger.exception("market research crashed dossier=%s", dossier.id)
+        result = {"status": "skipped", "reason": f"{exc.__class__.__name__}: {str(exc)[:120]}", "query": query}
+    if result.get("status") != "done":
+        reason = str(result.get("reason") or "没说原因")
+        if attempts < MARKET_MAX_ATTEMPTS:
+            raise StepError(f"拆解同类商品页没做成(第 {attempts} 次):{reason}")
+        _save_pipe(dossier, market={**result, "status": "skipped", "attempts": attempts})
+        return f"同类商品页拆不了({reason}),这个品不带市场情报往下走"
+    text = market.card_text(result, sku=product.sku, product_name=product.product_name_en or "")
+    card, _ = cards.create_card(
+        ctx.db,
+        dedupe_key=f"{MARKET_CARD_KIND}:{product.id}:{datetime.now(UTC).isoformat()}",
+        kind=MARKET_CARD_KIND,
+        title=text["title"],
+        conclusion=text["conclusion"],
+        why=text["why"],
+        if_not=text["if_not"],
+        reversible=True,
+        confidence=text["confidence"],
+        evidence={**text["evidence"], "dossier_id": dossier.id, "k_product_id": str(product.id)},
+    )
+    _save_pipe(dossier, market={**result, "card_ref": card.ref, "attempts": attempts})
+    if result.get("gaps"):
+        memory.record(
+            ctx.db,
+            kind="observation",
+            subject=f"{product.sku} 竞品拆解:要补的事实",
+            body=f"{product.sku} 同类页上买家在乎、我们档案里没有的:{';'.join(result['gaps'])[:600]}",
+            refs={"dossier_id": dossier.id, "card_ref": card.ref, "kind": MARKET_CARD_KIND},
+        )
+    pages_ok = sum(1 for p in result.get("pages") or [] if p.get("ok"))
+    seeds, comps = market.seed_keywords(result), market.competitor_names(result)
+    return f"读了 {pages_ok} 家同类页,拆解卡 #{card.ref} 发了(给老板看,不用批);{len(seeds)} 个关键词种子、{len(comps)} 个竞品名带进 K"
+
+
 def _keyword_choice(ctx: Ctx) -> dict[str, Any]:
     pipe = _pipe(ctx.dossier)
     if pipe.get("main_keyword"):
@@ -616,15 +695,26 @@ def _execution_outcome(execution: Any) -> str:
 
 def _step_keywords(ctx: Ctx, *, retry: bool) -> str:
     choice = _keyword_choice(ctx)
+    info = _market_info(ctx.dossier)
+    seeds = list(dict.fromkeys([*(choice["seed_keywords"] or []), *market.seed_keywords(info)]))[:50]
+    competitors = market.competitor_names(info)
+    pipe = _pipe(ctx.dossier)
+    rerun = bool(pipe.get("keywords_rerun"))
     if retry:
         execution = k_ops.latest_execution(ctx.db, ctx.product.id)
         report = (getattr(execution, "error_report_json", None) or {}) if execution is not None else {}
-        step = (report.get("failed_step") if isinstance(report, dict) else None) or getattr(execution, "current_step", None) or "deepseek_enrichment"
-        ctx.hands.retry_keywords(ctx.product.id, step=step, main_keyword=choice["main_keyword"], seed_keywords=choice["seed_keywords"])
+        step = "serp_keyword_fetch" if rerun else ((report.get("failed_step") if isinstance(report, dict) else None) or getattr(execution, "current_step", None) or "deepseek_enrichment")
+        ctx.hands.retry_keywords(ctx.product.id, step=step, main_keyword=choice["main_keyword"], seed_keywords=seeds, competitors=competitors)
     else:
-        ctx.hands.start_keywords(ctx.product.id, main_keyword=choice["main_keyword"], seed_keywords=choice["seed_keywords"])
+        ctx.hands.start_keywords(ctx.product.id, main_keyword=choice["main_keyword"], seed_keywords=seeds, competitors=competitors)
+    if rerun:
+        _save_pipe(ctx.dossier, keywords_rerun=None)
+        ctx.db.flush()  # expire_all 之前先落下去,不然这个记号会被丢掉
     ctx.db.expire_all()
-    return _execution_outcome(k_ops.latest_execution(ctx.db, ctx.product.id))
+    note = _execution_outcome(k_ops.latest_execution(ctx.db, ctx.product.id))
+    if info:
+        note += f"(带了 {len(market.seed_keywords(info))} 个拆解来的种子词、{len(competitors)} 个竞品名)"
+    return note
 
 
 def _step_risk_review(ctx: Ctx) -> str:
@@ -652,20 +742,25 @@ def _step_selling_points(ctx: Ctx) -> str:
 def _step_approve_selling_points(ctx: Ctx) -> str:
     candidates = ctx.product.selling_points_candidates_json or {}
     seo = [str(x) for x in candidates.get("seo_keywords") or []]
+    hint = [str(h) for h in (_market_info(ctx.dossier).get("bullet_order_hint") or [])]
     review = selling_point_review(candidates)
     if not any(item["review_decision"] == "approve" for item in review):
         raise StepError("K 给的候选卖点一条证据都核不上,没法批")
+    # 卖点顺序 = K 的编号顺序 = 文案里的顺序:按拆解出来的「买家最在乎」排,没拆解就按 K 的原序
+    ordered = market.reorder_bullets(review, hint)
     try:
-        ctx.hands.approve_selling_points(ctx.product.id, bullets=review, seo_keywords=seo)
+        ctx.hands.approve_selling_points(ctx.product.id, bullets=ordered, seo_keywords=seo)
     except k_ops.KOpError as exc:
-        # K 逐条核证据,退回的那几条驳掉再交一次;还不行就算这一步失败
+        # K 逐条核证据,退回的那几条驳掉再交一次;还不行就算这一步失败。K 报的序号是交上去那份(排过序)的序号,先换回候选序号
         errors = rejected_indexes(exc.detail)
         if not errors:
             raise
-        review = selling_point_review(candidates, errors)
+        by_candidate = {review.index(ordered[i]): why for i, why in errors.items() if i < len(ordered)}
+        review = selling_point_review(candidates, by_candidate)
         if not any(item["review_decision"] == "approve" for item in review):
             raise StepError("候选卖点被 K 逐条退回,剩下的一条都不够格") from exc
-        ctx.hands.approve_selling_points(ctx.product.id, bullets=review, seo_keywords=seo)
+        ordered = market.reorder_bullets(review, hint)
+        ctx.hands.approve_selling_points(ctx.product.id, bullets=ordered, seo_keywords=seo)
     kept = sum(1 for item in review if item["review_decision"] == "approve")
     held = [item["text"] for item in review if item["review_decision"] == "reject" and is_certification_claim(item)]
     _save_pipe(ctx.dossier, selling_points={"kept": kept, "dropped": len(review) - kept, "held_certifications": held, "at": datetime.now(UTC).isoformat()})
@@ -890,7 +985,8 @@ def _step_copy_check(ctx: Ctx) -> str:
         raise StepError("K 的文案是空的,没法读")
     points = _points_with_ids(product)
     boss_note = str(pipe.get("copy_boss_note") or "") or None
-    extra = copywork.check_prompt_extra(view, points, main_keyword=pipe.get("main_keyword"), held=held, hype=hype, flagged=flagged, boss_note=boss_note)
+    priorities = [str(p.get("what")) for p in (_market_info(dossier).get("priorities") or []) if isinstance(p, dict) and p.get("what")]
+    extra = copywork.check_prompt_extra(view, points, main_keyword=pipe.get("main_keyword"), held=held, hype=hype, flagged=flagged, boss_note=boss_note, priorities=priorities or None)
     result = _judge(ctx.db, copywork.COPY_CHECK_ASK, _product_brief(dossier, product), extra, timeout=COPY_JUDGE_TIMEOUT_SECONDS)
     data = parse_json(result)
     if not isinstance(data, dict):
@@ -1357,6 +1453,7 @@ JOB_TYPES = {"selling_points": "selling_points", "copy": "marketing_copy", "imag
 
 STEPS = {
     "material": _step_material,
+    "market": _step_market,
     "keywords": lambda ctx: _step_keywords(ctx, retry=False),
     "keywords_retry": lambda ctx: _step_keywords(ctx, retry=True),
     "risk_review": _step_risk_review,
@@ -1508,6 +1605,13 @@ def after_decision(db: Session, card: SqhCard, *, decision: str) -> dict[str, An
                 return {"ok": True, "note": "好,文案就按这版定了。作图指令按你的安排先不动,你说开始我再出。"}
             return {"ok": True, "note": "好,文案定了,我接着出作图指令、出图。"}
         return {"ok": True, "note": "收到,我照你说的改文案,改好再给你看。"}
+    if card.kind == MARKET_CARD_KIND:
+        if decision == "approve":
+            return {"ok": True, "note": "好,这份市场情报我接着用。"}
+        mark = _pipe(dossier).get("market") if isinstance(_pipe(dossier).get("market"), dict) else {}
+        _save_pipe(dossier, market={**mark, "status": "rejected", "rejected_reason": card.decision_reason}, keywords_rerun=True)
+        db.flush()
+        return {"ok": True, "note": "收到,这份市场情报撤掉:种子关键词和竞品名单不用了,关键词我重跑一遍。"}
     step = str(evidence.get("step") or "")
     failures = dict(_pipe(dossier).get("failures") or {})
     failures.pop(step, None)
@@ -1571,6 +1675,7 @@ class Runner:
 __all__ = [
     "BLOCKED_CARD_KIND",
     "COPY_CARD_KIND",
+    "MARKET_CARD_KIND",
     "PIPELINE_CARD_KINDS",
     "PRICE_CARD_KIND",
     "REVIEW_CARD_KIND",

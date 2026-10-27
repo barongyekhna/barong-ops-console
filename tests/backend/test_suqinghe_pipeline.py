@@ -106,6 +106,7 @@ def test_two_failures_stop_and_the_boss_decides(built, monkeypatch: pytest.Monke
 
 def test_material_lands_in_k_as_evidence_and_hype_waits_for_the_boss(built, monkeypatch: pytest.MonkeyPatch) -> None:
     dossier_id, product_id, _ = built
+    monkeypatch.setenv("SQH_MARKET_ENABLED", "0")  # 这条只验素材 → 关键词,竞品拆解另有用例
     summary = material.summarize(
         {
             "facts": [
@@ -157,6 +158,7 @@ def _plant_execution(product_id: str, **fields: Any) -> None:
 
 def test_keywords_then_risk_review_hand_her_judgement_to_k(built, monkeypatch: pytest.MonkeyPatch) -> None:
     dossier_id, product_id, _ = built
+    monkeypatch.setenv("SQH_MARKET_ENABLED", "0")
     with without_org_data_isolation(), SessionLocal() as db:
         dossier = db.get(SqhDossier, dossier_id)
         dossier.draft = {
@@ -173,8 +175,9 @@ def test_keywords_then_risk_review_hand_her_judgement_to_k(built, monkeypatch: p
     monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: next(answers))
     started: dict[str, Any] = {}
 
-    def fake_start(self, product_uuid, *, main_keyword, seed_keywords):
+    def fake_start(self, product_uuid, *, main_keyword, seed_keywords, competitors=None):
         started.update(main_keyword=main_keyword, seed_keywords=seed_keywords, actor=self.actor.username, org=self.org_id)
+        assert competitors == []  # 这条关了竞品拆解,不该带竞品名单
         _plant_execution(
             str(product_uuid),
             status="blocked",
@@ -402,6 +405,7 @@ def test_copy_is_read_fixed_carded_and_reworked_before_images(built, monkeypatch
         lambda db, dossier, product: dataclasses.replace(
             real_build_view(db, dossier, product),
             material_done=True,
+            market_done=True,
             execution_status="blocked",
             execution_step="marketing_copy_generation",
             risk_approved=True,
@@ -510,3 +514,93 @@ def test_copy_is_read_fixed_carded_and_reworked_before_images(built, monkeypatch
         with without_org_data_isolation(), SessionLocal() as db:
             db.execute(delete(SqhCard).where(SqhCard.kind == pipeline.COPY_CARD_KIND))
             db.commit()
+
+
+def test_market_research_feeds_keywords_and_a_rejected_card_reruns_them(built, monkeypatch: pytest.MonkeyPatch) -> None:
+    """竞品拆解(10-27):素材之后她读同类页 → 拆解卡(不用批)→ 种子词和竞品名带进 K 的关键词;老板驳了 → 撤掉重跑;拆不了两次 → 跳过不挡。"""
+    from backend.app.modules.agent_series.suqinghe import market
+    from backend.app.modules.agent_series.suqinghe.models import SqhMemory
+
+    dossier_id, product_id, owner = built
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossier = db.get(SqhDossier, dossier_id)
+        dossier.draft = {**dossier.draft, "material": {"features": [], "claims": [], "hype": [], "version": material.MATERIAL_VERSION}}
+        dossier.capture = {**(dossier.capture or {}), "pick_card_ref": None}
+        db.commit()
+    assert _pick() == (dossier_id, "market")
+
+    done = {
+        "status": "done",
+        "query": "squishy stress toy",
+        "pages": [{"url": f"https://shop{i}.com/p", "domain": f"shop{i}.com", "title": f"Toy {i}", "ok": True, "price": 12.0 + i, "bullets": 4, "faq": 2, "image_count": 6, "highlight": "Soft and slow rising", "claims": []} for i in range(4)],
+        "serp_keywords": ["squishy toys for adults"],
+        "priorities": [{"what": "捏起来软不软、回弹慢不慢", "why": "四家都把手感放第一条"}, {"what": "材质安不安全", "why": "三家写了无毒"}],
+        "ours": {"has": ["慢回弹"], "missing": ["材质检测报告"]},
+        "bullet_order_hint": ["slow rising soft", "safe material"],
+        "keywords": {"category": ["squishy stress toy", "stress relief squishy"], "attribute": ["slow rising"], "scene": ["desk fidget"], "question": ["are squishies safe for kids?"]},
+        "competitors": {"brands": ["Squishmallows"], "domains": ["shop0.com"]},
+        "gaps": ["材质检测报告有没有"],
+        "note": "同类都在卖手感,我们要把慢回弹讲到最前面",
+        "at": "2026-10-27T00:00:00+00:00",
+    }
+    monkeypatch.setattr(market, "research", lambda db, **kw: done)
+    out = pipeline.run_step(dossier_id, "market")
+    assert out["ok"] and "拆解卡 #" in out["note"] and "4 个关键词种子" in out["note"], out
+    pipe = _pipe(dossier_id)
+    ref = pipe["market"]["card_ref"]
+    with without_org_data_isolation(), SessionLocal() as db:
+        card = db.scalar(select(SqhCard).where(SqhCard.ref == ref))
+        assert card.kind == pipeline.MARKET_CARD_KIND and card.status == "pending" and "不用批" in card.conclusion
+        assert card.evidence["priorities"][0]["what"].startswith("捏起来") and card.evidence["keywords"]["category"] == ["squishy stress toy", "stress relief squishy"]
+        assert [p["domain"] for p in card.evidence["pages"]] == [f"shop{i}.com" for i in range(4)]
+        assert db.scalar(select(SqhMemory).where(SqhMemory.kind == "observation", SqhMemory.subject.like("%竞品拆解%"))) is not None
+    assert _pick() == (dossier_id, "keywords")
+
+    # 关键词:她定的种子 + 拆解来的种子,竞品名单一起交给 K
+    started: dict[str, Any] = {}
+    monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: {"main_keyword": "squishy stress toy", "seed_keywords": ["squishy toys"], "reason": "品类词"})
+
+    def fake_start(self, product_uuid, *, main_keyword, seed_keywords, competitors=None):
+        started.update(main_keyword=main_keyword, seed_keywords=seed_keywords, competitors=competitors)
+        _plant_execution(str(product_uuid), status="blocked", current_step="risk_term_review_manual", claude_filter_result_json={"risk_keywords": []}, error_report_json={"code": "RISK_REVIEW_REQUIRED"})
+
+    monkeypatch.setattr(k_ops.KHands, "start_keywords", fake_start)
+    out = pipeline.run_step(dossier_id, "keywords")
+    assert out["ok"] and "4 个拆解来的种子词、2 个竞品名" in out["note"], out
+    assert started["seed_keywords"] == ["squishy toys", "squishy stress toy", "stress relief squishy", "slow rising", "desk fidget"]
+    assert started["competitors"] == ["Squishmallows", "shop0.com"]
+
+    # 老板驳了拆解卡:情报撤掉,关键词从 SERP 那一步重跑、不带种子和竞品
+    assert "重跑" in _decide(ref, "reject", owner, reason="这几家不是我们的对手")["note"]
+    pipe = _pipe(dossier_id)
+    assert pipe["market"]["status"] == "rejected" and pipe["keywords_rerun"] is True
+    assert _pick() == (dossier_id, "keywords_retry")
+    retried: dict[str, Any] = {}
+    monkeypatch.setattr(k_ops.KHands, "retry_keywords", lambda self, pid, *, step, main_keyword, seed_keywords, competitors=None: retried.update(step=step, seed_keywords=seed_keywords, competitors=competitors))
+    out = pipeline.run_step(dossier_id, "keywords_retry")
+    assert out["ok"], out
+    assert retried == {"step": "serp_keyword_fetch", "seed_keywords": ["squishy toys"], "competitors": []}
+    assert not _pipe(dossier_id).get("keywords_rerun")
+    with without_org_data_isolation(), SessionLocal() as db:
+        db.execute(delete(SqhCard).where(SqhCard.kind == pipeline.MARKET_CARD_KIND))
+        db.commit()
+
+
+def test_market_research_that_fails_twice_is_skipped_without_blocking(built, monkeypatch: pytest.MonkeyPatch) -> None:
+    from backend.app.modules.agent_series.suqinghe import market
+
+    dossier_id, product_id, _ = built
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossier = db.get(SqhDossier, dossier_id)
+        dossier.draft = {**dossier.draft, "material": {"features": [], "claims": [], "hype": [], "version": material.MATERIAL_VERSION}}
+        db.commit()
+    monkeypatch.setattr(market, "research", lambda db, **kw: {"status": "skipped", "reason": "只读到 1 页(至少 3 页才拆)", "query": kw.get("query")})
+    first = pipeline.run_step(dossier_id, "market")
+    assert first["ok"] is False and first["blocked"] is False and "第 1 次" in first["note"]
+    assert _pick() == (dossier_id, "market")  # 再试一次
+    second = pipeline.run_step(dossier_id, "market")
+    assert second["ok"] and "不带市场情报往下走" in second["note"], second
+    assert _pipe(dossier_id)["market"]["status"] == "skipped" and _pipe(dossier_id)["market"]["attempts"] == 2
+    assert _pick() == (dossier_id, "keywords")  # 没有「卡住」卡,照常往下
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert db.scalar(select(SqhCard).where(SqhCard.kind == pipeline.BLOCKED_CARD_KIND)) is None
