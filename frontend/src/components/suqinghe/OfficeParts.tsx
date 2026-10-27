@@ -162,6 +162,8 @@ function PriceCardBody({ evidence }: { evidence: unknown }) {
           <tr>
             <th>规格</th>
             <th>进价</th>
+            <th>货</th>
+            <th>运费</th>
             <th>到手成本</th>
             <th>建议售价</th>
             <th>毛利</th>
@@ -176,6 +178,11 @@ function PriceCardBody({ evidence }: { evidence: unknown }) {
                 {row.note ? <small className={styles.rowNote}>{row.note}</small> : null}
               </td>
               <td>{row.costCny === null ? "—" : `¥${row.costCny}`}</td>
+              <td>{usd(row.goodsUsd)}</td>
+              <td>
+                {usd(row.shipUsd)}
+                {row.kg !== null ? <small>按 {row.kg} 公斤</small> : null}
+              </td>
               <td>{usd(row.landedUsd)}</td>
               <td>{row.include ? usd(row.priceUsd) : "不卖"}</td>
               <td>{row.include ? `${usd(row.profitUsd)}(${pct(row.margin)})` : "—"}</td>
@@ -183,6 +190,7 @@ function PriceCardBody({ evidence }: { evidence: unknown }) {
           ))}
         </tbody>
       </table>
+      {view.shippingRule ? <p className={styles.muted}>{view.shippingRule}</p> : null}
       {view.summary ? <p className={styles.muted}>{view.summary}</p> : null}
       <p className={styles.muted}>
         {view.competitors}

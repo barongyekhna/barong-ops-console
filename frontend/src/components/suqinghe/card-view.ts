@@ -23,8 +23,10 @@ export type PriceRow = {
   nameZh: string;
   include: boolean;
   costCny: number | null;
-  landedUsd: number | null;
+  goodsUsd: number | null;
   shipUsd: number | null;
+  kg: number | null;
+  landedUsd: number | null;
   priceUsd: number | null;
   profitUsd: number | null;
   margin: number | null;
@@ -38,6 +40,7 @@ export type PriceCardView = {
   competitors: string;
   shippingClass: string;
   battery: boolean;
+  shippingRule: string;
 };
 
 export function priceCardView(evidence: unknown): PriceCardView | null {
@@ -52,8 +55,10 @@ export function priceCardView(evidence: unknown): PriceCardView | null {
         nameZh: text(line.name_zh),
         include: line.include !== false,
         costCny: num(line.cost_cny),
-        landedUsd: goods !== null && ship !== null ? Math.round((goods + ship) * 100) / 100 : null,
+        goodsUsd: goods,
         shipUsd: ship,
+        kg: num(line.kg),
+        landedUsd: goods !== null && ship !== null ? Math.round((goods + ship) * 100) / 100 : null,
         priceUsd: num(line.price),
         profitUsd: num(line.profit),
         margin: num(line.margin),
@@ -68,6 +73,14 @@ export function priceCardView(evidence: unknown): PriceCardView | null {
       ? `谷歌购物「${text(comp.query)}」${n} 个:中位 $${num(comp.median)},一半在 $${num(comp.p25)}–$${num(comp.p75)}`
       : `竞品价没拿到${text(comp.error) ? `(${text(comp.error)})` : ""}`;
   const shipping = isRec(evidence.shipping) ? evidence.shipping : {};
+  const a = isRec(evidence.assumptions) ? evidence.assumptions : {};
+  const perKg = num(a.ship_cny_per_kg);
+  const perPiece = num(a.ship_cny_per_piece);
+  const rate = num(a.usd_cny);
+  const shippingRule =
+    perKg !== null && perPiece !== null
+      ? `运费 = 计费重 × ¥${perKg}/公斤 + ¥${perPiece}/件${rate !== null ? `,按 ${rate} 换美元` : ""}(估的带电专线价,不是真实报价)`
+      : "";
   return {
     rows,
     questions: strings(evidence.questions),
@@ -75,6 +88,7 @@ export function priceCardView(evidence: unknown): PriceCardView | null {
     competitors,
     shippingClass: text(shipping.class),
     battery: shipping.contains_battery === true,
+    shippingRule,
   };
 }
 

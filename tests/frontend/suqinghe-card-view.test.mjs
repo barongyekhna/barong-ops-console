@@ -28,6 +28,12 @@ test("价格卡:一行一个规格,混进来的充电器标「不卖」,低于�
   assert.equal(byName["2000mAh"].priceUsd, 19.99);
   assert.equal(byName["2000mAh"].costCny, 39);
   assert.ok(byName["2000mAh"].landedUsd > 10 && byName["2000mAh"].landedUsd < 11);
+  // 货和运费分开摆,老板一眼看出钱花在哪
+  assert.equal(byName["2000mAh"].goodsUsd, 5.42);
+  assert.equal(byName["2000mAh"].shipUsd, 4.9);
+  assert.equal(byName["2000mAh"].kg, 0.17);
+  assert.match(view.shippingRule, /计费重 × ¥90\/公斤 \+ ¥20\/件/);
+  assert.match(view.shippingRule, /不是真实报价/);
   assert.match(byName["1300mAh"].note, /抬到保底价/);
   assert.equal(view.shippingClass, "cn-direct-standard");
   assert.equal(view.battery, true);
