@@ -103,9 +103,11 @@ export function summaryOf(card: OfficeCard): CardSummary {
       const facts: string[] = [];
       facts.push(`进价 ${view.priceCny === null ? "—" : `¥${view.priceCny}`}${view.goodsUsd !== null ? ` ≈ ${money(view.goodsUsd)}` : ""},起订 ${view.moq ?? "—"}`);
       const comp = isRec(evidence.competitors) ? evidence.competitors : {};
-      if (num(comp.median) !== null) facts.push(`美国同类中位 ${money(num(comp.median))}`);
+      if (view.unit) facts.push(`美国同类按件 ${money(view.unit.median)}/件,主流 ${view.unit.packMode} 件装`);
+      else if (num(comp.median) !== null) facts.push(`美国同类中位 ${money(num(comp.median))}`);
       if (view.score) facts.push(`评分 ${view.score.total}/${view.score.max}${view.score.missing.length > 0 ? `(没拿到 ${view.score.missing.length} 项)` : ""}`);
-      return { headline: text(evidence.profile_product_en) || view.titleZh, facts };
+      // 标题用她按实物翻的英文名;F 的画像名是当初搜货的目标词(搜「帐篷外帐」搜出来的可能是天幕杆),不上卡
+      return { headline: view.nameEn || view.titleZh, facts };
     }
     case "dossier": {
       const flagged = num(evidence.flagged_count);

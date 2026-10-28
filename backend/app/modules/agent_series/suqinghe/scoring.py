@@ -102,23 +102,51 @@ def _term_in(term: str, text: str) -> bool:
     return re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])", text) is not None
 
 
-def economics(*, price_cny: float | None, weight_class: str | None, p25: float | None, a: pricing.Assumptions, kg_by_class: dict[str, float]) -> Dim:
+def _ratio_pts(ratio: float) -> int:
+    if ratio <= 0.8:
+        return 30
+    if ratio >= 1.0:
+        return 0
+    return round(30 * (1.0 - ratio) / 0.2)
+
+
+def economics(
+    *,
+    price_cny: float | None,
+    weight_class: str | None,
+    p25: float | None,
+    a: pricing.Assumptions,
+    kg_by_class: dict[str, float],
+    unit: dict[str, Any] | None = None,
+) -> Dim:
+    """账算得过。1688 的进价是单件的;谷歌购物的同类常常是 8 支、12 支装,所以(10-28 起)有按件折算的分布 unit 时,
+    按同类主流的件数凑一套来算:货 × 件数、运费按单件估重 × 件数(保守,真重量建档时才有),保底价折回每件,再和同类的每件 p25 比。
+    没有 unit(旧数据)还是 listing 价对单件价。"""
     if price_cny is None or price_cny <= 0:
         return Dim("economics", "账算得过", 0, 30, "没有进价,算不了", "1688 列表", missing=True)
     kg = kg_by_class.get(weight_class or "", kg_by_class.get("medium", 1.0))
     goods, ship = pricing.costs(float(price_cny), kg, a)
     floor = pricing.floor_price(goods, ship, a)
     basis = f"进价 ¥{price_cny:g}≈${goods:.2f},按{WEIGHT_CLASS_LABEL.get(weight_class or '', '估计')} {kg:g} 公斤估运费 ${ship:.2f},保底价(30% 毛利)${floor:.2f}"
+    unit_p25 = _num((unit or {}).get("p25")) if isinstance(unit, dict) else None
+    if unit_p25 and unit_p25 > 0:
+        pack = max(1, int(_num((unit or {}).get("pack_mode")) or 1))
+        if pack > 1:
+            set_goods, set_ship = pricing.costs(float(price_cny) * pack, kg * pack, a)
+            set_floor = pricing.floor_price(set_goods, set_ship, a)
+            per_unit = set_floor / pack
+            ratio = per_unit / unit_p25
+            basis = (
+                f"进价 ¥{price_cny:g}≈${goods:.2f}/件;美国同类多是 {pack} 件装,按 {pack} 件一套算:货 ${set_goods:.2f} + 运费(按单件估重 {kg:g} 公斤 × {pack},估 ${set_ship:.2f})"
+                f"→ 保底价 ${set_floor:.2f}/套 = ${per_unit:.2f}/件;同类按件折算 p25 ${unit_p25:.2f}/件,我们是它的 {ratio:.0%}"
+            )
+            return Dim("economics", "账算得过", _ratio_pts(ratio), 30, basis, f"进价+估算运费按 {pack} 件一套 vs 谷歌购物按件折算 p25")
+        ratio = floor / unit_p25
+        return Dim("economics", "账算得过", _ratio_pts(ratio), 30, basis + f";美国同类按件折算 p25 ${unit_p25:.2f}(多件装已折成单价),保底价是它的 {ratio:.0%}", "进价+估算运费 vs 谷歌购物按件折算 p25")
     if not p25 or p25 <= 0:
         return Dim("economics", "账算得过", 15, 30, basis + ";美国同类价没拿到,先给一半分", "进价+估算运费;谷歌购物没结果", missing=True)
     ratio = floor / p25
-    if ratio <= 0.8:
-        pts = 30
-    elif ratio >= 1.0:
-        pts = 0
-    else:
-        pts = round(30 * (1.0 - ratio) / 0.2)
-    return Dim("economics", "账算得过", pts, 30, basis + f";美国同类 p25 ${p25:.2f},保底价是它的 {ratio:.0%}", "进价+估算运费 vs 谷歌购物 p25")
+    return Dim("economics", "账算得过", _ratio_pts(ratio), 30, basis + f";美国同类 p25 ${p25:.2f},保底价是它的 {ratio:.0%}", "进价+估算运费 vs 谷歌购物 p25")
 
 
 def demand(*, keepa: list[dict[str, Any]], shopping_n: int | None, keepa_error: str | None = None) -> Dim:
@@ -221,7 +249,7 @@ def scorecard(
     vetoed = red_lines(title=title, category_path=category_path, profile_en=profile_en, flags=flags, weight_class=weight_class)
     shop = shopping if isinstance(shopping, dict) else {}
     dims = [
-        economics(price_cny=price_cny, weight_class=weight_class, p25=_num(shop.get("p25")), a=a, kg_by_class=kg_by_class),
+        economics(price_cny=price_cny, weight_class=weight_class, p25=_num(shop.get("p25")), a=a, kg_by_class=kg_by_class, unit=shop.get("unit") if isinstance(shop.get("unit"), dict) else None),
         demand(keepa=list(keepa or []), shopping_n=int(shop.get("n") or 0), keepa_error=keepa_error),
         competition(snapshot=amazon),
         factory_fit(pts=factory_pts, why=factory_why),

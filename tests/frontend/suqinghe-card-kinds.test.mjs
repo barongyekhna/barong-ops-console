@@ -59,10 +59,16 @@ test("分组:空组不画,组按家族顺序,组内保持传入顺序", () => {
 
 test("每种卡一行基本信息:说的是哪件货、几个关键数,不是一段话", () => {
   const p = summaryOf(pick);
-  assert.equal(p.headline, "Survival Compass");
+  assert.equal(p.headline, pick.evidence.title_zh); // 旧卡没有她翻的英文名 → 中文标题;F 的画像名(Survival Compass)是搜货目标词,不上卡
   assert.match(p.facts[0], /^进价 ¥4\.4 ≈ \$0\.61,起订 1$/);
   assert.match(p.facts.join(" "), /美国同类中位 \$10\.99/);
   assert.match(p.facts.join(" "), /评分 \d+\/100/);
+  // 10-28 起:英文名按实物、同类价按件折算
+  const stakes = { ...pick, evidence: { ...pick.evidence, name_en: "tent stakes", competitors: { ...pick.evidence.competitors, median: 35.97, unit: { n: 35, p25: 1.2, median: 1.62, p75: 4.81, pack_mode: 12, multi_share: 0.5 } } } };
+  const s = summaryOf(stakes);
+  assert.equal(s.headline, "tent stakes");
+  assert.match(s.facts.join(" "), /美国同类按件 \$1\.62\/件,主流 12 件装/);
+  assert.doesNotMatch(s.facts.join(" "), /中位 \$35\.97/);
 
   const d = summaryOf(dossier);
   assert.equal(d.headline, "12V电钻电池组");

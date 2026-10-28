@@ -364,3 +364,70 @@ def test_card_image_goes_through_f_image_cache(f_pool, auth_client: TestClient, 
     assert response.headers["content-type"].startswith("image/jpeg") and response.content.startswith(b"\xff\xd8")
     assert seen == {"candidate_id": cid, "image_url": "https://cbu01.alicdn.com/img/ibank/test.jpg", "variant": "thumb"}
     assert auth_client.get("/api/app/suqinghe/cards/zzzz/image").status_code == 404
+
+
+# ---------------------------------------------------------------- 10-28:同类价按件折算、英文品名按实物、算法改了旧卡重算
+
+
+def _shopping_packs(db, query):
+    return {
+        "query": query,
+        "n": 10,
+        "min": 4.81,
+        "p25": 6.51,
+        "median": 17.49,
+        "p75": 27.99,
+        "max": 50.09,
+        "unit": {"n": 10, "p25": 1.2, "median": 1.62, "p75": 4.81, "pack_mode": 12, "multi_share": 0.5},
+        "samples": [{"title": "12 Pack Stakes", "price": 14.98, "pack": 12, "unit_price": 1.25}],
+    }
+
+
+def test_parse_picks_takes_the_english_name_from_her_not_from_the_f_profile() -> None:
+    pool_ids = {"a"}
+    result = {"picks": [{"id": "a", "name_en": "Carbon Fiber Tarp Pole", "us_query": "carbon fiber tarp pole"}]}
+    assert picks.parse_picks(result, pool_ids=pool_ids, limit=3)[0].name_en == "carbon fiber tarp pole"
+    bad = {"picks": [{"id": "a", "name_en": "Coleman BEST tarp pole!!!", "us_query": "tarp pole"}]}
+    assert picks.parse_picks(bad, pool_ids=pool_ids, limit=3)[0].name_en == ""  # 夸张词/标点不要,卡上用中文标题
+    assert "name_en" in picks._PICK_ASK and "画像」是当初搜货的目标词" in picks._PICK_ASK
+
+
+def test_card_text_says_the_1688_price_is_per_piece_when_us_listings_are_packs() -> None:
+    row = _candidate(title=f"{PREFIX} 帐篷地钉户外露营天幕防风钉", price_cny=Decimal("2.28"))
+    pick = picks.Pick(f_candidate_id=str(row.id), reason="露营常耗配件。", risks=(), us_query="tent stakes heavy duty", name_en="tent stakes", weight_class="light")
+    a = picks.pricing.assumptions()
+    card = picks.score_candidate(row, pick, shopping=_shopping_packs(None, "tent stakes heavy duty"), amazon=_amazon_ok(None, "x"), keepa=_keepa_ok(None, ["A"])[0], keepa_error=None, a=a)
+    text = picks.build_card_text(row, pick, _shopping_packs(None, "tent stakes heavy duty"), a, card)
+    assert text["conclusion"].startswith("评分 ") and "tent stakes:1688 进价 ¥2.28(≈$0.32/件)" in text["conclusion"]
+    assert "按件折算中位 $1.62/件,主流 12 件装(50% 是多件装)——1688 的 ¥2.28 是单件价,账按件折算后比" in text["conclusion"]
+    assert "按 12 件一套算" in text["why"] and "账算得过 0/30" in text["why"]
+    assert text["evidence"]["name_en"] == "tent stakes" and text["evidence"]["competitors"]["unit"]["pack_mode"] == 12
+    assert "samples" not in text["evidence"]["competitors"]
+
+
+def test_rerun_retires_the_old_pending_card_and_issues_a_new_one_under_the_new_math(f_pool, monkeypatch) -> None:
+    """算法改了:指定候选重算——旧卡作废(stale,写明原因),新卡另一个 dedupe_key;池子仍不再提这个候选;不看配额。"""
+    monkeypatch.setenv("SQH_PICKS_PER_DAY", "1")
+    now = datetime.now(UTC)
+    cid = _add([_candidate()])[0]
+    with without_org_data_isolation(), SessionLocal() as db:
+        first = _run(db, now=now, judge=_judge_picking([cid]))
+        old = db.scalar(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND))
+        assert first["cards"] == [old.ref]
+        assert _run(db, now=now, judge=_judge_picking([cid])) == {"cards": [], "skipped": "today_done"}  # 配额到了
+        row = db.get(FCategoryCandidate, cid)
+        rerun = picks.run_picks(db, now=now, judge=_judge_picking([cid]), shopping=_shopping_ok, amazon=_amazon_ok, keepa=_keepa_ok, rows=[row])
+        db.expire_all()
+        old = db.get(SqhCard, old.id)
+        new = db.scalar(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND, SqhCard.id != old.id))
+        assert rerun["cards"] == [new.ref] and rerun["skipped"] is None
+        assert old.status == "stale" and old.decision_reason == picks.RESCORE_REASON and old.decided_at is not None
+        assert new.status == "pending" and new.dedupe_key == f"candidate:{cid}:r1" and new.evidence["f_candidate_id"] == cid
+        assert picks.pool(db) == []  # 还是不再从池子里提它
+        # 再重算一次:上一张新卡作废,再来一张 r2
+        picks.run_picks(db, now=now, judge=_judge_picking([cid]), shopping=_shopping_ok, amazon=_amazon_ok, keepa=_keepa_ok, rows=[row])
+        statuses = {c.dedupe_key: c.status for c in db.scalars(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND))}
+        assert statuses == {f"candidate:{cid}": "stale", f"candidate:{cid}:r1": "stale", f"candidate:{cid}:r2": "pending"}
+        # 重算时她没再留它:旧卡照样作废,不发新卡
+        picks.run_picks(db, now=now, judge=_judge_picking([]), shopping=_shopping_ok, amazon=_amazon_ok, keepa=_keepa_ok, rows=[row])
+        assert {c.status for c in db.scalars(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND))} == {"stale"}

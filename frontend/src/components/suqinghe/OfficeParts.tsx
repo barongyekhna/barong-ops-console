@@ -369,6 +369,7 @@ function CandidateCardBody({ card }: { card: OfficeCard }) {
       <div className={styles.candidateRow}>
         <div>
           <strong className={styles.preLine}>{view.titleZh}</strong>
+          {view.nameEn ? <small className={styles.muted}>{view.nameEn}</small> : null}
           {view.category ? <small className={styles.muted}>{view.category}</small> : null}
           <ul className={styles.bulletList}>
             <li>

@@ -273,6 +273,11 @@ def _retire(db: Session, card: SqhCard, *, status: str, reason: str) -> int:
     return int(result.rowcount or 0)
 
 
+def retire(db: Session, card: SqhCard, *, reason: str) -> bool:
+    """系统作废一张还在等批的卡(算法改了重算、底层数据没了之类),不是老板的决定。"""
+    return _retire(db, card, status="stale", reason=reason) > 0
+
+
 def settle_issues(db: Session, *, live: set[str], readable: set[str], today: str) -> dict[str, int]:
     """每天早上出计划前对一遍账。
 

@@ -115,6 +115,16 @@ test("选品卡:图走后端代理、进价折美元、美国同类价、风险�
   assert.equal(noLink.hasImage, false);
   assert.equal(candidateCardView({ title_zh: "" }), null);
   assert.equal(reviewCardView("x"), null);
+  // 10-28:她翻的英文名 + 同类价按件折算(单根和 12 支装混在一起时,卡上说明 1688 进价是单件价)
+  assert.equal(view.nameEn, "");
+  assert.equal(view.unit, null);
+  const packs = candidateCardView({ ...candidate.evidence, name_en: "tent stakes", competitors: { ...candidate.evidence.competitors, unit: { n: 10, p25: 1.2, median: 1.62, p75: 4.81, pack_mode: 12, multi_share: 0.5 } } });
+  assert.equal(packs.nameEn, "tent stakes");
+  assert.deepEqual(packs.unit, { median: 1.62, p25: 1.2, packMode: 12, multiShare: 0.5 });
+  assert.match(packs.competitors, /按件折算中位 \$1\.62\/件,主流 12 件装\(50% 是多件装\)——1688 的进价是单件价/);
+  const singles = candidateCardView({ ...candidate.evidence, competitors: { ...candidate.evidence.competitors, unit: { n: 10, p25: 20, median: 27.99, p75: 30, pack_mode: 1, multi_share: 0 } } });
+  assert.equal(singles.unit, null);
+  assert.doesNotMatch(singles.competitors, /按件折算/);
 });
 
 test("文案卡:全文一字不少(标题/钩子/短描述/卖点/段落/收尾/FAQ/SEO),她的中文摘要、改了什么、拿不准什么分开摆;作图指令暂停有提示", () => {

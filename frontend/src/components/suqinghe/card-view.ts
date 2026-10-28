@@ -156,6 +156,9 @@ export type ScoreView = { total: number; max: number; dims: ScoreDim[]; missing:
 
 export type CandidateCardView = {
   titleZh: string;
+  /** 她按 1688 标题翻的英文品名(F 的画像名是当初搜货的目标,常对不上实物);旧卡没有 */
+  nameEn: string;
+  unit: CompetitorUnitView | null;
   category: string;
   priceCny: number | null;
   goodsUsd: number | null;
@@ -211,15 +214,30 @@ export function scoreView(evidence: Rec): ScoreView | null {
 
 const DETAIL_1688 = /^https:\/\/detail\.1688\.com\/offer\/\d+\.html/;
 
+/** 同类价按件折算(10-28):谷歌购物里单根和 12 支装混在一起时,另给按件的中位/p25、主流件数、多件装占比;没有多件装就 null。 */
+export type CompetitorUnitView = { median: number; p25: number; packMode: number; multiShare: number };
+
+export function unitView(raw: unknown): CompetitorUnitView | null {
+  if (!isRec(raw)) return null;
+  const median = num(raw.median);
+  const p25 = num(raw.p25);
+  const packMode = num(raw.pack_mode);
+  const multiShare = num(raw.multi_share) ?? 0;
+  if (median === null || p25 === null || packMode === null || multiShare <= 0) return null;
+  return { median, p25, packMode, multiShare };
+}
+
 export function candidateCardView(evidence: unknown): CandidateCardView | null {
   if (!isRec(evidence)) return null;
   const titleZh = text(evidence.title_zh);
   if (!titleZh) return null;
   const comp = isRec(evidence.competitors) ? evidence.competitors : {};
   const n = num(comp.n) ?? 0;
+  const unit = unitView(comp.unit);
   const competitors =
     n > 0
-      ? `美国同类「${text(comp.query)}」${n} 个:中位 $${num(comp.median)},一半在 $${num(comp.p25)}–$${num(comp.p75)}`
+      ? `美国同类「${text(comp.query)}」${n} 个:中位 $${num(comp.median)},一半在 $${num(comp.p25)}–$${num(comp.p75)}` +
+        (unit ? `;按件折算中位 $${unit.median}/件,主流 ${unit.packMode} 件装(${Math.round(unit.multiShare * 100)}% 是多件装)——1688 的进价是单件价,账按件折算后比` : "")
       : `美国同类价没拿到${text(comp.error) ? `(${text(comp.error)})` : ""}`;
   const path = text(evidence.category_path)
     .split(">")
@@ -228,6 +246,8 @@ export function candidateCardView(evidence: unknown): CandidateCardView | null {
   const sourceUrl = text(evidence.source_url);
   return {
     titleZh,
+    nameEn: text(evidence.name_en),
+    unit,
     category: path.slice(-2).join(" > "),
     priceCny: num(evidence.price_cny),
     goodsUsd: num(evidence.goods_usd),

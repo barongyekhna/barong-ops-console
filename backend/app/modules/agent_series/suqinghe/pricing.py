@@ -22,6 +22,7 @@ import math
 import os
 import re
 import statistics
+from collections import Counter
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -186,29 +187,85 @@ def parse_price(value: Any) -> float | None:
     return number if number > 0 else None
 
 
+# 几件装:只认标题里写明的(8 Pack / 16 Pcs / 12-Count / Set of 10 / Pack of 6);"10 inch"、"16 Straight Rebar Stakes" 这种数字不算
+_PACK = re.compile(
+    r"\b(?:pack|set|box|bag|case|bundle|lot)\s+of\s+(\d{1,3})\b"
+    r"|\b(\d{1,3})\s*[- ]?(?:pack|packs|pk|pcs|pc|pieces|piece|count|ct|cnt)\b",
+    re.IGNORECASE,
+)
+
+
+def pack_count(title: Any) -> int:
+    """标题里写明的件数;没写或写得不像(1 件、上千件)都按 1 件。"""
+    for match in _PACK.finditer(str(title or "")):
+        try:
+            n = int(match.group(1) or match.group(2))
+        except (TypeError, ValueError):
+            continue
+        if 2 <= n <= 500:
+            return n
+    return 1
+
+
+def _quartiles(values: list[float]) -> tuple[float, float, float]:
+    """(p25, 中位, p75)。"""
+    if len(values) >= 4:
+        q = statistics.quantiles(values, n=4)
+        return q[0], statistics.median(values), q[-1]
+    return values[0], statistics.median(values), values[-1]
+
+
 def competitor_stats(items: list[dict[str, Any]], *, query: str) -> dict[str, Any]:
-    """谷歌购物的结果 → 价格分布。离中位数太远的(配件、整箱、标错价)先剔掉再算。"""
+    """谷歌购物的结果 → 价格分布。离中位数太远的(配件、整箱、标错价)先剔掉再算。
+
+    10-28 起每条结果还认几件装(pack)并折成单价(unit_price):同类里单根、12 支装、16 支装混在一起时,
+    listing 价的中位数没法和 1688 的单件进价比,所以另给一组按件折算的分布 unit(p25/中位/p75、主流件数、多件装占比)。
+    """
     rows = []
     for item in items:
         price = parse_price(item.get("price"))
         if price is not None:
-            rows.append({"title": str(item.get("title") or "")[:120], "source": str(item.get("source") or "")[:60], "price": price})
+            title = str(item.get("title") or "")[:120]
+            pack = pack_count(title)
+            rows.append({"title": title, "source": str(item.get("source") or "")[:60], "price": price, "pack": pack, "unit_price": round(price / pack, 2)})
     if not rows:
         return {"query": query, "n": 0}
     mid = statistics.median(r["price"] for r in rows)
     kept = [r for r in rows if mid / 5 <= r["price"] <= mid * 5]
     prices = sorted(r["price"] for r in kept)
-    q = statistics.quantiles(prices, n=4) if len(prices) >= 4 else [prices[0], statistics.median(prices), prices[-1]]
+    p25, median, p75 = _quartiles(prices)
+    units = sorted(r["unit_price"] for r in kept)
+    u25, umedian, u75 = _quartiles(units)
+    packs = [r["pack"] for r in kept]
+    multi = [p for p in packs if p > 1]
+    pack_mode = Counter(packs).most_common(1)[0][0]
+    if pack_mode == 1 and len(multi) * 2 >= len(packs):
+        pack_mode = int(statistics.median(multi))  # 一半以上是多件装但件数各异 → 取多件装的中位件数
     return {
         "query": query,
         "n": len(prices),
         "min": round(prices[0], 2),
-        "p25": round(q[0], 2),
-        "median": round(statistics.median(prices), 2),
-        "p75": round(q[-1], 2),
+        "p25": round(p25, 2),
+        "median": round(median, 2),
+        "p75": round(p75, 2),
         "max": round(prices[-1], 2),
+        "unit": {
+            "n": len(units),
+            "p25": round(u25, 2),
+            "median": round(umedian, 2),
+            "p75": round(u75, 2),
+            "pack_mode": pack_mode,
+            "multi_share": round(len(multi) / len(packs), 2),
+        },
         "samples": kept[:15],
     }
+
+
+def unit_text(unit: Any) -> str:
+    """卡上那半句:「按件折算中位 $1.62/件,主流 12 件装(七成是多件装)」;没有多件装就空。"""
+    if not isinstance(unit, dict) or not unit.get("multi_share"):
+        return ""
+    return f"按件折算中位 ${unit.get('median')}/件,主流 {unit.get('pack_mode')} 件装({float(unit['multi_share']):.0%} 是多件装)"
 
 
 def fetch_shopping(db: Any, *, query: str, org_id: str | None) -> dict[str, Any]:
@@ -253,6 +310,7 @@ PRICE_ASK = (
     "- 参照竞品价位,但只跟能比的比:我们是无品牌新店、没有评论,大牌(Milwaukee、DeWalt、Bosch、Makita、Ryobi、"
     "Thermacell 这类)的价格不能直接比——看例子里同类的无牌/白牌/超市自有牌(Hyper Tough、Ozark Trail、Warrior 这类)"
     "卖多少,第一批价放在它们附近或略低;别贴着最低价打价格战。成本高到放不进这个区间的,就给保底价,并在 note 里说明。\n"
+    "- 竞品标题写了几件装的,先折成每件的价再比;我们的规格本身是几件装(axis=quantity)的,就按整包比整包。单件进价不能直接对整包售价。\n"
     "- 指出不对劲的规格:不是同一种商品(比如电池里混进了充电器)→ include=false 并说明;"
     "几个规格重量一模一样、缺重量 → note 里提醒。\n"
     "- label_en:这个规格在英文商品页上的选项名(短,比如 2000mAh、Black、Tool Only、Kit with 2 Batteries)。\n"
@@ -272,11 +330,15 @@ def price_prompt_extra(lines: list[Line], competitors: dict[str, Any], a: Assump
         for line in lines
     )
     if competitors.get("n"):
-        samples = "\n".join(f"  ${row['price']} | {row['source']} | {row['title'][:80]}" for row in competitors.get("samples", [])[:15])
+        samples = "\n".join(
+            f"  ${row['price']} | {row['source']} | {row['title'][:80]}" + (f"({row['pack']} 件装,${row['unit_price']}/件)" if int(row.get("pack") or 1) > 1 else "")
+            for row in competitors.get("samples", [])[:15]
+        )
+        unit_line = unit_text(competitors.get("unit"))
         comp = (
             f"谷歌购物「{competitors.get('query')}」{competitors['n']} 个价:最低 ${competitors['min']},"
             f"四分之一 ${competitors['p25']},中位 ${competitors['median']},四分之三 ${competitors['p75']},"
-            f"最高 ${competitors['max']}。例子(价格 | 店 | 标题):\n{samples}"
+            f"最高 ${competitors['max']}。" + (f"{unit_line}。" if unit_line else "") + f"例子(价格 | 店 | 标题):\n{samples}"
         )
     else:
         comp = f"竞品价没拿到({competitors.get('error') or '没有结果'}),按成本给价并说明。"

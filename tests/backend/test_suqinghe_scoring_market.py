@@ -260,3 +260,26 @@ def test_research_skips_when_too_few_pages_and_never_raises(monkeypatch: pytest.
     assert out["status"] == "skipped" and "只读到 0 页" in out["reason"] and out["pages"][0]["error"] == "timeout"
     monkeypatch.setattr(market, "search_pages", lambda db, **kw: {"error": "Serper 钥匙没绑"})
     assert market.research(_Db(), org_id="org", query="bucket", brief="b", gap_seconds=0)["reason"] == "搜不了:Serper 钥匙没绑"
+
+
+def test_economics_compares_per_unit_when_us_listings_are_multipacks() -> None:
+    """地钉:1688 单根 ¥2.28,美国同类多是 12 支装——按 12 支一套算货和运费,保底价折回每支,再和同类每支 p25 比。
+    不折算的老算法会把单根进价对整包售价,给满分;折算后这件货(按 ¥90/kg 空运估)根本不赚钱,0 分。"""
+    stakes = dict(
+        title="帐篷地钉户外露营天幕防风钉",
+        category_path="Sporting Goods > Outdoor Recreation > Camping & Hiking > Tents",
+        profile_en="Tent stakes",
+        price_cny=2.28,
+        weight_class="light",
+        shopping={"query": "tent stakes heavy duty", "n": 35, "p25": 19.99, "median": 35.97, "p75": 59.99},
+    )
+    old = _card(**stakes)["dims"][0]
+    assert old["pts"] == 30  # 没有 unit(旧数据)还是老算法,给了满分——就是老板看出的那个 bug
+    unit = {"n": 35, "p25": 1.2, "median": 1.62, "p75": 4.81, "pack_mode": 12, "multi_share": 0.5}
+    new = _card(**{**stakes, "shopping": {**stakes["shopping"], "unit": unit}})["dims"][0]
+    assert new["pts"] == 0
+    assert "美国同类多是 12 件装" in new["why"] and "按 12 件一套算" in new["why"] and "/件;同类按件折算 p25 $1.20/件" in new["why"]
+    assert "按 12 件一套" in new["source"]
+    # 同类都是单件卖的:unit 里 pack_mode 1,按件 p25 直接比,文字说明已折算
+    single = _card(**{**stakes, "price_cny": 18.0, "shopping": {"query": "x", "n": 16, "p25": 14.0, "median": 19.99, "p75": 26.0, "unit": {"n": 16, "p25": 14.0, "median": 19.99, "p75": 26.0, "pack_mode": 1, "multi_share": 0.0}}})["dims"][0]
+    assert single["pts"] == 30 and "按件折算 p25 $14.00" in single["why"]

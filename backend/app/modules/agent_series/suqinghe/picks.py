@@ -61,6 +61,7 @@ class Pick:
     flags: tuple[str, ...] = ()  # scoring.VETO_FLAGS / DEDUCT_FLAGS 里的词
     factory_pts: int = 5  # 和工厂的关系 0–15
     factory_why: str = ""
+    name_en: str = ""  # 她按 1688 标题翻的英文品名(F 的画像名是当初搜货的目标,和实物常对不上)
 
 
 # ---------------------------------------------------------------- 候选池
@@ -88,7 +89,7 @@ def _taken_offer_ids(db: Session) -> set[str]:
 
 def _carded_ids(db: Session) -> set[str]:
     rows = db.scalars(select(SqhCard.dedupe_key).where(SqhCard.kind == CANDIDATE_CARD_KIND), execution_options=_X)
-    return {str(key).split(":", 1)[1] for key in rows if key and ":" in str(key)}
+    return {str(key).split(":")[1] for key in rows if key and ":" in str(key)}
 
 
 def pool(db: Session, *, limit: int = POOL_LIMIT, per_category: int = PER_CATEGORY) -> list[FCategoryCandidate]:
@@ -143,14 +144,16 @@ _PICK_ASK = (
     "需要 EPA/FDA 的(驱蚊药片、杀虫剂、入口的、医疗的);液体、气罐、压缩气体;定制、加印、定做;儿童用品;店里已经有的同类;"
     "和老板之前驳过的那种类似的。\n"
     "工厂能力(判「和工厂的关系」用):" + FACTORY_BRIEF + "\n"
-    "每个留下的给:reason(一句中文,为什么值得,说人话、别夸);risks(一条一句中文:带电/锂电池、带磁、易碎、"
+    "注意:列表里的「画像」是当初搜货的目标词,不是实物——实物以标题为准(搜「帐篷外帐」搜出来的可能是天幕杆)。\n"
+    "每个留下的给:name_en(这件实物的英文品名,按标题翻、说清是什么,2–5 个小写单词,不带品牌);"
+    "reason(一句中文,为什么值得,说人话、别夸);risks(一条一句中文:带电/锂电池、带磁、易碎、"
     "季节性、尺寸可能偏大、材质或认证要核实之类,没有就空数组);us_query(美国买家在 Google 搜这类东西的英文品类词,"
     "2–4 个小写单词,不带品牌,用来查同类价和亚马逊);weight_class(light / medium / heavy,按常识估这件东西连包装的重量:"
     "light 不到半公斤,medium 半公斤到两公斤,heavy 两公斤以上);flags(从这些词里选,没有就空数组:"
     "battery 带电/锂电池、magnet 带磁、pressure 带压、fragile 易碎、seasonal 季节性、liquid 液体、gas 气罐、custom 定制加印、"
     "epa_fda 需要 EPA/FDA、knife 刀具武器、child 儿童用品、brand 带别人品牌、oversize 大件);"
     "factory_fit(pts 0–15:能自己组装/换外观/做套装 12–15,改改包装或配件 8–11,只能原样转卖 3–5;why 一句中文)。\n"
-    'Reply JSON only: {{"picks": [{{"id": "<候选 id>", "reason": "...", "risks": ["..."], "us_query": "...", "weight_class": "light", '
+    'Reply JSON only: {{"picks": [{{"id": "<候选 id>", "name_en": "tent stakes", "reason": "...", "risks": ["..."], "us_query": "...", "weight_class": "light", '
     '"flags": [], "factory_fit": {{"pts": 10, "why": "..."}}}}], "note": "一句中文:这批候选整体怎么样(可空)"}}'
 )
 
@@ -208,6 +211,7 @@ def parse_picks(result: Any, *, pool_ids: set[str], limit: int, fallback_query: 
         reason = str(item.get("reason") or "").strip()[:200]
         risks = tuple(str(r).strip()[:120] for r in (item.get("risks") or []) if isinstance(r, str) and str(r).strip())[:6]
         query = _clean_query(item.get("us_query")) or _clean_query((fallback_query or {}).get(cid))
+        name_en = _clean_name(item.get("name_en"))
         weight_class = str(item.get("weight_class") or "").strip().lower()
         if weight_class not in scoring.WEIGHT_CLASSES:
             weight_class = "medium"
@@ -228,11 +232,23 @@ def parse_picks(result: Any, *, pool_ids: set[str], limit: int, fallback_query: 
                 flags=flags,
                 factory_pts=factory_pts,
                 factory_why=str(fit.get("why") or "").strip()[:200],
+                name_en=name_en,
             )
         )
         if len(out) >= limit:
             break
     return out
+
+
+_NAME_OK = re.compile(r"^[a-z0-9][a-z0-9 /&'\-]{1,58}$")
+
+
+def _clean_name(value: Any) -> str:
+    """英文品名:小写英文词,2–60 字符,带品牌词或夸张词的不要(卡上就用中文标题)。"""
+    name = re.sub(r"\s+", " ", str(value or "").strip().lower())
+    if not _NAME_OK.match(name) or any(word in name.split() for word in _HYPE_WORDS):
+        return ""
+    return name
 
 
 def _clean_query(value: Any) -> str:
@@ -246,7 +262,7 @@ def _clean_query(value: Any) -> str:
 
 
 def _competitors_slim(stats: dict[str, Any]) -> dict[str, Any]:
-    keep = {k: stats.get(k) for k in ("query", "n", "min", "p25", "median", "p75", "max", "error") if stats.get(k) is not None}
+    keep = {k: stats.get(k) for k in ("query", "n", "min", "p25", "median", "p75", "max", "error", "unit") if stats.get(k) is not None}
     return keep
 
 
@@ -300,9 +316,12 @@ def build_card_text(row: FCategoryCandidate, pick: Pick, competitors: dict[str, 
     n = int(competitors.get("n") or 0)
     if n > 0:
         comp_text = f"美国同类({competitors.get('query')})中位 ${competitors.get('median')},一半在 ${competitors.get('p25')}–${competitors.get('p75')}"
+        unit_line = pricing.unit_text(competitors.get("unit"))
+        if unit_line:
+            comp_text += f";{unit_line}——1688 的 ¥{price if price is not None else '?'} 是单件价,账按件折算后比"
     else:
         comp_text = "美国同类价没拿到" + (f"({competitors.get('error')})" if competitors.get("error") else "(没有能查的英文词)")
-    facts = f"1688 进价 ¥{price if price is not None else '?'}" + (f"(≈${goods:.2f})" if goods is not None else "") + f",起订 {row.moq or '?'},月销 {sales if sales is not None else '?'}"
+    facts = (pick.name_en + ":" if pick.name_en else "") + f"1688 进价 ¥{price if price is not None else '?'}" + (f"(≈${goods:.2f}/件)" if goods is not None else "") + f",起订 {row.moq or '?'},月销 {sales if sales is not None else '?'}"
     score_text = f"评分 {card['total']}/{card['max']}" + (f"(没拿到:{'、'.join(card['missing'])})" if card.get("missing") else "") + ";" if card else ""
     conclusion = f"{score_text}{facts};{comp_text}。批了我就开详情页建档(先建草稿、不上架),建档卡再给你过目。"
     why = pick.reason
@@ -329,6 +348,7 @@ def build_card_text(row: FCategoryCandidate, pick: Pick, competitors: dict[str, 
             "source_url": row.source_url,
             "image_url": row.image_url,
             "title_zh": row.title,
+            "name_en": pick.name_en,
             "category_path": row.category_path,
             "profile_product_en": row.profile_product_en,
             "price_cny": price,
@@ -409,6 +429,19 @@ def pending_count(db: Session) -> int:
     return int(db.scalar(select(func.count()).select_from(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND, SqhCard.status == "pending"), execution_options=_X) or 0)
 
 
+RESCORE_REASON = "算法修正(同类价按件折算、英文品名按实物),这张作废,她按新账重算。"
+
+
+def _retire_old_cards(db: Session, row: FCategoryCandidate, *, reason: str) -> int:
+    """重算时:这个候选还在等批的旧卡作废;返回这个候选已有几张卡(新卡的 dedupe_key 用 :r<n> 区分)。"""
+    key = f"{CANDIDATE_CARD_KIND}:{row.id}"
+    olds = db.scalars(select(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND, SqhCard.dedupe_key.like(f"{key}%")), execution_options=_X).all()
+    for old in olds:
+        if old.status == "pending":
+            cards.retire(db, old, reason=reason)
+    return len(olds)
+
+
 def run_picks(
     db: Session,
     *,
@@ -417,19 +450,30 @@ def run_picks(
     shopping: ShoppingFn | None = None,
     amazon: AmazonFn | None = None,
     keepa: KeepaFn | None = None,
+    rows: list[FCategoryCandidate] | None = None,
 ) -> dict[str, Any]:
-    """挑一轮:初筛(她)→ 取数据(谷歌购物/亚马逊/Keepa)→ 评分卡 → 红线否决、过线的发卡。返回 {"cards": [refs], "skipped": 原因 | None, "scored": [...]}。"""
+    """挑一轮:初筛(她)→ 取数据(谷歌购物/亚马逊/Keepa)→ 评分卡 → 红线否决、过线的发卡。返回 {"cards": [refs], "skipped": 原因 | None, "scored": [...]}。
+
+    rows 给了 = 重算这几个候选(算法改了之后):不看配额、不看池子,它们还在等批的旧卡作废,过线的重新发卡。
+    """
     now = now or datetime.now(UTC)
-    quota = picks_per_day() - cards_today(db, now)
-    if quota <= 0:
-        return {"cards": [], "skipped": "today_done"}
-    if pending_count(db) >= picks_max_pending():
-        return {"cards": [], "skipped": "pending_full"}
-    rows = pool(db)
-    if not rows:
-        memory.log_activity(db, "找货池里没有能挑的候选了(F 池子挑空了,或剩下的都是开不了页面/踩红线的)。", kind="pick")
-        db.commit()
-        return {"cards": [], "skipped": "pool_empty"}
+    rerun = rows is not None
+    if rerun:
+        rows = list(rows or [])
+        quota = len(rows)
+        if not rows:
+            return {"cards": [], "skipped": "pool_empty"}
+    else:
+        quota = picks_per_day() - cards_today(db, now)
+        if quota <= 0:
+            return {"cards": [], "skipped": "today_done"}
+        if pending_count(db) >= picks_max_pending():
+            return {"cards": [], "skipped": "pending_full"}
+        rows = pool(db)
+        if not rows:
+            memory.log_activity(db, "找货池里没有能挑的候选了(F 池子挑空了,或剩下的都是开不了页面/踩红线的)。", kind="pick")
+            db.commit()
+            return {"cards": [], "skipped": "pool_empty"}
     by_id = {str(row.id): row for row in rows}
     judge = judge or _default_judge
     shopping = shopping or _default_shopping
@@ -438,7 +482,7 @@ def run_picks(
     _set_activity(db, "thinking", f"在找货池里挑今天的新品({len(rows)} 个候选)")
     db.commit()
     extra = "候选:\n" + "\n".join(candidate_line(row) for row in rows) + "\n\n" + _store_brief(db) + "\n\n" + _boss_history(db)
-    shortlist = min(SHORTLIST_MAX, max(quota, quota * 2))
+    shortlist = quota if rerun else min(SHORTLIST_MAX, max(quota, quota * 2))
     try:
         result = judge(db, _PICK_ASK.format(limit=shortlist), extra)
     except Exception as exc:  # noqa: BLE001 —— 挑不成不拖垮 worker,写流水,下一次再挑
@@ -449,6 +493,13 @@ def run_picks(
         return {"cards": [], "skipped": "judge_failed"}
     fallback = {cid: (row.profile_product_en or "") for cid, row in by_id.items()}
     picks = parse_picks(result, pool_ids=set(by_id), limit=shortlist, fallback_query=fallback)
+    if rerun:
+        kept = {pick.f_candidate_id for pick in picks}
+        for row in rows:
+            n_old = _retire_old_cards(db, row, reason=RESCORE_REASON)
+            if str(row.id) not in kept and n_old:
+                memory.log_activity(db, f"重算时没再留这个候选:{row.title[:30]},旧卡作废。", kind="pick")
+        db.commit()
     if not picks:
         memory.log_activity(db, f"看了 {len(rows)} 个候选,今天没有值得发给老板的。", kind="pick")
         _set_activity(db, "working", "今天的候选都不够格,没发卡")
@@ -479,9 +530,13 @@ def run_picks(
             db.commit()
             continue
         text = build_card_text(row, pick, competitors, a, card_score, amazon=amz if isinstance(amz, dict) else None, keepa=keepa_rows)
+        dedupe_key = f"{CANDIDATE_CARD_KIND}:{row.id}"
+        if rerun:
+            n_old = int(db.scalar(select(func.count()).select_from(SqhCard).where(SqhCard.kind == CANDIDATE_CARD_KIND, SqhCard.dedupe_key.like(f"{dedupe_key}%")), execution_options=_X) or 0)
+            dedupe_key = f"{dedupe_key}:r{n_old}"
         card, created = cards.create_card(
             db,
-            dedupe_key=f"{CANDIDATE_CARD_KIND}:{row.id}",
+            dedupe_key=dedupe_key,
             kind=CANDIDATE_CARD_KIND,
             title=text["title"],
             conclusion=text["conclusion"],
