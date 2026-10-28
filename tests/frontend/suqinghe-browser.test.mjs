@@ -63,7 +63,10 @@ test("面板接进办公室窗口(两种视图都能开)、提醒卡上有「打
   const panel = read("frontend/src/components/suqinghe/BrowserPanel.tsx");
   assert.match(panel, /getBrowser\(true\)/); // 开着面板才告诉 worker「有人在看」
   assert.match(panel, /登录 1688/);
+  assert.match(panel, /原尺寸\(扫码用\)/); // 10-28 扫码扫不上:能切到 1366 原尺寸
+  assert.match(panel, /data-zoom=\{zoom \? "1" : undefined\}/);
   const css = read("frontend/src/components/suqinghe/Office.module.css");
   assert.match(css, /\.browserOverlay \{/);
   assert.match(css, /\.browserFrame \{/);
+  assert.match(css, /\.browserStage\[data-zoom="1"\] \.browserFrame \{[^}]*width: 1366px/);
 });

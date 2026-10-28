@@ -552,6 +552,8 @@ class SuqingheWorker:
                 self.online = False
             if not busy and not built and not resumed:
                 _sleep_interruptible(_chat_poll_seconds(), should_stop)
+        if browser.enabled():
+            browser.shutdown()  # 10-28:关干净才不留 SingletonLock,下个容器(新主机名)才起得来 Chromium
 
 
 def _chat_poll_seconds() -> float:

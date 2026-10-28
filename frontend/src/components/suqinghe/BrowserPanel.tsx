@@ -19,6 +19,7 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
   const [frameSrc, setFrameSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [zoom, setZoom] = useState(false); // 10-28 扫码扫不上:原尺寸显示(1366 宽,可滚动),二维码才够大
   const imgRef = useRef<HTMLImageElement | null>(null);
   const loadingRef = useRef(false);
   const pressRef = useRef<{ x: number; y: number; sentDown: boolean } | null>(null);
@@ -162,6 +163,9 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
           {status?.logged_in_at ? <span className={styles.muted}> · 已登录 1688</span> : <span className={styles.muted}> · 还没登录 1688</span>}
         </div>
         <div className={styles.browserTools}>
+          <button disabled={!live} onClick={() => setZoom((z) => !z)} type="button">
+            {zoom ? "缩回窗口" : "原尺寸(扫码用)"}
+          </button>
           {canCommand ? (
             <>
               <button disabled={busy} onClick={() => void act("登录 1688", browserLogin)} type="button">
@@ -186,7 +190,7 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
           {error}
         </p>
       ) : null}
-      <div className={styles.browserStage} onKeyDown={onKeyDown} tabIndex={0}>
+      <div className={styles.browserStage} data-zoom={zoom ? "1" : undefined} onKeyDown={onKeyDown} tabIndex={0}>
         {live && frameSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -216,7 +220,7 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
       </div>
       {live ? (
         <p className={styles.browserHint}>
-          {canCommand ? "直接在画面上点、拖滑块、打字(先点一下画面让它接键盘)。过了验证她会自己接着做。" : "只有老板能操作,你可以看。"}
+          {canCommand ? "直接在画面上点、拖滑块、打字(先点一下画面让它接键盘)。扫码前先点「原尺寸」把二维码放大。过了验证她会自己接着做。" : "只有老板能操作,你可以看。"}
         </p>
       ) : null}
     </div>

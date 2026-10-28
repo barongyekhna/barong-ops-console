@@ -6,7 +6,7 @@
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
   "migration_count": 137,
-  "migration_hash": "476e069463b8442137d873cd674135b37030a3d2cd558dda0e1f8e01a95bbb89",
+  "migration_hash": "5861e14e23e24ad0e0f2f907a485948d179406fc7911e3ed3c681b6e57671a7f",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -1102,7 +1102,7 @@
     },
     {
       "applied_at": "1970-01-01T00:00:00Z",
-      "checksum": "f15553e4e74e760862c620de6841b81373f9ef096eb538cb460e3b35580db5ae",
+      "checksum": "751a7a63603d07e7f0be3bf996fe6d532c4c871e9baff24abd9137ec8dc2099c",
       "down_revision": "20261023_01_suqinghe_dossiers",
       "path": "backend/alembic/versions/20261028_01_suqinghe_browser.py",
       "version": "20261028_01_suqinghe_browser"

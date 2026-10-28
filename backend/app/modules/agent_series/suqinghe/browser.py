@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 _X = SKIP_ORG_DATA_ISOLATION
 
 VIEWPORT = {"width": 1366, "height": 900}
-FRAME_WIDTH = 1024
+FRAME_WIDTH = 1366  # 10-28 老板扫码扫不上:不再缩到 1024,原尺寸 + 质量 85,二维码才清楚
+FRAME_QUALITY = 85
 FRAME_INTERVAL_S = 0.7
 INPUT_POLL_S = 0.1
 RECOVERY_CHECK_S = 2.0
@@ -192,15 +193,36 @@ def logged_in(cookies: list[dict[str, Any]]) -> bool:
     return any(n in names for n in LOGIN_COOKIES)
 
 
-def frame_bytes(screenshot_png_or_jpeg: bytes, *, width: int = FRAME_WIDTH) -> bytes:
-    """截图缩到 1024 宽的 JPEG(≈50KB),给面板看够了。"""
+SINGLETON_FILES = ("SingletonLock", "SingletonSocket", "SingletonCookie")
+
+
+def clear_stale_singleton(profile: str) -> list[str]:
+    """worker 容器重建后主机名变了,Chromium 看到上一个容器留下的 SingletonLock(hostname-pid)会当成「别的机器在用这份 profile」拒绝启动。
+    这份 profile 只有本线程一个用户,启动前把三个 Singleton* 符号链接清掉。返回清掉的文件名。"""
+    removed: list[str] = []
+    for name in SINGLETON_FILES:
+        path = os.path.join(profile, name)
+        if os.path.islink(path) or os.path.exists(path):
+            try:
+                os.unlink(path)
+                removed.append(name)
+            except OSError:
+                logger.warning("could not remove %s", path)
+    if removed:
+        logger.info("cleared stale chromium singleton files: %s", removed)
+    return removed
+
+
+def frame_bytes(screenshot_png_or_jpeg: bytes, *, width: int = FRAME_WIDTH, quality: int = FRAME_QUALITY) -> bytes:
+    """截图转成 JPEG 给面板看。原尺寸(1366 宽)、质量 85、只压一次(截图用无损 PNG):
+    老板要拿手机对着屏幕扫二维码,10-28 第一次用时缩到 1024 又压到 60,码糊得扫不上。≈150–250KB,只在有人看且画面变了才写。"""
     from PIL import Image
 
     img = Image.open(io.BytesIO(screenshot_png_or_jpeg)).convert("RGB")
     if img.width > width:
-        img = img.resize((width, round(img.height * width / img.width)))
+        img = img.resize((width, round(img.height * width / img.width)), Image.LANCZOS)
     out = io.BytesIO()
-    img.save(out, "JPEG", quality=60, optimize=True)
+    img.save(out, "JPEG", quality=quality, optimize=True)
     return out.getvalue()
 
 
@@ -277,6 +299,7 @@ class BrowserSession(threading.Thread):
     # ---- 线程主循环 ----
 
     def run(self) -> None:
+        self._set("idle", dossier_id=None)  # 线程一起来就把库里的行归位:上个容器被杀时留下的 interactive/needs_human 不作数
         while not self.stop_flag.is_set():
             try:
                 fn, args, fut = self._jobs.get(timeout=INPUT_POLL_S)
@@ -303,6 +326,7 @@ class BrowserSession(threading.Thread):
 
         profile = browser_profile_dir()
         os.makedirs(profile, exist_ok=True)
+        clear_stale_singleton(profile)
         self._pw = sync_playwright().start()
         kwargs: dict[str, Any] = {
             "user_data_dir": profile,
@@ -511,7 +535,7 @@ class BrowserSession(threading.Thread):
 
     def _push_frame(self) -> None:
         try:
-            raw = self._page.screenshot(type="jpeg", quality=70)
+            raw = self._page.screenshot(type="png")  # 无损截,只在 frame_bytes 压一次
         except Exception:  # noqa: BLE001
             return
         digest = hashlib.sha1(raw).hexdigest()
@@ -543,7 +567,7 @@ class BrowserSession(threading.Thread):
             self._set("idle", dossier_id=None)
         elif self.status == "interactive":
             if "login.1688.com" not in url and self._refresh_login():
-                self._set("idle", dossier_id=None, url=url, title=title)
+                self._set("idle", reason="1688 登录成功,账号记住了,下次抓页面直接用", dossier_id=None, url=url, title=title)
 
 
 # ---------------------------------------------------------------- 进程内单例
@@ -572,3 +596,19 @@ def status() -> dict[str, Any]:
 
 def holding() -> bool:
     return status()["status"] in HOLD_STATES
+
+
+def shutdown(timeout_s: float = 20.0) -> bool:
+    """worker 下线时把 Chromium 关干净(cookie 落盘、SingletonLock 自己撤掉),线程收工。没线程就什么都不做。"""
+    global _session
+    with _session_lock:
+        sess, _session = _session, None
+    if sess is None or not sess.is_alive():
+        return False
+    try:
+        sess.close()
+    except Exception:  # noqa: BLE001 —— 关不掉也要停线程
+        logger.exception("browser close on shutdown failed")
+    sess.stop_flag.set()
+    sess.join(timeout=timeout_s)
+    return True

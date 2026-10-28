@@ -208,7 +208,7 @@ def test_login_cookies_frame_bytes_and_url_allowlist() -> None:
     assert not browser.logged_in([{"name": "cna"}, {"name": "isg"}]) and not browser.logged_in([])
     jpeg = browser.frame_bytes(_png(1366, 900))
     img = Image.open(io.BytesIO(jpeg))
-    assert img.format == "JPEG" and img.width == 1024 and img.height == 675
+    assert img.format == "JPEG" and img.width == 1366 and img.height == 900  # 10-28 起不缩,二维码要能扫
     assert browser.allowed_url("https://login.1688.com/member/signin.htm") and browser.allowed_url("https://1688.com/")
     assert not browser.allowed_url("https://detail.1688.com.evil.com/x") and not browser.allowed_url("ftp://1688.com") and not browser.allowed_url("")
 
@@ -318,6 +318,27 @@ def test_login_flow_records_logged_in_when_cookies_arrive(session) -> None:
     page.url = "https://www.1688.com/"
     assert _wait(lambda: sess.status == "idle", timeout=4)
     assert sess.logged_in_at == clock.now and store.states[-1]["logged_in_at"] == clock.now
+
+
+def test_stale_singleton_files_are_cleared_before_launch(tmp_path: Path) -> None:
+    # 10-28 实况:上一个容器留下 SingletonLock -> 7a17bfe4ceca-50(旧主机名),新容器主机名不同,Chromium 会拒绝起
+    (tmp_path / "SingletonLock").symlink_to("7a17bfe4ceca-50")
+    (tmp_path / "SingletonCookie").symlink_to("14917247614385835859")
+    (tmp_path / "SingletonSocket").symlink_to("/tmp/org.chromium.Chromium.x/SingletonSocket")
+    (tmp_path / "Default").mkdir()
+    assert sorted(browser.clear_stale_singleton(str(tmp_path))) == ["SingletonCookie", "SingletonLock", "SingletonSocket"]
+    assert not any((tmp_path / n).is_symlink() for n in browser.SINGLETON_FILES) and (tmp_path / "Default").is_dir()
+    assert browser.clear_stale_singleton(str(tmp_path)) == []
+
+
+def test_shutdown_closes_the_context_and_stops_the_thread(session, monkeypatch: pytest.MonkeyPatch) -> None:
+    sess, page, ctx, store, clock, detect = session
+    store.inputs.append((1, "login", {}))
+    assert _wait(lambda: sess.status == "interactive", timeout=4)
+    monkeypatch.setattr(browser, "_session", sess)
+    assert browser.shutdown(timeout_s=5)
+    assert ctx.closed and not sess.is_alive() and store.states[-1]["status"] == "idle"
+    assert browser._session is None and not browser.shutdown()
 
 
 def test_status_helpers_treat_a_disabled_browser_as_idle(monkeypatch: pytest.MonkeyPatch) -> None:
