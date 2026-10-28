@@ -21,7 +21,7 @@ from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from ....services.worker_heartbeat import list_heartbeats
 from . import cards
 from .constants import LA, NIGHT_END_HOUR, NIGHT_START_HOUR, THINKING_FRESH_SECONDS, USAGE_LABEL, WORKER_NAME
-from .models import SqhActivity, SqhCard, SqhGoal, SqhSnapshot, SqhState
+from .models import SqhActivity, SqhBrowser, SqhCard, SqhGoal, SqhSnapshot, SqhState
 
 _X = SKIP_ORG_DATA_ISOLATION
 
@@ -96,6 +96,23 @@ def _claude_spend_today(db: Session) -> float | None:
         return None
 
 
+def browser_payload(db: Session) -> dict[str, Any]:
+    """她的登录浏览器此刻的状态(10-28):面板按它决定亮不亮、要不要拉画面。"""
+    row = db.get(SqhBrowser, 1, execution_options=_X)
+    if row is None:
+        return {"status": "idle", "reason": None, "url": None, "title": None, "dossier_id": None, "frame_at": None, "viewer_seen_at": None, "logged_in_at": None}
+    return {
+        "status": row.status,
+        "reason": row.reason,
+        "url": row.url,
+        "title": row.title,
+        "dossier_id": row.dossier_id,
+        "frame_at": row.frame_at.isoformat() if row.frame_at else None,
+        "viewer_seen_at": row.viewer_seen_at.isoformat() if row.viewer_seen_at else None,
+        "logged_in_at": row.logged_in_at.isoformat() if row.logged_in_at else None,
+    }
+
+
 def office_payload(db: Session, *, can_command: bool, now: datetime | None = None) -> dict[str, Any]:
     now = now or datetime.now(UTC)
     state = get_state(db)
@@ -161,6 +178,7 @@ def office_payload(db: Session, *, can_command: bool, now: datetime | None = Non
             {"id": a.id, "kind": a.kind, "text": a.text, "at": a.created_at.isoformat() if a.created_at else None}
             for a in activity_rows
         ],
+        "browser": browser_payload(db),
         "can_command": can_command,
         "server_time": now.isoformat(),
     }

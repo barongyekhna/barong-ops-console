@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 import styles from "./Office.module.css";
 import {
@@ -10,6 +10,8 @@ import {
   type OfficeRead,
   type OfficeState,
 } from "./office-api";
+import { BrowserPanel } from "./BrowserPanel";
+import { BrowserPanelContext } from "./browser-context";
 import { GoalList, Inbox, OwnerControls, minutesAgo, pickEasterLine, timeText } from "./OfficeParts";
 import { OfficeScene } from "./OfficeScene";
 
@@ -164,6 +166,15 @@ export function OfficeWindow({
     }
   };
 
+  // 她的登录浏览器(10-28):面板当覆盖层画在窗口里,收件筐里的提醒卡、下面的按钮都能打开它(场景里也行,走 context)
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const browserControls = useMemo(
+    () => ({ open: () => setBrowserOpen(true), close: () => setBrowserOpen(false), isOpen: browserOpen }),
+    [browserOpen],
+  );
+  const browserStatus = office?.browser?.status ?? "idle";
+  const browserNeedsYou = browserStatus === "needs_human" || browserStatus === "interactive";
+
   const run = useCallback(
     async (label: string, action: () => Promise<unknown>) => {
       setBusy(true);
@@ -234,12 +245,25 @@ export function OfficeWindow({
               {size === "large" ? "缩小" : "放大"}
             </button>
           ) : null}
+          <button
+            aria-pressed={browserOpen}
+            className={styles.browserButton}
+            data-live={browserNeedsYou ? "true" : undefined}
+            onClick={() => setBrowserOpen((value) => !value)}
+            title={browserNeedsYou ? "1688 要验证,她在等你" : "她的登录浏览器"}
+            type="button"
+          >
+            🖥️ 浏览器
+            {browserNeedsYou ? <span aria-label="等你" className={styles.browserDot} /> : null}
+          </button>
           <button aria-label="关闭办公室" className={styles.close} onClick={onClose} type="button">
             ×
           </button>
         </div>
       </header>
 
+      <BrowserPanelContext.Provider value={browserControls}>
+      {browserOpen ? <BrowserPanel canCommand={canCommand} onClose={() => setBrowserOpen(false)} /> : null}
       <div className={styles.body}>
         {!office ? (
           <p className={styles.muted}>{loadError ?? "正在推开办公室的门…"}</p>
@@ -360,6 +384,7 @@ export function OfficeWindow({
           </>
         )}
       </div>
+      </BrowserPanelContext.Provider>
     </section>
   );
 }

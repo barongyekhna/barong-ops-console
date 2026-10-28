@@ -1465,11 +1465,15 @@ function isAllowedSuqinghePath(method: string, path: string[]) {
   }
   if (method === "GET") {
     if (path.length === 2) {
-      // office = 办公室全景;memory = 书柜(硬记忆);snapshots = 日历(每日快照列表);dossiers = 档案柜
-      return path[1] === "office" || path[1] === "memory" || path[1] === "snapshots" || path[1] === "dossiers";
+      // office = 办公室全景;memory = 书柜(硬记忆);snapshots = 日历(每日快照列表);dossiers = 档案柜;browser = 她的登录浏览器状态
+      return path[1] === "office" || path[1] === "memory" || path[1] === "snapshots" || path[1] === "dossiers" || path[1] === "browser";
     }
     if (path.length === 3 && path[1] === "dossiers") {
       return SUQINGHE_DOSSIER_ID_PATTERN.test(path[2]);
+    }
+    if (path.length === 3 && path[1] === "browser") {
+      // 浏览器画面(JPEG,no-store):1688 要验证时老板在办公室里过滑块、扫码
+      return path[2] === "frame";
     }
     if (path.length === 4 && path[1] === "cards") {
       // 选品卡上的候选图:后端经 F 的图片缓存回源阿里 CDN
@@ -1484,6 +1488,10 @@ function isAllowedSuqinghePath(method: string, path: string[]) {
     if (path.length === 4 && path[1] === "dossiers") {
       // 档案柜里的「重新整理」:旧档案作废、同一个链接按新规则重排
       return SUQINGHE_DOSSIER_ID_PATTERN.test(path[2]) && path[3] === "redo";
+    }
+    if (path.length === 3 && path[1] === "browser") {
+      // 老板在浏览器面板里的动作(点/拖/打字)、登录 1688、关掉;闸在后端 require_owner
+      return path[2] === "input" || path[2] === "login" || path[2] === "close";
     }
     return (
       path.length === 4 &&

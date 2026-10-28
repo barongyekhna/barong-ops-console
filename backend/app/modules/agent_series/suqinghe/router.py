@@ -6,12 +6,12 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ....api.deps import get_current_user, require_owner
@@ -19,11 +19,12 @@ from ....core.roles import is_owner_role
 from ....db.session import get_db
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
+from . import browser as _browser
 from . import cards, dossiers, memory, office
 from . import pipeline as _pipeline  # noqa: F401 —— 导入即登记 k_price 指纹(价格卡批之前核 K 里的价有没有人动过)
 from . import snapshot as _snapshot  # noqa: F401 —— 导入即登记 product_gate 指纹,批卡前才能查数据变没变
 from .constants import MEMORY_KINDS
-from .models import SqhDossier, SqhGoal, SqhMemory, SqhSnapshot
+from .models import SqhBrowser, SqhBrowserInput, SqhDossier, SqhGoal, SqhMemory, SqhSnapshot
 
 router = APIRouter(prefix="/suqinghe", tags=["suqinghe"])
 
@@ -289,3 +290,93 @@ def card_image(ref: str, db: Session = Depends(get_db), user: User = Depends(get
     except f_images.FImageUnavailableError as exc:
         raise HTTPException(status_code=404, detail={"code": "SQH_CARD_IMAGE_UNAVAILABLE", "message": str(exc)}) from exc
     return Response(content=data, media_type=media_type, headers={"Cache-Control": "private, max-age=604800, immutable"})
+
+
+# ---------------------------------------------------------------- 她的登录浏览器(10-28)
+
+
+class BrowserInputBody(BaseModel):
+    kind: Literal["click", "down", "move", "up", "type", "key", "wheel", "navigate", "dump"]
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+def _touch_viewer(db: Session) -> None:
+    db.execute(update(SqhBrowser).where(SqhBrowser.id == 1).values(viewer_seen_at=datetime.now(UTC)), execution_options=SKIP_ORG_DATA_ISOLATION)
+
+
+@router.get("/browser")
+def get_browser(viewer: bool = Query(default=False), db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """浏览器状态。面板开着时带 viewer=1:worker 只在有人看时才截图、写帧。"""
+    if viewer:
+        _touch_viewer(db)
+        db.commit()
+    return office.browser_payload(db)
+
+
+@router.get("/browser/frame")
+def get_browser_frame(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
+    row = db.get(SqhBrowser, 1, execution_options=SKIP_ORG_DATA_ISOLATION)
+    _touch_viewer(db)
+    db.commit()
+    if row is None or not row.frame:
+        raise HTTPException(status_code=404, detail={"code": "SQH_BROWSER_NO_FRAME", "message": "现在没有画面。"})
+    return Response(content=bytes(row.frame), media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+def _queue_input(db: Session, *, kind: str, payload: dict[str, Any], owner: User) -> int:
+    row = SqhBrowserInput(kind=kind, payload=payload, created_by_user_id=str(owner.id))
+    db.add(row)
+    db.flush()
+    return int(row.id)
+
+
+@router.post("/browser/input")
+def browser_input(body: BrowserInputBody, db: Session = Depends(get_db), owner: User = Depends(require_owner)) -> dict[str, Any]:
+    """老板在面板上的一下动作:只做形状校验,真正应用在 worker 的浏览器线程(browser.apply_input)。"""
+    payload = dict(body.payload or {})
+    if body.kind in ("click", "down", "move", "up", "wheel"):
+        try:
+            x, y = float(payload.get("x")), float(payload.get("y"))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail={"code": "SQH_BROWSER_BAD_INPUT", "message": "坐标不对。"}) from exc
+        if not (0 <= x <= _browser.VIEWPORT["width"] and 0 <= y <= _browser.VIEWPORT["height"]):
+            raise HTTPException(status_code=422, detail={"code": "SQH_BROWSER_BAD_INPUT", "message": "坐标越界。"})
+        payload = {"x": round(x, 1), "y": round(y, 1), **({"dy": float(payload.get("dy") or 0)} if body.kind == "wheel" else {})}
+    elif body.kind == "type":
+        text = str(payload.get("text") or "")[:200]
+        if not text:
+            raise HTTPException(status_code=422, detail={"code": "SQH_BROWSER_BAD_INPUT", "message": "没有要输入的字。"})
+        payload = {"text": text}
+    elif body.kind == "key":
+        key = str(payload.get("key") or "")
+        if key not in _browser.KEYS_ALLOWED:
+            raise HTTPException(status_code=422, detail={"code": "SQH_BROWSER_BAD_INPUT", "message": "不认识这个键。"})
+        payload = {"key": key}
+    elif body.kind == "navigate":
+        url = str(payload.get("url") or "")
+        if not _browser.allowed_url(url):
+            raise HTTPException(status_code=422, detail={"code": "SQH_BROWSER_BAD_INPUT", "message": "只能去 1688 的页面。"})
+        payload = {"url": url[:1000]}
+    else:
+        payload = {}
+    row_id = _queue_input(db, kind=body.kind, payload=payload, owner=owner)
+    _touch_viewer(db)
+    db.commit()
+    return {"id": row_id, "queued": True}
+
+
+@router.post("/browser/login")
+def browser_login(db: Session = Depends(get_db), owner: User = Depends(require_owner)) -> dict[str, Any]:
+    row_id = _queue_input(db, kind="login", payload={}, owner=owner)
+    _touch_viewer(db)
+    memory.log_activity(db, "老板来帮我登录 1688。", kind="control")
+    db.commit()
+    return {"id": row_id, "queued": True}
+
+
+@router.post("/browser/close")
+def browser_close(db: Session = Depends(get_db), owner: User = Depends(require_owner)) -> dict[str, Any]:
+    row_id = _queue_input(db, kind="close", payload={}, owner=owner)
+    memory.log_activity(db, "老板关掉了我的浏览器。", kind="control")
+    db.commit()
+    return {"id": row_id, "queued": True}

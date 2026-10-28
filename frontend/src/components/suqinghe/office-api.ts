@@ -51,8 +51,22 @@ export type OfficeRead = {
   pending_cards: OfficeCard[];
   recent_cards: OfficeCard[];
   activity: OfficeActivity[];
+  /** 她的登录浏览器此刻的状态(10-28);老后端没有这个字段 */
+  browser?: BrowserStatus;
   can_command: boolean;
   server_time: string;
+};
+
+/** 后端 /suqinghe/browser(office.browser_payload)。 */
+export type BrowserStatus = {
+  status: "idle" | "fetching" | "needs_human" | "interactive" | "asking_seller" | string;
+  reason: string | null;
+  url: string | null;
+  title: string | null;
+  dossier_id: number | null;
+  frame_at: string | null;
+  viewer_seen_at: string | null;
+  logged_in_at: string | null;
 };
 
 const BASE = "/suqinghe";
@@ -143,7 +157,7 @@ export function getSnapshot(date: string) {
 }
 
 /** 档案柜:一个 1688 链接 → 一份 K 档案草稿(后端 /suqinghe/dossiers)。 */
-export type DossierStatus = "queued" | "fetching" | "reading" | "ready" | "blocked" | "failed" | "created" | "rejected";
+export type DossierStatus = "queued" | "fetching" | "reading" | "ready" | "blocked" | "failed" | "created" | "rejected" | "needs_human";
 
 export type DossierSummary = {
   id: number;
@@ -197,7 +211,32 @@ export const DOSSIER_STATUS_LABEL: Record<DossierStatus, string> = {
   failed: "失败",
   created: "已建进K",
   rejected: "已驳回",
+  needs_human: "等你过验证",
 };
+
+/** 她的登录浏览器(10-28):状态、画面、老板的动作。 */
+export function getBrowser(viewer = false) {
+  return apiRequest<BrowserStatus>(`${BASE}/browser${viewer ? "?viewer=1" : ""}`);
+}
+
+/** 画面是 JPEG,带时间戳防缓存;后端也回 no-store。 */
+export function browserFrameUrl(now: number = Date.now()) {
+  return `/api/backend${BASE}/browser/frame?t=${now}`;
+}
+
+export type BrowserInputKind = "click" | "down" | "move" | "up" | "type" | "key" | "wheel" | "navigate" | "dump";
+
+export function sendBrowserInput(kind: BrowserInputKind, payload: Record<string, unknown> = {}) {
+  return apiRequest<{ id: number; queued: boolean }>(`${BASE}/browser/input`, { body: { kind, payload }, method: "POST" });
+}
+
+export function browserLogin() {
+  return apiRequest<{ id: number; queued: boolean }>(`${BASE}/browser/login`, { method: "POST" });
+}
+
+export function browserClose() {
+  return apiRequest<{ id: number; queued: boolean }>(`${BASE}/browser/close`, { method: "POST" });
+}
 
 export const DOSSIER_IN_PROGRESS: DossierStatus[] = ["queued", "fetching", "reading"];
 

@@ -292,3 +292,154 @@ def test_redo_rejects_old_card_and_requeues_same_link(clean, auth_client: TestCl
     assert again.status_code == 422 and "整理中" in again.json()["detail"]["message"]
     missing = auth_client.post("/api/app/suqinghe/dossiers/999999/redo")
     assert missing.status_code == 422 and "没有这份档案" in missing.json()["detail"]["message"]
+
+
+# ---------------------------------------------------------------- 10-28:登录浏览器——被拦留页等老板、过了接着做;「今天先不碰」真的不碰;浏览器接口
+
+
+class _FakeBrowser:
+    def __init__(self) -> None:
+        self.noted: list[int] = []
+
+    def note_dossier(self, dossier_id: int) -> None:
+        self.noted.append(dossier_id)
+
+    def take_recovered(self):
+        return None
+
+
+def _fetch_needs_human(url: str) -> dict:
+    return {"blocked": True, "block_reason": "needs_human:captcha_page", "offer_id": OFFER, "url": url}
+
+
+def _fetch_blocked(url: str) -> dict:
+    return {"blocked": True, "block_reason": "captcha_page", "offer_id": OFFER, "url": url}
+
+
+def _recovered_event(dossier_id: int) -> dict:
+    return {
+        "outcome": "recovered",
+        "dossier_id": dossier_id,
+        "final_url": URL,
+        "title": "捏捏乐 - 阿里巴巴",
+        "html": (FIXTURE / f"offer_{OFFER}.html").read_text(encoding="utf-8"),
+        "text": (FIXTURE / f"offer_{OFFER}.txt").read_text(encoding="utf-8"),
+    }
+
+
+def test_blocked_page_waits_for_the_boss_then_resumes_into_a_ready_dossier(clean, monkeypatch) -> None:
+    from backend.app.modules.agent_series.suqinghe import browser, sourcing_1688
+
+    fake = _FakeBrowser()
+    monkeypatch.setenv("SQH_BROWSER", "1")
+    monkeypatch.setattr(browser, "get", lambda: fake)
+    monkeypatch.setattr(sourcing_1688, "fetch_detail_description", lambda url, **kw: ((FIXTURE / f"offer_{OFFER}.desc.txt").read_text(encoding="utf-8"), None))
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossiers.enqueue(db, url=URL, actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+        held = dossiers.process_next(db, now=T0, fetch=_fetch_needs_human, read=_read, build=_build)
+        assert held is not None and held.status == "needs_human" and held.error == "captcha_page" and fake.noted == [held.id]
+        alert = db.scalar(select(SqhCard).where(SqhCard.kind == "ops_alert"))
+        assert alert is not None and alert.evidence["browser"] is True and alert.evidence["dossier_id"] == held.id and "打开浏览器" in alert.conclusion
+        # 等人期间别的链接不抓(浏览器 holding);这里用假的 status 模拟
+        monkeypatch.setattr(browser, "status", lambda: {"status": "needs_human", "reason": "captcha_page", "dossier_id": held.id, "logged_in_at": None, "alive": True})
+        dossiers.enqueue(db, url="https://detail.1688.com/offer/777000333.html", actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+        calls: list[str] = []
+        assert dossiers.process_next(db, now=T0 + timedelta(minutes=5), fetch=lambda url: calls.append(url) or _capture(), read=_read, build=_build) is None
+        assert calls == []
+        monkeypatch.setattr(browser, "status", lambda: {"status": "idle", "reason": None, "dossier_id": None, "logged_in_at": None, "alive": True})
+        # 「重新整理」对等验证的档案说不
+        with pytest.raises(dossiers.DossierError):
+            dossiers.redo(db, dossier_id=held.id, actor=db.get(User, clean["owner"]))
+        # 老板过了验证:浏览器线程交出恢复后的页面,她接着读图、建草稿、发建档卡
+        done = dossiers.resume_human(db, now=T0 + timedelta(minutes=6), event=_recovered_event(held.id), read=_read, build=_build)
+        assert done is not None and done.id == held.id and done.status == "ready" and done.card_ref
+        card = cards.find_card(db, done.card_ref)
+        assert card is not None and card.kind == "create_k_dossier"
+        # 没有事件 / 事件对不上档案:什么都不做
+        assert dossiers.resume_human(db, event=None) is None
+        assert dossiers.resume_human(db, event={"outcome": "recovered", "dossier_id": done.id}) is None  # 已经不是 needs_human
+
+
+def test_giving_up_marks_blocked_and_restart_requeues(clean, monkeypatch) -> None:
+    from backend.app.modules.agent_series.suqinghe import browser
+
+    monkeypatch.setenv("SQH_BROWSER", "1")
+    monkeypatch.setattr(browser, "get", lambda: _FakeBrowser())
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossiers.enqueue(db, url=URL, actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+        held = dossiers.process_next(db, now=T0, fetch=_fetch_needs_human, read=_read, build=_build)
+        gave_up = dossiers.resume_human(db, event={"outcome": "gave_up", "dossier_id": held.id, "reason": "等了 120 分钟没人来过验证"})
+        assert gave_up is not None and gave_up.status == "blocked" and "120 分钟" in gave_up.error
+        # 再排一份进 needs_human,模拟 worker 重启:回队列
+        dossiers.enqueue(db, url=URL, actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+        monkeypatch.setenv("SQH_1688_RETRY_AFTER_BLOCK", "1")  # 上面那份今天已经 blocked,先放开闸
+        held2 = dossiers.process_next(db, now=T0 + timedelta(minutes=2), fetch=_fetch_needs_human, read=_read, build=_build)
+        assert held2 is not None and held2.status == "needs_human"
+        assert dossiers.requeue_needs_human(db) == 1
+        db.refresh(held2)
+        assert held2.status == "queued" and held2.error is None
+
+
+def test_blocked_today_really_means_no_more_1688_today(clean, monkeypatch) -> None:
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossiers.enqueue(db, url=URL, actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+        blocked = dossiers.process_next(db, now=T0, fetch=_fetch_blocked, read=_read, build=_build)
+        assert blocked is not None and blocked.status == "blocked"
+        dossiers.enqueue(db, url="https://detail.1688.com/offer/777000333.html", actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+        calls: list[str] = []
+        fetch = lambda url: calls.append(url) or _capture()  # noqa: E731
+        assert dossiers.process_next(db, now=T0 + timedelta(minutes=5), fetch=fetch, read=_read, build=_build) is None and calls == []
+        monkeypatch.setenv("SQH_1688_RETRY_AFTER_BLOCK", "1")
+        assert dossiers.process_next(db, now=T0 + timedelta(minutes=5), fetch=fetch, read=_read, build=_build) is not None and calls
+        monkeypatch.delenv("SQH_1688_RETRY_AFTER_BLOCK")
+        # 第二天照常
+        dossiers.enqueue(db, url="https://detail.1688.com/offer/777000444.html", actor_user_id=str(clean["owner"]), channel="web")
+        db.commit()
+        assert dossiers.process_next(db, now=T0 + timedelta(days=1), fetch=fetch, read=_read, build=_build) is not None
+
+
+def test_browser_endpoints_everyone_reads_only_owner_acts(clean, auth_client: TestClient) -> None:
+    from backend.app.modules.agent_series.suqinghe.models import SqhBrowser, SqhBrowserInput
+
+    with without_org_data_isolation(), SessionLocal() as db:
+        db.execute(delete(SqhBrowserInput))
+        row = db.get(SqhBrowser, 1) or SqhBrowser(id=1)
+        row.status, row.frame, row.frame_at, row.viewer_seen_at = "idle", None, None, None
+        db.add(row)
+        db.commit()
+    assert auth_client.get("/api/app/suqinghe/browser").status_code == 401
+    _login(auth_client, REGULAR)
+    res = auth_client.get("/api/app/suqinghe/browser?viewer=1")
+    assert res.status_code == 200 and res.json()["status"] == "idle"
+    assert auth_client.get("/api/app/suqinghe/browser/frame").status_code == 404
+    assert auth_client.post("/api/app/suqinghe/browser/input", json={"kind": "click", "payload": {"x": 1, "y": 2}}).status_code == 403
+    assert auth_client.post("/api/app/suqinghe/browser/login").status_code == 403
+    with without_org_data_isolation(), SessionLocal() as db:
+        seen = db.get(SqhBrowser, 1).viewer_seen_at
+        assert seen is not None  # 看一眼就记下「有人在看」,worker 据此才截图
+        db.get(SqhBrowser, 1).frame = b"\xff\xd8\xff\xe0fakejpeg"
+        db.commit()
+    frame = auth_client.get("/api/app/suqinghe/browser/frame")
+    assert frame.status_code == 200 and frame.headers["content-type"] == "image/jpeg" and frame.headers["cache-control"] == "no-store" and frame.content.startswith(b"\xff\xd8")
+    _login(auth_client, OWNER)
+    ok = auth_client.post("/api/app/suqinghe/browser/input", json={"kind": "down", "payload": {"x": 100.26, "y": 500}})
+    assert ok.status_code == 200 and ok.json()["queued"] is True
+    assert auth_client.post("/api/app/suqinghe/browser/input", json={"kind": "click", "payload": {"x": 5000, "y": 1}}).status_code == 422
+    assert auth_client.post("/api/app/suqinghe/browser/input", json={"kind": "key", "payload": {"key": "F12"}}).status_code == 422
+    assert auth_client.post("/api/app/suqinghe/browser/input", json={"kind": "navigate", "payload": {"url": "https://evil.example/"}}).status_code == 422
+    assert auth_client.post("/api/app/suqinghe/browser/input", json={"kind": "type", "payload": {"text": "abc"}}).status_code == 200
+    assert auth_client.post("/api/app/suqinghe/browser/login").status_code == 200
+    assert auth_client.post("/api/app/suqinghe/browser/close").status_code == 200
+    with without_org_data_isolation(), SessionLocal() as db:
+        rows = db.scalars(select(SqhBrowserInput).order_by(SqhBrowserInput.id)).all()
+        assert [(r.kind, r.payload) for r in rows] == [("down", {"x": 100.3, "y": 500.0}), ("type", {"text": "abc"}), ("login", {}), ("close", {})]
+        assert all(r.applied_at is None for r in rows)
+    # 办公室全景里也带浏览器状态
+    office = auth_client.get("/api/app/suqinghe/office").json()
+    assert office["browser"]["status"] == "idle" and "logged_in_at" in office["browser"]

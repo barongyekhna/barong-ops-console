@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 
 import styles from "./Office.module.css";
+import { useBrowserPanel } from "./browser-context";
 import {
   CANDIDATE_CARD_KIND,
   COPY_CARD_KIND,
@@ -196,6 +197,11 @@ export function CardSheet({
   );
 }
 
+/** 1688 要验证的提醒卡(10-28):evidence.browser 为真 = 页面在她的登录浏览器里等老板。 */
+export function evidenceWantsBrowser(evidence: unknown): boolean {
+  return typeof evidence === "object" && evidence !== null && !Array.isArray(evidence) && (evidence as { browser?: unknown }).browser === true;
+}
+
 /** 卷宗:这张卡的全部——她的结论、为什么、正文、不做会怎样、能不能撤回、原始证据,页底能批能驳。 */
 export function CardDossier({
   card,
@@ -216,6 +222,7 @@ export function CardDossier({
   const summary = summaryOf(card);
   const dossierId = dossierIdOf(card);
   const [showRaw, setShowRaw] = useState(false);
+  const browserPanel = useBrowserPanel();
   return (
     <div className={styles.dossierPage} data-family={meta.family}>
       <button className={styles.linkButton} onClick={onBack} type="button">
@@ -273,6 +280,11 @@ export function CardDossier({
       {dossierId !== null && onOpenDossier ? (
         <button className={styles.linkButton} onClick={() => onOpenDossier(dossierId)} type="button">
           看档案 →
+        </button>
+      ) : null}
+      {browserPanel && card.kind === "ops_alert" && card.status === "pending" && evidenceWantsBrowser(card.evidence) ? (
+        <button className={styles.primary} onClick={browserPanel.open} type="button">
+          打开浏览器,帮她过验证 →
         </button>
       ) : null}
       <DecideBar busy={busy} canCommand={canCommand} card={card} onDecided={onBack} run={run} />

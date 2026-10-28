@@ -1242,3 +1242,147 @@
     height: 80px;
   }
 }
+
+/* ---------------------------------------------------------------- 她的登录浏览器(10-28):头部按钮 + 覆盖层面板 */
+.browserButton {
+  position: relative;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font-size: 12px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.browserButton[aria-pressed="true"],
+.browserButton[data-live="true"] {
+  border-color: var(--color-primary);
+  color: var(--color-text-strong);
+}
+
+.browserDot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-error);
+  box-shadow: 0 0 0 2px var(--color-surface-solid);
+  animation: browserPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes browserPulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.35);
+  }
+}
+
+.browserOverlay {
+  position: absolute;
+  inset: 52px 8px 8px;
+  z-index: 9;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--color-primary);
+  background: var(--color-panel-base);
+  color: var(--color-text);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.browserHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.browserStatus {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-elevated);
+  color: var(--color-muted);
+  font-size: 12px;
+}
+
+.browserStatus[data-status="needs_human"],
+.browserStatus[data-status="interactive"] {
+  background: var(--color-error);
+  color: var(--color-panel-base);
+}
+
+.browserStatus[data-status="fetching"],
+.browserStatus[data-status="asking_seller"] {
+  background: var(--color-primary);
+  color: var(--color-panel-base);
+}
+
+.browserTools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.browserTools button {
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-elevated);
+  color: var(--color-text);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.browserTools button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.browserStage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+  outline: none;
+}
+
+.browserStage:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--color-primary);
+}
+
+.browserFrame {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  cursor: crosshair;
+  user-select: none;
+  touch-action: none;
+}
+
+.browserHint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browserDot {
+    animation: none;
+  }
+}

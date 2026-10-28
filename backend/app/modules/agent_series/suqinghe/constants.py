@@ -31,9 +31,10 @@ CARD_CHANNELS = ("web", "c19", "mcp")
 MEMORY_KINDS = ("plan", "suggestion", "decision", "note", "dictation", "observation")
 GOAL_STATUSES = ("active", "paused", "done", "dropped")
 OFFICE_STATES = ("working", "thinking", "raised", "night", "offline")
-DOSSIER_STATUSES = ("queued", "fetching", "reading", "ready", "blocked", "failed", "created", "rejected")
+# needs_human(10-28):1688 要验证,页面在她的登录浏览器里留着,等老板过滑块/扫码;过了她自己接着做。
+DOSSIER_STATUSES = ("queued", "fetching", "reading", "ready", "blocked", "failed", "created", "rejected", "needs_human")
 # 还在处理中的档案:同一个 offer 再交一次,不重复排队。
-DOSSIER_ACTIVE_STATUSES = ("queued", "fetching", "reading", "ready")
+DOSSIER_ACTIVE_STATUSES = ("queued", "fetching", "reading", "ready", "needs_human")
 DOSSIER_CARD_KIND = "create_k_dossier"
 # 早间计划出的卡(brain.PLAN_FORMAT 里的 kind 加上 plan)。只有这几种按「快照里那件事」去重、对账(cards.settle_issues);
 # 档案卡按档案号管,K 流水线的卡(pipeline.py)按产品和步骤管。
@@ -138,3 +139,42 @@ def daily_claude_budget_usd() -> float:
 
 def loop_seconds() -> float:
     return max(5.0, _env_float("SQH_LOOP_SECONDS", 60.0))
+
+
+# ---------------------------------------------------------------- 登录浏览器(10-28)
+
+# fetch_offer 被拦但页面留在登录浏览器里等老板时,block_reason 以它开头(后面跟原始原因)
+NEEDS_HUMAN = "needs_human:"
+
+
+
+def browser_enabled() -> bool:
+    """SQH_BROWSER=1:1688 走 worker 里常驻的登录浏览器(老板扫码登录一次,cookie 落在 profile 里跨重启);
+    默认关,关着就还是每次新开匿名无头浏览器的老路。"""
+    return os.getenv("SQH_BROWSER", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def browser_profile_dir() -> str:
+    """Chromium 的 profile 放在 worker 已挂的 agent-memory 卷上。"""
+    root = os.getenv("AGENT_MEMORY_DIR", "/var/lib/barong/agent-memory")
+    return os.getenv("SQH_BROWSER_PROFILE_DIR", os.path.join(root, "suqinghe", "chrome-1688"))
+
+
+def browser_dump_dir() -> str:
+    root = os.getenv("AGENT_MEMORY_DIR", "/var/lib/barong/agent-memory")
+    return os.getenv("SQH_BROWSER_DUMP_DIR", os.path.join(root, "suqinghe", "browser-dumps"))
+
+
+def browser_idle_minutes() -> float:
+    """没活多久就把浏览器关掉(profile 留着)。"""
+    return max(1.0, _env_float("SQH_BROWSER_IDLE_MINUTES", 10.0))
+
+
+def browser_hold_minutes() -> float:
+    """等老板过验证最多等多久,超了档案转 blocked。"""
+    return max(5.0, _env_float("SQH_BROWSER_HOLD_MINUTES", 120.0))
+
+
+def retry_after_block() -> bool:
+    """被拦之后今天还继续抓不抓(默认不:「今天先不碰」)。"""
+    return os.getenv("SQH_1688_RETRY_AFTER_BLOCK", "0").strip().lower() in ("1", "true", "yes", "on")

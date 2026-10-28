@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Integer, Numeric, String, Text, func
+from sqlalchemy import JSON, BigInteger, Boolean, Date, DateTime, Integer, LargeBinary, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -132,3 +132,36 @@ class SqhDossier(Base):
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class SqhBrowser(Base):
+    """单行(id=1):她的登录浏览器此刻什么状态(10-28)。画面(JPEG)也放这儿——后端和 worker 只共享数据库;
+    只在有人看(viewer_seen_at 5 秒内)时才写帧。"""
+
+    __tablename__ = "sqh_browser"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # idle / fetching / needs_human(等老板过验证) / interactive(老板在登录) / asking_seller(在问卖家)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="idle")
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    title: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    dossier_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    frame: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    frame_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    viewer_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    logged_in_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class SqhBrowserInput(Base):
+    """老板在「浏览器」面板里的一下点击/一次输入(owner 才能写),worker 每 100ms 取走应用到页面上。"""
+
+    __tablename__ = "sqh_browser_inputs"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload: Mapped[Any] = mapped_column(_json(), nullable=False, default=dict)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

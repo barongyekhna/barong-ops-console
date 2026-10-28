@@ -500,20 +500,19 @@ def _http_get_text(url: str, *, timeout: float = 20.0) -> str:
 
 def _render_page(url: str, timeout_s: float) -> tuple[str, str, str, str]:
     """在独立线程里跑同步 Playwright(调用方可能带着事件循环)。返回 (最终地址, 标题, html, 文本)。
-    10-27 起通用渲染搬到 common/webpage.render_raw(竞品页也用它);1688 这边保持中文 locale、滚 10 次、多等一会。"""
+    10-27 起通用渲染搬到 common/webpage.render_raw(竞品页也用它);1688 这边保持中文 locale、滚 10 次、多等一会。
+    10-28 起开了 SQH_BROWSER 就走她的常驻登录浏览器(browser.py),被拦时页面留着等老板。"""
+    from . import browser
+
+    if browser.enabled():
+        return browser.get().fetch_offer_html(url, timeout_s)
     from ..common import webpage
 
     return webpage.render_raw(url, timeout_s=timeout_s, locale="zh-CN", scroll=10, wait_ms=2500)
 
 
-def fetch_offer(url: str, *, timeout_s: float = 25) -> Capture:
-    offer_id = parse_offer_id(url)
-    if offer_id is None:
-        return Capture(offer_id=None, url=url, blocked=True, block_reason="not_a_1688_offer_url")
-    target = offer_url(offer_id)
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        # 正常一页 43–48 秒(启动浏览器+滚动+重试取内容);10-26 实测 +40 余量偶发超时,放到 +80。
-        final_url, title, html, text = pool.submit(_render_page, target, timeout_s).result(timeout=timeout_s + 80)
+def capture_from_render(*, offer_id: str, target: str, final_url: str, title: str, html: str, text: str) -> Capture:
+    """渲染结果 → Capture:判拦截、解析页面、再去取详情描述。老板过完验证的页面也走这一段。"""
     reason = detect_blocked(final_url=final_url, title=title, html=html)
     if reason:
         return Capture(offer_id=offer_id, url=target, title_zh=title or None, blocked=True, block_reason=reason)
@@ -524,6 +523,27 @@ def fetch_offer(url: str, *, timeout_s: float = 25) -> Capture:
         capture.detail_error = error
     else:
         capture.detail_error = "页面里没找到详情描述的地址"
+    return capture
+
+
+
+def fetch_offer(url: str, *, timeout_s: float = 25) -> Capture:
+    offer_id = parse_offer_id(url)
+    if offer_id is None:
+        return Capture(offer_id=None, url=url, blocked=True, block_reason="not_a_1688_offer_url")
+    target = offer_url(offer_id)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        # 正常一页 43–48 秒(启动浏览器+滚动+重试取内容);10-26 实测 +40 余量偶发超时,放到 +80。
+        final_url, title, html, text = pool.submit(_render_page, target, timeout_s).result(timeout=timeout_s + 80)
+    capture = capture_from_render(offer_id=offer_id, target=target, final_url=final_url, title=title, html=html, text=text)
+    if capture.blocked and capture.block_reason:
+        from . import browser
+        from .constants import NEEDS_HUMAN
+
+        if browser.enabled():
+            # 页面不关:进 needs_human,办公室面板里老板过滑块/扫码,页面恢复了她自己接着做(dossiers.resume_human)
+            browser.get().hold_for_human(capture.block_reason)
+            capture.block_reason = NEEDS_HUMAN + capture.block_reason
     return capture
 
 

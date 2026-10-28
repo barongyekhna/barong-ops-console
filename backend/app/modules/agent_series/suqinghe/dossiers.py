@@ -20,14 +20,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
-from . import cards, memory, office
+from . import browser, cards, memory, office
 from .constants import (
     DOSSIER_ACTIVE_STATUSES,
     DOSSIER_CARD_KIND,
     DOSSIER_IMAGE_BUDGET_USD,
     DOSSIER_MIN_GAP_SECONDS,
     LA,
+    NEEDS_HUMAN,
     dossier_daily_limit,
+    retry_after_block,
 )
 from .models import SqhCard, SqhDossier
 
@@ -122,7 +124,7 @@ def redo(db: Session, *, dossier_id: int, actor: Any) -> tuple[SqhDossier, bool,
     old = db.get(SqhDossier, dossier_id, execution_options=_X)
     if old is None:
         raise DossierError("没有这份档案。")
-    if old.status in ("queued", "fetching", "reading"):
+    if old.status in ("queued", "fetching", "reading", "needs_human"):
         raise DossierError("这份还在整理中,等它做完再说。")
     if old.status == "created":
         raise DossierError("这份已经建进 K 了,不能重做;要改去 K 里改。")
@@ -141,7 +143,7 @@ def redo(db: Session, *, dossier_id: int, actor: Any) -> tuple[SqhDossier, bool,
 
 def queue_reply(position: int, *, created: bool, status: str) -> str:
     if not created:
-        labels = {"queued": "已经在排队了", "fetching": "正在打开页面", "reading": "正在读详情图", "ready": "已经整理好了,在办公室收件筐等你批"}
+        labels = {"queued": "已经在排队了", "fetching": "正在打开页面", "reading": "正在读详情图", "ready": "已经整理好了,在办公室收件筐等你批", "needs_human": "被 1688 要验证了,页面在办公室的浏览器里等你过一下"}
         return f"这个链接{labels.get(status, '在处理中')}。"
     eta = max(1, position) * MINUTES_PER_DOSSIER
     return f"收到，排在第 {position} 个，大概 {eta} 分钟后整理好，放在办公室收件筐里。"
@@ -162,6 +164,18 @@ def throttle_ok(*, now: datetime, last_fetch: datetime | None, fetched_today: in
     if last_fetch is not None and (now - last_fetch).total_seconds() < min_gap:
         return False, "离上一个 1688 页面不到一分钟,歇一下,别被拦。"
     return True, ""
+
+
+def _blocked_today(db: Session, now: datetime) -> bool:
+    """今天(洛杉矶)已经被拦过一次:「今天先不碰」——10-28 之前只是嘴上说,现在真不碰(SQH_1688_RETRY_AFTER_BLOCK=1 放开)。"""
+    if retry_after_block():
+        return False
+    start, end = la_day_bounds(now)
+    n = db.scalar(
+        select(func.count()).select_from(SqhDossier).where(SqhDossier.status == "blocked", SqhDossier.fetched_at >= start, SqhDossier.fetched_at < end),
+        execution_options=_X,
+    )
+    return int(n or 0) > 0
 
 
 def _throttle_state(db: Session, now: datetime) -> tuple[datetime | None, int]:
@@ -229,19 +243,27 @@ def _set_activity(db: Session, activity: str, task: str) -> None:
     db.add(state)
 
 
-def _alert_blocked(db: Session, *, dossier: SqhDossier, reason: str, now: datetime) -> None:
+def _alert_blocked(db: Session, *, dossier: SqhDossier, reason: str, now: datetime, browser: bool = False) -> None:
     day = now.astimezone(LA).date().isoformat()
+    if browser:
+        title = "1688 要验证,页面我留着了"
+        conclusion = "老板,我在办公室开着那个页面:你点「打开浏览器」帮我过一下滑块或扫码登录,过了我自己接着做。"
+        if_not = "这一单先停着;两小时没人来我就按被拦处理,今天不再碰 1688。"
+    else:
+        title = "1688 把我拦住了"
+        conclusion = "老板,我打开 1688 页面时被拦了(反爬/要登录)。今天先不再碰 1688,明天再试;急的话你帮我开一下那个页面。"
+        if_not = "这一单的 K 档案今天出不来。"
     cards.create_card(
         db,
         dedupe_key=f"{day}:1688_blocked",
         kind="ops_alert",
-        title="1688 把我拦住了",
-        conclusion="老板,我打开 1688 页面时被拦了(反爬/要登录)。今天先不再碰 1688,明天再试;急的话你帮我开一下那个页面。",
+        title=title,
+        conclusion=conclusion,
         why=reason[:500],
-        if_not="这一单的 K 档案今天出不来。",
+        if_not=if_not,
         reversible=True,
         confidence="high",
-        evidence={"dossier_id": dossier.id, "offer_id": dossier.offer_id},
+        evidence={"dossier_id": dossier.id, "offer_id": dossier.offer_id, "browser": browser},
     )
 
 
@@ -265,6 +287,10 @@ def process_next(
     )
     if dossier is None:
         return None
+    if browser.holding():  # 页面正等老板过验证 / 老板在登录 / 在问卖家:这时候不开新页面
+        return None
+    if _blocked_today(db, now):
+        return None
     last, today = _throttle_state(db, now)
     ok, why = throttle_ok(now=now, last_fetch=last, fetched_today=today, limit=dossier_daily_limit())
     if not ok:
@@ -285,63 +311,164 @@ def process_next(
     try:
         capture = fetch(dossier.source_url)
         if capture.get("blocked"):
+            reason = str(capture.get("block_reason") or "被 1688 拦了")
+            if reason.startswith(NEEDS_HUMAN):
+                # 页面在她的浏览器里留着(browser.py),等老板过验证;过了 resume_human 接着做
+                dossier.status = "needs_human"
+                dossier.capture = {**(dossier.capture or {}), **capture}
+                dossier.error = reason[len(NEEDS_HUMAN):][:500]
+                _alert_blocked(db, dossier=dossier, reason=dossier.error, now=now, browser=True)
+                memory.log_activity(db, f"1688 {dossier.offer_id} 要验证({dossier.error[:60]}),页面我留着了,等老板过一下。", kind="error")
+                _set_activity(db, "raised", "1688 要验证,等老板帮我过一下")
+                db.commit()
+                if browser.enabled():
+                    try:
+                        browser.get().note_dossier(dossier.id)
+                    except Exception:  # noqa: BLE001 —— 记不上档案号不影响等人
+                        logger.exception("browser note_dossier failed")
+                return dossier
             dossier.status = "blocked"
             dossier.capture = {**(dossier.capture or {}), **capture}
-            dossier.error = str(capture.get("block_reason") or "被 1688 拦了")[:500]
+            dossier.error = reason[:500]
             _alert_blocked(db, dossier=dossier, reason=dossier.error, now=now)
             memory.log_activity(db, f"1688 {dossier.offer_id} 被拦了:{dossier.error[:80]}", kind="error")
             _set_activity(db, "working", "1688 拦了我,今天先不碰")
             db.commit()
             return dossier
+        return _complete(db, dossier, capture, read=read, build=build, spent=spent, cost_since=cost_since)
+    except Exception as exc:  # noqa: BLE001 —— 一单失败不拖垮 worker,但要落库、写流水
+        return _fail(db, dossier.id, exc)
 
-        dossier.status = "reading"
-        dossier.capture = {**(dossier.capture or {}), **capture}
-        _set_activity(db, "thinking", f"在读 1688 详情图:{dossier.offer_id}")
-        memory.log_activity(db, f"{dossier.offer_id}:页面拿到了,{len(capture.get('skus') or [])} 个 SKU,开始读详情图。", kind="fetch")
-        db.commit()
 
-        image_read = read(db, capture)
-        draft = build(db, capture, image_read)
-        dossier = db.get(SqhDossier, dossier.id, execution_options=_X)
-        dossier.draft = draft
-        dossier.flagged_count = int(draft.get("flagged_count") or 0)
-        # 花费记台账实数(读图 + 英文名,整单从开始到现在);台账读不到才用读图那边的数。
-        real_cost = spent(cost_since) if spent else None
-        dossier.cost_usd = round(float(real_cost if real_cost is not None else image_read.get("cost_usd") or 0), 4)
-        dossier.status = "ready"
-        title = (draft.get("fields", {}).get("name_zh", {}) or {}).get("value") or capture.get("title_zh") or dossier.offer_id
-        card, _ = cards.create_card(
-            db,
-            dedupe_key=f"dossier:{dossier.offer_id}:{dossier.id}",
-            kind=DOSSIER_CARD_KIND,
-            title=f"建 K 档案:{str(title)[:30]}",
-            conclusion=(
-                f"{draft.get('summary_zh', '')} 批了我就建进 K(先建成单品草稿,不上架);"
-                "售价得老板定,标红的几项也请过目。"
-            ),
-            why=f"1688 offer {dossier.offer_id},{reading_text(draft.get('image_read') or {})},花了 ${dossier.cost_usd}。",
-            if_not="不批就停在草稿,不会进 K。",
-            reversible=True,
-            confidence="medium" if dossier.flagged_count else "high",
-            evidence={"dossier_id": dossier.id, "offer_id": dossier.offer_id, "flagged_count": dossier.flagged_count},
-        )
-        dossier.card_ref = card.ref
+def _complete(db: Session, dossier: SqhDossier, capture: dict[str, Any], *, read: ReadFn, build: BuildFn, spent: SpentFn | None, cost_since: datetime) -> SqhDossier:
+    """页面拿到了之后的半段:读详情图 → 建草稿 → ready → 建档卡。被拦后老板过了验证也走这里。"""
+    dossier.status = "reading"
+    dossier.capture = {**(dossier.capture or {}), **capture}
+    _set_activity(db, "thinking", f"在读 1688 详情图:{dossier.offer_id}")
+    memory.log_activity(db, f"{dossier.offer_id}:页面拿到了,{len(capture.get('skus') or [])} 个 SKU,开始读详情图。", kind="fetch")
+    db.commit()
+
+    image_read = read(db, capture)
+    draft = build(db, capture, image_read)
+    dossier = db.get(SqhDossier, dossier.id, execution_options=_X)
+    dossier.draft = draft
+    dossier.flagged_count = int(draft.get("flagged_count") or 0)
+    # 花费记台账实数(读图 + 英文名,整单从开始到现在);台账读不到才用读图那边的数。
+    real_cost = spent(cost_since) if spent else None
+    dossier.cost_usd = round(float(real_cost if real_cost is not None else image_read.get("cost_usd") or 0), 4)
+    dossier.status = "ready"
+    title = (draft.get("fields", {}).get("name_zh", {}) or {}).get("value") or capture.get("title_zh") or dossier.offer_id
+    card, _ = cards.create_card(
+        db,
+        dedupe_key=f"dossier:{dossier.offer_id}:{dossier.id}",
+        kind=DOSSIER_CARD_KIND,
+        title=f"建 K 档案:{str(title)[:30]}",
+        conclusion=(
+            f"{draft.get('summary_zh', '')} 批了我就建进 K(先建成单品草稿,不上架);"
+            "售价得老板定,标红的几项也请过目。"
+        ),
+        why=f"1688 offer {dossier.offer_id},{reading_text(draft.get('image_read') or {})},花了 ${dossier.cost_usd}。",
+        if_not="不批就停在草稿,不会进 K。",
+        reversible=True,
+        confidence="medium" if dossier.flagged_count else "high",
+        evidence={"dossier_id": dossier.id, "offer_id": dossier.offer_id, "flagged_count": dossier.flagged_count},
+    )
+    dossier.card_ref = card.ref
+    db.add(dossier)
+    memory.log_activity(db, f"{dossier.offer_id} 的 K 档案草稿好了,标红 {dossier.flagged_count} 项,卡 #{card.ref} 等老板批。", kind="dossier")
+    _set_activity(db, "working", f"档案 #{dossier.id} 好了,等老板批")
+    db.commit()
+    return dossier
+
+
+def _fail(db: Session, dossier_id: int, exc: BaseException) -> SqhDossier:
+    db.rollback()
+    logger.exception("dossier %s failed", dossier_id)
+    failed = db.get(SqhDossier, dossier_id, execution_options=_X)
+    failed.status = "failed"
+    failed.error = f"{exc.__class__.__name__}: {str(exc)[:400]}"
+    db.add(failed)
+    memory.log_activity(db, f"{failed.offer_id} 没整理成:{failed.error[:100]}", kind="error")
+    _set_activity(db, "working", "上一单 1688 没整理成,看流水")
+    db.commit()
+    return failed
+
+
+# ---------------------------------------------------------------- 等老板过验证(10-28)
+
+
+def resume_human(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    event: dict[str, Any] | None = None,
+    read: ReadFn | None = None,
+    build: BuildFn | None = None,
+    spent: SpentFn | None = None,
+) -> SqhDossier | None:
+    """浏览器线程说页面恢复了(或等不到人了):接着把那份 needs_human 的档案做完。worker 的快循环每几秒问一次。
+    ``event`` 不传就从 browser 线程取;测试直接传。"""
+    now = now or datetime.now(UTC)
+    if event is None:
+        if not browser.enabled():
+            return None
+        event = browser.get().take_recovered()
+    if not event:
+        return None
+    dossier_id = event.get("dossier_id")
+    dossier = db.get(SqhDossier, int(dossier_id), execution_options=_X) if dossier_id else None
+    if dossier is None or dossier.status != "needs_human":
+        return None
+    if event.get("outcome") != "recovered":
+        dossier.status = "blocked"
+        dossier.error = str(event.get("reason") or dossier.error or "等老板过验证没等到")[:500]
         db.add(dossier)
-        memory.log_activity(db, f"{dossier.offer_id} 的 K 档案草稿好了,标红 {dossier.flagged_count} 项,卡 #{card.ref} 等老板批。", kind="dossier")
-        _set_activity(db, "working", f"档案 #{dossier.id} 好了,等老板批")
+        memory.log_activity(db, f"1688 {dossier.offer_id}:{dossier.error[:80]},这单按被拦处理。", kind="error")
+        _set_activity(db, "working", "1688 那页没等到人,今天先不碰")
         db.commit()
         return dossier
-    except Exception as exc:  # noqa: BLE001 —— 一单失败不拖垮 worker,但要落库、写流水
-        db.rollback()
-        logger.exception("dossier %s failed", dossier.id)
-        failed = db.get(SqhDossier, dossier.id, execution_options=_X)
-        failed.status = "failed"
-        failed.error = f"{exc.__class__.__name__}: {str(exc)[:400]}"
-        db.add(failed)
-        memory.log_activity(db, f"{failed.offer_id} 没整理成:{failed.error[:100]}", kind="error")
-        _set_activity(db, "working", "上一单 1688 没整理成,看流水")
+    if read is None or build is None:
+        _, d_read, d_build = _defaults()
+        read, build = read or d_read, build or d_build
+        spent = spent or _ledger_spent
+    from .sourcing_1688 import capture_from_render, offer_url
+
+    cost_since = datetime.now(UTC)
+    memory.log_activity(db, f"老板帮我过了 1688 的验证,接着整理 {dossier.offer_id}。", kind="fetch")
+    _set_activity(db, "thinking", f"在读 1688:{dossier.offer_id}")
+    db.commit()
+    try:
+        capture = capture_from_render(
+            offer_id=dossier.offer_id,
+            target=offer_url(dossier.offer_id),
+            final_url=str(event.get("final_url") or ""),
+            title=str(event.get("title") or ""),
+            html=str(event.get("html") or ""),
+            text=str(event.get("text") or ""),
+        ).to_dict()
+        if capture.get("blocked"):
+            dossier.status = "blocked"
+            dossier.error = str(capture.get("block_reason") or "还是被拦")[:500]
+            db.add(dossier)
+            memory.log_activity(db, f"1688 {dossier.offer_id} 过了验证还是拿不到页面:{dossier.error[:60]}", kind="error")
+            db.commit()
+            return dossier
+        return _complete(db, dossier, capture, read=read, build=build, spent=spent, cost_since=cost_since)
+    except Exception as exc:  # noqa: BLE001
+        return _fail(db, dossier.id, exc)
+
+
+def requeue_needs_human(db: Session) -> int:
+    """worker 重启:内存里的浏览器状态没了,还在 needs_human 的档案回队列重抓(profile 里的登录态还在,多半直接成)。"""
+    rows = db.scalars(select(SqhDossier).where(SqhDossier.status == "needs_human"), execution_options=_X).all()
+    for row in rows:
+        row.status = "queued"
+        row.error = None
+        db.add(row)
+    if rows:
+        memory.log_activity(db, f"重启了,{len(rows)} 份等验证的档案重新排队。", kind="fetch")
         db.commit()
-        return failed
+    return len(rows)
 
 
 # ---------------------------------------------------------------- 展示

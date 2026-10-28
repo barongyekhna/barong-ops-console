@@ -35,7 +35,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, cards, dossiers, executor, memory, office, picks, pipeline, snapshot
+from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot
 from .constants import (
     AGENT_USERNAME,
     HEARTBEAT_INTERVAL_SECONDS,
@@ -497,9 +497,23 @@ class SuqingheWorker:
         finally:
             db.close()
 
+    def resume_human(self) -> bool:
+        """浏览器线程说老板过完验证了(或等不到人):接着把那份档案做完。开关关着什么都不做。"""
+        if not browser.enabled():
+            return False
+        with SessionLocal() as db:
+            return dossiers.resume_human(db, now=self.clock()) is not None
+
     def run_forever(self, *, should_stop) -> None:
         backoff = 2.0
         next_tick = 0.0
+        if browser.enabled():
+            try:
+                with SessionLocal() as db:
+                    dossiers.requeue_needs_human(db)  # 重启后内存里的浏览器状态没了,等验证的档案回队列
+                browser.get()
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("browser session init failed")
         while not should_stop():
             if not self.online:
                 if not self.connect():
@@ -523,6 +537,11 @@ class SuqingheWorker:
                 built = self.build_approved()
             except Exception:  # noqa: BLE001 —— 建档出错不能拖垮整个循环;没记上账的下一轮还会再捡到
                 _LOGGER.exception("批了的档案建 K 出错")
+            resumed = False
+            try:
+                resumed = self.resume_human()
+            except Exception:  # noqa: BLE001 —— 续做出错不拖垮循环;档案已落 failed/blocked
+                _LOGGER.exception("等验证的档案续做出错")
             busy = False
             try:
                 busy = self.poll_chat()
@@ -531,7 +550,7 @@ class SuqingheWorker:
             except httpx.HTTPError as exc:
                 _LOGGER.warning("控制台暂时够不着: %s", exc)
                 self.online = False
-            if not busy and not built:
+            if not busy and not built and not resumed:
                 _sleep_interruptible(_chat_poll_seconds(), should_stop)
 
 
