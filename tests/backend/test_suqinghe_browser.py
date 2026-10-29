@@ -4,6 +4,7 @@ unit:浏览器用假的 page/context,库用假的 store,不起 Chromium、不连
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import time
@@ -119,13 +120,54 @@ class FakePage:
         return self._closed
 
 
+class FakeCdp:
+    """假的 CDP 会话:记下发过的命令;导航历史从页面拿;测试用 emit_frame 模拟 Chromium 推来一帧。"""
+
+    def __init__(self, page: FakePage) -> None:
+        self.page = page
+        self.sent: list[tuple[str, dict[str, Any]]] = []
+        self.handlers: dict[str, Any] = {}
+        self.detached = False
+
+    def on(self, event: str, handler: Any) -> None:
+        self.handlers[event] = handler
+
+    def send(self, method: str, params: dict[str, Any] | None = None) -> Any:
+        self.sent.append((method, params or {}))
+        if method == "Page.getNavigationHistory":
+            return {"currentIndex": 0, "entries": [{"url": self.page.url, "title": self.page._title}]}
+        return {}
+
+    def detach(self) -> None:
+        self.detached = True
+
+    def emit_frame(self, color: tuple[int, int, int], session_id: int) -> None:
+        self.handlers["Page.screencastFrame"]({"data": base64.b64encode(_shot("JPEG", color)).decode(), "sessionId": session_id, "metadata": {}})
+
+    @property
+    def casting(self) -> bool:
+        starts = [m for m, _ in self.sent if m in ("Page.startScreencast", "Page.stopScreencast")]
+        return bool(starts) and starts[-1] == "Page.startScreencast"
+
+
 class FakeContext:
-    def __init__(self, page: FakePage, cookies: list[dict[str, Any]] | None = None) -> None:
+    def __init__(self, page: FakePage, cookies: list[dict[str, Any]] | None = None, *, cdp: bool = True) -> None:
         self.page = page
         self.pages = [page]
         self._cookies = cookies or []
         self.closed = False
         self.handlers: dict[str, Any] = {}
+        self._cdp = cdp
+        self.cdps: list[FakeCdp] = []
+
+    def new_cdp_session(self, page: FakePage) -> FakeCdp:
+        if not self._cdp:
+            raise RuntimeError("Protocol error: CDP sessions are only supported in Chromium")
+        self.cdps.append(FakeCdp(page))
+        return self.cdps[-1]
+
+    def cdp_for(self, page: FakePage) -> FakeCdp:
+        return [c for c in self.cdps if c.page is page][-1]
 
     def on(self, event: str, handler: Any) -> None:
         self.handlers[event] = handler
@@ -313,17 +355,27 @@ def test_fetch_then_hold_then_boss_solves_then_resume(session) -> None:
     time.sleep(0.5)
     assert page.shots == 0 and store.frames == []
     store.viewer = True
+    cdp = ctx.cdp_for(page)
+    assert _wait(lambda: cdp.casting)  # 有人看才开 screencast
+    assert ("Page.startScreencast", browser.SCREENCAST_PARAMS) in cdp.sent and browser.SCREENCAST_PARAMS["quality"] == 85
+    cdp.emit_frame((120, 140, 200), 7)
     assert _wait(lambda: len(store.frames) >= 1)
-    assert page.shot_kwargs == {"type": "jpeg", "quality": browser.FRAME_QUALITY} and Image.open(io.BytesIO(store.frames[0])).size == (1366, 900)  # Chromium 直接出 JPEG,原尺寸
-    first = page.shots
+    assert Image.open(io.BytesIO(store.frames[0])).size == (1366, 900) and ("Page.screencastFrameAck", {"sessionId": 7}) in cdp.sent  # 取走一帧就确认,Chromium 才给下一帧
+    assert page.shots == 0  # 不再 page.screenshot(它要进页面主线程,1688 商品页上要 2–18 秒)
+    first = len(cdp.sent)
     store.inputs.append((1, "down", {"x": 100, "y": 500}))
     store.inputs.append((2, "move", {"x": 300, "y": 500}))
     store.inputs.append((3, "up", {"x": 300, "y": 500}))
     assert _wait(lambda: ("up", None) in page.log)
     assert ("down", None) in page.log and ("move", (300.0, 500.0)) in page.log
     # 同一张画面不重复写库
-    time.sleep(1.6)
-    assert page.shots > first and len(store.frames) == 1
+    cdp.emit_frame((120, 140, 200), 8)
+    assert _wait(lambda: ("Page.screencastFrameAck", {"sessionId": 8}) in cdp.sent)
+    time.sleep(0.5)
+    assert len(cdp.sent) > first and len(store.frames) == 1
+    store.viewer = False
+    assert _wait(lambda: not cdp.casting, timeout=8)  # 没人看就停推
+    store.viewer = True
     # 页面恢复成商品页:自愈,状态回 idle,主线程取走一次
     page._title, page._html, page._text = "捏捏乐 - 阿里巴巴", "<html>window.context offerDetail skuMap</html>", "正文"
     detect["result"] = None
@@ -378,12 +430,17 @@ def test_contact_seller_popup_is_followed_and_dump_covers_every_tab(session, tmp
     monkeypatch.setattr(browser, "browser_dump_dir", lambda: str(tmp_path))
     store.viewer = True
     store.inputs.append((1, "login", {}))
-    assert _wait(lambda: sess.status == "interactive" and len(store.frames) >= 1, timeout=4)
+    assert _wait(lambda: sess.status == "interactive" and ctx.cdp_for(page).casting, timeout=4)
+    ctx.cdp_for(page).emit_frame((120, 140, 200), 1)
+    assert _wait(lambda: len(store.frames) >= 1, timeout=4)
     page.url = "https://detail.1688.com/offer/643348607768.html"
     before = len(store.frames)
     popup = ctx.open_popup("https://air.1688.com/app/ocms-fusion-components-1688/def_cbu_web_im/index.html?offerId=643348607768")
-    # 面板跟到新页:接下来的帧是新页截的(颜色不同),库里的 url 也换成旺旺页
-    assert _wait(lambda: popup.shots >= 1 and len(store.frames) > before, timeout=4)
+    # 面板跟到新页:给新页开 screencast(老页的会话撤掉),接下来的帧来自新页(颜色不同),库里的 url 也换成旺旺页
+    assert _wait(lambda: len(ctx.cdps) == 2 and ctx.cdp_for(popup).casting, timeout=4)
+    assert ctx.cdp_for(page).detached
+    ctx.cdp_for(popup).emit_frame((30, 160, 60), 1)
+    assert _wait(lambda: len(store.frames) > before, timeout=4)
     assert Image.open(io.BytesIO(store.frames[-1])).getpixel((5, 5))[1] > 120  # 新页是绿的
     assert _wait(lambda: (store.states[-1].get("url") or "").startswith("https://air.1688.com/"), timeout=4)
     # 点和滚落到新页上,不落到商品页
@@ -405,6 +462,25 @@ def test_contact_seller_popup_is_followed_and_dump_covers_every_tab(session, tmp
     assert sess.status == "interactive"
     store.inputs.append((5, "close", {}))
     assert _wait(lambda: sess.status == "idle", timeout=4)
+
+
+def test_without_cdp_frames_fall_back_to_jpeg_screenshots() -> None:
+    page = FakePage()
+    ctx = FakeContext(page, cdp=False)
+    store = FakeStore()
+    sess = browser.BrowserSession(store=store, launcher=lambda: ctx, clock=Clock(), detect_blocked=lambda **kw: "captcha_page")
+    sess.start()
+    try:
+        sess.fetch_offer_html(GOOD_URL, 5)
+        sess.hold_for_human("captcha_page", dossier_id=1)
+        store.viewer = True
+        assert _wait(lambda: len(store.frames) >= 1)
+        assert page.shot_kwargs == {"type": "jpeg", "quality": browser.FRAME_QUALITY} and Image.open(io.BytesIO(store.frames[0])).size == (1366, 900)
+        assert ctx.cdps == []
+    finally:
+        sess.stop_flag.set()
+        sess.join(timeout=3)
+    assert browser.AUTOPLAY_ARG == "--autoplay-policy=user-gesture-required"
 
 
 def test_stale_singleton_files_are_cleared_before_launch(tmp_path: Path) -> None:

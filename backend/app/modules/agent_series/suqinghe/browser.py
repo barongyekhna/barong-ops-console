@@ -12,10 +12,14 @@
 - 不改 compose:profile 放在 worker 已挂的 agent-memory 卷;按需启动,闲置 N 分钟关(profile 留着)。
 - 全部受 SQH_BROWSER 开关管;关着时 sourcing_1688 还是每次新开匿名浏览器的老路。
 - 10-29 热修 4:1688 的「联系供应商」把旺旺开在新标签页,面板跟着新开的页走;同一批滚轮合成一下再给 Chromium;截图直接出 JPEG。
+- 10-29 热修 5:日志量出来 page.screenshot 在 1688 商品页上要 2–18 秒(它要在页面主线程里跑脚本,主线程被视频/追踪脚本占满),
+  滚动点击都排在它后面。画面改走 CDP screencast(合成器直接出 JPEG,不占主线程;我们确认一帧它才给下一帧,节奏由我们定),
+  url/标题走导航历史不问页面,启动时禁视频自动播放。CDP 拿不到(非 Chromium)时退回截图。
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import logging
@@ -42,6 +46,9 @@ VIEWPORT = {"width": 1366, "height": 900}
 FRAME_QUALITY = 85  # 10-28 老板扫码扫不上:不缩(视口原尺寸 1366 宽)、JPEG 质量 85,二维码才清楚
 FRAME_INTERVAL_S = 0.4  # 10-29 老板说滚动「非常慢」:0.7→0.4,且应用完输入立刻出一帧
 SLOW_TICK_S = 1.5  # 一轮(应用输入 + 截帧)超过这么久就记日志,老板再说慢我能看出慢在哪
+PUMP_MS = 50  # screencast 推帧要靠 Playwright 事件循环转起来,每轮让它转这么久
+AUTOPLAY_ARG = "--autoplay-policy=user-gesture-required"  # 1688 商品页视频自动播,主线程和 CPU 都被它吃掉
+SCREENCAST_PARAMS = {"format": "jpeg", "quality": FRAME_QUALITY, "maxWidth": VIEWPORT["width"], "maxHeight": VIEWPORT["height"], "everyNthFrame": 1}
 WHEEL_MAX = 6000.0  # 合并后的一下滚轮最多滚这么多像素(约六屏半)
 INPUT_POLL_S = 0.1
 RECOVERY_CHECK_S = 2.0
@@ -237,6 +244,64 @@ def clear_stale_singleton(profile: str) -> list[str]:
     return removed
 
 
+# ---------------------------------------------------------------- 一页的 CDP 会话(推帧 + 页信息)
+
+
+class Screen:
+    """当前页的 CDP 会话:Page.startScreencast 推帧——Chromium 合成器直接出 JPEG,不占页面主线程;
+    一帧我们取走并 Ack 之后它才给下一帧,所以节奏跟着面板走、没人取就不推。url/标题走 Page.getNavigationHistory,也不问页面。"""
+
+    def __init__(self, cdp: Any) -> None:
+        self.cdp = cdp
+        self.latest: bytes | None = None
+        self._acks: list[Any] = []
+        self.casting = False
+        cdp.on("Page.screencastFrame", self._on_frame)
+
+    def _on_frame(self, params: dict[str, Any]) -> None:
+        try:
+            self.latest = base64.b64decode(params.get("data") or "")
+        except (TypeError, ValueError):
+            self.latest = None
+        self._acks.append(params.get("sessionId"))
+
+    def start(self) -> None:
+        if not self.casting:
+            self.cdp.send("Page.startScreencast", dict(SCREENCAST_PARAMS))
+            self.casting = True
+
+    def stop(self) -> None:
+        if self.casting:
+            self.casting = False
+            try:
+                self.cdp.send("Page.stopScreencast")
+            except Exception:  # noqa: BLE001 —— 页可能已经关了
+                pass
+
+    def take(self) -> bytes | None:
+        """取走最新一帧,并把收到的帧都确认掉——Chromium 才会继续推。"""
+        frame, self.latest = self.latest, None
+        acks, self._acks = self._acks, []
+        for sid in acks:
+            try:
+                self.cdp.send("Page.screencastFrameAck", {"sessionId": sid})
+            except Exception:  # noqa: BLE001
+                pass
+        return frame
+
+    def info(self) -> tuple[str, str]:
+        history = self.cdp.send("Page.getNavigationHistory")
+        entry = history["entries"][history["currentIndex"]]
+        return str(entry.get("url") or ""), str(entry.get("title") or "")
+
+    def detach(self) -> None:
+        self.stop()
+        try:
+            self.cdp.detach()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 # ---------------------------------------------------------------- 浏览器线程
 
 
@@ -273,6 +338,9 @@ class BrowserSession(threading.Thread):
         self._last_command_scan = 0.0
         self._last_cleanup = time.monotonic()
         self._last_frame_warn = 0.0
+        self._screen: Screen | None = None
+        self._screen_page: Any = None
+        self._screen_warned = False
         self._recovered: dict[str, Any] | None = None
         self.stop_flag = threading.Event()
 
@@ -344,7 +412,7 @@ class BrowserSession(threading.Thread):
         kwargs: dict[str, Any] = {
             "user_data_dir": profile,
             "headless": True,
-            "args": ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+            "args": ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled", AUTOPLAY_ARG],
             "locale": "zh-CN",
             "viewport": VIEWPORT,
             "user_agent": DESKTOP_UA,
@@ -366,6 +434,25 @@ class BrowserSession(threading.Thread):
     @staticmethod
     def _open_pages(ctx: Any) -> list[Any]:
         return [p for p in (getattr(ctx, "pages", []) or []) if not getattr(p, "is_closed", lambda: False)()]
+
+    def _ensure_screen(self) -> Screen | None:
+        """给当前页挂(或换到)它的 CDP 会话;拿不到就退回截图路径(只警告一次)。"""
+        if self._page is None:
+            return None
+        if self._screen is not None and self._screen_page is self._page:
+            return self._screen
+        if self._screen is not None:
+            self._screen.detach()
+            self._screen = None
+        self._screen_page = self._page
+        try:
+            self._screen = Screen(self._context().new_cdp_session(self._page))
+        except Exception as exc:  # noqa: BLE001
+            if not self._screen_warned:
+                self._screen_warned = True
+                logger.warning("browser screencast unavailable, falling back to screenshots: %s", str(exc).splitlines()[0][:200])
+            self._screen = None
+        return self._screen
 
     def _on_new_page(self, page: Any) -> None:
         """1688 的「联系供应商」把旺旺开在新标签页(10-29 老板点了六下、开出三页,面板却一直盯着商品页):新开的页面板跟过去。"""
@@ -399,6 +486,7 @@ class BrowserSession(threading.Thread):
             except Exception:  # noqa: BLE001
                 pass
         self._ctx = self._page = self._pw = None
+        self._screen = self._screen_page = None
 
     def _set(self, status: str, *, reason: str | None = None, dossier_id: int | None = ..., url: str | None = None, title: str | None = None) -> None:  # type: ignore[assignment]
         self.status = status
@@ -412,6 +500,12 @@ class BrowserSession(threading.Thread):
             logger.exception("browser state sync failed")
 
     def _page_info(self) -> tuple[str, str]:
+        screen = self._ensure_screen()
+        if screen is not None:
+            try:
+                return screen.info()  # 不碰页面主线程
+            except Exception:  # noqa: BLE001
+                pass
         try:
             return str(self._page.url), str(self._page.title())
         except Exception:  # noqa: BLE001
@@ -557,10 +651,21 @@ class BrowserSession(threading.Thread):
         if self.status not in HOLD_STATES:
             return
         frame_s = 0.0
+        screen = self._ensure_screen()
+        if screen is not None:
+            try:
+                screen.start() if viewer else screen.stop()
+            except Exception as exc:  # noqa: BLE001
+                self._warn_frame(exc)
         if viewer and time.monotonic() - self._last_frame >= FRAME_INTERVAL_S:
             self._last_frame = time.monotonic()
-            self._push_frame()
+            self._push_frame(screen)
             frame_s = time.monotonic() - self._last_frame
+        if screen is not None and screen.casting:
+            try:
+                self._page.wait_for_timeout(PUMP_MS)  # 让 Playwright 的事件循环转一下,推来的帧才会到 Screen 手里
+            except Exception:  # noqa: BLE001
+                pass
         if applied_s + frame_s > SLOW_TICK_S:
             logger.info("browser tick slow: inputs=%s apply=%.2fs frame=%.2fs", ",".join(applied) or "-", applied_s, frame_s)
         if now - self._last_recovery >= RECOVERY_CHECK_S:
@@ -595,16 +700,24 @@ class BrowserSession(threading.Thread):
                 logger.exception("browser input %s failed", kind)
         return done
 
-    def _push_frame(self) -> None:
+    def _warn_frame(self, exc: BaseException) -> None:
+        if time.monotonic() - self._last_frame_warn > 60:  # 一分钟最多记一次
+            self._last_frame_warn = time.monotonic()
+            logger.warning("browser frame failed: %s", str(exc).splitlines()[0][:200])
+
+    def _push_frame(self, screen: Screen | None = None) -> None:
         if self._page is None:
             return
-        try:
-            raw = self._page.screenshot(type="jpeg", quality=FRAME_QUALITY)  # Chromium 直接出 JPEG(视口就是 1366 宽),不再 PNG→PIL 转一道
-        except Exception as exc:  # noqa: BLE001 —— 截不下来(页面正忙/刚关)就等下一帧,一分钟最多记一次
-            if time.monotonic() - self._last_frame_warn > 60:
-                self._last_frame_warn = time.monotonic()
-                logger.warning("browser screenshot failed: %s", str(exc).splitlines()[0][:200])
-            return
+        if screen is not None:
+            raw = screen.take()  # screencast 推来的最新一帧;没新帧就是画面没变
+            if not raw:
+                return
+        else:
+            try:
+                raw = self._page.screenshot(type="jpeg", quality=FRAME_QUALITY)  # 退路:Chromium 直接出 JPEG(视口就是 1366 宽)
+            except Exception as exc:  # noqa: BLE001 —— 截不下来(页面正忙/刚关)就等下一帧
+                self._warn_frame(exc)
+                return
         digest = hashlib.sha1(raw).hexdigest()
         if digest == self._last_frame_hash:
             return
