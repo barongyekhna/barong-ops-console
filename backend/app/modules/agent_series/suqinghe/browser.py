@@ -11,12 +11,12 @@
 - 状态:idle / fetching / needs_human(等老板过验证) / interactive(老板在登录) / asking_seller(B 期,问卖家)。
 - 不改 compose:profile 放在 worker 已挂的 agent-memory 卷;按需启动,闲置 N 分钟关(profile 留着)。
 - 全部受 SQH_BROWSER 开关管;关着时 sourcing_1688 还是每次新开匿名浏览器的老路。
+- 10-29 热修 4:1688 的「联系供应商」把旺旺开在新标签页,面板跟着新开的页走;同一批滚轮合成一下再给 Chromium;截图直接出 JPEG。
 """
 
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import logging
 import os
@@ -39,9 +39,10 @@ logger = logging.getLogger(__name__)
 _X = SKIP_ORG_DATA_ISOLATION
 
 VIEWPORT = {"width": 1366, "height": 900}
-FRAME_WIDTH = 1366  # 10-28 老板扫码扫不上:不再缩到 1024,原尺寸 + 质量 85,二维码才清楚
-FRAME_QUALITY = 85
+FRAME_QUALITY = 85  # 10-28 老板扫码扫不上:不缩(视口原尺寸 1366 宽)、JPEG 质量 85,二维码才清楚
 FRAME_INTERVAL_S = 0.4  # 10-29 老板说滚动「非常慢」:0.7→0.4,且应用完输入立刻出一帧
+SLOW_TICK_S = 1.5  # 一轮(应用输入 + 截帧)超过这么久就记日志,老板再说慢我能看出慢在哪
+WHEEL_MAX = 6000.0  # 合并后的一下滚轮最多滚这么多像素(约六屏半)
 INPUT_POLL_S = 0.1
 RECOVERY_CHECK_S = 2.0
 VIEWER_FRESH_S = 5.0
@@ -174,7 +175,7 @@ def apply_input(page: Any, kind: str, payload: dict[str, Any]) -> bool:
         if (p := xy()) is None:
             return False
         try:
-            dy = max(-3000.0, min(3000.0, float(payload.get("dy") or 0)))
+            dy = max(-WHEEL_MAX, min(WHEEL_MAX, float(payload.get("dy") or 0)))
         except (TypeError, ValueError):
             return False
         page.mouse.move(p[0], p[1])
@@ -187,6 +188,27 @@ def apply_input(page: Any, kind: str, payload: dict[str, Any]) -> bool:
         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
         return True
     return False
+
+
+def coalesce_inputs(rows: list[tuple[int, str, dict[str, Any]]]) -> list[tuple[int, str, dict[str, Any]]]:
+    """同一批里连着的滚轮合成一下(dy 相加、位置取最后一条的),连着的 move 只留最后一个;点、键、命令原样按序保留。
+    10-29 老板滚一屏面板发 8 条/秒,worker 每条一次 Chromium 往返(约 100ms),队列积到 24–32 秒才应用上。"""
+    out: list[tuple[int, str, dict[str, Any]]] = []
+    for row in rows:
+        _id, kind, payload = row
+        if out and kind in ("wheel", "move") and out[-1][1] == kind:
+            if kind == "move":
+                out[-1] = row
+                continue
+            try:
+                dy = float(out[-1][2].get("dy") or 0) + float(payload.get("dy") or 0)
+            except (TypeError, ValueError):
+                out.append(row)
+                continue
+            out[-1] = (_id, kind, {**payload, "dy": dy})
+            continue
+        out.append(row)
+    return out
 
 
 def logged_in(cookies: list[dict[str, Any]]) -> bool:
@@ -213,19 +235,6 @@ def clear_stale_singleton(profile: str) -> list[str]:
     if removed:
         logger.info("cleared stale chromium singleton files: %s", removed)
     return removed
-
-
-def frame_bytes(screenshot_png_or_jpeg: bytes, *, width: int = FRAME_WIDTH, quality: int = FRAME_QUALITY) -> bytes:
-    """截图转成 JPEG 给面板看。原尺寸(1366 宽)、质量 85、只压一次(截图用无损 PNG):
-    老板要拿手机对着屏幕扫二维码,10-28 第一次用时缩到 1024 又压到 60,码糊得扫不上。≈150–250KB,只在有人看且画面变了才写。"""
-    from PIL import Image
-
-    img = Image.open(io.BytesIO(screenshot_png_or_jpeg)).convert("RGB")
-    if img.width > width:
-        img = img.resize((width, round(img.height * width / img.width)), Image.LANCZOS)
-    out = io.BytesIO()
-    img.save(out, "JPEG", quality=quality, optimize=True)
-    return out.getvalue()
 
 
 # ---------------------------------------------------------------- 浏览器线程
@@ -263,6 +272,7 @@ class BrowserSession(threading.Thread):
         self._last_recovery = 0.0
         self._last_command_scan = 0.0
         self._last_cleanup = time.monotonic()
+        self._last_frame_warn = 0.0
         self._recovered: dict[str, Any] | None = None
         self.stop_flag = threading.Event()
 
@@ -321,6 +331,7 @@ class BrowserSession(threading.Thread):
             return self._ctx
         if self._launcher is not None:
             self._ctx = self._launcher()
+            self._hook_context(self._ctx)
             return self._ctx
         from playwright.sync_api import sync_playwright
 
@@ -344,13 +355,40 @@ class BrowserSession(threading.Thread):
             logger.info("chromium channel unavailable, falling back to default headless")
             self._ctx = self._pw.chromium.launch_persistent_context(**kwargs)
         self._ctx.set_default_timeout(30_000)
+        self._hook_context(self._ctx)
         return self._ctx
+
+    def _hook_context(self, ctx: Any) -> None:
+        ctx.on("page", self._on_new_page)
+        for page in self._open_pages(ctx):
+            page.on("close", self._on_page_closed)
+
+    @staticmethod
+    def _open_pages(ctx: Any) -> list[Any]:
+        return [p for p in (getattr(ctx, "pages", []) or []) if not getattr(p, "is_closed", lambda: False)()]
+
+    def _on_new_page(self, page: Any) -> None:
+        """1688 的「联系供应商」把旺旺开在新标签页(10-29 老板点了六下、开出三页,面板却一直盯着商品页):新开的页面板跟过去。"""
+        page.on("close", self._on_page_closed)
+        self._page = page
+        self._last_frame = 0.0
+        self._last_frame_hash = ""
+        self._last_activity = time.monotonic()
+        logger.info("browser followed a new tab")
+
+    def _on_page_closed(self, page: Any) -> None:
+        if page is not self._page or self._ctx is None:
+            return
+        pages = self._open_pages(self._ctx)
+        self._page = pages[-1] if pages else None
+        self._last_frame = 0.0
+        self._last_frame_hash = ""
 
     def _get_page(self) -> Any:
         ctx = self._context()
         if self._page is None or getattr(self._page, "is_closed", lambda: False)():
-            pages = list(getattr(ctx, "pages", []) or [])
-            self._page = pages[0] if pages else ctx.new_page()
+            pages = self._open_pages(ctx)
+            self._page = pages[-1] if pages else ctx.new_page()  # 最新开的那页
         self._last_activity = time.monotonic()
         return self._page
 
@@ -451,30 +489,37 @@ class BrowserSession(threading.Thread):
         self._set("idle", dossier_id=None)
 
     def _do_dump(self) -> str:
-        """把当前页面存一份(url/html/各 frame/截图),B 期靠它读旺旺 IM 的 DOM。"""
-        page = self._get_page()
+        """把现在开着的每个标签页都存一份(url/html/各 frame/整页截图),B 期靠它读旺旺 IM 的 DOM。"""
+        self._get_page()
+        ctx = self._context()
         folder = os.path.join(browser_dump_dir(), self._clock().strftime("%Y%m%d-%H%M%S"))
         os.makedirs(folder, exist_ok=True)
-        info: dict[str, Any] = {"url": page.url, "title": page.title(), "pages": [], "frames": []}
-        try:
-            info["pages"] = [p.url for p in self._context().pages]
-        except Exception:  # noqa: BLE001
-            pass
-        with open(os.path.join(folder, "page.html"), "w", encoding="utf-8") as fh:
-            fh.write(page.content())
-        for i, frame in enumerate(getattr(page, "frames", []) or []):
+        info: dict[str, Any] = {"current": None, "pages": []}
+        for i, page in enumerate(self._open_pages(ctx)):
+            if page is self._page:
+                info["current"] = i
+            entry: dict[str, Any] = {"index": i, "url": "", "title": "", "frames": []}
             try:
-                info["frames"].append({"index": i, "url": frame.url, "name": frame.name})
-                with open(os.path.join(folder, f"frame-{i}.html"), "w", encoding="utf-8") as fh:
-                    fh.write(frame.content())
+                entry["url"], entry["title"] = str(page.url), str(page.title())
+                with open(os.path.join(folder, f"page-{i}.html"), "w", encoding="utf-8") as fh:
+                    fh.write(page.content())
+            except Exception as exc:  # noqa: BLE001 —— 一页存不下来不耽误别的页
+                entry["error"] = str(exc)[:300]
+            for j, frame in enumerate(getattr(page, "frames", []) or []):
+                try:
+                    entry["frames"].append({"index": j, "url": frame.url, "name": frame.name})
+                    with open(os.path.join(folder, f"page-{i}-frame-{j}.html"), "w", encoding="utf-8") as fh:
+                        fh.write(frame.content())
+                except Exception:  # noqa: BLE001
+                    continue
+            try:
+                page.screenshot(path=os.path.join(folder, f"page-{i}.png"), full_page=True)
             except Exception:  # noqa: BLE001
-                continue
-        try:
-            page.screenshot(path=os.path.join(folder, "page.png"), full_page=True)
-        except Exception:  # noqa: BLE001
-            pass
+                pass
+            info["pages"].append(entry)
         with open(os.path.join(folder, "info.json"), "w", encoding="utf-8") as fh:
             json.dump(info, fh, ensure_ascii=False, indent=1)
+        logger.info("browser dump saved: %s (%d pages)", folder, len(info["pages"]))
         return folder
 
     # ---- 空闲循环:帧 / 输入 / 自愈 / 闲置关闭 ----
@@ -502,16 +547,22 @@ class BrowserSession(threading.Thread):
             self._set("idle", dossier_id=None)
             return
         viewer = self.store.viewer_recent()
+        applied: list[str] = []
         if viewer:
-            self._apply_inputs(self.store.pop_inputs())
+            applied = self._apply_inputs(self.store.pop_inputs())
         elif now - self._last_command_scan >= 1.0:
             self._last_command_scan = now
-            self._apply_inputs(self.store.pop_inputs(kinds=COMMAND_KINDS))
+            applied = self._apply_inputs(self.store.pop_inputs(kinds=COMMAND_KINDS))
+        applied_s = time.monotonic() - now
         if self.status not in HOLD_STATES:
             return
-        if viewer and now - self._last_frame >= FRAME_INTERVAL_S:
-            self._last_frame = now
+        frame_s = 0.0
+        if viewer and time.monotonic() - self._last_frame >= FRAME_INTERVAL_S:
+            self._last_frame = time.monotonic()
             self._push_frame()
+            frame_s = time.monotonic() - self._last_frame
+        if applied_s + frame_s > SLOW_TICK_S:
+            logger.info("browser tick slow: inputs=%s apply=%.2fs frame=%.2fs", ",".join(applied) or "-", applied_s, frame_s)
         if now - self._last_recovery >= RECOVERY_CHECK_S:
             self._last_recovery = now
             self._check_recovery()
@@ -525,8 +576,10 @@ class BrowserSession(threading.Thread):
                 self._recovered = {"outcome": "gave_up", "dossier_id": self.dossier_id, "reason": f"等了 {browser_hold_minutes():g} 分钟没人来过验证"}
             self._set("idle", dossier_id=None)
 
-    def _apply_inputs(self, rows: list[tuple[int, str, dict[str, Any]]]) -> None:
-        for _id, kind, payload in rows:
+    def _apply_inputs(self, rows: list[tuple[int, str, dict[str, Any]]]) -> list[str]:
+        done: list[str] = []
+        for _id, kind, payload in coalesce_inputs(rows):
+            done.append(kind)
             try:
                 if kind == "login":
                     self._do_login()
@@ -540,17 +593,23 @@ class BrowserSession(threading.Thread):
                     self._last_frame = 0.0  # 动了就马上截一帧,老板不用等下一个间隔
             except Exception:  # noqa: BLE001 —— 一下点错了不影响下一下
                 logger.exception("browser input %s failed", kind)
+        return done
 
     def _push_frame(self) -> None:
+        if self._page is None:
+            return
         try:
-            raw = self._page.screenshot(type="png")  # 无损截,只在 frame_bytes 压一次
-        except Exception:  # noqa: BLE001
+            raw = self._page.screenshot(type="jpeg", quality=FRAME_QUALITY)  # Chromium 直接出 JPEG(视口就是 1366 宽),不再 PNG→PIL 转一道
+        except Exception as exc:  # noqa: BLE001 —— 截不下来(页面正忙/刚关)就等下一帧,一分钟最多记一次
+            if time.monotonic() - self._last_frame_warn > 60:
+                self._last_frame_warn = time.monotonic()
+                logger.warning("browser screenshot failed: %s", str(exc).splitlines()[0][:200])
             return
         digest = hashlib.sha1(raw).hexdigest()
         if digest == self._last_frame_hash:
             return
         self._last_frame_hash = digest
-        self.store.push_frame(frame_bytes(raw))
+        self.store.push_frame(raw)
 
     def _check_recovery(self) -> None:
         url, title = self._page_info()
@@ -575,11 +634,11 @@ class BrowserSession(threading.Thread):
             self._set("idle", dossier_id=None)
         elif self.status == "interactive":
             # 10-29:登上之后不再自动收回——老板要用这页开商品页、点联系供应商、存页面;状态留在 interactive 直到他点「关掉」或久不用
-            if "login.1688.com" not in url and self._refresh_login():
-                if self.reason != LOGGED_IN_REASON:
-                    self._set("interactive", reason=LOGGED_IN_REASON, dossier_id=None, url=url, title=title)
-                else:
-                    self.store.sync_state(status=self.status, reason=self.reason, url=url, title=title, dossier_id=self.dossier_id, logged_in_at=self.logged_in_at)
+            # 每 2 秒把现在看着的页(url/title)写回库——跟到旺旺新标签页后面板状态行才会换过来
+            if "login.1688.com" not in url and self._refresh_login() and self.reason != LOGGED_IN_REASON:
+                self._set("interactive", reason=LOGGED_IN_REASON, dossier_id=None, url=url, title=title)
+            else:
+                self.store.sync_state(status=self.status, reason=self.reason, url=url, title=title, dossier_id=self.dossier_id, logged_in_at=self.logged_in_at)
 
 
 # ---------------------------------------------------------------- 进程内单例

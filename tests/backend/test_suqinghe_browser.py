@@ -1,10 +1,11 @@
 """她的登录浏览器(10-28)的纯逻辑:状态机(抓页 → 被拦留页等老板 → 老板过了自己接着做 / 等不到人放弃)、
-老板动作的映射、登录判断、画面压缩、导航白名单、渲染结果 → Capture 的半段、迁移文件。
+老板动作的映射与合并、登录判断、新标签页跟随、导航白名单、渲染结果 → Capture 的半段、迁移文件。
 unit:浏览器用假的 page/context,库用假的 store,不起 Chromium、不连库。"""
 
 from __future__ import annotations
 
 import io
+import json
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -21,9 +22,9 @@ FIXTURE = Path(__file__).parent / "fixtures" / "sqh1688" / "offer_1057528621016"
 GOOD_URL = "https://detail.1688.com/offer/1057528621016.html"
 
 
-def _png(width: int = 1366, height: int = 900) -> bytes:
+def _shot(fmt: str = "JPEG", color: tuple[int, int, int] = (120, 140, 200)) -> bytes:
     buffer = io.BytesIO()
-    Image.new("RGB", (width, height), (120, 140, 200)).save(buffer, "PNG")
+    Image.new("RGB", (1366, 900), color).save(buffer, fmt)
     return buffer.getvalue()
 
 
@@ -70,7 +71,19 @@ class FakePage:
         self._html = "<html></html>"
         self._text = ""
         self.shots = 0
+        self.shot_kwargs: dict[str, Any] = {}
         self.frames: list[Any] = []
+        self.handlers: dict[str, Any] = {}
+        self._closed = False
+        self.color = (120, 140, 200)
+
+    def on(self, event: str, handler: Any) -> None:
+        self.handlers[event] = handler
+
+    def close(self) -> None:
+        self._closed = True
+        if "close" in self.handlers:
+            self.handlers["close"](self)
 
     def goto(self, url: str, **kwargs: Any) -> None:
         self.log.append(("goto", url))
@@ -96,10 +109,14 @@ class FakePage:
 
     def screenshot(self, **kwargs: Any) -> bytes:
         self.shots += 1
-        return _png()
+        self.shot_kwargs = kwargs
+        if kwargs.get("path"):
+            Path(kwargs["path"]).write_bytes(_shot("PNG", self.color))
+            return b""
+        return _shot("JPEG" if kwargs.get("type") == "jpeg" else "PNG", self.color)
 
     def is_closed(self) -> bool:
-        return False
+        return self._closed
 
 
 class FakeContext:
@@ -108,6 +125,19 @@ class FakeContext:
         self.pages = [page]
         self._cookies = cookies or []
         self.closed = False
+        self.handlers: dict[str, Any] = {}
+
+    def on(self, event: str, handler: Any) -> None:
+        self.handlers[event] = handler
+
+    def open_popup(self, url: str) -> FakePage:
+        """像 1688 的「联系供应商」那样在新标签页里开一页。"""
+        popup = FakePage()
+        popup.url = url
+        popup.color = (30, 160, 60)
+        self.pages.append(popup)
+        self.handlers["page"](popup)
+        return popup
 
     def new_page(self) -> FakePage:
         return self.page
@@ -203,12 +233,25 @@ def test_apply_input_maps_each_kind_and_drops_bad_ones() -> None:
     assert len(page.log) == n
 
 
-def test_login_cookies_frame_bytes_and_url_allowlist() -> None:
+def test_coalesce_inputs_merges_runs_of_wheel_and_move_but_keeps_order() -> None:
+    rows = [
+        (1, "wheel", {"x": 10, "y": 10, "dy": 30}),
+        (2, "wheel", {"x": 20, "y": 20, "dy": 40}),
+        (3, "wheel", {"x": 20, "y": 20, "dy": -10}),
+        (4, "click", {"x": 5, "y": 5}),
+        (5, "move", {"x": 1, "y": 1}),
+        (6, "move", {"x": 2, "y": 2}),
+        (7, "wheel", {"x": 9, "y": 9, "dy": 5}),
+        (8, "wheel", {"x": 9, "y": 9, "dy": "bad"}),
+    ]
+    out = browser.coalesce_inputs(rows)
+    assert [(k, p.get("dy"), p.get("x")) for _, k, p in out] == [("wheel", 60.0, 20), ("click", None, 5), ("move", None, 2), ("wheel", 5, 9), ("wheel", "bad", 9)]
+    assert browser.coalesce_inputs([]) == []
+
+
+def test_login_cookies_and_url_allowlist() -> None:
     assert browser.logged_in([{"name": "cookie2", "value": "x"}, {"name": "cna"}])
     assert not browser.logged_in([{"name": "cna"}, {"name": "isg"}]) and not browser.logged_in([])
-    jpeg = browser.frame_bytes(_png(1366, 900))
-    img = Image.open(io.BytesIO(jpeg))
-    assert img.format == "JPEG" and img.width == 1366 and img.height == 900  # 10-28 起不缩,二维码要能扫
     assert browser.allowed_url("https://login.1688.com/member/signin.htm") and browser.allowed_url("https://1688.com/")
     assert not browser.allowed_url("https://detail.1688.com.evil.com/x") and not browser.allowed_url("ftp://1688.com") and not browser.allowed_url("")
 
@@ -271,6 +314,7 @@ def test_fetch_then_hold_then_boss_solves_then_resume(session) -> None:
     assert page.shots == 0 and store.frames == []
     store.viewer = True
     assert _wait(lambda: len(store.frames) >= 1)
+    assert page.shot_kwargs == {"type": "jpeg", "quality": browser.FRAME_QUALITY} and Image.open(io.BytesIO(store.frames[0])).size == (1366, 900)  # Chromium 直接出 JPEG,原尺寸
     first = page.shots
     store.inputs.append((1, "down", {"x": 100, "y": 500}))
     store.inputs.append((2, "move", {"x": 300, "y": 500}))
@@ -326,6 +370,41 @@ def test_login_flow_records_logged_in_when_cookies_arrive(session) -> None:
     store.inputs.append((3, "close", {}))
     assert _wait(lambda: sess.status == "idle", timeout=4)
     assert ctx.closed
+
+
+def test_contact_seller_popup_is_followed_and_dump_covers_every_tab(session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """10-29 老板实况:点「联系供应商」,1688 把旺旺开在新标签页,面板却一直盯着商品页,看着像没反应。"""
+    sess, page, ctx, store, clock, detect = session
+    monkeypatch.setattr(browser, "browser_dump_dir", lambda: str(tmp_path))
+    store.viewer = True
+    store.inputs.append((1, "login", {}))
+    assert _wait(lambda: sess.status == "interactive" and len(store.frames) >= 1, timeout=4)
+    page.url = "https://detail.1688.com/offer/643348607768.html"
+    before = len(store.frames)
+    popup = ctx.open_popup("https://air.1688.com/app/ocms-fusion-components-1688/def_cbu_web_im/index.html?offerId=643348607768")
+    # 面板跟到新页:接下来的帧是新页截的(颜色不同),库里的 url 也换成旺旺页
+    assert _wait(lambda: popup.shots >= 1 and len(store.frames) > before, timeout=4)
+    assert Image.open(io.BytesIO(store.frames[-1])).getpixel((5, 5))[1] > 120  # 新页是绿的
+    assert _wait(lambda: (store.states[-1].get("url") or "").startswith("https://air.1688.com/"), timeout=4)
+    # 点和滚落到新页上,不落到商品页
+    store.inputs.append((2, "wheel", {"x": 100, "y": 100, "dy": 120}))
+    store.inputs.append((3, "wheel", {"x": 100, "y": 100, "dy": 80}))
+    assert _wait(lambda: ("wheel", 200.0) in popup.log, timeout=4)  # 两条合成一下
+    assert not [e for e in page.log if e[0] == "wheel"]
+    # 存一份页面:每个标签页都存
+    store.inputs.append((4, "dump", {}))
+    assert _wait(lambda: (tmp_path / "20261028-100000" / "info.json").exists(), timeout=4)
+    folder = tmp_path / "20261028-100000"
+    info = json.loads((folder / "info.json").read_text())
+    assert info["current"] == 1 and [p["url"] for p in info["pages"]] == [page.url, popup.url]
+    assert (folder / "page-0.html").exists() and (folder / "page-1.html").exists() and (folder / "page-1.png").exists()
+    # 旺旺页关了:退回商品页,不掉成 idle
+    popup.close()
+    assert _wait(lambda: sess._page is page, timeout=4)
+    time.sleep(0.3)
+    assert sess.status == "interactive"
+    store.inputs.append((5, "close", {}))
+    assert _wait(lambda: sess.status == "idle", timeout=4)
 
 
 def test_stale_singleton_files_are_cleared_before_launch(tmp_path: Path) -> None:
