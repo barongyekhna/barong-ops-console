@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from backend.app.modules.agent_series.suqinghe import browser, pricing, seller_chat
-from tests.backend.test_suqinghe_browser import Clock, FakeContext, FakePage, FakeStore, _wait
+from tests.backend.test_suqinghe_browser import Clock, FakeContext, FakePage, FakeStore, _shot, _wait
 
 pytestmark = pytest.mark.unit
 
@@ -99,10 +99,67 @@ def test_new_replies_ignore_our_own_messages_and_what_was_already_there() -> Non
         {"self": False, "nick": "湖南来美电子", "time": "2026-10-29 21:05:00", "text": "2000mAh 的 350 克,一箱 50 个"},
         {"self": False, "nick": "湖南来美电子", "time": "2026-10-29 21:05:01", "text": ""},
     ]
-    assert seller_chat.new_replies(messages, baseline) == [{"nick": "湖南来美电子", "time": "2026-10-29 21:05:00", "text": "2000mAh 的 350 克,一箱 50 个"}]
+    assert seller_chat.new_replies(messages, baseline) == [{"nick": "湖南来美电子", "time": "2026-10-29 21:05:00", "text": "2000mAh 的 350 克,一箱 50 个", "images": []}]
+    # 只发图(文字空)也算一条新回复;底账里已有的图、自己发的图不算
+    pic = {"self": False, "nick": "湖南来美电子", "time": "2026-10-29 21:06:00", "text": "", "images": [{"url": "https://img.alicdn.com/a.jpg", "path": "/d/img-1.jpg"}]}
+    assert seller_chat.new_replies([pic], baseline)[0]["images"] == [{"url": "https://img.alicdn.com/a.jpg", "path": "/d/img-1.jpg"}]
+    assert seller_chat.new_replies([pic], [{"nick": "湖南来美电子", "time": "2026-10-29 21:06:00", "text": "", "images": [{"url": "https://img.alicdn.com/a.jpg"}]}]) == []
+    assert seller_chat.new_replies([{**pic, "self": True}], []) == []
     assert browser.im_url("湖南来美电子", "643348607768") == (
         "https://air.1688.com/app/ocms-fusion-components-1688/def_cbu_web_im/index.html?touid=cnalichn%E6%B9%96%E5%8D%97%E6%9D%A5%E7%BE%8E%E7%94%B5%E5%AD%90&siteid=cnalichn&status=1&offerId=643348607768"
     )
+
+
+def test_read_images_transcribes_each_picture_and_never_breaks_the_poll(tmp_path: Path) -> None:
+    for n in range(8):
+        (tmp_path / f"img-{n}.jpg").write_bytes(_shot("JPEG", (200, 200, 200)))
+    replies = [
+        {"nick": "卖家", "time": "t1", "text": "", "images": [{"url": "u0", "path": str(tmp_path / "img-0.jpg")}, {"url": "u1", "path": str(tmp_path / "img-1.jpg")}, {"url": "u2", "path": None}]},
+        {"nick": "卖家", "time": "t2", "text": "看图", "images": [{"url": f"u{n}", "path": str(tmp_path / f"img-{n}.jpg")} for n in range(2, 8)]},
+    ]
+    calls: list[str] = []
+
+    def reader(db, prompt, segment):
+        calls.append(prompt)
+        assert segment[:2] == b"\xff\xd8" and "Variants we asked about" in prompt and "v1: 黑" in prompt  # 送的是 JPEG 段,带规格清单
+        if len(calls) == 2:
+            raise RuntimeError("model hiccup")
+        if len(calls) == 3:
+            return {"_ai_degraded": True}
+        return {"text": f"2000mah 165g 第{len(calls)}张", "useful": True}
+
+    got = seller_chat.read_images(FakeDb(), replies, listing="v1: 黑", reader=reader)
+    images = replies[0]["images"] + replies[1]["images"]
+    assert len(calls) == 6  # 一次最多读 6 张(第 7、8 张不读)
+    assert images[0]["read"] == "2000mah 165g 第1张" and images[1]["read"] is None and "hiccup" in images[1]["error"]
+    assert images[2].get("read") is None and "read" not in images[2]  # 没下下来的图不读
+    assert images[3]["read"] is None and "额度" in images[3]["error"]
+    assert got == 4 and images[7].get("read") is None
+    text = seller_chat.reply_text(replies)
+    assert "[图片1 转录] 2000mah 165g 第1张" in text and "[图片2 没读出来]" in text and "看图" in text
+
+
+def test_poll_one_reads_pictures_before_extracting_and_waits_when_nothing_is_legible(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "img-1.jpg").write_bytes(_shot("JPEG", (200, 200, 200)))
+    asked = NOW - timedelta(minutes=20)
+    draft = {"variants": [{"name_zh": "2000mah", "cost_price_cny": 39}], "seller_chat": {"status": "asked", "asked_at": asked.isoformat(), "checked_at": asked.isoformat(), "im_url": "https://air.1688.com/x", "question": "您好…", "baseline": []}}
+    dossier, db = FakeDossier(draft), FakeDb()
+    picture = [{"self": False, "nick": "卖家", "time": "t2", "text": "", "images": [{"url": "https://img.alicdn.com/a.jpg", "path": str(tmp_path / "img-1.jpg")}]}]
+    # 图一张都没读出字:继续等
+    assert seller_chat.poll_one(db, dossier, now=NOW, read=lambda **kw: picture, judge=lambda db, p: pytest.fail("没读出字不该去抽数"), image_reader=lambda db, p, seg: {"text": "", "useful": False}) == "unclear"
+    assert dossier.draft["seller_chat"]["status"] == "asked" and dossier.draft["seller_chat"]["replies"][0]["images"][0]["read"] is None
+    # 图读出来了:转录进抽数提示词,数写回规格
+    prompts: list[str] = []
+    dossier.draft["seller_chat"]["checked_at"] = asked.isoformat()
+
+    def judge(db, prompt):
+        prompts.append(prompt)
+        return {"answers": [{"key": "v1", "weight_g": 165, "dims_cm": [12, 8, 6], "units_per_carton": 50}]}
+
+    out = seller_chat.poll_one(db, dossier, now=NOW, read=lambda **kw: picture, judge=judge, image_reader=lambda db, p, seg: {"text": "2000mAh 包装 165g 12×8×6cm 50个/箱", "useful": True})
+    assert out == "answered" and "[图片1 转录] 2000mAh 包装 165g 12×8×6cm 50个/箱" in prompts[0]
+    assert dossier.draft["variants"][0]["weight_g"] == 165.0 and dossier.draft["variants"][0]["source"] == "seller_said"
+    assert dossier.draft["seller_chat"]["replies"][0]["images"][0]["read"].startswith("2000mAh")
 
 
 # ---------------------------------------------------------------- 落库那一段(假 db / 假档案)
@@ -112,6 +169,9 @@ class FakeDb:
     def __init__(self) -> None:
         self.added: list[Any] = []
         self.commits = 0
+
+    def get(self, model: Any, pk: Any, **kw: Any) -> Any:
+        return None  # poll_one 放掉事务后重取档案;假库没有,它就沿用手里那份
 
     def add(self, row: Any) -> None:
         self.added.append(row)
@@ -248,6 +308,31 @@ class FakeFrame:
         return "<html></html>"
 
 
+class FakeResponse:
+    def __init__(self, ok: bool, ctype: str, body: bytes) -> None:
+        self.ok, self.headers, self._body = ok, {"content-type": ctype}, body
+
+    def body(self) -> bytes:
+        return self._body
+
+
+class FakeRequest:
+    """page.request:按地址回不同的东西——正常图、太大的图、不是图、404。"""
+
+    def __init__(self) -> None:
+        self.urls: list[str] = []
+
+    def get(self, url: str, timeout: int = 0) -> FakeResponse:
+        self.urls.append(url)
+        if "big" in url:
+            return FakeResponse(True, "image/jpeg", b"\xff" * (browser.REPLY_IMAGE_MAX_BYTES + 1))
+        if "html" in url:
+            return FakeResponse(True, "text/html; charset=utf-8", b"<html>")
+        if "404" in url:
+            return FakeResponse(False, "image/jpeg", b"")
+        return FakeResponse(True, "image/png" if url.endswith(".png") else "image/jpeg", _shot("PNG" if url.endswith(".png") else "JPEG"))
+
+
 class ImPage(FakePage):
     """像真页面:开商品页能找到卖家账号;开旺旺地址后出现 im_core 的 iframe;键盘打字落进 iframe 的输入框。"""
 
@@ -255,6 +340,7 @@ class ImPage(FakePage):
         super().__init__()
         self.im_frame: FakeFrame | None = None
         self.seller_id: str | None = "湖南来美电子"
+        self.request = FakeRequest()
 
         page = self
 
@@ -314,8 +400,32 @@ def test_browser_asks_the_seller_in_wangwang_and_reads_the_thread_back(im_sessio
         page.im_frame.messages.append({"self": False, "nick": "卖家", "time": "t2", "text": "350 克"})
 
     page.goto = goto
-    msgs = sess.read_seller_chat(im_url=out["im_url"])
-    assert msgs[-1] == {"self": False, "nick": "卖家", "time": "t2", "text": "350 克"} and sess.status == "idle"
+    msgs = sess.read_seller_chat(im_url=out["im_url"], offer_id="643348607768")
+    assert msgs[-1] == {"self": False, "nick": "卖家", "time": "t2", "text": "350 克", "images": []} and sess.status == "idle"
+
+
+def test_browser_downloads_the_sellers_pictures_with_the_login_cookies(im_session) -> None:
+    sess, page, ctx, store, tmp = im_session
+    original_goto = page.goto
+
+    def goto(url: str, **kw: Any) -> None:
+        original_goto(url, **kw)
+        page.im_frame.messages = [
+            {"self": True, "nick": "我", "time": "t1", "text": "您好", "images": ["https://img.alicdn.com/mine.jpg"]},
+            {"self": False, "nick": "卖家", "time": "t2", "text": "", "images": ["https://img.alicdn.com/label.jpg", "https://img.alicdn.com/big.jpg", "https://img.alicdn.com/page.html", "https://img.alicdn.com/4th.png"]},
+            {"self": False, "nick": "卖家", "time": "t3", "text": "再看", "images": ["https://img.alicdn.com/404.jpg", "https://img.alicdn.com/scale.png"]},
+        ]
+
+    page.goto = goto
+    msgs = sess.read_seller_chat(im_url=browser.im_url("湖南来美电子", "643348607768"), offer_id="643348607768")
+    assert msgs[0]["images"] == [{"url": "https://img.alicdn.com/mine.jpg", "path": None}]  # 自己发的不下
+    assert "mine.jpg" not in page.request.urls
+    second = msgs[1]["images"]
+    assert [i["url"] for i in second] == ["https://img.alicdn.com/label.jpg", "https://img.alicdn.com/big.jpg", "https://img.alicdn.com/page.html"]  # 一条最多 3 张
+    assert second[0]["path"].endswith("img-1.jpg") and Path(second[0]["path"]).exists() and second[1]["path"] is None and second[2]["path"] is None
+    third = msgs[2]["images"]
+    assert third[0]["path"] is None and third[1]["path"].endswith("img-2.png") and Path(third[1]["path"]).exists()
+    assert "-reply-643348607768" in second[0]["path"] and str(tmp) in second[0]["path"]
 
 
 def test_browser_holds_for_the_boss_when_wangwang_wants_a_login(im_session) -> None:

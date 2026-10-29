@@ -7,6 +7,8 @@
 worker 每轮 poll_all():到点开旺旺读消息 → 新回复交给便宜模型抽成每规格的 重量/尺寸/一箱几个 → 写回 variants,作废还在等批的价格卡 →
 流水线下一轮重出价格卡(why 里写明「卖家口头」);等满 SQH_SELLER_CHAT_WAIT_HOURS 没回 → timeout,价格卡照旧出并写「问了没回」。
 状态都在 draft["seller_chat"],没有迁移。开关 SQH_SELLER_CHAT(默认关)。
+卖家回图(标签照片/规格表截图/称重照片):浏览器带登录态把图下到 browser-dumps/seller-chat/,交读图档(fast=Haiku)转成文字,
+和文字回复一起给抽数模型;一张都没读出字就继续等。语音在 1688 几乎不存在,不管。
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
+from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import browser, cards, memory
 from .constants import LA, seller_chat_enabled, seller_chat_poll_minutes, seller_chat_wait_hours
 from .models import SqhDossier
@@ -37,6 +40,14 @@ PARSE_ASK = (
     "If the seller gave one figure for all variants, apply it to every variant. If nothing usable was said, return {\"answers\": [], \"unclear\": true}."
 )
 USAGE_LABEL = "sqh_seller_chat"
+IMAGE_ASK = (
+    "This is a photo or screenshot a 1688 supplier sent in chat, answering our question about each variant's package weight (grams), "
+    "package dimensions (cm, L×W×H) and units per carton. Transcribe into Chinese every weight, dimension and quantity figure visible, "
+    "together with the variant name or label it belongs to, one item per line, exactly as written. Do not guess unreadable figures. "
+    'Reply JSON only: {"text": "<lines>", "useful": true|false}. useful=false when the image holds no such figures.'
+)
+REPLY_IMAGES_PER_READ = 6  # 一次 poll 最多读几段图(和浏览器下载上限一致)
+IMAGE_SEGMENTS_PER_IMAGE = 4  # 长截图切段后最多读几段
 
 
 class SellerChatUnavailable(RuntimeError):
@@ -110,18 +121,95 @@ def build_question(variants: list[dict[str, Any]]) -> str:
     return QUESTION_TEMPLATE.format(specs=specs)[:QUESTION_MAX]
 
 
+def _image_urls(message: dict[str, Any]) -> tuple[str, ...]:
+    urls = []
+    for item in message.get("images") or []:
+        url = item.get("url") if isinstance(item, dict) else item
+        if isinstance(url, str) and url:
+            urls.append(url)
+    return tuple(urls)
+
+
 def new_replies(messages: list[dict[str, Any]], baseline: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """卖家的新消息 = 列表里不是自己发的、且发问那一刻还没有的。按 (nick, time, text) 认,不比时区。"""
-    seen = {(str(m.get("nick") or ""), str(m.get("time") or ""), str(m.get("text") or "")) for m in baseline if isinstance(m, dict)}
+    """卖家的新消息 = 列表里不是自己发的、且发问那一刻还没有的。按 (nick, time, text, 图片地址) 认,不比时区。
+    有文字或有图都算一条;老底账没有 images 字段,当空。"""
+    seen = {(str(m.get("nick") or ""), str(m.get("time") or ""), str(m.get("text") or ""), _image_urls(m)) for m in baseline if isinstance(m, dict)}
     out = []
     for m in messages:
         if not isinstance(m, dict) or m.get("self"):
             continue
-        key = (str(m.get("nick") or ""), str(m.get("time") or ""), str(m.get("text") or ""))
-        if key in seen or not key[2]:
+        key = (str(m.get("nick") or ""), str(m.get("time") or ""), str(m.get("text") or ""), _image_urls(m))
+        if key in seen or not (key[2] or key[3]):
             continue
-        out.append({"nick": key[0], "time": key[1], "text": key[2][:1000]})
+        images = [{"url": i.get("url"), "path": i.get("path")} for i in (m.get("images") or []) if isinstance(i, dict) and i.get("url")]
+        out.append({"nick": key[0], "time": key[1], "text": key[2][:1000], "images": images})
     return out
+
+
+def _read_image_segment(db: Session, prompt: str, segment: bytes) -> Any:
+    from . import brain
+    from .sourcing_1688 import _payload
+
+    db.commit()  # 出网前放掉事务
+    return brain._execute("fast", _payload(prompt, segment)["messages"], timeout=60, usage_label=USAGE_LABEL)
+
+
+def read_images(db: Session, replies: list[dict[str, Any]], *, listing: str = "", reader: Callable[[Session, str, bytes], Any] | None = None) -> int:
+    """把卖家回复里下下来的图(path)交给读图档转成文字,写进 image["read"]。读不了(额度降级/坏图/出错)写 None,不中断。返回读出字的张数。"""
+    from .brain import parse_json
+    from .sourcing_1688 import slice_image
+
+    reader = reader or _read_image_segment
+    prompt = IMAGE_ASK + (f"\n\nVariants we asked about:\n{listing}" if listing else "")
+    budget = REPLY_IMAGES_PER_READ
+    got = 0
+    for reply in replies:
+        for image in reply.get("images") or []:
+            path = image.get("path") if isinstance(image, dict) else None
+            if not path or budget <= 0:
+                continue
+            try:
+                with open(path, "rb") as fh:
+                    segments = slice_image(fh.read())[:IMAGE_SEGMENTS_PER_IMAGE]
+            except Exception as exc:  # noqa: BLE001 —— 坏图
+                image["read"], image["error"] = None, f"图打不开:{str(exc)[:80]}"
+                continue
+            lines: list[str] = []
+            error = None
+            for segment in segments:
+                if budget <= 0:
+                    break
+                budget -= 1
+                try:
+                    result = reader(db, prompt, segment)
+                except Exception as exc:  # noqa: BLE001
+                    error = str(exc)[:120]
+                    break
+                if isinstance(result, dict) and result.get("_ai_degraded"):
+                    error = "读图档今天额度用完,图先读不了"
+                    break
+                data = parse_json(result) or {}
+                text = str(data.get("text") or "").strip()
+                if text:
+                    lines.append(text)
+            image["read"] = "\n".join(lines)[:500] or None
+            if error:
+                image["error"] = error
+            if image["read"]:
+                got += 1
+    return got
+
+
+def reply_text(replies: list[dict[str, Any]]) -> str:
+    """给抽数模型看的回复原文:文字 + 每张图的转录(没读出来也写明,别让它脑补)。"""
+    parts = []
+    for m in replies:
+        line = f"[{m.get('time') or ''}] {m.get('nick') or ''}: {m.get('text') or ''}".rstrip()
+        for n, image in enumerate(m.get("images") or [], start=1):
+            read = image.get("read") if isinstance(image, dict) else None
+            line += f"\n  [图片{n} 转录] {read}" if read else f"\n  [图片{n} 没读出来]"
+        parts.append(line)
+    return "\n".join(parts)
 
 
 def _num(value: Any, lo: float, hi: float) -> float | None:
@@ -282,7 +370,7 @@ def _retire_price_card(db: Session, dossier: SqhDossier, *, reason: str) -> bool
     return bool(card is not None and card.status == "pending" and cards.retire(db, card, reason=reason))
 
 
-def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None) -> str:
+def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None, image_reader: Callable[[Session, str, bytes], Any] | None = None) -> str:
     """看一份档案的旺旺:超时 → timeout;有新回复 → 抽数写回规格、作废旧价格卡;没回 → 记下看过的时间。返回做了什么。"""
     from .brain import parse_json
 
@@ -295,35 +383,45 @@ def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[
         db.commit()
         return "timeout"
     reader = read or (lambda **kw: browser.get().read_seller_chat(**kw))
-    messages = reader(im_url=str(chat.get("im_url") or ""))
+    dossier_id = dossier.id
+    db.commit()  # 开旺旺要几十秒:先把事务放掉,不然主库的空闲事务超时会把连接掐断(10-29 16:40 实况)
+    messages = reader(im_url=str(chat.get("im_url") or ""), offer_id=str(offer))
+    dossier = db.get(SqhDossier, dossier_id, execution_options=SKIP_ORG_DATA_ISOLATION) or dossier
     replies = new_replies(messages, chat.get("baseline") or [])
     chat["checked_at"] = now.isoformat()
     if not replies:
         _save_chat(db, dossier, chat)
         db.commit()
         return "no_reply"
-    chat["replies"] = replies[:20]
     draft = dict(dossier.draft) if isinstance(dossier.draft, dict) else {}
     variants = [dict(v) for v in draft.get("variants") or [] if isinstance(v, dict)]
     listing = "\n".join(f"v{i}: {v.get('name_zh') or ''}" for i, v in enumerate(variants, start=1))
-    reply_text = "\n".join(f"[{m['time']}] {m['nick']}: {m['text']}" for m in replies)
-    result = (judge or _judge)(db, f"{PARSE_ASK}\n\nVariants:\n{listing}\n\nOur question:\n{chat.get('question') or ''}\n\nSeller reply:\n{reply_text}")
+    replies = replies[:20]
+    pictures = sum(len(m.get("images") or []) for m in replies)
+    read = read_images(db, replies, listing=listing, reader=image_reader) if pictures else 0
+    chat["replies"] = [{**m, "images": [{k: v for k, v in i.items() if k in ("url", "path", "read", "error")} for i in m.get("images") or []]} for m in replies]
+    if pictures and read == 0 and not any((m.get("text") or "").strip() for m in replies):
+        _save_chat(db, dossier, chat)  # 只回了图、一张都没读出字:继续等,不瞎填
+        memory.log_activity(db, f"1688 {offer}:卖家回了 {pictures} 张图,一张都没读出字,我再等等。", kind="work")
+        db.commit()
+        return "unclear"
+    result = (judge or _judge)(db, f"{PARSE_ASK}\n\nVariants:\n{listing}\n\nOur question:\n{chat.get('question') or ''}\n\nSeller reply:\n{reply_text(replies)}")
     answers = parse_answers(parse_json(result), variants)
     if not answers:
         _save_chat(db, dossier, chat)  # 回了但没说到数(客套/反问):继续等
-        memory.log_activity(db, f"1688 {offer}:卖家回了话但没给重量尺寸,我再等等。", kind="work")
+        memory.log_activity(db, f"1688 {offer}:卖家回了话{f'和 {pictures} 张图(读出 {read} 张)' if pictures else ''}但没给重量尺寸,我再等等。", kind="work")
         db.commit()
         return "unclear"
     changed = apply_answers(variants, answers, asked_at=str(chat.get("asked_at") or now.isoformat()))
     chat.update({"status": STATUS_ANSWERED, "answered_at": now.isoformat(), "answers": answers})
     _save_chat(db, dossier, chat, variants=variants)
     retired = _retire_price_card(db, dossier, reason="卖家回了重量尺寸,按新数重出")
-    memory.log_activity(db, f"1688 {offer}:卖家回了 {changed} 个规格的重量尺寸(口头说的,没凭证),我按新数重出价格卡{'(旧卡作废)' if retired else ''}。", kind="work")
+    memory.log_activity(db, f"1688 {offer}:卖家回了 {changed} 个规格的重量尺寸{f'(含 {pictures} 张图,读出 {read} 张)' if pictures else ''}(口头说的,没凭证),我按新数重出价格卡{'(旧卡作废)' if retired else ''}。", kind="work")
     db.commit()
     return "answered"
 
 
-def poll_all(db: Session, *, now: datetime | None = None, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None) -> str | None:
+def poll_all(db: Session, *, now: datetime | None = None, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None, image_reader: Callable[[Session, str, bytes], Any] | None = None) -> str | None:
     """worker 每轮叫一次:到点的档案里挑一份去旺旺看。一轮最多一单(开旺旺要几十秒)。"""
     from . import pipeline
 
@@ -337,7 +435,7 @@ def poll_all(db: Session, *, now: datetime | None = None, read: Callable[..., li
         if not timed_out(chat, now=now) and read is None and (not browser.enabled() or browser.holding()):
             return None  # 浏览器没开 / 正等老板:下轮再看
         try:
-            return poll_one(db, dossier, now=now, read=read, judge=judge)
+            return poll_one(db, dossier, now=now, read=read, judge=judge, image_reader=image_reader)
         except browser.SellerChatBlocked:
             db.rollback()
             return "blocked"

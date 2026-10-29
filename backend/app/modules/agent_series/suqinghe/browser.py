@@ -68,12 +68,23 @@ _ALLOWED_HOSTS = (".1688.com", ".taobao.com", ".alibaba.com")
 IM_PAGE = "https://air.1688.com/app/ocms-fusion-components-1688/def_cbu_web_im/index.html"
 IM_CORE_FRAME = "def_cbu_web_im_core"  # 聊天本体在这个 iframe 里
 IM_SELECTORS = {"input": "pre.edit[contenteditable]", "send": "button.send-btn"}
-IM_MESSAGES_JS = """() => Array.from(document.querySelectorAll('.message-list .message-item')).map(el => ({
-  self: el.classList.contains('self'),
-  nick: ((el.querySelector('.nick') || {}).innerText || '').trim(),
-  time: ((el.querySelector('.time') || {}).innerText || '').trim(),
-  text: ((el.querySelector('.content-row') || el).innerText || '').trim()
-}))"""
+IM_IMAGE_SELECTOR = ".content-row img.imui-msg-img"  # 图片消息(bundle 里 hBe:<img class=imui-msg-img src=originalData.url>)
+IM_MESSAGES_JS = """() => Array.from(document.querySelectorAll('.message-list .message-item')).map(el => {
+  const row = el.querySelector('.content-row') || el;
+  const pick = (img) => img.currentSrc || img.src || (img.dataset || {}).src || '';
+  let images = Array.from(row.querySelectorAll('img.imui-msg-img')).map(pick).filter(Boolean);
+  if (!images.length) images = Array.from(row.querySelectorAll('img')).filter(i => (i.naturalWidth || 0) >= 120).map(pick).filter(Boolean);
+  return {
+    self: el.classList.contains('self'),
+    nick: ((el.querySelector('.nick') || {}).innerText || '').trim(),
+    time: ((el.querySelector('.time') || {}).innerText || '').trim(),
+    text: (row.innerText || '').trim(),
+    images: images.slice(0, 6)
+  };
+})"""
+REPLY_IMAGES_PER_MESSAGE = 3  # 卖家一条消息里最多下几张
+REPLY_IMAGES_PER_READ = 6  # 一次读聊天最多下几张
+REPLY_IMAGE_MAX_BYTES = 8 * 1024 * 1024
 SELLER_ID_JS = """() => {
   const pick = (s) => { const m = String(s || '').match(/"sellerLoginId"\\s*:\\s*"([^"]{1,64})"/); return m ? m[1] : null; };
   try { const hit = pick(JSON.stringify(window.context || {})); if (hit) return hit; } catch (e) {}
@@ -406,9 +417,10 @@ class BrowserSession(threading.Thread):
         """在旺旺里给卖家发一条(B 期)。没有 login_id 就先开商品页从页面数据里找。成功回 {ok, im_url, login_id, messages, dump}。"""
         return self.submit(self._do_ask_seller, offer_url, login_id, offer_id, text, dossier_id, timeout_s).result(timeout=timeout_s + 60)
 
-    def read_seller_chat(self, *, im_url: str, timeout_s: float = 60.0) -> list[dict[str, Any]]:
-        """开到和卖家的会话,把消息列表读回来:[{self, nick, time, text}]。"""
-        return self.submit(self._do_read_chat, im_url, timeout_s).result(timeout=timeout_s + 60)
+    def read_seller_chat(self, *, im_url: str, offer_id: str = "", timeout_s: float = 60.0) -> list[dict[str, Any]]:
+        """开到和卖家的会话,把消息列表读回来:[{self, nick, time, text, images: [{url, path}]}]。
+        卖家发的图在浏览器里(带登录态)下载到 browser-dumps/seller-chat/<ts>-reply-<offer>/,只回路径,不回字节。"""
+        return self.submit(self._do_read_chat, im_url, timeout_s, offer_id).result(timeout=timeout_s + 90)
 
     def take_recovered(self) -> dict[str, Any] | None:
         """自愈(或放弃)之后主线程取一次:{"outcome": "recovered"|"gave_up", "dossier_id", "final_url", "title", "html", "text", "reason"}。"""
@@ -704,7 +716,7 @@ class BrowserSession(threading.Thread):
             if self.status == "asking_seller":
                 self._set("idle", dossier_id=None)
 
-    def _do_read_chat(self, url: str, timeout_s: float) -> list[dict[str, Any]]:
+    def _do_read_chat(self, url: str, timeout_s: float, offer_id: str = "") -> list[dict[str, Any]]:
         page = self._get_page()
         self._set("asking_seller", reason="在旺旺看卖家回了没", dossier_id=None, url=url)
         try:
@@ -713,10 +725,55 @@ class BrowserSession(threading.Thread):
             frame = self._im_frame(page, min(45.0, timeout_s))
             page.wait_for_timeout(1500)  # 消息列表是后拉的
             self._refresh_login()
-            return list(frame.evaluate(IM_MESSAGES_JS) or [])
+            messages = list(frame.evaluate(IM_MESSAGES_JS) or [])
+            return self._fetch_reply_images(page, messages, offer_id)
         finally:
             if self.status == "asking_seller":
                 self._set("idle", dossier_id=None)
+
+    def _fetch_reply_images(self, page: Any, messages: list[dict[str, Any]], offer_id: str) -> list[dict[str, Any]]:
+        """卖家消息里的图在浏览器里下下来(page.request 带着登录 cookie;图床匿名多半打不开),存成文件,消息里只留 {url, path}。"""
+        folder: str | None = None
+        taken = 0
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            urls = [u for u in (message.get("images") or []) if isinstance(u, str) and u.startswith("http")]
+            if message.get("self") or not urls:
+                message["images"] = [{"url": u, "path": None} for u in urls]
+                continue
+            out: list[dict[str, Any]] = []
+            for src in urls[:REPLY_IMAGES_PER_MESSAGE]:
+                path = None
+                if taken < REPLY_IMAGES_PER_READ:
+                    if folder is None:
+                        folder = os.path.join(browser_dump_dir(), "seller-chat", f"{self._clock().strftime('%Y%m%d-%H%M%S')}-reply-{offer_id or 'x'}")
+                        os.makedirs(folder, exist_ok=True)
+                    path = self._download_image(page, src, os.path.join(folder, f"img-{taken + 1}"))
+                    if path:
+                        taken += 1
+                out.append({"url": src, "path": path})
+            message["images"] = out
+        return messages
+
+    @staticmethod
+    def _download_image(page: Any, src: str, stem: str) -> str | None:
+        try:
+            response = page.request.get(src, timeout=20_000)
+            ctype = str((response.headers or {}).get("content-type") or "").lower()
+            if not response.ok or not ctype.startswith("image/"):
+                return None
+            body = response.body()
+        except Exception as exc:  # noqa: BLE001 —— 一张下不来不耽误别的
+            logger.info("seller chat image download failed: %s", str(exc).splitlines()[0][:160])
+            return None
+        if not body or len(body) > REPLY_IMAGE_MAX_BYTES:
+            return None
+        ext = {"image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}.get(ctype.split(";")[0].strip(), ".jpg")
+        path = stem + ext
+        with open(path, "wb") as fh:
+            fh.write(body)
+        return path
 
     def _do_dump(self) -> str:
         """把现在开着的每个标签页都存一份(url/html/各 frame/整页截图),B 期靠它读旺旺 IM 的 DOM。"""
