@@ -19,7 +19,8 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
   const [frameSrc, setFrameSrc] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [zoom, setZoom] = useState(false); // 10-28 扫码扫不上:原尺寸显示(1366 宽,可滚动),二维码才够大
+  const [zoom, setZoom] = useState(false);
+  const [address, setAddress] = useState(""); // 10-29 登录后页面留给老板用:地址栏贴 1688 商品页 // 10-28 扫码扫不上:原尺寸显示(1366 宽,可滚动),二维码才够大
   const imgRef = useRef<HTMLImageElement | null>(null);
   const loadingRef = useRef(false);
   const pressRef = useRef<{ x: number; y: number; sentDown: boolean } | null>(null);
@@ -185,6 +186,31 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
         </div>
       </div>
       {status?.reason ? <p className={styles.muted}>{status.reason}</p> : null}
+      {canCommand && live ? (
+        <form
+          className={styles.browserAddress}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const url = address.trim();
+            if (!/^https:\/\/[^/]*\.(1688|taobao|alibaba)\.com\//i.test(url + "/")) {
+              setError("只能打开 1688 的页面(https://…1688.com/…)");
+              return;
+            }
+            void act("打开页面", () => sendBrowserInput("navigate", { url }));
+          }}
+        >
+          <input
+            aria-label="要打开的 1688 地址"
+            onChange={(event) => setAddress(event.target.value)}
+            placeholder={status?.url ?? "贴一条 1688 商品页地址,回车打开"}
+            type="url"
+            value={address}
+          />
+          <button disabled={busy || !address.trim()} type="submit">
+            打开
+          </button>
+        </form>
+      ) : null}
       {error ? (
         <p className={styles.error} role="alert">
           {error}
@@ -220,7 +246,7 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
       </div>
       {live ? (
         <p className={styles.browserHint}>
-          {canCommand ? "直接在画面上点、拖滑块、打字(先点一下画面让它接键盘)。扫码前先点「原尺寸」把二维码放大。过了验证她会自己接着做。" : "只有老板能操作,你可以看。"}
+          {canCommand ? "直接在画面上点、拖滑块、打字(先点一下画面让它接键盘)。扫码前先点「原尺寸」把二维码放大。登录后页面归你用,用完点「关掉」。" : "只有老板能操作,你可以看。"}
         </p>
       ) : null}
     </div>

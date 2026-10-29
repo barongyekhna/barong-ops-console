@@ -52,6 +52,8 @@ INPUT_KINDS = ("click", "down", "move", "up", "type", "key", "wheel", "navigate"
 COMMAND_KINDS = ("login", "close", "dump")  # 没人看也每秒扫一次
 KEYS_ALLOWED = ("Enter", "Backspace", "Tab", "Escape", "Delete", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space", "Home", "End")
 LOGIN_COOKIES = ("cookie2", "_tb_token_", "sgcookie", "unb")
+LOGGED_IN_REASON = "1688 登录成功,账号记住了。页面留给你用:可以贴地址打开商品页、点「联系供应商」、「存一份页面」;用完点「关掉」"
+HOLD_IDLE_REASON = "没人用了,我把页面收了(账号还在)"
 _ALLOWED_HOSTS = (".1688.com", ".taobao.com", ".alibaba.com")
 
 
@@ -513,6 +515,11 @@ class BrowserSession(threading.Thread):
         if now - self._last_recovery >= RECOVERY_CHECK_S:
             self._last_recovery = now
             self._check_recovery()
+        if self.status == "interactive" and not viewer and now - self._last_activity > browser_idle_minutes() * 60:
+            logger.info("interactive browser unused, closing context (profile kept)")
+            self._teardown()
+            self._set("idle", reason=HOLD_IDLE_REASON, dossier_id=None)
+            return
         if self.status == "needs_human" and (self._clock() - self._state_since) > timedelta(minutes=browser_hold_minutes()):
             with self._lock:
                 self._recovered = {"outcome": "gave_up", "dossier_id": self.dossier_id, "reason": f"等了 {browser_hold_minutes():g} 分钟没人来过验证"}
@@ -566,8 +573,12 @@ class BrowserSession(threading.Thread):
                 self._recovered = {"outcome": "recovered", "dossier_id": self.dossier_id, "final_url": url, "title": title, "html": html, "text": text}
             self._set("idle", dossier_id=None)
         elif self.status == "interactive":
+            # 10-29:登上之后不再自动收回——老板要用这页开商品页、点联系供应商、存页面;状态留在 interactive 直到他点「关掉」或久不用
             if "login.1688.com" not in url and self._refresh_login():
-                self._set("idle", reason="1688 登录成功,账号记住了,下次抓页面直接用", dossier_id=None, url=url, title=title)
+                if self.reason != LOGGED_IN_REASON:
+                    self._set("interactive", reason=LOGGED_IN_REASON, dossier_id=None, url=url, title=title)
+                else:
+                    self.store.sync_state(status=self.status, reason=self.reason, url=url, title=title, dossier_id=self.dossier_id, logged_in_at=self.logged_in_at)
 
 
 # ---------------------------------------------------------------- 进程内单例

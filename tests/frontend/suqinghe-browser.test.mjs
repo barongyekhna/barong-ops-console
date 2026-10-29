@@ -65,6 +65,8 @@ test("面板接进办公室窗口(两种视图都能开)、提醒卡上有「打
   assert.match(panel, /登录 1688/);
   assert.match(panel, /原尺寸\(扫码用\)/); // 10-28 扫码扫不上:能切到 1366 原尺寸
   assert.match(panel, /data-zoom=\{zoom \? "1" : undefined\}/);
+  assert.match(panel, /sendBrowserInput\("navigate", \{ url \}\)/); // 10-29 登录后地址栏开商品页
+  assert.match(panel, /贴一条 1688 商品页地址/);
   const css = read("frontend/src/components/suqinghe/Office.module.css");
   assert.match(css, /\.browserOverlay \{/);
   assert.match(css, /\.browserFrame \{/);

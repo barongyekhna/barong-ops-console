@@ -316,8 +316,16 @@ def test_login_flow_records_logged_in_when_cookies_arrive(session) -> None:
     # 老板扫码:页面跳走、登录 cookie 出现
     ctx._cookies = [{"name": "cookie2", "value": "x"}, {"name": "_tb_token_", "value": "y"}]
     page.url = "https://www.1688.com/"
+    assert _wait(lambda: sess.reason == browser.LOGGED_IN_REASON, timeout=4)
+    assert sess.status == "interactive" and sess.logged_in_at == clock.now and store.states[-1]["logged_in_at"] == clock.now
+    # 10-29:登上后页面留给老板用(开商品页、存页面),不自动收;老板点「关掉」才回 idle
+    store.viewer = True  # 老板开着面板(点/贴地址只在有人看时才应用)
+    store.inputs.append((2, "navigate", {"url": "https://detail.1688.com/offer/1.html"}))
+    assert _wait(lambda: page.url == "https://detail.1688.com/offer/1.html", timeout=4)
+    assert sess.status == "interactive"
+    store.inputs.append((3, "close", {}))
     assert _wait(lambda: sess.status == "idle", timeout=4)
-    assert sess.logged_in_at == clock.now and store.states[-1]["logged_in_at"] == clock.now
+    assert ctx.closed
 
 
 def test_stale_singleton_files_are_cleared_before_launch(tmp_path: Path) -> None:
