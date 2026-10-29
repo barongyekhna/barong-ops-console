@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import styles from "./Office.module.css";
 import { BROWSER_STATUS_LABEL, LIVE_STATUSES, VIEWPORT, isClick, isPrintable, keyFor, toViewport } from "./browser-input";
 import { browserClose, browserFrameUrl, browserLogin, getBrowser, officeErrorMessage, sendBrowserInput, type BrowserStatus } from "./office-api";
 
-const POLL_MS = 700;
+const POLL_MS = 400;
+const WHEEL_FLUSH_MS = 80;
 const MOVE_THROTTLE_MS = 60;
 const TYPE_FLUSH_MS = 300;
 
@@ -27,7 +28,11 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
   const lastMoveRef = useRef(0);
   const typeBufferRef = useRef("");
   const typeTimerRef = useRef<number | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const wheelRef = useRef<{ x: number; y: number; dy: number; timer: number | null }>({ x: 0, y: 0, dy: 0, timer: null });
+  const liveRef = useRef(false);
   const live = Boolean(status && LIVE_STATUSES.includes(status.status));
+  liveRef.current = live;
 
   useEffect(() => {
     let stopped = false;
@@ -104,13 +109,35 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
     else void send("click", { x: press.x, y: press.y });
   };
 
-  const onWheel = (event: ReactWheelEvent<HTMLImageElement>) => {
-    if (!canCommand || !live) return;
-    const p = point(event);
-    if (!p) return;
-    event.preventDefault();
-    void send("wheel", { ...p, dy: Math.max(-3000, Math.min(3000, event.deltaY)) });
-  };
+  // 滚轮:浏览器把 wheel 监听默认当 passive,React 的 onWheel 里 preventDefault 不生效,控制台页面会跟着滚(10-29 老板实况)。
+  // 这里挂原生非 passive 监听,并把 80ms 内的滚动量攒成一次发,免得每格滚轮都打一个请求。
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const flush = () => {
+      const w = wheelRef.current;
+      w.timer = null;
+      const dy = Math.max(-3000, Math.min(3000, Math.round(w.dy)));
+      w.dy = 0;
+      if (dy) void send("wheel", { x: w.x, y: w.y, dy });
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!canCommand || !liveRef.current) return;
+      const p = point(event);
+      if (!p) return;
+      event.preventDefault();
+      const w = wheelRef.current;
+      w.x = p.x;
+      w.y = p.y;
+      w.dy += event.deltaMode === 1 ? event.deltaY * 40 : event.deltaY;
+      if (w.timer === null) w.timer = window.setTimeout(flush, WHEEL_FLUSH_MS);
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      stage.removeEventListener("wheel", onWheel);
+      if (wheelRef.current.timer !== null) window.clearTimeout(wheelRef.current.timer);
+    };
+  }, [canCommand, send]);
 
   const flushType = useCallback(() => {
     const text = typeBufferRef.current;
@@ -216,7 +243,7 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
           {error}
         </p>
       ) : null}
-      <div className={styles.browserStage} data-zoom={zoom ? "1" : undefined} onKeyDown={onKeyDown} tabIndex={0}>
+      <div className={styles.browserStage} data-zoom={zoom ? "1" : undefined} onKeyDown={onKeyDown} ref={stageRef} tabIndex={0}>
         {live && frameSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -233,7 +260,6 @@ export function BrowserPanel({ canCommand, onClose }: { canCommand: boolean; onC
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
-            onWheel={onWheel}
             ref={imgRef}
             src={frameSrc}
             width={VIEWPORT.width}

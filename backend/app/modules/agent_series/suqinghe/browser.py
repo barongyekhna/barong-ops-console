@@ -41,7 +41,7 @@ _X = SKIP_ORG_DATA_ISOLATION
 VIEWPORT = {"width": 1366, "height": 900}
 FRAME_WIDTH = 1366  # 10-28 老板扫码扫不上:不再缩到 1024,原尺寸 + 质量 85,二维码才清楚
 FRAME_QUALITY = 85
-FRAME_INTERVAL_S = 0.7
+FRAME_INTERVAL_S = 0.4  # 10-29 老板说滚动「非常慢」:0.7→0.4,且应用完输入立刻出一帧
 INPUT_POLL_S = 0.1
 RECOVERY_CHECK_S = 2.0
 VIEWER_FRESH_S = 5.0
@@ -537,6 +537,7 @@ class BrowserSession(threading.Thread):
                 elif self._page is not None:
                     apply_input(self._page, kind, payload)
                     self._last_activity = time.monotonic()
+                    self._last_frame = 0.0  # 动了就马上截一帧,老板不用等下一个间隔
             except Exception:  # noqa: BLE001 —— 一下点错了不影响下一下
                 logger.exception("browser input %s failed", kind)
 

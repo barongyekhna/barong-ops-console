@@ -1353,6 +1353,7 @@
 .browserStage {
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
   display: grid;
   place-items: center;
   border-radius: 8px;
