@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, copywork, k_ops, market, material, memory, pricing
+from . import cards, copywork, k_ops, market, material, memory, pricing, seller_chat
 from .constants import COPY_CARD_KIND, MARKET_CARD_KIND, USAGE_LABEL, image_brief_paused, market_enabled
 from .models import SqhCard, SqhDossier
 
@@ -132,6 +132,7 @@ class View:
     live_checked: bool = False
     market_done: bool = False  # 竞品拆解做过了(done / skipped / 老板驳了);开关关着时视为做过
     keywords_rerun: bool = False  # 老板驳了拆解卡:撤掉市场情报,关键词重跑一遍
+    seller_pending: bool = False  # 问了卖家重量尺寸还没回(B 期,10-29):价格卡先不出
 
 
 def next_step(view: View) -> str | None:
@@ -152,8 +153,8 @@ def next_step(view: View) -> str | None:
         return "risk_review" if view.execution_step in RISK_STEPS else "keywords_retry"
     if view.sp_approved:
         if not (view.price_applied and view.shipping_set):
-            if view.price_card == "pending":
-                return None  # 等老板批价格卡
+            if view.price_card == "pending" or view.seller_pending:
+                return None  # 等老板批价格卡 / 等卖家回重量尺寸
             return "apply_price" if view.price_card == "approved" else "price_card"
         return _next_after_price(view)
     if view.sp_job in {"pending", "running"}:
@@ -262,6 +263,7 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
         price_card=_card_status(db, (pipe.get("price") or {}).get("card_ref")),
         market_done=(not market_enabled()) or str((pipe.get("market") or {}).get("status") or "") in {"done", "skipped", "rejected"},
         keywords_rerun=bool(pipe.get("keywords_rerun")),
+        seller_pending=seller_chat.pending(draft),
         **_later_view(db, product, pipe, jobs),
     )
 
@@ -794,12 +796,31 @@ def _step_price_card(ctx: Ctx) -> str:
     lines = pricing.cost_lines([v for v in draft.get("variants") or [] if isinstance(v, dict)], a)
     if not lines:
         raise StepError("档案里没有规格和进价,算不了价")
-    query = pipe.get("main_keyword") or ctx.product.primary_keyword or ctx.product.product_name_en or ""
-    competitors = pricing.fetch_shopping(ctx.db, query=query, org_id=ctx.hands.org_id)
     previous = (pipe.get("price") or {}).get("card_ref")
     boss_reason = None
     if previous and _card_status(ctx.db, previous) == "rejected":
         boss_reason = ctx.db.scalar(select(SqhCard.decision_reason).where(SqhCard.ref == previous), execution_options=SKIP_ORG_DATA_ISOLATION)
+    chat = seller_chat.chat_of(draft)
+    boss_reason = boss_reason or chat.get("boss_reason") or None  # 老板驳回点名重量尺寸 → 问过卖家再出的这张,仍带着他的话
+    # B 期(10-29):详情页没有重量尺寸 / 疑似乱填 / 老板点名 → 先去旺旺问卖家,这张卡等回了再出(问不成就照旧出,写明原因)
+    seller_note = ""
+    why_ask = seller_chat.needs_ask(draft, lines, now=datetime.now(UTC))
+    if why_ask:
+        try:
+            seller_chat.ask(ctx.db, ctx.dossier, lines, why=why_ask)
+            return f"{why_ask}:先在旺旺问卖家重量尺寸,回了再出价格卡(最多等 {seller_chat.seller_chat_wait_hours():g} 小时)"
+        except Exception as exc:  # noqa: BLE001 —— 台账用完 / 浏览器没开 / 没发成:价格卡照旧出,写一句
+            seller_note = f"想先问卖家重量尺寸({why_ask}),没问成:{str(exc)[:120]};先按详情页的数算"
+            ctx.db.rollback()
+            ctx.dossier = ctx.db.get(SqhDossier, ctx.dossier.id, execution_options=SKIP_ORG_DATA_ISOLATION) or ctx.dossier
+            draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
+            chat = seller_chat.chat_of(draft)
+    if chat.get("status") == seller_chat.STATUS_ANSWERED:
+        seller_note = f"重量尺寸是卖家 {str(chat.get('answered_at') or '')[:10]} 在旺旺口头说的,没有凭证,只当估算、不当认证"
+    elif chat.get("status") == seller_chat.STATUS_TIMEOUT:
+        seller_note = f"在旺旺问过卖家重量尺寸,{seller_chat.seller_chat_wait_hours():g} 小时没回,按详情页的数算"
+    query = pipe.get("main_keyword") or ctx.product.primary_keyword or ctx.product.product_name_en or ""
+    competitors = pricing.fetch_shopping(ctx.db, query=query, org_id=ctx.hands.org_id)
     extra = pricing.price_prompt_extra(lines, competitors, a, boss_reason=boss_reason)
     result = _judge(ctx.db, pricing.PRICE_ASK, _product_brief(ctx.dossier, ctx.product), extra)
     lines, questions, summary = pricing.apply_plan(lines, result, a)
@@ -825,6 +846,7 @@ def _step_price_card(ctx: Ctx) -> str:
             part
             for part in (
                 pricing.lines_text(lines),
+                seller_note,
                 summary,
                 *[f"要你定:{q}" for q in questions],
                 pricing.competitors_text(competitors),
@@ -847,6 +869,7 @@ def _step_price_card(ctx: Ctx) -> str:
             "assumptions": {k: getattr(a, k) for k in a.__dataclass_fields__},
             "shipping": {"class": pricing.DEFAULT_SHIPPING_CLASS, "contains_battery": battery},
             "boss_reason": boss_reason,
+            "seller_chat": {"status": chat.get("status"), "note": seller_note} if (chat or seller_note) else None,
             "recheck": {"type": PRICE_CARD_KIND, "product_id": str(ctx.product.id)},
         },
     )
@@ -1591,6 +1614,9 @@ def after_decision(db: Session, card: SqhCard, *, decision: str) -> dict[str, An
         # 真正去改交给流水线线程(apply_price / 重出价格卡),这里只回一句
         if decision == "approve":
             return {"ok": True, "note": "好,我这就按这个价改变体、选运费模板,然后接着写文案、出图。"}
+        if seller_chat.enabled() and seller_chat.boss_wants_weight(card.decision_reason):
+            seller_chat.request(db, dossier, reason=card.decision_reason)  # 老板点名重量尺寸:下一张卡之前先去旺旺问卖家
+            return {"ok": True, "note": "收到,我先去旺旺问卖家每个规格的重量尺寸和装箱数,回了再按你的意思重算价格卡。"}
         return {"ok": True, "note": "收到,我照你说的重算一版价格卡。"}
     if card.kind == REVIEW_CARD_KIND:
         if decision == "approve":

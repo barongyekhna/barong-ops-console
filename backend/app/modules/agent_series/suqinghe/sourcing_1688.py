@@ -300,6 +300,9 @@ def parse_capture(*, url: str, html: str, text: str, desc_js: str | None) -> Cap
         supplier["location"] = location.group(1)
     if (seller or {}).get("winportUrl"):
         supplier["shop_url"] = str(seller["winportUrl"])
+    login_id = seller_login_id(seller, html)
+    if login_id:
+        supplier["login_id"] = login_id  # 旺旺直达地址要它(B 期问卖家):touid=cnalichn{login_id}
     capture.supplier = supplier
 
     # 属性:页面数据优先,文本兜底
@@ -715,6 +718,23 @@ def _payload(prompt: str, segment: bytes) -> dict[str, Any]:
         ],
         "response_format": {"type": "json_object"},
     }
+
+
+def seller_login_id(seller: dict[str, Any] | None, html: str | None) -> str | None:
+    """卖家的 1688 登录名(sellerModel.loginId,或页面数据里的 sellerLoginId)。旺旺聊天页按它开:touid=cnalichn{login_id}。"""
+    raw = (seller or {}).get("loginId") or (seller or {}).get("sellerLoginId")
+    if not raw:
+        match = re.search(r'"sellerLoginId"\s*:\s*"([^"]{1,64})"', html or "")
+        raw = match.group(1) if match else None
+    if not raw:
+        return None
+    value = str(raw).strip()
+    if "\\u" in value:
+        try:
+            value = json.loads(f'"{value}"')
+        except ValueError:
+            pass
+    return value[:64] or None
 
 
 def _as_json(result: Any) -> dict[str, Any]:

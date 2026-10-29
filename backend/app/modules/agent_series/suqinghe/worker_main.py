@@ -35,7 +35,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot
+from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot, seller_chat
 from .constants import (
     AGENT_USERNAME,
     HEARTBEAT_INTERVAL_SECONDS,
@@ -489,6 +489,11 @@ class SuqingheWorker:
                 picks.run_picks(db, now=now)
             # 建进 K 的产品往下推:线程闲着就派下一件(暂停时上面已经 return,不派新活)
             self.pipeline.maybe_start(db)
+            # B 期(10-29):问过卖家的档案到点去旺旺看回复(一轮最多一单;浏览器正等老板就跳过)
+            try:
+                seller_chat.poll_all(db, now=now)
+            except Exception:  # noqa: BLE001 —— 看回复出错不拖垮这一轮
+                _LOGGER.exception("看卖家回复出错")
             try:
                 self.maybe_remind(db)
             except (ConsoleAuthError, httpx.HTTPError) as exc:

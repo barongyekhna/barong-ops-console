@@ -84,6 +84,8 @@ PROVIDER_SQH_RAINFOREST = "sqh_rainforest"
 PROVIDER_SQH_KEEPA = "sqh_keepa"
 PROVIDER_SQH_SERPER_SEARCH = "sqh_serper_search"
 PROVIDER_SQH_PAGE_FETCH = "sqh_page_fetch"
+# 苏青禾问卖家(10-29,B 期):用老板的 1688 账号给卖家发一条旺旺问重量尺寸 = 1 次。老板拍板首月一天最多 5 家,看风控。
+PROVIDER_SQH_1688_IM = "sqh_1688_im"
 
 DEFAULT_DAILY_BUDGETS = {
     PROVIDER_1688_IMAGE_SEARCH: 330,
@@ -115,6 +117,7 @@ DEFAULT_DAILY_BUDGETS = {
     PROVIDER_SQH_KEEPA: 60,
     PROVIDER_SQH_SERPER_SEARCH: 10,
     PROVIDER_SQH_PAGE_FETCH: 60,
+    PROVIDER_SQH_1688_IM: 5,
 }
 
 BUDGET_ENV_NAMES = {
@@ -144,6 +147,7 @@ BUDGET_ENV_NAMES = {
     PROVIDER_SQH_KEEPA: "SQH_KEEPA_DAILY",
     PROVIDER_SQH_SERPER_SEARCH: "SQH_SERPER_SEARCH_DAILY",
     PROVIDER_SQH_PAGE_FETCH: "SQH_PAGE_FETCH_DAILY",
+    PROVIDER_SQH_1688_IM: "SQH_1688_IM_DAILY",
 }
 
 
@@ -184,6 +188,7 @@ def provider_label(provider: str) -> str:
         PROVIDER_AMZ_KEEPA: "亚马逊竞品盯盘(Keepa)",
         PROVIDER_SM_WRITER: "SM 社媒写手",
         PROVIDER_SQH_SERPER_SHOPPING: "苏青禾定价比价(谷歌购物)",
+        PROVIDER_SQH_1688_IM: "苏青禾问卖家(1688 旺旺)",
     }.get(provider, provider)
 
 

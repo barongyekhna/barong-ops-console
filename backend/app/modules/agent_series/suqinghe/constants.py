@@ -175,6 +175,21 @@ def browser_hold_minutes() -> float:
     return max(5.0, _env_float("SQH_BROWSER_HOLD_MINUTES", 120.0))
 
 
+def seller_chat_enabled() -> bool:
+    """SQH_SELLER_CHAT=1(B 期,10-29):详情页没有重量尺寸、或各规格同一个重量疑似乱填时,她用老板的 1688 账号去旺旺问卖家。默认关。"""
+    return os.getenv("SQH_SELLER_CHAT", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def seller_chat_wait_hours() -> float:
+    """问了卖家最多等多久;超了价格卡照旧出,写明「问了没回」。"""
+    return max(1.0, _env_float("SQH_SELLER_CHAT_WAIT_HOURS", 24.0))
+
+
+def seller_chat_poll_minutes() -> float:
+    """问了之后隔多久去旺旺看一次回复。"""
+    return max(5.0, _env_float("SQH_SELLER_CHAT_POLL_MINUTES", 15.0))
+
+
 def retry_after_block() -> bool:
     """被拦之后今天还继续抓不抓(默认不:「今天先不碰」)。"""
     return os.getenv("SQH_1688_RETRY_AFTER_BLOCK", "0").strip().lower() in ("1", "true", "yes", "on")

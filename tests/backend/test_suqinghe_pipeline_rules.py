@@ -51,6 +51,8 @@ def _view(**overrides) -> View:
         # 卖点批完 → 价格卡:没发过/被驳/作废 → 出一张;在等老板 → 等;批了 → 去 K 里改;改完 → 写文案
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True}, "price_card"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "pending"}, None),
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "seller_pending": True}, None),  # 问了卖家重量尺寸,等回(B 期)
+        ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "stale", "seller_pending": False}, "price_card"),  # 卖家回了,旧卡作废 → 重出
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "rejected"}, "price_card"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "stale"}, "price_card"),
         ({"risk_approved": True, "execution_status": "blocked", "sp_approved": True, "price_card": "approved"}, "apply_price"),

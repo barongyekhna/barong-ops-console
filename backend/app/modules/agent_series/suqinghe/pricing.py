@@ -136,16 +136,24 @@ class Line:
         return out
 
 
+SELLER_SAID = "seller_said"  # 规格的重量尺寸是旺旺里卖家口头说的(B 期,10-29)
+SELLER_SAID_NOTE = "卖家口头说的重量尺寸,没有凭证"
+
+
 def cost_lines(variants: list[dict[str, Any]], a: Assumptions) -> list[Line]:
     """档案里的每个规格 → 到手成本和保底价。缺重量的按同一商品里最重的规格算,并写明。"""
-    weights = [float(v["weight_g"]) for v in variants if isinstance(v.get("weight_g"), (int, float)) and v["weight_g"] > 0]
-    fallback_g = max(weights) if weights else None
+    weights_all = [float(v["weight_g"]) for v in variants if isinstance(v.get("weight_g"), (int, float)) and v["weight_g"] > 0]
+    # 「每个规格同一个重量=疑似乱填」只看详情页填的;卖家口头说的(B 期问来的)不算在内
+    weights = [float(v["weight_g"]) for v in variants if isinstance(v.get("weight_g"), (int, float)) and v["weight_g"] > 0 and v.get("source") != SELLER_SAID]
+    fallback_g = max(weights_all) if weights_all else None
     lines: list[Line] = []
     for index, variant in enumerate(variants, start=1):
         weight = variant.get("weight_g") if isinstance(variant.get("weight_g"), (int, float)) and variant["weight_g"] > 0 else None
         note = ""
         if weight is None and fallback_g:
             weight, note = fallback_g, f"卖家没写这个规格的重量,按 {fallback_g:g}g 算"
+        elif weight is not None and variant.get("source") == SELLER_SAID:
+            note = SELLER_SAID_NOTE  # 旺旺里问来的,只当估算,永不当认证
         dims = variant.get("dims_cm") if isinstance(variant.get("dims_cm"), list) else None
         cost = variant.get("cost_price_cny") if isinstance(variant.get("cost_price_cny"), (int, float)) else None
         line = Line(

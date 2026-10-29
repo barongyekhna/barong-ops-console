@@ -30,7 +30,7 @@ import time
 from concurrent.futures import Future
 from datetime import UTC, datetime, timedelta
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 from sqlalchemy import delete, select, update
 
@@ -63,6 +63,41 @@ LOGIN_COOKIES = ("cookie2", "_tb_token_", "sgcookie", "unb")
 LOGGED_IN_REASON = "1688 登录成功,账号记住了。页面留给你用:可以贴地址打开商品页、点「联系供应商」、「存一份页面」;用完点「关掉」"
 HOLD_IDLE_REASON = "没人用了,我把页面收了(账号还在)"
 _ALLOWED_HOSTS = (".1688.com", ".taobao.com", ".alibaba.com")
+
+# ---- 旺旺(1688 网页 IM),10-29 从三份「存一份页面」里读出来的
+IM_PAGE = "https://air.1688.com/app/ocms-fusion-components-1688/def_cbu_web_im/index.html"
+IM_CORE_FRAME = "def_cbu_web_im_core"  # 聊天本体在这个 iframe 里
+IM_SELECTORS = {"input": "pre.edit[contenteditable]", "send": "button.send-btn"}
+IM_MESSAGES_JS = """() => Array.from(document.querySelectorAll('.message-list .message-item')).map(el => ({
+  self: el.classList.contains('self'),
+  nick: ((el.querySelector('.nick') || {}).innerText || '').trim(),
+  time: ((el.querySelector('.time') || {}).innerText || '').trim(),
+  text: ((el.querySelector('.content-row') || el).innerText || '').trim()
+}))"""
+SELLER_ID_JS = """() => {
+  const pick = (s) => { const m = String(s || '').match(/"sellerLoginId"\\s*:\\s*"([^"]{1,64})"/); return m ? m[1] : null; };
+  try { const hit = pick(JSON.stringify(window.context || {})); if (hit) return hit; } catch (e) {}
+  try { return pick(document.documentElement.outerHTML); } catch (e) { return null; }
+}"""
+IM_BLOCK_MARKERS = ("安全验证", "nc_1_n1z", "punish", "验证码")
+IM_QUESTION_MAX = 480  # 输入框上限 500 字
+
+
+class SellerChatError(RuntimeError):
+    """问卖家这一下没做成(旺旺没开出来、字没打进去、发了没出现)。detail 里有截图目录和当时的消息列表。"""
+
+    def __init__(self, message: str, *, detail: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.detail = detail or {}
+
+
+class SellerChatBlocked(SellerChatError):
+    """开旺旺/商品页时 1688 要登录或验证:页面留在 needs_human 等老板,这一次算没问成。"""
+
+
+def im_url(login_id: str, offer_id: str) -> str:
+    """直接开到和这个卖家的会话(不用再点「联系供应商」)。"""
+    return IM_PAGE + "?" + urlencode({"touid": f"cnalichn{login_id}", "siteid": "cnalichn", "status": "1", "offerId": str(offer_id)})
 
 
 def enabled() -> bool:
@@ -367,6 +402,14 @@ class BrowserSession(threading.Thread):
     def close(self) -> None:
         self.submit(self._do_close).result(timeout=30)
 
+    def ask_seller(self, *, offer_url: str, login_id: str | None, offer_id: str, text: str, dossier_id: int | None, timeout_s: float = 90.0) -> dict[str, Any]:
+        """在旺旺里给卖家发一条(B 期)。没有 login_id 就先开商品页从页面数据里找。成功回 {ok, im_url, login_id, messages, dump}。"""
+        return self.submit(self._do_ask_seller, offer_url, login_id, offer_id, text, dossier_id, timeout_s).result(timeout=timeout_s + 60)
+
+    def read_seller_chat(self, *, im_url: str, timeout_s: float = 60.0) -> list[dict[str, Any]]:
+        """开到和卖家的会话,把消息列表读回来:[{self, nick, time, text}]。"""
+        return self.submit(self._do_read_chat, im_url, timeout_s).result(timeout=timeout_s + 60)
+
     def take_recovered(self) -> dict[str, Any] | None:
         """自愈(或放弃)之后主线程取一次:{"outcome": "recovered"|"gave_up", "dossier_id", "final_url", "title", "html", "text", "reason"}。"""
         with self._lock:
@@ -581,6 +624,99 @@ class BrowserSession(threading.Thread):
                 self._recovered = {"outcome": "gave_up", "dossier_id": self.dossier_id, "reason": "老板关掉了浏览器"}
         self._teardown()
         self._set("idle", dossier_id=None)
+
+    # ---- 旺旺(B 期,10-29):问卖家 / 读回复。都在本线程,状态 asking_seller,完了回 idle;要登录/验证就留 needs_human 等老板 ----
+
+    def _guard_blocked(self, page: Any, where: str) -> None:
+        url, title = self._page_info()
+        try:
+            html = page.content()
+        except Exception:  # noqa: BLE001
+            html = ""
+        if "login.1688.com" in url or "login.taobao.com" in url or any(m in (title or "") for m in IM_BLOCK_MARKERS[:1]) or any(m in html[:200_000] for m in IM_BLOCK_MARKERS[1:]):
+            self._set("needs_human", reason=f"{where}时 1688 要登录/验证,老板开面板帮我过一下(账号还在)", dossier_id=None, url=url, title=title)
+            self._last_recovery = time.monotonic()
+            raise SellerChatBlocked(f"needs_human:{where}", detail={"url": url, "title": title})
+
+    def _im_frame(self, page: Any, timeout_s: float) -> Any:
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            for frame in getattr(page, "frames", []) or []:
+                if IM_CORE_FRAME in str(getattr(frame, "url", "") or ""):
+                    try:
+                        frame.wait_for_selector(IM_SELECTORS["input"], timeout=5000)
+                        return frame
+                    except Exception:  # noqa: BLE001 —— 还在加载,再等
+                        break
+            page.wait_for_timeout(500)
+        raise SellerChatError("旺旺聊天窗没出来")
+
+    def _shot(self, page: Any, path: str) -> None:
+        try:
+            page.screenshot(path=path)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _do_ask_seller(self, offer_url: str, login_id: str | None, offer_id: str, text: str, dossier_id: int | None, timeout_s: float) -> dict[str, Any]:
+        page = self._get_page()
+        self._set("asking_seller", reason=f"在旺旺问 {offer_id} 的卖家重量尺寸", dossier_id=dossier_id, url=offer_url)
+        folder = os.path.join(browser_dump_dir(), "seller-chat", f"{self._clock().strftime('%Y%m%d-%H%M%S')}-{offer_id}")
+        os.makedirs(folder, exist_ok=True)
+        out: dict[str, Any] = {"ok": False, "login_id": login_id, "im_url": None, "dump": folder, "messages": []}
+        try:
+            if not login_id:
+                page.goto(offer_url, wait_until="domcontentloaded", timeout=30_000)
+                page.wait_for_timeout(1500)
+                self._guard_blocked(page, "开商品页")
+                login_id = page.evaluate(SELLER_ID_JS) or None
+                out["login_id"] = str(login_id)[:64] if login_id else None
+                if not login_id:
+                    raise SellerChatError("商品页里找不到卖家账号,开不了旺旺", detail=out)
+            url = im_url(str(login_id), offer_id)
+            out["im_url"] = url
+            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            self._guard_blocked(page, "开旺旺")
+            frame = self._im_frame(page, min(45.0, timeout_s))
+            frame.click(IM_SELECTORS["input"])
+            page.keyboard.type(text[:IM_QUESTION_MAX], delay=15)
+            page.wait_for_timeout(300)
+            typed = str(frame.locator(IM_SELECTORS["input"]).inner_text() or "")
+            if text[:20] not in typed:
+                self._shot(page, os.path.join(folder, "typing-failed.png"))
+                raise SellerChatError("字没打进旺旺输入框", detail=out)
+            self._shot(page, os.path.join(folder, "before-send.png"))
+            frame.click(IM_SELECTORS["send"])
+            msgs: list[dict[str, Any]] = []
+            for _ in range(20):
+                page.wait_for_timeout(500)
+                msgs = list(frame.evaluate(IM_MESSAGES_JS) or [])
+                if any(m.get("self") and text[:20] in str(m.get("text") or "") for m in msgs):
+                    out["ok"] = True
+                    break
+            self._shot(page, os.path.join(folder, "after-send.png"))
+            out["messages"] = msgs
+            out["sent_at"] = self._clock().isoformat()
+            if not out["ok"]:
+                raise SellerChatError("点了发送,消息列表里没出现这一条", detail=out)
+            self._refresh_login()
+            return out
+        finally:
+            if self.status == "asking_seller":
+                self._set("idle", dossier_id=None)
+
+    def _do_read_chat(self, url: str, timeout_s: float) -> list[dict[str, Any]]:
+        page = self._get_page()
+        self._set("asking_seller", reason="在旺旺看卖家回了没", dossier_id=None, url=url)
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            self._guard_blocked(page, "开旺旺")
+            frame = self._im_frame(page, min(45.0, timeout_s))
+            page.wait_for_timeout(1500)  # 消息列表是后拉的
+            self._refresh_login()
+            return list(frame.evaluate(IM_MESSAGES_JS) or [])
+        finally:
+            if self.status == "asking_seller":
+                self._set("idle", dossier_id=None)
 
     def _do_dump(self) -> str:
         """把现在开着的每个标签页都存一份(url/html/各 frame/整页截图),B 期靠它读旺旺 IM 的 DOM。"""

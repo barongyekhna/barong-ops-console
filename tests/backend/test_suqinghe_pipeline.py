@@ -604,3 +604,85 @@ def test_market_research_that_fails_twice_is_skipped_without_blocking(built, mon
     assert _pick() == (dossier_id, "keywords")  # 没有「卡住」卡,照常往下
     with without_org_data_isolation(), SessionLocal() as db:
         assert db.scalar(select(SqhCard).where(SqhCard.kind == pipeline.BLOCKED_CARD_KIND)) is None
+
+
+def test_price_card_asks_the_seller_first_when_the_page_has_no_weights(built, monkeypatch: pytest.MonkeyPatch) -> None:
+    """B 期(10-29):详情页没有重量 → 不出价格卡,先在旺旺问卖家(台账 +1);卖家回了 → 规格标「卖家口头」、旧卡作废、价格卡重出并写明;
+    老板驳回时点名重量 → 再问一次。整条链上浏览器是假的,模型是假的,台账是真的。"""
+    from backend.app.modules.agent_series.suqinghe import browser, pricing, seller_chat
+    from backend.app.modules.w_series.shipping.models import WShippingClass
+    from r_system_v2.ra.quota_ledger import PROVIDER_SQH_1688_IM, remaining_today
+
+    monkeypatch.setenv("SQH_SELLER_CHAT", "1")
+    dossier_id, product_id, owner = built
+    variants = [
+        {"name_zh": "黑色", "name_en": "Black", "cost_price_cny": 20.0, "weight_g": None, "dims_cm": None},
+        {"name_zh": "绿色", "name_en": "Green", "cost_price_cny": 20.0, "weight_g": None, "dims_cm": None},
+    ]
+    with without_org_data_isolation(), SessionLocal() as db:
+        dossier = db.get(SqhDossier, dossier_id)
+        dossier.draft = {**dossier.draft, "variants": variants, "supplier": {"name": "义乌市多加玩具有限公司", "login_id": "义乌市多加玩具有限公司"}, "pipeline": {"main_keyword": "squishy stress toy"}}
+        if not db.scalar(select(WShippingClass).where(WShippingClass.slug == pricing.DEFAULT_SHIPPING_CLASS)):
+            db.add(WShippingClass(slug=pricing.DEFAULT_SHIPPING_CLASS, name="中国直发-标准线", zone_rates_json=[], origin="cn_direct"))
+        db.commit()
+        before = remaining_today(db, PROVIDER_SQH_1688_IM)
+
+    class FakeBrowser:
+        asked: list[dict[str, Any]] = []
+        thread: list[dict[str, Any]] = []
+
+        def ask_seller(self, **kw):
+            self.asked.append(kw)
+            self.thread = [{"self": True, "nick": "无敌小巴龙", "time": "2026-10-29 21:00:00", "text": kw["text"]}]
+            return {"ok": True, "im_url": browser.im_url(kw["login_id"], kw["offer_id"]), "login_id": kw["login_id"], "dump": "/tmp/x", "messages": list(self.thread)}
+
+        def read_seller_chat(self, **kw):
+            return list(self.thread)
+
+    fake = FakeBrowser()
+    monkeypatch.setattr(browser, "enabled", lambda: True)
+    monkeypatch.setattr(browser, "holding", lambda: False)
+    monkeypatch.setattr(browser, "get", lambda: fake)
+    monkeypatch.setattr(pricing, "fetch_shopping", lambda db, *, query, org_id: {"query": query, "n": 0, "samples": []})
+    monkeypatch.setattr(pipeline, "_judge", lambda db, ask, brief, extra, **kw: {"variants": [{"key": "v1", "include": True, "price": 12.99, "label_en": "Black", "axis": "color"}, {"key": "v2", "include": True, "price": 12.99, "label_en": "Green", "axis": "color"}], "questions": [], "summary": "按颜色"})
+
+    # 1. 该出价格卡了,但页面没有重量:先问卖家,不发卡,台账 +1,流水线停在「等卖家」
+    out = pipeline.run_step(dossier_id, "price_card")
+    assert out["ok"] and "先在旺旺问卖家" in out["note"], out
+    assert len(fake.asked) == 1 and fake.asked[0]["login_id"] == "义乌市多加玩具有限公司" and fake.asked[0]["text"].startswith("您好,我是跨境卖家")
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert remaining_today(db, PROVIDER_SQH_1688_IM) == before - 1
+        dossier = db.get(SqhDossier, dossier_id)
+        chat = dossier.draft["seller_chat"]
+        assert chat["status"] == "asked" and chat["question"] == fake.asked[0]["text"] and "price" not in (dossier.draft.get("pipeline") or {})
+        product = db.get(KProductKnowledgeProduct, product_id)
+        assert pipeline.build_view(db, dossier, product).seller_pending  # 等卖家:next_step 对它的处理见 rules 测试(这个夹具还没走到卖点那一步)
+    # 2. 到点去看:卖家回了 → 规格写回(卖家口头)、下一步重出价格卡
+    fake.thread.append({"self": False, "nick": "义乌市多加玩具有限公司", "time": "2026-10-29 21:30:00", "text": "黑的 350 克,绿的 420 克,都是 12x8x6,一箱 50 个"})
+    later = datetime.now(UTC) + __import__("datetime").timedelta(minutes=20)
+    judge = lambda db, prompt: {"answers": [{"key": "v1", "weight_g": 350, "dims_cm": [12, 8, 6], "units_per_carton": 50}, {"key": "v2", "weight_g": 420, "dims_cm": [12, 8, 6], "units_per_carton": 50}]}  # noqa: E731
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert seller_chat.poll_all(db, now=later, judge=judge) == "answered"
+        dossier = db.get(SqhDossier, dossier_id)
+        assert dossier.draft["seller_chat"]["status"] == "answered"
+        assert [v["weight_g"] for v in dossier.draft["variants"]] == [350.0, 420.0] and all(v["source"] == "seller_said" for v in dossier.draft["variants"])
+        product = db.get(KProductKnowledgeProduct, product_id)
+        assert not pipeline.build_view(db, dossier, product).seller_pending  # 回了:不再等,下一轮按状态该出价格卡就出
+    out = pipeline.run_step(dossier_id, "price_card")
+    assert out["ok"] and "价格卡" in out["note"], out
+    ref = _pipe(dossier_id)["price"]["card_ref"]
+    with without_org_data_isolation(), SessionLocal() as db:
+        card = db.scalar(select(SqhCard).where(SqhCard.ref == ref))
+        assert card.status == "pending" and "卖家" in card.why and "口头" in card.why and "不当认证" in card.why
+        assert all(line["weight_note"] == pricing.SELLER_SAID_NOTE for line in card.evidence["variants"])
+        assert card.evidence["seller_chat"]["status"] == "answered"
+        assert remaining_today(db, PROVIDER_SQH_1688_IM) == before - 1  # 回了就不再问
+    # 3. 老板驳回点名重量 → 下一张卡之前再问一次(台账 +1),这次不等:直接模拟回复
+    assert "问卖家" in _decide(ref, "reject", owner, reason="绿色的重量不对,再问一下")["note"]
+    out = pipeline.run_step(dossier_id, "price_card")
+    assert out["ok"] and "先在旺旺问卖家" in out["note"], out
+    assert len(fake.asked) == 2
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert remaining_today(db, PROVIDER_SQH_1688_IM) == before - 2
+        dossier = db.get(SqhDossier, dossier_id)
+        assert dossier.draft["seller_chat"]["status"] == "asked" and dossier.draft["seller_chat"]["boss_reason"] == "绿色的重量不对,再问一下"
