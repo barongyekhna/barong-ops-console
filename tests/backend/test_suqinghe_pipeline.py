@@ -677,8 +677,13 @@ def test_price_card_asks_the_seller_first_when_the_page_has_no_weights(built, mo
         assert all(line["weight_note"] == pricing.SELLER_SAID_NOTE for line in card.evidence["variants"])
         assert card.evidence["seller_chat"]["status"] == "answered"
         assert remaining_today(db, PROVIDER_SQH_1688_IM) == before - 1  # 回了就不再问
-    # 3. 老板驳回点名重量 → 下一张卡之前再问一次(台账 +1),这次不等:直接模拟回复
+    # 3. 老板驳回点名重量 → 下一张卡之前再问一次(台账 +1)。驳回是后端进程处理的,它那边没有开关(10-29 实况):记号照记
+    monkeypatch.setenv("SQH_SELLER_CHAT", "0")
     assert "问卖家" in _decide(ref, "reject", owner, reason="绿色的重量不对,再问一下")["note"]
+    monkeypatch.setenv("SQH_SELLER_CHAT", "1")
+    assert _pipe(dossier_id) is not None
+    with without_org_data_isolation(), SessionLocal() as db:
+        assert db.get(SqhDossier, dossier_id).draft["seller_chat"]["requested"] is True
     out = pipeline.run_step(dossier_id, "price_card")
     assert out["ok"] and "先在旺旺问卖家" in out["note"], out
     assert len(fake.asked) == 2

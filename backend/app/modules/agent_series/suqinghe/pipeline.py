@@ -1614,8 +1614,10 @@ def after_decision(db: Session, card: SqhCard, *, decision: str) -> dict[str, An
         # 真正去改交给流水线线程(apply_price / 重出价格卡),这里只回一句
         if decision == "approve":
             return {"ok": True, "note": "好,我这就按这个价改变体、选运费模板,然后接着写文案、出图。"}
-        if seller_chat.enabled() and seller_chat.boss_wants_weight(card.decision_reason):
-            seller_chat.request(db, dossier, reason=card.decision_reason)  # 老板点名重量尺寸:下一张卡之前先去旺旺问卖家
+        if seller_chat.boss_wants_weight(card.decision_reason):
+            # 老板点名重量尺寸:记下来,worker 出下一张卡之前先去旺旺问卖家。这里不看开关——开关只在 worker 的环境里(10-29 实况:
+            # 后端进程看不到 SQH_SELLER_CHAT,记号没记上,她直接重出了一张卡);记号无害,问不问由 worker 按开关定。
+            seller_chat.request(db, dossier, reason=card.decision_reason)
             return {"ok": True, "note": "收到,我先去旺旺问卖家每个规格的重量尺寸和装箱数,回了再按你的意思重算价格卡。"}
         return {"ok": True, "note": "收到,我照你说的重算一版价格卡。"}
     if card.kind == REVIEW_CARD_KIND:
