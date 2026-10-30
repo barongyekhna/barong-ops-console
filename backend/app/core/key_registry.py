@@ -209,6 +209,20 @@ KEY_TYPE_REGISTRY: dict[str, dict[str, Any]] = {
         "runtime_enabled": False,
         "module_ids": ["r.analysis"],
     },
+    "google_search_console": {
+        "type": "google_search_console",
+        "name": "Google Search Console(服务账号)",
+        "description": "苏青禾读 barongyekhna.com 的搜索表现(词/页的展现、点击、排名)做搜索缺口;粘服务账号 JSON 钥匙,只读",
+        "provider": "google",
+        "auth_type": "oauth_json",
+        "enabled": True,
+        "scope": ["SQH"],
+        "validation_endpoint": None,
+        "default_url": "https://searchconsole.googleapis.com",
+        "default_alias": "gsc",
+        "adapter": "GoogleSearchConsoleAdapter",
+        "module_ids": ["k.product_knowledge"],
+    },
     "track17": {
         "type": "track17",
         "name": "17TRACK",
@@ -240,6 +254,7 @@ KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
     "track17": ("track17", "17track", "api.17track.net"),
     "amazon_sp_api": ("amazon_sp_api", "sp_api", "spapi", "sellingpartnerapi"),
     "amazon_ads_api": ("amazon_ads_api", "amazon_ads", "advertising-api.amazon.com"),
+    "google_search_console": ("google_search_console", "gsc", "search_console", "searchconsole.googleapis.com"),
 }
 
 
@@ -259,6 +274,8 @@ def normalize_key_type(value: str | None) -> str:
         normalized = "amazon_sp_api"
     if normalized in {"amazon_ads", "ads_api", "amazon_advertising"}:
         normalized = "amazon_ads_api"
+    if normalized in {"gsc", "search_console", "google_gsc"}:
+        normalized = "google_search_console"
     if normalized not in KEY_TYPE_REGISTRY:
         raise ValueError("unknown_key_type")
     return normalized
@@ -282,6 +299,7 @@ def list_key_type_definitions() -> list[dict[str, Any]]:
         "google_ads",
         "amazon_sp_api",
         "amazon_ads_api",
+        "google_search_console",
         "track17",
         "n8n",
         "custom",

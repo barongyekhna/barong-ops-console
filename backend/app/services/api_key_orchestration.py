@@ -957,6 +957,14 @@ def validate_api_key_value(
         return KeepaAdapter.validate_key(key_value)
     if normalized_key_type in AMAZON_JSON_KEY_TYPES:
         return validate_amazon_credential_payload(normalized_key_type, key_value)
+    if normalized_key_type == "google_search_console":
+        from .google_service_account import ServiceAccountError, parse_service_account
+
+        try:
+            parse_service_account(key_value)
+        except ServiceAccountError as exc:
+            return {"valid": False, "adapter": "GoogleSearchConsoleAdapter", "reason": str(exc).split(":", 1)[0]}
+        return {"valid": True, "adapter": "GoogleSearchConsoleAdapter", "reason": "service_account_json_shape"}
     return {
         "valid": bool(key_value.strip()),
         "adapter": key_type_definition(normalized_key_type).get("adapter"),

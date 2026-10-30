@@ -35,7 +35,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot, seller_chat, digest
+from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot, seller_chat, digest, gsc
 from .constants import (
     AGENT_USERNAME,
     DIGEST_ALERTS_PER_DAY,
@@ -336,6 +336,24 @@ def run_weekly(db, *, now: datetime | None = None) -> dict[str, Any]:
     return {"week": key, "headline": row.headline, "card_ref": card.ref, "card_new": is_new, "findings": len(findings)}
 
 
+def run_gsc_pull(db, *, now: datetime | None = None) -> dict[str, Any]:
+    """拉 Search Console(第二期):该拉的天拉了,记一笔流水;没配钥匙静默。"""
+    now = now or datetime.now(UTC)
+    try:
+        out = gsc.pull_due(db, now=now)
+    except Exception as exc:  # noqa: BLE001 —— 拉数出错不拖垮 tick
+        _LOGGER.exception("gsc pull failed")
+        db.rollback()
+        memory.log_activity(db, f"拉 Search Console 出错:{str(exc)[:120]},明天再试。", kind="error")
+        db.commit()
+        return {"configured": None, "error": str(exc)[:200]}
+    if out.get("configured") and (out.get("pulled") or out.get("failed")):
+        note = f"Search Console 拉了 {out['pulled']} 天({out['rows']} 行)" + (f",{out['failed']} 天没拉成" if out.get("failed") else "") + (f";台账用完先停:{out['stopped']}" if out.get("stopped") else "")
+        memory.log_activity(db, note[:500], kind="work")
+        db.commit()
+    return out
+
+
 def intake_links(db, links: list[tuple[str, str]], *, actor_user_id: str) -> str:
     """老板在 C19 里丢了 1688 链接:排队,回一句排第几、大概多久。"""
     replies: list[str] = []
@@ -372,6 +390,7 @@ class SuqingheWorker:
         self.owner_conversations: dict[str, str] = {}
         self._morning_day: date | None = None
         self._weekly_day: date | None = None
+        self._gsc_day: date | None = None  # Search Console 一天拉一次(第二期)
         self._weekly_attempts = 0
         self._weekly_last: datetime | None = None
         self._morning_attempts = 0
@@ -589,6 +608,10 @@ class SuqingheWorker:
             # 运营看板(10-30):周一 07:00 后把上周合成一张卡;错过了哪天补哪天
             if should_run_weekly(now, exists=digest.exists(db, kind=digest.WEEK, period_key=digest.previous_week_key(now))) and self._weekly_attempt_allowed(now):
                 run_weekly(db, now=now)
+            # 看板第二期:Search Console 一天拉一次(08:00 LA 后);没配钥匙就什么都不做
+            if gsc.should_pull(now, last_attempt_day=self._gsc_day):
+                self._gsc_day = la_date(now)
+                run_gsc_pull(db, now=now)
             handle_dictations(db)
             # 1688 → K 档案:一轮最多一单,节流在 dossiers.process_next 里。
             dossiers.process_next(db, now=now)
@@ -688,6 +711,13 @@ def main(argv: list[str] | None = None) -> int:
         db = SessionLocal()
         try:
             print(digest.backfill(db, days=days, weeks=4))
+        finally:
+            db.close()
+        return 0
+    if "--pull-gsc-now" in args:
+        db = SessionLocal()
+        try:
+            print(run_gsc_pull(db))
         finally:
             db.close()
         return 0

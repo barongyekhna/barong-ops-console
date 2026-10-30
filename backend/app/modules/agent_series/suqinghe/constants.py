@@ -193,6 +193,26 @@ def seller_chat_poll_minutes() -> float:
     return max(5.0, _env_float("SQH_SELLER_CHAT_POLL_MINUTES", 15.0))
 
 
+def gsc_site() -> str:
+    """Search Console 的资源名(网域资源 sc-domain:…;网址前缀资源就是完整 URL)。"""
+    return os.getenv("SQH_GSC_SITE", "sc-domain:barongyekhna.com").strip() or "sc-domain:barongyekhna.com"
+
+
+def gsc_lag_days() -> int:
+    """谷歌的搜索数据要 2–3 天才定稿,按 today-lag 拉。"""
+    try:
+        return max(1, int(os.getenv("SQH_GSC_LAG_DAYS", "3")))
+    except ValueError:
+        return 3
+
+
+def gsc_backfill_days() -> int:
+    try:
+        return max(7, min(480, int(os.getenv("SQH_GSC_BACKFILL_DAYS", "90"))))
+    except ValueError:
+        return 90
+
+
 def retry_after_block() -> bool:
     """被拦之后今天还继续抓不抓(默认不:「今天先不碰」)。"""
     return os.getenv("SQH_1688_RETRY_AFTER_BLOCK", "0").strip().lower() in ("1", "true", "yes", "on")

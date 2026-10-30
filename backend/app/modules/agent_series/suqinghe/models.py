@@ -180,3 +180,30 @@ class SqhDigest(Base):
     payload: Mapped[Any] = mapped_column(_json(), nullable=False, default=dict)
     findings: Mapped[Any] = mapped_column(_json(), nullable=False, default=list)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class SqhGscDaily(Base):
+    """Search Console 搜索表现(10-30,看板第二期):一天 × 一个搜索词 × 一个落地页一行。只读谷歌给的数,不改写。"""
+
+    __tablename__ = "sqh_gsc_daily"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    query: Mapped[str] = mapped_column(String(300), nullable=False)
+    page: Mapped[str] = mapped_column(String(1000), nullable=False)
+    clicks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    impressions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ctr: Mapped[float] = mapped_column(Numeric(8, 5), nullable=False, default=0)
+    position: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=0)
+
+
+class SqhGscDay(Base):
+    """哪几天拉过了(一天没有任何展现也要记,不然天天重拉):rows 行数、status ok/failed、error。"""
+
+    __tablename__ = "sqh_gsc_days"
+
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pulled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

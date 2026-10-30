@@ -289,7 +289,17 @@ def collect_day(db: Session, day: date, *, now: datetime | None = None) -> dict[
         "site": _safe("site", site_part, db, now=now),
         "content": _safe("content", content_part, db, start=day - timedelta(days=6), end=day),
         "catalog": _safe("catalog", catalog_part, db),
+        "search": _safe("search", search_part_lagged, db, end=day),
     }
+
+
+def search_part_lagged(db: Session, *, end: date) -> dict[str, Any]:
+    """日报里的搜索一节:谷歌数据滞后,看到 end-lag 为止的最近 7 天。"""
+    from .constants import gsc_lag_days
+    from .gsc import search_part
+
+    last = end - timedelta(days=gsc_lag_days() - 1)
+    return search_part(db, start=last - timedelta(days=6), end=last)
 
 
 def collect_week(db: Session, key: str, *, now: datetime | None = None) -> dict[str, Any]:
@@ -314,9 +324,16 @@ def collect_week(db: Session, key: str, *, now: datetime | None = None) -> dict[
         "content": _safe("content", content_part, db, start=monday, end=sunday),
         "catalog": _safe("catalog", catalog_part, db),
         "cards": _safe("cards", cards_part, db, start=monday, end=sunday),
+        "search": _safe("search", _search_week, db, start=monday, end=sunday),
         "daily_findings": dict(codes),
         "daily_digests": len(daily),
     }
+
+
+def _search_week(db: Session, *, start: date, end: date) -> dict[str, Any]:
+    from .gsc import search_part
+
+    return search_part(db, start=start, end=end)
 
 
 # ---------------------------------------------------------------- 规则层:只报有数据支撑的
@@ -370,7 +387,7 @@ def rules(payload: dict[str, Any]) -> list[dict[str, Any]]:
             elif change is not None and change >= 50:
                 add("orders_week_spike", "info", f"本周 {c} 单,比上周 {p} 多了 {change}%", count=c, prev=p, change=change)
     site = payload.get("site") or {}
-    if isinstance(site, dict) and "error" not in site:
+    if isinstance(site, dict) and site and "error" not in site:
         age = site.get("age_hours")
         if site.get("checked_at") is None or (age is not None and age > SITE_CHECK_MAX_AGE_H):
             add("site_check_missing", "warn", f"站点体检 {int(age) if age else '从来'} 小时没跑了(H 哨兵每天 03:40 那条)", age_hours=age)
@@ -385,6 +402,24 @@ def rules(payload: dict[str, Any]) -> list[dict[str, Any]]:
     content = payload.get("content") or {}
     if isinstance(content, dict) and "error" not in content and int(content.get("pending_review") or 0) >= 10:
         add("content_backlog", "info", f"内容台积压 {content['pending_review']} 篇待审", pending_review=content["pending_review"])
+    search = payload.get("search") or {}
+    if isinstance(search, dict) and "error" not in search and search.get("configured"):
+        from .constants import gsc_lag_days
+
+        last_day = search.get("last_day")
+        try:
+            stale_days = (date.fromisoformat(str(payload.get("period_key"))[:10]) - date.fromisoformat(str(last_day))).days if last_day and kind == DAY else None
+        except ValueError:
+            stale_days = None
+        if last_day is None or (stale_days is not None and stale_days > gsc_lag_days() + 3):
+            add("gsc_pull_stale", "warn", f"Search Console 的数{'一天都没拉到' if last_day is None else f'停在 {last_day}'}{',最近一次报错:' + str(search.get('last_error'))[:80] if search.get('last_error') else ''}", last_day=last_day)
+        elif kind == WEEK:
+            c, p = int(search.get("clicks") or 0), int(search.get("prev_clicks") or 0)
+            change = _pct(c, p)
+            if p >= 50 and change is not None and change <= -40:
+                add("gsc_clicks_drop", "warn", f"本周谷歌搜索点击 {c},比上周 {p} 少了 {-change}%", clicks=c, prev=p, change=change)
+            elif p >= 50 and change is not None and change >= 40:
+                add("gsc_clicks_spike", "info", f"本周谷歌搜索点击 {c},比上周 {p} 多了 {change}%", clicks=c, prev=p, change=change)
     return out
 
 
@@ -419,6 +454,9 @@ def headline(payload: dict[str, Any]) -> str:
         parts.append("订单读不到")
     if isinstance(site, dict) and "error" not in site and site.get("checked_at"):
         parts.append(f"站点 {site.get('urls_broken', 0)} 坏链 {site.get('urls_slow', 0)} 慢页")
+    search = payload.get("search") or {}
+    if isinstance(search, dict) and search.get("configured") and search.get("last_day"):
+        parts.append(f"谷歌搜索 {search.get('clicks', 0)} 点击 {search.get('impressions', 0)} 展现")
     return ";".join(parts) + "。"
 
 
@@ -495,9 +533,44 @@ def sections(payload: dict[str, Any]) -> list[dict[str, Any]]:
     catalog = payload.get("catalog") or {}
     if isinstance(catalog, dict) and "error" not in catalog:
         out.append({"heading": "店里的品", "rows": [["已发布 / 可上架 / 草稿", f"{catalog.get('published', 0)} / {catalog.get('ready_to_upload', 0)} / {catalog.get('uploaded_draft', 0)}", None]]})
+    out.extend(search_sections(payload.get("search"), kind=kind, prev_label=prev_label))
     cards = payload.get("cards") or {}
     if kind == WEEK and isinstance(cards, dict) and "error" not in cards:
         out.append({"heading": "她这周的卡", "rows": [["发了 / 你批了 / 你驳了", f"{cards.get('created', 0)} / {cards.get('approved', 0)} / {cards.get('rejected', 0)}", None]]})
+    return out
+
+
+def search_sections(search: Any, *, kind: str, prev_label: str) -> list[dict[str, Any]]:
+    """「搜索(Search Console)」+「搜索缺口」两节。没接钥匙就一行说明;接了没拉到就说到哪天。"""
+    if not isinstance(search, dict) or "error" in search:
+        return [{"heading": "搜索(Search Console)", "rows": [["状态", "读不到", None]]}]
+    if not search.get("configured"):
+        return [{"heading": "搜索(Search Console)", "rows": [["状态", "还没接:等老板按操作单配好服务账号", None]]}]
+    window = f"{search.get('day_from')}~{search.get('day_to')}"
+    rows: list[list[Any]] = [
+        ["数据到哪天", str(search.get("last_day") or "一天都没拉到") + (f"(窗口 {window},覆盖 {search.get('covered_days', 0)} 天)" if search.get("last_day") else ""), None],
+        ["点击 / 展现", f"{search.get('clicks', 0)} / {search.get('impressions', 0)}", (f"{_delta(search.get('clicks'), search.get('prev_clicks'))} {prev_label}" if _delta(search.get("clicks"), search.get("prev_clicks")) else None)],
+        ["点击率 / 平均位次", f"{round(float(search.get('ctr') or 0) * 100, 1)}% / {search.get('position', 0)}", None],
+    ]
+    if search.get("top_queries"):
+        rows.append(["点击最多的词", "、".join(f"{q['query']} {q['clicks']}" for q in search["top_queries"][:5]), None])
+    out = [{"heading": "搜索(Search Console)", "rows": rows}]
+    g = search.get("gaps") or {}
+    gap_rows: list[list[Any]] = []
+    if g.get("quick_wins"):
+        gap_rows.append(["差一步的词(排 8–20,展现够)", "、".join(f"{x['query']}(第 {x['position']:g},{x['impressions']} 展现)" for x in g["quick_wins"][:5]), "值得补内容/内链把它推进前十"])
+    if g.get("low_ctr_pages"):
+        gap_rows.append(["有展现没点击的页", "、".join(f"{x['page'].split('/')[-2] or x['page'].split('/')[-1] or x['page']}({x['impressions']} 展现,点击率 {round(x['ctr'] * 100, 1)}%)" for x in g["low_ctr_pages"][:5]), "标题和描述该改"])
+    far_product = [x for x in g.get("far_queries") or [] if x.get("has_product")]
+    far_none = [x for x in g.get("far_queries") or [] if not x.get("has_product")]
+    if far_product:
+        gap_rows.append(["有需求、我们有品但排得远", "、".join(f"{x['query']}(第 {x['position']:g})" for x in far_product[:5]), "产品页该加强"])
+    if far_none:
+        gap_rows.append(["有需求、我们没对应品/内容", "、".join(f"{x['query']}({x['impressions']} 展现)" for x in far_none[:5]), "喂内容台选题 / 选品池"])
+    if g.get("new_queries"):
+        gap_rows.append(["本期新出现的词", "、".join(f"{x['query']}({x['impressions']})" for x in g["new_queries"][:5]), None])
+    if search.get("last_day"):
+        out.append({"heading": "搜索缺口", "rows": gap_rows or [["这一期", "没有够门槛的缺口(展现太少)", None]]})
     return out
 
 

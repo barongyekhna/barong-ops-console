@@ -15,6 +15,7 @@ export type ApiKeyType =
   | "google_ads"
   | "amazon_sp_api"
   | "amazon_ads_api"
+  | "google_search_console"
   | "track17";
 
 export type ApiKeyTypeOption = {
@@ -97,6 +98,13 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     description: "一店一把。粘贴一行 JSON:{client_id, client_secret, refresh_token, region, profile_ids:[…]};别名 ads:<店铺码>,如 ads:01us",
     defaultUrl: "https://advertising-api.amazon.com",
     defaultAlias: "ads",
+  },
+  {
+    type: "google_search_console",
+    label: "Google Search Console(服务账号)",
+    description: "苏青禾读独立站的搜索表现(每个词的展现 / 点击 / 排名)做搜索缺口。粘服务账号的 JSON 钥匙整段;别名 gsc,绑到贸易公司。只读。",
+    defaultUrl: "https://searchconsole.googleapis.com",
+    defaultAlias: "gsc",
   },
   {
     type: "track17",

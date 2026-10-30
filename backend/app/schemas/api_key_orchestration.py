@@ -27,6 +27,7 @@ class KeyType(str, Enum):
     GOOGLE_ADS = "google_ads"
     AMAZON_SP_API = "amazon_sp_api"
     AMAZON_ADS_API = "amazon_ads_api"
+    GOOGLE_SEARCH_CONSOLE = "google_search_console"
     TRACK17 = "track17"
 
 

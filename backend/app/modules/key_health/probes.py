@@ -99,6 +99,8 @@ def adapter_for_target(target: ProbeTarget) -> str:
 
     if key_type == "google_ads":
         return "google_ads"
+    if key_type == "google_search_console" or hostname == "searchconsole.googleapis.com" or "gsc" in aliases:
+        return "google_search_console"
     if key_type in {"amazon_sp_api", "amazon_ads_api"}:
         return key_type
     if key_type == "alibaba1688":
@@ -594,6 +596,71 @@ def _google_pending_response(response: httpx.Response) -> bool:
             "TEST ACCOUNT",
         )
     )
+
+
+GSC_API_ROOT = "https://searchconsole.googleapis.com"
+GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
+
+
+def _probe_google_search_console(
+    target: ProbeTarget,
+    *,
+    enforce_public_network: bool,
+    transport: httpx.BaseTransport | None,
+) -> ProbeResult:
+    """服务账号 JSON → 签 JWT 换 token → 列它能看的 Search Console 资源。
+    资源表里有我们的站 = 健康;换到 token 但资源表空/没我们的站 = 老板还没在 Search Console 把它加成用户(invalid, site_not_granted)。"""
+    from ...services.google_service_account import ServiceAccountError, build_assertion, parse_service_account
+    from ..agent_series.suqinghe.constants import gsc_site
+
+    adapter = "google_search_console"
+    started = perf_counter()
+    try:
+        account = parse_service_account(str(target.secret_value or ""))
+        assertion = build_assertion(account, scope=GSC_SCOPE)
+    except ServiceAccountError as exc:
+        return _finish(adapter=adapter, started=started, status="malformed", reason_code=str(exc).split(":", 1)[0])
+    token_host = _host(account.token_uri)
+    oauth_response = _request(
+        "POST",
+        account.token_uri,
+        allowed_hosts=frozenset(("oauth2.googleapis.com", token_host)),
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        data={"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": assertion},
+    )
+    oauth_payload = _json_dict(oauth_response)
+    access_token = str((oauth_payload or {}).get("access_token") or "").strip()
+    if oauth_response.status_code != 200 or not access_token:
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="invalid" if oauth_response.status_code < 500 else "provider_error",
+            reason_code="service_account_token_rejected",
+            http_status=oauth_response.status_code,
+        )
+    sites_response = _request(
+        "GET",
+        f"{GSC_API_ROOT}/webmasters/v3/sites",
+        allowed_hosts=frozenset(("searchconsole.googleapis.com",)),
+        enforce_public_network=enforce_public_network,
+        transport=transport,
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    if sites_response.status_code != 200:
+        return _finish(
+            adapter=adapter,
+            started=started,
+            status="invalid" if sites_response.status_code < 500 else "provider_error",
+            reason_code="sites_list_rejected",
+            http_status=sites_response.status_code,
+        )
+    entries = (_json_dict(sites_response) or {}).get("siteEntry") or []
+    wanted = gsc_site().rstrip("/")
+    granted = {str(e.get("siteUrl") or "").rstrip("/") for e in entries if isinstance(e, dict)}
+    if wanted not in granted:
+        return _finish(adapter=adapter, started=started, status="invalid", reason_code="site_not_granted", http_status=200)
+    return _finish(adapter=adapter, started=started, status="healthy", reason_code="site_granted", http_status=200)
 
 
 def _probe_google_ads(
@@ -1159,6 +1226,12 @@ def probe_target(
         )
     if adapter == "google_ads":
         return _probe_google_ads(
+            target,
+            enforce_public_network=enforce_public_network,
+            transport=transport,
+        )
+    if adapter == "google_search_console":
+        return _probe_google_search_console(
             target,
             enforce_public_network=enforce_public_network,
             transport=transport,

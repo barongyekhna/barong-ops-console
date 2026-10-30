@@ -148,3 +148,37 @@ def test_backfill_fills_missing_periods_only(seeded) -> None:
         assert digest.backfill(db, days=3, weeks=1, now=NOW) == {"day": 0, "week": 0}
         keys = sorted(r.period_key for r in db.scalars(select(SqhDigest).where(SqhDigest.kind == digest.DAY)))
         assert keys == [(YESTERDAY - timedelta(days=n)).isoformat() for n in (2, 1, 0)]
+
+
+def test_week_digest_carries_search_console_data_when_pulled(seeded) -> None:
+    """看板第二期:拉过的 Search Console 数据进周报的「搜索」和「搜索缺口」两节;没拉过(没钥匙)就写「还没接」。"""
+    from backend.app.modules.agent_series.suqinghe import gsc
+    from backend.app.modules.agent_series.suqinghe.models import SqhGscDaily, SqhGscDay
+
+    monday, sunday = digest.week_days(LAST_WEEK)
+    with without_org_data_isolation(), SessionLocal() as db:
+        db.execute(delete(SqhGscDaily))
+        db.execute(delete(SqhGscDay))
+        db.commit()
+        before = digest.build_and_save(db, kind=digest.WEEK, period_key=LAST_WEEK, now=NOW)
+        search_before = before.payload["search"]
+        assert search_before.get("configured") is False or search_before.get("last_day") is None  # 测试库没钥匙 / 没拉过
+        for offset in range(7):
+            day = monday + timedelta(days=offset)
+            gsc.save_day(db, day, [
+                {"query": "camping lantern", "page": "https://barongyekhna.com/product/lantern/", "clicks": 2, "impressions": 60, "ctr": 0.033, "position": 9.0},
+                {"query": "tent pole repair", "page": "https://barongyekhna.com/blog/poles/", "clicks": 0, "impressions": 20, "ctr": 0.0, "position": 28.0},
+            ])
+        db.commit()
+        assert gsc.pulled_days(db) >= {monday, sunday}
+        row = digest.build_and_save(db, kind=digest.WEEK, period_key=LAST_WEEK, now=NOW)
+        db.commit()
+        search = row.payload["search"]
+        assert search["configured"] and search["covered_days"] == 7 and search["clicks"] == 14 and search["impressions"] == 560
+        assert [x["query"] for x in search["gaps"]["quick_wins"]] == ["camping lantern"] and [x["query"] for x in search["gaps"]["far_queries"]] == ["tent pole repair"]
+        headings = [s["heading"] for s in row.payload["sections"]]
+        assert "搜索(Search Console)" in headings and "搜索缺口" in headings
+        assert "谷歌搜索 14 点击 560 展现" in row.headline
+        db.execute(delete(SqhGscDaily))
+        db.execute(delete(SqhGscDay))
+        db.commit()
