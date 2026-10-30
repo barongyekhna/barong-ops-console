@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20261028_01_suqinghe_browser",
+  "alembic_head": "20261030_01_suqinghe_digests",
   "environment": "staging",
-  "expected_alembic_head": "20261028_01_suqinghe_browser",
+  "expected_alembic_head": "20261030_01_suqinghe_digests",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 137,
-  "migration_hash": "5861e14e23e24ad0e0f2f907a485948d179406fc7911e3ed3c681b6e57671a7f",
+  "migration_count": 138,
+  "migration_hash": "df8be573a512db82aeff6d26475aef3441636911585c537472fc7e6819cae2e8",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -144,9 +144,10 @@
     "20261021_01_ai_usage_ledger",
     "20261022_01_suqinghe",
     "20261023_01_suqinghe_dossiers",
-    "20261028_01_suqinghe_browser"
+    "20261028_01_suqinghe_browser",
+    "20261030_01_suqinghe_digests"
   ],
-  "migration_order_checksum": "281f7c90db372f3e3f0d2b8b32f5ff60a8870c8e74e1857a2666ef03ae5786ef",
+  "migration_order_checksum": "ddbcf3940805fcf8f43b9cda30ba4e4b74d7d2e475daba73b451444dc08eca9e",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -1106,6 +1107,13 @@
       "down_revision": "20261023_01_suqinghe_dossiers",
       "path": "backend/alembic/versions/20261028_01_suqinghe_browser.py",
       "version": "20261028_01_suqinghe_browser"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "695bf6a16c05262358f7a77e61fce7234b4cf6db08e619856b1b73bbe22a30ba",
+      "down_revision": "20261028_01_suqinghe_browser",
+      "path": "backend/alembic/versions/20261030_01_suqinghe_digests.py",
+      "version": "20261030_01_suqinghe_digests"
     }
   ]
 }

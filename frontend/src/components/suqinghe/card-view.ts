@@ -409,3 +409,47 @@ export function usd(value: number | null): string {
 export function pct(value: number | null): string {
   return value === null ? "—" : `${Math.round(value * 100)}%`;
 }
+
+
+/** 运营看板周报卡(10-30):evidence 由后端 digest.sections / rules 定——每节一张小表,异常一条一条;模型没碰过这些数。 */
+export const DIGEST_CARD_KIND = "ops_digest";
+
+export type DigestRow = { label: string; value: string; delta: string | null };
+export type DigestSection = { heading: string; rows: DigestRow[] };
+export type DigestFinding = { code: string; severity: "warn" | "info"; text: string };
+export type DigestView = {
+  week: string;
+  dayFrom: string;
+  dayTo: string;
+  headline: string;
+  sections: DigestSection[];
+  findings: DigestFinding[];
+};
+
+export function digestSections(value: unknown): DigestSection[] {
+  return list(value)
+    .filter(isRec)
+    .map((section) => ({
+      heading: text(section.heading),
+      rows: list(section.rows)
+        .filter((row): row is unknown[] => Array.isArray(row) && row.length >= 2)
+        .map((row) => ({ label: text(row[0]), value: typeof row[1] === "number" ? String(row[1]) : text(row[1]), delta: text(row[2]) || null }))
+        .filter((row) => row.label),
+    }))
+    .filter((section) => section.heading && section.rows.length > 0);
+}
+
+export function digestFindings(value: unknown): DigestFinding[] {
+  return list(value)
+    .filter(isRec)
+    .map((f) => ({ code: text(f.code), severity: text(f.severity) === "warn" ? ("warn" as const) : ("info" as const), text: text(f.text) }))
+    .filter((f) => f.text);
+}
+
+export function digestCardView(evidence: unknown): DigestView | null {
+  if (!isRec(evidence)) return null;
+  const sections = digestSections(evidence.sections);
+  const findings = digestFindings(evidence.findings);
+  if (sections.length === 0 && findings.length === 0) return null;
+  return { week: text(evidence.week), dayFrom: text(evidence.day_from), dayTo: text(evidence.day_to), headline: text(evidence.headline), sections, findings };
+}

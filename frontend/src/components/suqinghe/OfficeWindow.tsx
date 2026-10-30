@@ -12,7 +12,7 @@ import {
 } from "./office-api";
 import { BrowserPanel } from "./BrowserPanel";
 import { BrowserPanelContext } from "./browser-context";
-import { GoalList, Inbox, OwnerControls, minutesAgo, pickEasterLine, timeText } from "./OfficeParts";
+import { DigestPanel, GoalList, Inbox, OwnerControls, minutesAgo, pickEasterLine, timeText } from "./OfficeParts";
 import { OfficeScene } from "./OfficeScene";
 
 const POSITION_KEY = "suqinghe-office-position";
@@ -346,6 +346,11 @@ export function OfficeWindow({
                 <p>{office.snapshot.headline}</p>
               </section>
             ) : null}
+
+            <section className={styles.section}>
+              <h3>看板</h3>
+              <DigestPanel digest={office.digest} />
+            </section>
 
             {actionError ? (
               <p className={styles.error} role="alert">

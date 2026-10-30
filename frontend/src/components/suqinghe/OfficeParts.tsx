@@ -7,19 +7,23 @@ import { useBrowserPanel } from "./browser-context";
 import {
   CANDIDATE_CARD_KIND,
   COPY_CARD_KIND,
+  DIGEST_CARD_KIND,
   MARKET_CARD_KIND,
   PRICE_CARD_KIND,
   REVIEW_CARD_KIND,
   candidateCardView,
   copyCardView,
+  digestCardView,
   marketCardView,
+  type DigestFinding,
+  type DigestSection,
   pct,
   priceCardView,
   reviewCardView,
   usd,
 } from "./card-view";
 import { cardImageUrl, confidenceLabel, familyMeta, familyOf, groupCards, summaryOf, waitedText } from "./card-kinds";
-import { CARD_STATUS_LABEL, GOAL_METRICS, VIA_LABEL, addGoal, controlOffice, decideCard, instructOffice, patchGoal, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
+import { CARD_STATUS_LABEL, GOAL_METRICS, VIA_LABEL, addGoal, controlOffice, decideCard, getDigest, instructOffice, officeErrorMessage, patchGoal, type DigestDetail, type DigestKind, type DigestSummary, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
 
 /** 场景视图和列表视图共用的零件:审批卡、指挥控件、几个格式化小工具。 */
 
@@ -263,6 +267,7 @@ export function CardDossier({
         {card.kind === REVIEW_CARD_KIND ? <ReviewCardBody evidence={card.evidence} /> : null}
         {card.kind === COPY_CARD_KIND ? <CopyCardBody evidence={card.evidence} /> : null}
         {card.kind === MARKET_CARD_KIND ? <MarketCardBody evidence={card.evidence} /> : null}
+        {card.kind === DIGEST_CARD_KIND ? <DigestCardBody evidence={card.evidence} /> : null}
         {familyOf(card.kind) === "dossier" || familyOf(card.kind) === "alert" ? <p className={styles.muted}>{meta.ask}</p> : null}
       </section>
       {card.if_not ? (
@@ -626,6 +631,47 @@ function CopyCardBody({ evidence }: { evidence: unknown }) {
 }
 
 /** 竞品拆解卡(10-27):读了哪几家、买家最在乎什么、我们有无、四簇关键词、缺的事实。给老板看,不用批。 */
+/** 运营看板(10-30):异常一条一条 + 每节一张小表;数全是后端查表算的,这里只画。 */
+export function DigestTables({ sections, findings }: { sections: DigestSection[]; findings: DigestFinding[] }) {
+  return (
+    <div className={styles.cardBody}>
+      {findings.length > 0 ? (
+        <ul className={styles.digestFindings}>
+          {findings.map((f) => (
+            <li key={f.code || f.text} data-severity={f.severity}>
+              {f.text}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {sections.map((section) => (
+        <table className={styles.scoreTable} key={section.heading}>
+          <thead>
+            <tr>
+              <th colSpan={3}>{section.heading}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {section.rows.map((row) => (
+              <tr key={`${section.heading}:${row.label}`}>
+                <td>{row.label}</td>
+                <td>{row.value}</td>
+                <td className={styles.digestDelta}>{row.delta ?? ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ))}
+    </div>
+  );
+}
+
+function DigestCardBody({ evidence }: { evidence: unknown }) {
+  const view = digestCardView(evidence);
+  if (!view) return null;
+  return <DigestTables findings={view.findings} sections={view.sections} />;
+}
+
 function MarketCardBody({ evidence }: { evidence: unknown }) {
   const view = marketCardView(evidence);
   if (!view) return null;
@@ -796,5 +842,70 @@ export function GoalList({ goals, canCommand, busy, run }: { goals: OfficeGoal[]
         ))}
       </ul>
     </>
+  );
+}
+
+
+/** 办公室列表视图里的「看板」段(10-30):昨日一行数 + 异常;点开看全表;本周同理。数据是后端 sqh_digests 里算好的。 */
+export function DigestPanel({ digest }: { digest: OfficeRead["digest"] | undefined }) {
+  const [open, setOpen] = useState<DigestKind | null>(null);
+  const [detail, setDetail] = useState<Record<string, DigestDetail>>({});
+  const [error, setError] = useState<string | null>(null);
+  if (!digest || (!digest.day && !digest.week)) {
+    return <p className={styles.muted}>看板还没算过:她明早 7 点第一次出昨日的数,周一出上周的。</p>;
+  }
+  const toggle = async (item: DigestSummary) => {
+    const key = `${item.kind}:${item.period_key}`;
+    if (open === item.kind) {
+      setOpen(null);
+      return;
+    }
+    setOpen(item.kind);
+    if (detail[key]) return;
+    try {
+      const got = await getDigest(item.kind, item.period_key);
+      setDetail((prev) => ({ ...prev, [key]: got }));
+      setError(null);
+    } catch (err) {
+      setError(officeErrorMessage(err, "看板"));
+    }
+  };
+  const rows: Array<[string, DigestSummary | null]> = [
+    ["昨日", digest.day],
+    ["上周", digest.week],
+  ];
+  return (
+    <div className={styles.cardBody}>
+      {rows.map(([label, item]) =>
+        item ? (
+          <div key={item.kind}>
+            <div className={styles.digestHead}>
+              <b>
+                {label} {item.period_key}
+              </b>
+              <span>{item.headline ?? ""}</span>
+              {item.warnings > 0 ? <span className={styles.warnLine}>{item.warnings} 条异常</span> : null}
+              <button className={styles.linkButton} onClick={() => void toggle(item)} type="button">
+                {open === item.kind ? "收起" : "看全表"}
+              </button>
+            </div>
+            {open === item.kind && detail[`${item.kind}:${item.period_key}`] ? (
+              <DigestTables
+                findings={detail[`${item.kind}:${item.period_key}`].findings.map((f) => ({ code: f.code, severity: f.severity, text: f.text }))}
+                sections={detail[`${item.kind}:${item.period_key}`].sections.map((section) => ({
+                  heading: section.heading,
+                  rows: section.rows.map((row) => ({ label: row[0], value: String(row[1] ?? ""), delta: row[2] ?? null })),
+                }))}
+              />
+            ) : null}
+          </div>
+        ) : null,
+      )}
+      {error ? (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

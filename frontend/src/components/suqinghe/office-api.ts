@@ -53,6 +53,8 @@ export type OfficeRead = {
   activity: OfficeActivity[];
   /** 她的登录浏览器此刻的状态(10-28);老后端没有这个字段 */
   browser?: BrowserStatus;
+  /** 运营看板(10-30):最新一天 / 最新一周的标题和异常;老后端没有这个字段 */
+  digest?: { day: DigestSummary | null; week: DigestSummary | null };
   can_command: boolean;
   server_time: string;
 };
@@ -154,6 +156,22 @@ export function getSnapshots(limit = 30) {
 
 export function getSnapshot(date: string) {
   return apiRequest<SnapshotDetail>(`${BASE}/snapshots/${encodeURIComponent(date)}`);
+}
+
+/** 运营看板(10-30):后端 /suqinghe/digests。日报只进这里和早间快照,周报另发一张「看板」卡。 */
+export type DigestKind = "day" | "week";
+export type DigestFindingRead = { code: string; severity: "warn" | "info"; text: string; numbers?: Record<string, unknown> };
+export type DigestSummary = { kind: DigestKind; period_key: string; headline: string | null; generated_at: string | null; findings: DigestFindingRead[]; warnings: number };
+export type DigestDetail = DigestSummary & { sections: Array<{ heading: string; rows: Array<[string, string, string | null]> }>; payload: Record<string, unknown> };
+
+export function getDigests(kind?: DigestKind, limit = 14) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (kind) query.set("kind", kind);
+  return apiRequest<{ items: DigestSummary[] }>(`${BASE}/digests?${query.toString()}`);
+}
+
+export function getDigest(kind: DigestKind, periodKey: string) {
+  return apiRequest<DigestDetail>(`${BASE}/digests/${kind}/${encodeURIComponent(periodKey)}`);
 }
 
 /** 档案柜:一个 1688 链接 → 一份 K 档案草稿(后端 /suqinghe/dossiers)。 */

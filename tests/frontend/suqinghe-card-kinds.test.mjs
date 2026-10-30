@@ -23,6 +23,7 @@ const review = load("card-review-643348607768.json");
 const copy = load("card-copy.json");
 const market = load("card-market.json");
 const pick = load("card-candidate-scored.json");
+const digest = load("card-digest.json");
 const dossier = { ref: "d055", kind: DOSSIER_CARD_KIND, title: "建 K 档案:12V电钻电池组", conclusion: "读完了,3 处标红。", status: "pending", confidence: "medium", created_at: null, evidence: { dossier_id: 7, offer_id: "643348607768", flagged_count: 3 } };
 const blocked = { ref: "b10c", kind: BLOCKED_CARD_KIND, title: "PTB-001 卡在「出图」", conclusion: "出图试了 2 次都没成,我先停在这儿。批 = 让我再试一次;驳 = 这个品先不做。", status: "pending", confidence: "high", created_at: null, evidence: { dossier_id: 7, k_product_id: "x", sku: "PTB-001", step: "render" } };
 
@@ -34,7 +35,10 @@ test("七个家族:每种 kind 都落到一个家族,要你批的排前、只看
   assert.equal(familyOf("k_review"), "review");
   assert.equal(familyOf("market"), "market");
   for (const kind of ["ops_alert", "product_blocker", "goal", "other", BLOCKED_CARD_KIND, "something_new"]) assert.equal(familyOf(kind), "alert", kind);
-  assert.deepEqual(FAMILY_ORDER, ["dossier", "price", "copy", "review", "pick", "alert", "market"]);
+  assert.equal(familyOf("ops_digest"), "digest"); // 运营看板周报(10-30):只看不用批,排最后
+  assert.deepEqual(FAMILY_ORDER, ["dossier", "price", "copy", "review", "pick", "alert", "market", "digest"]);
+  assert.equal(FAMILIES.digest.needsDecision, false);
+  assert.match(familyMeta("ops_digest").ask, /不用批/);
   assert.ok(FAMILY_ORDER.every((f) => FAMILIES[f].label && FAMILIES[f].icon && FAMILIES[f].ask));
   assert.equal(FAMILIES.market.needsDecision, false);
   assert.match(familyMeta("market").ask, /不用批/);
@@ -126,4 +130,22 @@ test("收件筐按家族分组、纸片有戳记和缩略图、卷宗有「← �
   const css = read("frontend/src/components/suqinghe/Office.module.css");
   for (const family of FAMILY_ORDER) assert.match(css, new RegExp(`\\.sheet\\[data-family="${family}"\\]`), family);
   assert.match(css, /inbox_bg\.webp/);
+});
+
+
+test("看板卡(10-30):一行基本信息写周、异常条数、几节;列表里的看板路径进了代理白名单", () => {
+  const summary = summaryOf(digest);
+  assert.equal(summary.headline, "2026-W44 运营看板");
+  assert.ok(summary.facts.includes("2026-10-26 ~ 2026-11-01"));
+  assert.ok(summary.facts.some((f) => /条要看的异常/.test(f)) && summary.facts.some((f) => /节$/.test(f)));
+  assert.equal(isAllowedBackendProxyPath("GET", ["suqinghe", "digests"]), true);
+  assert.equal(isAllowedBackendProxyPath("GET", ["suqinghe", "digests", "week", "2026-W44"]), true);
+  assert.equal(isAllowedBackendProxyPath("GET", ["suqinghe", "digests", "day", "2026-10-29"]), true);
+  assert.equal(isAllowedBackendProxyPath("GET", ["suqinghe", "digests", "month", "2026-10"]), false);
+  assert.equal(isAllowedBackendProxyPath("GET", ["suqinghe", "digests", "week", "../x"]), false);
+  assert.equal(isAllowedBackendProxyPath("POST", ["suqinghe", "digests"]), false);
+  const parts = read("frontend/src/components/suqinghe/OfficeParts.tsx");
+  assert.match(parts, /DIGEST_CARD_KIND \? <DigestCardBody/);
+  assert.match(parts, /export function DigestPanel/);
+  assert.match(read("frontend/src/components/suqinghe/OfficeWindow.tsx"), /<h3>看板<\/h3>\s*<DigestPanel digest=\{office\.digest\}/);
 });

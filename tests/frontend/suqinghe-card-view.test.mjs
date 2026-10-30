@@ -18,6 +18,7 @@ import {
   candidateCardView,
   candidateImageUrl,
   copyCardView,
+  digestCardView,
   kMediaThumbnailUrl,
   marketCardView,
   pct,
@@ -220,4 +221,31 @@ test("竞品拆解卡:读了哪几家(没读到的标原因)、买家最在乎�
   const parts = read("frontend/src/components/suqinghe/OfficeParts.tsx");
   assert.match(parts, /card\.kind === MARKET_CARD_KIND \? <MarketCardBody/);
   assert.match(parts, /view\.score \? \(/);
+});
+
+
+test("看板卡(10-30):每节一张小表、异常分 warn/info,数全是后端算好的;坏的 evidence 不画", () => {
+  const digest = load("card-digest.json");
+  const view = digestCardView(digest.evidence);
+  assert.ok(view);
+  assert.equal(view.week, "2026-W44");
+  assert.deepEqual([view.dayFrom, view.dayTo], ["2026-10-26", "2026-11-01"]);
+  assert.deepEqual(
+    view.sections.map((s) => s.heading),
+    ["流量(Jetpack)", "订单(Woo) 2026-10-26~2026-11-01", "站点健康(H 哨兵)", "内容台", "店里的品", "她这周的卡"],
+  );
+  const traffic = Object.fromEntries(view.sections[0].rows.map((r) => [r.label, r]));
+  assert.equal(traffic["近 7 日浏览"].value, "217");
+  assert.equal(traffic["近 7 日浏览"].delta, "+45% 比上周");
+  assert.equal(traffic["来源前五"].value, "Google 80、Pinterest 12");
+  assert.deepEqual(
+    view.findings.map((f) => [f.code, f.severity]),
+    [
+      ["week_traffic_spike", "info"],
+      ["site_broken_links", "warn"],
+    ],
+  );
+  assert.equal(digestCardView({ sections: [], findings: [] }), null);
+  assert.equal(digestCardView("nope"), null);
+  assert.deepEqual(digestCardView({ sections: [{ heading: "x", rows: [["a", 3], ["b"], "junk"] }] }).sections, [{ heading: "x", rows: [{ label: "a", value: "3", delta: null }] }]);
 });

@@ -1,0 +1,173 @@
+{
+ "ref": "dg44",
+ "kind": "ops_digest",
+ "title": "2026-W44 运营看板",
+ "conclusion": "本周 101 人 217 次浏览(比上周多 45%);来源头一名 Google;2 单 USD 61.98;站点 2 坏链 1 慢页。",
+ "why": "本周 217 次浏览,比上周 150 多了 45%\n站上有 2 个坏链接",
+ "if_not": "",
+ "reversible": true,
+ "confidence": "high",
+ "status": "pending",
+ "created_at": "2026-11-02T15:05:00+00:00",
+ "decided_at": null,
+ "decided_via": null,
+ "decision_reason": null,
+ "evidence": {
+  "week": "2026-W44",
+  "headline": "本周 101 人 217 次浏览(比上周多 45%);来源头一名 Google;2 单 USD 61.98;站点 2 坏链 1 慢页。",
+  "sections": [
+   {
+    "heading": "流量(Jetpack)",
+    "rows": [
+     [
+      "近 7 日浏览",
+      "217",
+      "+45% 比上周"
+     ],
+     [
+      "近 7 日访客",
+      "101",
+      "+44% 比上周"
+     ],
+     [
+      "来源前五",
+      "Google 80、Pinterest 12",
+      null
+     ],
+     [
+      "热门页前五",
+      "12V Drill Battery Pack 40",
+      null
+     ],
+     [
+      "国家前五",
+      "United States 150",
+      null
+     ],
+     [
+      "站内搜索词",
+      "camping lantern 6",
+      null
+     ]
+    ]
+   },
+   {
+    "heading": "订单(Woo) 2026-10-26~2026-11-01",
+    "rows": [
+     [
+      "订单数",
+      "2",
+      "+100% 比上周"
+     ],
+     [
+      "销售额",
+      "USD 61.98",
+      null
+     ],
+     [
+      "客单价",
+      "USD 30.99",
+      null
+     ],
+     [
+      "卖得最多",
+      "12V Drill Battery Pack ×2",
+      null
+     ],
+     [
+      "买家国家",
+      "US 2",
+      null
+     ]
+    ]
+   },
+   {
+    "heading": "站点健康(H 哨兵)",
+    "rows": [
+     [
+      "最近一次体检",
+      "2026-11-01 03:40",
+      null
+     ],
+     [
+      "坏链接 / 慢页",
+      "2 / 1(共查 120 页)",
+      null
+     ],
+     [
+      "响应 p95",
+      "1200 ms",
+      null
+     ],
+     [
+      "首页 / 站点地图",
+      "正常 / 正常",
+      null
+     ],
+     [
+      "未处理的问题",
+      "2",
+      null
+     ]
+    ]
+   },
+   {
+    "heading": "内容台",
+    "rows": [
+     [
+      "本期发布",
+      "2",
+      null
+     ],
+     [
+      "待审 / 批了没发 / 已上线",
+      "2 / 1 / 15",
+      null
+     ]
+    ]
+   },
+   {
+    "heading": "店里的品",
+    "rows": [
+     [
+      "已发布 / 可上架 / 草稿",
+      "9 / 2 / 3",
+      null
+     ]
+    ]
+   },
+   {
+    "heading": "她这周的卡",
+    "rows": [
+     [
+      "发了 / 你批了 / 你驳了",
+      "6 / 4 / 1",
+      null
+     ]
+    ]
+   }
+  ],
+  "findings": [
+   {
+    "code": "week_traffic_spike",
+    "severity": "info",
+    "text": "本周 217 次浏览,比上周 150 多了 45%",
+    "numbers": {
+     "views": 217,
+     "prev": 150,
+     "change": 45
+    }
+   },
+   {
+    "code": "site_broken_links",
+    "severity": "warn",
+    "text": "站上有 2 个坏链接",
+    "numbers": {
+     "urls_broken": 2
+    }
+   }
+  ],
+  "day_from": "2026-10-26",
+  "day_to": "2026-11-01"
+ }
+}

@@ -1435,6 +1435,10 @@ def sync_result(
     return SyncResultResponse(job_id=response_job_id, status=response_status)
 
 
+ORDERS_WORKER_NAME = "w-orders"  # 10-30:订单同步也记心跳,运营看板据此判「同步停了」
+ORDERS_EXPECTED_INTERVAL_SECONDS = 900
+
+
 @machine_router.post("/orders/ingest", response_model=OrdersIngestResponse)
 def orders_ingest(
     payload: OrdersIngestRequest,
@@ -1452,8 +1456,15 @@ def orders_ingest(
         item.model_dump(mode="python", exclude_unset=True)
         for item in payload.orders
     ]
-    created, updated = logistics.upsert_orders(db, rows)
-    db.commit()
+    try:
+        created, updated = logistics.upsert_orders(db, rows)
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - 失败要记进心跳,再抛(10-30 运营看板靠这个心跳判「订单同步停了」)
+        db.rollback()
+        record_failure(db, worker_name=ORDERS_WORKER_NAME, module_key="w", error=f"{type(exc).__name__}: {exc}", expected_interval_seconds=ORDERS_EXPECTED_INTERVAL_SECONDS)
+        raise
+    # n8n 每 15 分钟推一次最近 50 单;推到了就算活着(没新单也推,所以这里不看 created/updated)
+    record_success(db, worker_name=ORDERS_WORKER_NAME, module_key="w", expected_interval_seconds=ORDERS_EXPECTED_INTERVAL_SECONDS)
     return OrdersIngestResponse(
         accepted=len(rows),
         created=created,

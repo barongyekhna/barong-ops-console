@@ -256,6 +256,18 @@ def goals_section(db: Session, products: dict[str, Any] | None) -> list[dict[str
     return out
 
 
+def ops_section(db: Session) -> dict[str, Any]:
+    """运营看板(10-30):昨天的流量/订单/站点健康一页数 + 规则层异常。全量落 sqh_digests(run_morning 存),快照里只留摘要。"""
+    from datetime import timedelta
+
+    from . import digest
+
+    yesterday = la_today() - timedelta(days=1)
+    payload = digest.collect_day(db, yesterday)
+    findings = digest.rules(payload)
+    return {"day": yesterday.isoformat(), "headline": digest.headline(payload), "findings": findings, "traffic": payload.get("traffic") if isinstance(payload.get("traffic"), dict) and "error" not in payload["traffic"] else dict(UNREADABLE), "orders": payload.get("orders_7d") if isinstance(payload.get("orders_7d"), dict) and "error" not in payload["orders_7d"] else dict(UNREADABLE), "_payload": payload}
+
+
 SOURCES = {
     "products": products_section,
     "content": content_section,
@@ -263,6 +275,7 @@ SOURCES = {
     "keys": keys_section,
     "ai": ai_section,
     "approvals": approvals_section,
+    "ops": ops_section,
 }
 
 
@@ -296,6 +309,9 @@ def _headline(snap: dict[str, Any]) -> str:
     keys = snap.get("keys")
     if isinstance(keys, dict) and keys.get("failing"):
         parts.append(f"{len(keys['failing'])} 把钥匙坏了")
+    ops = snap.get("ops")
+    if isinstance(ops, dict) and ops.get("headline"):
+        parts.append(str(ops["headline"]).rstrip("。"))
     return ";".join(parts) + "。"
 
 
@@ -334,6 +350,8 @@ def build_snapshot(db: Session, *, now: datetime | None = None) -> dict[str, Any
 
 def save_snapshot(db: Session, payload: dict[str, Any], *, now: datetime | None = None) -> SqhSnapshot:
     day = la_today(now)
+    if isinstance(payload.get("ops"), dict) and "_payload" in payload["ops"]:
+        payload = {**payload, "ops": {k: v for k, v in payload["ops"].items() if k != "_payload"}}  # 全量在 sqh_digests,快照只留摘要
     row = db.get(SqhSnapshot, day)
     if row is None:
         row = SqhSnapshot(snapshot_date=day, payload=payload)

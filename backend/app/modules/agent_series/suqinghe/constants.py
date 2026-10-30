@@ -65,6 +65,9 @@ def image_brief_paused() -> bool:
 CANDIDATE_CARD_KIND = "candidate"
 # 竞品拆解卡(10-27):建档后跑关键词前,她读同类商品页拆出来的市场情报;给老板看,不用批,驳了撤掉重跑关键词。
 MARKET_CARD_KIND = "market"
+# 运营看板(10-30):周报一张「只看不用批」的卡;日报不发卡,异常走 ops_alert(issue 前缀 ops:),一天最多 DIGEST_ALERTS_PER_DAY 张
+DIGEST_CARD_KIND = "ops_digest"
+DIGEST_ALERTS_PER_DAY = 2
 # 工厂能力(选品评分「和工厂的关系」那一维她照这个判;老板改一句话就能换)。
 FACTORY_BRIEF = (
     "我们在吉林有自己的工厂:无固定品类,擅长组装(把外购零部件装成成品)、换外观(颜色/贴牌/包装)、做套装(几件配成一套);"

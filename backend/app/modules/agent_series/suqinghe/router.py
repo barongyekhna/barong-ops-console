@@ -20,7 +20,7 @@ from ....db.session import get_db
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from . import browser as _browser
-from . import cards, dossiers, memory, office
+from . import cards, digest, dossiers, memory, office
 from . import pipeline as _pipeline  # noqa: F401 —— 导入即登记 k_price 指纹(价格卡批之前核 K 里的价有没有人动过)
 from . import snapshot as _snapshot  # noqa: F401 —— 导入即登记 product_gate 指纹,批卡前才能查数据变没变
 from .constants import MEMORY_KINDS
@@ -129,6 +129,27 @@ def get_snapshot(snapshot_date: date, db: Session = Depends(get_db), user: User 
     if row is None:
         raise HTTPException(status_code=404, detail={"code": "SQH_SNAPSHOT_NOT_FOUND", "message": "那天没有快照。"})
     return {"date": row.snapshot_date.isoformat(), "headline": _headline(row.payload), "payload": row.payload}
+
+
+@router.get("/digests")
+def list_digests(
+    kind: Literal["day", "week"] | None = Query(default=None),
+    limit: int = Query(default=14, ge=1, le=60),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """运营看板(10-30):日报/周报的标题列表(登录即可看,和快照一样)。"""
+    del user
+    return {"items": [digest.summary_payload(row) for row in digest.listing(db, kind=kind, limit=limit)]}
+
+
+@router.get("/digests/{digest_kind}/{period_key}")
+def get_digest(digest_kind: Literal["day", "week"], period_key: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict[str, Any]:
+    del user
+    row = digest.get(db, kind=digest_kind, period_key=period_key[:16])
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": "SQH_DIGEST_NOT_FOUND", "message": "那一期的看板还没有。"})
+    return digest.detail_payload(row)
 
 
 @router.post("/cards/{ref}/decide")

@@ -249,6 +249,9 @@ function candidateValues(paramName) {
   if (name === "ref") return ["a3f9"];
   // 苏青禾的日历按日期取快照,代理层只认 YYYY-MM-DD。
   if (name === "snapshot_date") return ["2026-10-22"];
+  // 苏青禾的运营看板(10-30):只有 day / week 两种,期键是 YYYY-MM-DD 或 YYYY-Www,代理层按形状卡死。
+  if (name === "digest_kind") return ["day", "week"];
+  if (name === "period_key") return ["2026-10-29", "2026-W44"];
   if (name.endsWith("_id")) return [UUID_SAMPLE, "12"];
   return PARAM_CANDIDATES.default;
 }

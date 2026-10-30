@@ -1454,6 +1454,7 @@ const SUQINGHE_CARD_REF_PATTERN = /^[0-9a-f]{4,8}$/;
 const SUQINGHE_GOAL_ID_PATTERN = /^\d{1,12}$/;
 const SUQINGHE_DOSSIER_ID_PATTERN = /^[1-9][0-9]{0,12}$/;
 const SUQINGHE_SNAPSHOT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const SUQINGHE_DIGEST_KEY_PATTERN = /^(\d{4}-\d{2}-\d{2}|\d{4}-W\d{2})$/;
 
 /**
  * 苏青禾的办公室(全局浮窗):GET office 谁都能看;批卡 / 目标 / 暂停恢复 / 交代一句
@@ -1465,8 +1466,12 @@ function isAllowedSuqinghePath(method: string, path: string[]) {
   }
   if (method === "GET") {
     if (path.length === 2) {
-      // office = 办公室全景;memory = 书柜(硬记忆);snapshots = 日历(每日快照列表);dossiers = 档案柜;browser = 她的登录浏览器状态
-      return path[1] === "office" || path[1] === "memory" || path[1] === "snapshots" || path[1] === "dossiers" || path[1] === "browser";
+      // office = 办公室全景;memory = 书柜(硬记忆);snapshots = 日历(每日快照列表);dossiers = 档案柜;browser = 她的登录浏览器状态;digests = 运营看板(日报/周报)
+      return path[1] === "office" || path[1] === "memory" || path[1] === "snapshots" || path[1] === "dossiers" || path[1] === "browser" || path[1] === "digests";
+    }
+    if (path.length === 4 && path[1] === "digests") {
+      // 运营看板(10-30):某一天 / 某一周的全量(sections + findings)
+      return (path[2] === "day" || path[2] === "week") && SUQINGHE_DIGEST_KEY_PATTERN.test(path[3]);
     }
     if (path.length === 3 && path[1] === "dossiers") {
       return SUQINGHE_DOSSIER_ID_PATTERN.test(path[2]);

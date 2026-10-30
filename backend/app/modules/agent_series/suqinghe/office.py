@@ -179,6 +179,22 @@ def office_payload(db: Session, *, can_command: bool, now: datetime | None = Non
             for a in activity_rows
         ],
         "browser": browser_payload(db),
+        "digest": digest_payload(db),
         "can_command": can_command,
         "server_time": now.isoformat(),
     }
+
+
+def digest_payload(db: Session) -> dict[str, Any]:
+    """运营看板(10-30)给办公室首屏:最新一天 + 最新一周的标题和异常(全量走 /suqinghe/digests)。"""
+    from . import digest
+
+    out: dict[str, Any] = {"day": None, "week": None}
+    for kind in (digest.DAY, digest.WEEK):
+        try:
+            row = digest.latest(db, kind)
+        except Exception:  # noqa: BLE001 —— 表还没建(迁移前)或读不到,首屏别因此空白
+            db.rollback()
+            row = None
+        out[kind] = digest.summary_payload(row) if row is not None else None
+    return out

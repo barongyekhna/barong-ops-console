@@ -165,3 +165,18 @@ class SqhBrowserInput(Base):
     created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SqhDigest(Base):
+    """运营看板(10-30):一天一行(kind=day, period_key=2026-10-29)、一周一行(kind=week, period_key=2026-W44)。
+    payload 是各路数 + 给面板画的 sections;findings 是规则层算出的异常。接口和面板只读它,不现算。"""
+
+    __tablename__ = "sqh_digests"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(8), nullable=False)
+    period_key: Mapped[str] = mapped_column(String(16), nullable=False)
+    headline: Mapped[str | None] = mapped_column(Text, nullable=True)
+    payload: Mapped[Any] = mapped_column(_json(), nullable=False, default=dict)
+    findings: Mapped[Any] = mapped_column(_json(), nullable=False, default=list)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

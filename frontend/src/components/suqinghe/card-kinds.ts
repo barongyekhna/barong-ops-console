@@ -3,13 +3,13 @@
  * 纯函数,node 测试直接验;evidence 的字段只挑要画的,缺什么就不画。
  */
 
-import { CANDIDATE_CARD_KIND, COPY_CARD_KIND, MARKET_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND, candidateCardView, copyCardView, marketCardView, priceCardView, reviewCardView } from "./card-view";
+import { CANDIDATE_CARD_KIND, COPY_CARD_KIND, DIGEST_CARD_KIND, MARKET_CARD_KIND, PRICE_CARD_KIND, REVIEW_CARD_KIND, candidateCardView, copyCardView, digestCardView, marketCardView, priceCardView, reviewCardView } from "./card-view";
 import type { OfficeCard } from "./office-api";
 
 export const DOSSIER_CARD_KIND = "create_k_dossier";
 export const BLOCKED_CARD_KIND = "k_blocked";
 
-export type Family = "dossier" | "price" | "copy" | "review" | "pick" | "alert" | "market";
+export type Family = "dossier" | "price" | "copy" | "review" | "pick" | "alert" | "market" | "digest";
 
 export type FamilyMeta = {
   family: Family;
@@ -30,9 +30,10 @@ export const FAMILIES: Record<Family, FamilyMeta> = {
   pick: { family: "pick", label: "选品", icon: "🧭", ask: "批了她开 1688 页建档", order: 4, needsDecision: true },
   alert: { family: "alert", label: "提醒", icon: "🔔", ask: "看情况:批 = 让她再试 / 照办,驳 = 先不做", order: 5, needsDecision: true },
   market: { family: "market", label: "拆解", icon: "🔍", ask: "给你看的,不用批;驳了她撤掉这份情报重跑关键词", order: 6, needsDecision: false },
+  digest: { family: "digest", label: "看板", icon: "📊", ask: "本周运营看板,给你看的,不用批;看过点「知道了」", order: 7, needsDecision: false },
 };
 
-export const FAMILY_ORDER: Family[] = ["dossier", "price", "copy", "review", "pick", "alert", "market"];
+export const FAMILY_ORDER: Family[] = ["dossier", "price", "copy", "review", "pick", "alert", "market", "digest"];
 
 export function familyOf(kind: string): Family {
   switch (kind) {
@@ -48,6 +49,8 @@ export function familyOf(kind: string): Family {
       return "pick";
     case MARKET_CARD_KIND:
       return "market";
+    case DIGEST_CARD_KIND:
+      return "digest";
     default:
       return "alert";
   }
@@ -148,6 +151,12 @@ export function summaryOf(card: OfficeCard): CardSummary {
         ? [`读了 ${view.pages.filter((p) => p.ok).length} 家`, `${view.priorities.length} 条要点`, `${view.keywords.reduce((n, c) => n + c.items.length, 0)} 个关键词`, view.gaps.length > 0 ? `缺 ${view.gaps.length} 项事实` : ""].filter(Boolean)
         : [firstSentence(card.conclusion)];
       return { headline: sku || text(evidence.product_name) || card.title, facts };
+    }
+    case "digest": {
+      const view = digestCardView(evidence);
+      const warns = view ? view.findings.filter((f) => f.severity === "warn").length : 0;
+      const facts = view ? [view.dayFrom && view.dayTo ? `${view.dayFrom} ~ ${view.dayTo}` : "", warns > 0 ? `${warns} 条要看的异常` : "没有异常", `${view.sections.length} 节`].filter(Boolean) : [firstSentence(card.conclusion)];
+      return { headline: view?.week ? `${view.week} 运营看板` : card.title, facts };
     }
     default: {
       const step = text(evidence.step);

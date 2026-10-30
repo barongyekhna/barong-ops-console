@@ -35,9 +35,11 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot, seller_chat
+from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot, seller_chat, digest
 from .constants import (
     AGENT_USERNAME,
+    DIGEST_ALERTS_PER_DAY,
+    DIGEST_CARD_KIND,
     HEARTBEAT_INTERVAL_SECONDS,
     LA,
     MODULE_KEY,
@@ -134,8 +136,9 @@ def should_run_morning(*, now: datetime, last_plan: date | None) -> bool:
     return local.hour >= MORNING_HOUR and last_plan != local.date()
 
 
-def reminder_text(pending: int) -> str:
-    return f"老板,今天有 {pending} 张卡等你,在办公室里(右下角我的头像)。不急,你有空再看。"
+def reminder_text(pending: int, *, digest_cards: int = 0) -> str:
+    tail = "其中一张是本周运营看板,看过点「知道了」就行。" if digest_cards else ""
+    return f"老板,今天有 {pending} 张卡等你,在办公室里(右下角我的头像)。不急,你有空再看。{tail}"
 
 
 def decided_text(card: Any, *, changed: bool, decision: str, execution: dict[str, Any] | None = None) -> str:
@@ -196,6 +199,7 @@ def run_morning(db, *, now: datetime | None = None) -> dict[str, Any]:
     db.commit()
     snap = snapshot.build_snapshot(db, now=now)
     snapshot.save_snapshot(db, snap, now=now)
+    _save_day_digest(db, snap, now=now)
     memory.log_activity(db, f"快照:{snap.get('headline', '')}"[:500], kind="snapshot")
     db.commit()
 
@@ -237,6 +241,7 @@ def run_morning(db, *, now: datetime | None = None) -> dict[str, Any]:
             evidence=evidence,
         )
         created += int(is_new)
+    created += _ops_alert_cards(db, snap, today=today, raised=raised)
     memory.record(db, kind="plan", subject=f"{today.isoformat()} 计划", body=result.plan, refs={"role": result.role, "degraded": result.degraded})
     note = "(今天额度紧,用的是便宜档)" if result.degraded else ""
     memory.log_activity(db, f"今天的计划出好了,新卡 {created} 张{note}。", kind="plan")
@@ -247,6 +252,88 @@ def run_morning(db, *, now: datetime | None = None) -> dict[str, Any]:
     first_line = result.plan.splitlines()[0] if result.plan else "今天的计划出好了"
     _set_activity(db, "working", first_line[:300], None)
     return {"snapshot": snap.get("headline"), "plan": result.plan, "cards_created": created, "role": result.role, "settled": settled}
+
+
+def _save_day_digest(db, snap: dict[str, Any], *, now: datetime) -> None:
+    """运营看板(10-30):快照里 ops 节算好的昨日全量数落 sqh_digests(日报不发卡,面板和接口读这张表)。"""
+    ops = snap.get("ops")
+    if not isinstance(ops, dict) or not isinstance(ops.get("_payload"), dict):
+        return
+    payload = dict(ops["_payload"])
+    try:
+        payload["sections"] = digest.sections(payload)
+        digest.save(db, kind=digest.DAY, period_key=str(ops.get("day")), payload=payload, findings=list(ops.get("findings") or []), headline_text=str(ops.get("headline") or ""), now=now)
+    except Exception:  # noqa: BLE001 —— 看板存不上不挡早间计划
+        _LOGGER.exception("day digest save failed")
+        db.rollback()
+
+
+def _ops_alert_cards(db, snap: dict[str, Any], *, today: date, raised: set[str]) -> int:
+    """规则层的 warn → ops_alert 卡(一天最多 DIGEST_ALERTS_PER_DAY 张);issue=ops:<code>,异常消失那天 settle_issues 作废。"""
+    ops = snap.get("ops")
+    if not isinstance(ops, dict):
+        return 0
+    from sqlalchemy import func, select
+
+    from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
+    from .models import SqhCard
+
+    # 上限按「今天」算,不按这一次调用算:早间计划失败重试(一天最多三次)不能把提醒卡翻倍
+    already = int(db.scalar(select(func.count()).select_from(SqhCard).where(SqhCard.dedupe_key.like(f"issue:ops:%:{today.isoformat()}")), execution_options=SKIP_ORG_DATA_ISOLATION) or 0)
+    created = 0
+    for finding in ops.get("findings") or []:
+        if already + created >= DIGEST_ALERTS_PER_DAY:
+            break
+        if not isinstance(finding, dict) or finding.get("severity") != "warn" or not finding.get("code"):
+            continue
+        issue = f"ops:{finding['code']}"
+        if issue in raised:
+            continue
+        _, is_new = cards.create_card(
+            db,
+            dedupe_key=f"issue:{issue}:{today.isoformat()}",
+            kind="ops_alert",
+            title=f"运营看板:{str(finding.get('text') or finding['code'])[:40]}"[:60],
+            conclusion=str(finding.get("text") or ""),
+            why=f"昨天({ops.get('day')})的看板算出来的:{ops.get('headline', '')}",
+            if_not="这件事不处理,看板上的数会一直不准或者一直往下掉;我只报一次,好了自动作废。",
+            reversible=True,
+            confidence="high",
+            evidence={"snapshot_date": today.isoformat(), "issue": issue, "digest": ops.get("day"), "numbers": finding.get("numbers") or {}},
+        )
+        created += int(is_new)
+    return created
+
+
+def should_run_weekly(now: datetime, *, exists: bool) -> bool:
+    return digest.should_run_weekly(now, exists=exists)
+
+
+def run_weekly(db, *, now: datetime | None = None) -> dict[str, Any]:
+    """周一早上(或错过后的任何一天)把上一整周合成一张「只看不用批」的卡。返回摘要(验收脚本看)。"""
+    now = now or datetime.now(UTC)
+    key = digest.previous_week_key(now)
+    _set_activity(db, "thinking", f"在算 {key} 的运营看板…", 20)
+    db.commit()
+    row = digest.build_and_save(db, kind=digest.WEEK, period_key=key, now=now)
+    db.commit()
+    findings = [f for f in (row.findings or []) if isinstance(f, dict)]
+    why = "\n".join(f"{'⚠ ' if f.get('severity') == 'warn' else ''}{f.get('text')}" for f in findings) or "这周没有触发任何异常规则。"
+    card, is_new = cards.create_card(
+        db,
+        dedupe_key=f"digest:{key}",
+        kind=DIGEST_CARD_KIND,
+        title=f"{key} 运营看板"[:60],
+        conclusion=str(row.headline or ""),
+        why=why,
+        if_not="",
+        reversible=True,
+        confidence="high",
+        evidence={"week": key, "headline": row.headline, "sections": (row.payload or {}).get("sections") or [], "findings": findings, "day_from": (row.payload or {}).get("day_from"), "day_to": (row.payload or {}).get("day_to")},
+    )
+    memory.log_activity(db, f"{key} 的运营看板出好了{'(卡 #' + card.ref + ')' if is_new else '(卡已经有了)'}:{row.headline}"[:500], kind="plan")
+    db.commit()
+    return {"week": key, "headline": row.headline, "card_ref": card.ref, "card_new": is_new, "findings": len(findings)}
 
 
 def intake_links(db, links: list[tuple[str, str]], *, actor_user_id: str) -> str:
@@ -284,6 +371,9 @@ class SuqingheWorker:
         self.answered: list[str] = self.store.load_state("answered", [])
         self.owner_conversations: dict[str, str] = {}
         self._morning_day: date | None = None
+        self._weekly_day: date | None = None
+        self._weekly_attempts = 0
+        self._weekly_last: datetime | None = None
         self._morning_attempts = 0
         self._morning_last: datetime | None = None
         self._pick_day: date | None = None
@@ -421,7 +511,9 @@ class SuqingheWorker:
     def maybe_remind(self, db) -> bool:
         now = self.clock()
         state = office.get_state(db)
-        pending = len(cards.pending_cards(db))
+        pending_rows = cards.pending_cards(db)
+        pending = len(pending_rows)
+        digest_cards = sum(1 for c in pending_rows if c.kind == DIGEST_CARD_KIND)
         if not may_speak(now=now, pending=pending, last_spoke=state.last_spoke_date, muted_until=state.muted_until, paused=state.paused):
             return False
         if not self.online and not self.connect():
@@ -435,7 +527,7 @@ class SuqingheWorker:
             cid = self._owner_conversation(str(owner.id))
             if not cid:
                 continue
-            self.client.send_message(cid, text=reminder_text(pending), client_message_id=f"sqh-remind-{uuid.uuid4().hex[:20]}")
+            self.client.send_message(cid, text=reminder_text(pending, digest_cards=digest_cards), client_message_id=f"sqh-remind-{uuid.uuid4().hex[:20]}")
             sent = True
         if sent:
             memory.log_activity(db, f"在 C19 提醒了老板:{pending} 张卡待审。", kind="speak")
@@ -456,6 +548,19 @@ class SuqingheWorker:
             return False
         self._morning_attempts += 1
         self._morning_last = now
+        return True
+
+    def _weekly_attempt_allowed(self, now: datetime) -> bool:
+        """周报同理:一天最多 MORNING_MAX_ATTEMPTS 次,两次之间至少隔 MORNING_RETRY_MINUTES 分钟。"""
+        today = la_date(now)
+        if self._weekly_day != today:
+            self._weekly_day, self._weekly_attempts, self._weekly_last = today, 0, None
+        if self._weekly_attempts >= MORNING_MAX_ATTEMPTS:
+            return False
+        if self._weekly_last is not None and now - self._weekly_last < timedelta(minutes=MORNING_RETRY_MINUTES):
+            return False
+        self._weekly_attempts += 1
+        self._weekly_last = now
         return True
 
     def _pick_attempt_allowed(self, now: datetime) -> bool:
@@ -481,6 +586,9 @@ class SuqingheWorker:
             now = self.clock()
             if should_run_morning(now=now, last_plan=state.last_plan_date) and self._morning_attempt_allowed(now):
                 run_morning(db, now=now)
+            # 运营看板(10-30):周一 07:00 后把上周合成一张卡;错过了哪天补哪天
+            if should_run_weekly(now, exists=digest.exists(db, kind=digest.WEEK, period_key=digest.previous_week_key(now))) and self._weekly_attempt_allowed(now):
+                run_weekly(db, now=now)
             handle_dictations(db)
             # 1688 → K 档案:一轮最多一单,节流在 dossiers.process_next 里。
             dossiers.process_next(db, now=now)
@@ -574,6 +682,22 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     args = list(sys.argv[1:] if argv is None else argv)
+    if any(a.startswith("--backfill-digests") for a in args):
+        arg = next(a for a in args if a.startswith("--backfill-digests"))
+        days = int(arg.split("=", 1)[1]) if "=" in arg else 30
+        db = SessionLocal()
+        try:
+            print(digest.backfill(db, days=days, weeks=4))
+        finally:
+            db.close()
+        return 0
+    if "--run-weekly-now" in args:
+        db = SessionLocal()
+        try:
+            print(run_weekly(db))
+        finally:
+            db.close()
+        return 0
     if "--run-morning-now" in args:
         db = SessionLocal()
         try:

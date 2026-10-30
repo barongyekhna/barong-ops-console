@@ -986,6 +986,16 @@
   --family: var(--color-muted);
 }
 
+/* 运营看板周报(10-30):只看不用批,用主色但不抢眼 */
+.inboxGroup[data-family="digest"],
+.sheet[data-family="digest"],
+.stamp[data-family="digest"],
+.sheetThumb[data-family="digest"],
+.dossierThumb[data-family="digest"],
+.dossierPage[data-family="digest"] {
+  --family: var(--color-primary);
+}
+
 .groupTab {
   display: flex;
   align-items: center;
@@ -1417,4 +1427,36 @@
   .browserDot {
     animation: none;
   }
+}
+
+/* 运营看板(10-30):异常条 + 每节一张小表(复用 scoreTable);warn 用告警色,info 用常规色;变化量一列压暗 */
+.digestFindings {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  display: grid;
+  gap: 2px;
+}
+
+.digestFindings li[data-severity="warn"] {
+  color: var(--color-warning);
+}
+
+.digestDelta {
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.digestHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.digestHead b {
+  color: var(--color-text-strong);
+  font-weight: 600;
 }

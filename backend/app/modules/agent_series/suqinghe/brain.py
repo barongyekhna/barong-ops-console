@@ -141,6 +141,10 @@ def issues_in(snapshot: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], set[
         readable.add("approvals")
         if approvals.get("pending"):
             live["approvals"] = {}
+    ops = snapshot.get("ops")  # 运营看板(10-30)的规则层异常:ops:<code>;异常消失那天 settle_issues 自动作废卡
+    if isinstance(ops, dict) and isinstance(ops.get("findings"), list):
+        readable.add("ops")
+        live.update({f"ops:{f['code']}": {} for f in ops["findings"] if isinstance(f, dict) and f.get("code") and f.get("severity") == "warn"})
     return live, readable
 
 
