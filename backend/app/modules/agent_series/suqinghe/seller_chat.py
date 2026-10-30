@@ -9,6 +9,8 @@ worker 每轮 poll_all():到点开旺旺读消息 → 新回复交给便宜模�
 状态都在 draft["seller_chat"],没有迁移。开关 SQH_SELLER_CHAT(默认关)。
 卖家回图(标签照片/规格表截图/称重照片):浏览器带登录态把图下到 browser-dumps/seller-chat/,交读图档(fast=Haiku)转成文字,
 和文字回复一起给抽数模型;一张都没读出字就继续等。语音在 1688 几乎不存在,不管。
+卖家反问(10-30 老板拍板):答非所问/不说人话的不追问(「这种卖家不合作」);只有问「哪个款式/规格」「要多少件」这两类才回一句固定话,
+一单只一次,不占每天 5 家的额度,永不发第三句。
 """
 
 from __future__ import annotations
@@ -37,8 +39,17 @@ PARSE_ASK = (
     "Map the reply onto the variants listed. Reply JSON only: "
     '{"answers": [{"key": "v1", "weight_g": 350, "dims_cm": [12, 8, 6], "units_per_carton": 50}], "unclear": false}. '
     "Omit any field the seller did not state; omit variants the seller did not cover. weight in grams, dims in cm. "
-    "If the seller gave one figure for all variants, apply it to every variant. If nothing usable was said, return {\"answers\": [], \"unclear\": true}."
+    "If the seller gave one figure for all variants, apply it to every variant. If nothing usable was said, return {\"answers\": [], \"unclear\": true}. "
+    "Also report whether the seller asked us a clarifying question we should answer, in \"seller_question\": "
+    '{"kind": "which_variant" | "quantity" | "other" | "none", "quote": "<the seller\'s question verbatim, or empty>"}. '
+    "which_variant = they ask which model/spec/style we mean or tell us to pick one; quantity = they ask how many pieces we want; "
+    "other = some other real question; none = no question (greetings, auto-replies, '1', 'looking at it' are none)."
 )
+# 卖家反问有用的问题(老板 10-30 拍板):只认两类,各一句固定话,一单只追答一次,永不发第三句;答非所问的不理。
+FOLLOW_UP_TEMPLATES = {
+    "which_variant": "就是这个链接的商品:{offer_url} 。要确认的是 {specs} 这几个规格,每个的包装重量(克)、包装尺寸(长宽高 cm)、一箱装几个,麻烦了。",
+    "quantity": "数量要看尺寸重量算好运费才能定,先按起订量了解。麻烦先告诉我 {specs} 每个的包装重量(克)、包装尺寸(长宽高 cm)、一箱装几个,谢谢。",
+}
 USAGE_LABEL = "sqh_seller_chat"
 IMAGE_ASK = (
     "This is a photo or screenshot a 1688 supplier sent in chat, answering our question about each variant's package weight (grams), "
@@ -244,6 +255,29 @@ def parse_answers(data: Any, variants: list[dict[str, Any]]) -> dict[str, dict[s
     return out
 
 
+def parse_question(data: Any) -> dict[str, str] | None:
+    """抽数模型顺带报的「卖家反问」:只认 which_variant / quantity 两类(老板口径),其余当没问。"""
+    if not isinstance(data, dict) or not isinstance(data.get("seller_question"), dict):
+        return None
+    kind = str(data["seller_question"].get("kind") or "").strip()
+    if kind not in FOLLOW_UP_TEMPLATES:
+        return None
+    return {"kind": kind, "quote": str(data["seller_question"].get("quote") or "")[:200]}
+
+
+def follow_up_text(kind: str, variants: list[dict[str, Any]], offer_url: str) -> str:
+    """固定话术,不生成。规格太多只点前几个。"""
+    names = [str(v.get("name_zh") or "").strip() for v in variants if isinstance(v, dict) and str(v.get("name_zh") or "").strip()]
+    shown: list[str] = []
+    for name in names:
+        candidate = "、".join([*shown, name])
+        if len(FOLLOW_UP_TEMPLATES[kind].format(offer_url=offer_url, specs=candidate)) > QUESTION_MAX - 30:
+            break
+        shown.append(name)
+    specs = "、".join(shown) + (f" 等共 {len(names)} 个" if len(names) > len(shown) else "")
+    return FOLLOW_UP_TEMPLATES[kind].format(offer_url=offer_url, specs=specs or "链接里的每个规格")[:QUESTION_MAX]
+
+
 def apply_answers(variants: list[dict[str, Any]], answers: dict[str, dict[str, Any]], *, asked_at: str) -> int:
     """写回规格:source=seller_said、weight_source_note=「卖家口头」。只盖卖家说了的字段。返回改了几个规格。"""
     changed = 0
@@ -356,8 +390,9 @@ def due(chat: dict[str, Any], *, now: datetime) -> bool:
 
 
 def timed_out(chat: dict[str, Any], *, now: datetime) -> bool:
+    """等满 N 小时没回就超时;追答过一次的从追答那一刻重新数。"""
     try:
-        asked = datetime.fromisoformat(str(chat.get("asked_at")))
+        asked = datetime.fromisoformat(str((chat.get("follow_up") or {}).get("at") or chat.get("asked_at")))
     except (TypeError, ValueError):
         return True
     return (now - asked).total_seconds() >= seller_chat_wait_hours() * 3600
@@ -370,7 +405,31 @@ def _retire_price_card(db: Session, dossier: SqhDossier, *, reason: str) -> bool
     return bool(card is not None and card.status == "pending" and cards.retire(db, card, reason=reason))
 
 
-def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None, image_reader: Callable[[Session, str, bytes], Any] | None = None) -> str:
+def _follow_up(db: Session, dossier: SqhDossier, chat: dict[str, Any], question: dict[str, str], variants: list[dict[str, Any]], *, now: datetime, send: Callable[..., dict[str, Any]] | None) -> str | None:
+    """卖家反问有用的问题:回一句固定话(一单只一次),底账换成发完那一刻的全部消息,等待时间从现在重新数。不占每天 5 家的台账。
+    发不出去(浏览器没开/正等老板/没发成)就当没追,照旧等。"""
+    draft = dossier.draft if isinstance(dossier.draft, dict) else {}
+    offer_url = str(draft.get("source_url") or dossier.source_url)
+    text = follow_up_text(question["kind"], variants, offer_url)
+    if send is None:
+        if not browser.enabled() or browser.holding():
+            return None
+        send = lambda **kw: browser.get().ask_seller(**kw)  # noqa: E731
+    try:
+        result = send(offer_url=offer_url, login_id=chat.get("login_id") or None, offer_id=str(dossier.offer_id), text=text, dossier_id=dossier.id)
+    except Exception as exc:  # noqa: BLE001 —— 追答没发成不算追过,下轮若还没数就再试一次;记一笔
+        memory.log_activity(db, f"1688 {dossier.offer_id}:卖家反问「{question['quote'][:40]}」,我想回一句没发成({str(exc)[:60]})。", kind="error")
+        return None
+    chat["follow_up"] = {"at": now.isoformat(), "kind": question["kind"], "quote": question["quote"], "text": text, "dump": result.get("dump")}
+    chat["baseline"] = [{"nick": m.get("nick"), "time": m.get("time"), "text": m.get("text"), "images": [{"url": u} for u in (m.get("images") or []) if isinstance(u, str)] or [{"url": i.get("url")} for i in (m.get("images") or []) if isinstance(i, dict)]} for m in (result.get("messages") or []) if isinstance(m, dict)][-50:]
+    chat["checked_at"] = now.isoformat()
+    _save_chat(db, dossier, chat)
+    memory.log_activity(db, f"1688 {dossier.offer_id}:卖家反问「{question['quote'][:40]}」,我回了一句({'说明是哪几个规格' if question['kind'] == 'which_variant' else '先按起订量了解'}),接着等,不再追第二次。", kind="work")
+    db.commit()
+    return "followed_up"
+
+
+def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None, image_reader: Callable[[Session, str, bytes], Any] | None = None, send: Callable[..., dict[str, Any]] | None = None) -> str:
     """看一份档案的旺旺:超时 → timeout;有新回复 → 抽数写回规格、作废旧价格卡;没回 → 记下看过的时间。返回做了什么。"""
     from .brain import parse_json
 
@@ -406,9 +465,15 @@ def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[
         db.commit()
         return "unclear"
     result = (judge or _judge)(db, f"{PARSE_ASK}\n\nVariants:\n{listing}\n\nOur question:\n{chat.get('question') or ''}\n\nSeller reply:\n{reply_text(replies)}")
-    answers = parse_answers(parse_json(result), variants)
+    data = parse_json(result)
+    answers = parse_answers(data, variants)
     if not answers:
-        _save_chat(db, dossier, chat)  # 回了但没说到数(客套/反问):继续等
+        question = parse_question(data)
+        if question and not chat.get("follow_up"):
+            outcome = _follow_up(db, dossier, chat, question, variants, now=now, send=send)
+            if outcome:
+                return outcome
+        _save_chat(db, dossier, chat)  # 回了但没说到数(客套/答非所问):继续等,不追问(老板:这种卖家不合作)
         memory.log_activity(db, f"1688 {offer}:卖家回了话{f'和 {pictures} 张图(读出 {read} 张)' if pictures else ''}但没给重量尺寸,我再等等。", kind="work")
         db.commit()
         return "unclear"
@@ -421,7 +486,7 @@ def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[
     return "answered"
 
 
-def poll_all(db: Session, *, now: datetime | None = None, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None, image_reader: Callable[[Session, str, bytes], Any] | None = None) -> str | None:
+def poll_all(db: Session, *, now: datetime | None = None, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None, image_reader: Callable[[Session, str, bytes], Any] | None = None, send: Callable[..., dict[str, Any]] | None = None) -> str | None:
     """worker 每轮叫一次:到点的档案里挑一份去旺旺看。一轮最多一单(开旺旺要几十秒)。"""
     from . import pipeline
 
@@ -435,7 +500,7 @@ def poll_all(db: Session, *, now: datetime | None = None, read: Callable[..., li
         if not timed_out(chat, now=now) and read is None and (not browser.enabled() or browser.holding()):
             return None  # 浏览器没开 / 正等老板:下轮再看
         try:
-            return poll_one(db, dossier, now=now, read=read, judge=judge, image_reader=image_reader)
+            return poll_one(db, dossier, now=now, read=read, judge=judge, image_reader=image_reader, send=send)
         except browser.SellerChatBlocked:
             db.rollback()
             return "blocked"

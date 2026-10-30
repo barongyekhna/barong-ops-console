@@ -162,6 +162,19 @@ def test_poll_one_reads_pictures_before_extracting_and_waits_when_nothing_is_leg
     assert dossier.draft["seller_chat"]["replies"][0]["images"][0]["read"].startswith("2000mAh")
 
 
+def test_follow_up_only_for_the_two_useful_question_kinds() -> None:
+    assert seller_chat.parse_question({"answers": [], "seller_question": {"kind": "which_variant", "quote": "你问的是什么款式?"}}) == {"kind": "which_variant", "quote": "你问的是什么款式?"}
+    assert seller_chat.parse_question({"seller_question": {"kind": "quantity", "quote": "要多少件?"}})["kind"] == "quantity"
+    for bad in ({"seller_question": {"kind": "other", "quote": "能便宜点吗"}}, {"seller_question": {"kind": "none", "quote": ""}}, {"answers": []}, None, {"seller_question": "which_variant"}):
+        assert seller_chat.parse_question(bad) is None
+    url = "https://detail.1688.com/offer/643348607768.html"
+    text = seller_chat.follow_up_text("which_variant", [{"name_zh": "2000mah"}, {"name_zh": "2500mah"}], url)
+    assert text == f"就是这个链接的商品:{url} 。要确认的是 2000mah、2500mah 这几个规格,每个的包装重量(克)、包装尺寸(长宽高 cm)、一箱装几个,麻烦了。"
+    assert seller_chat.follow_up_text("quantity", [], url).startswith("数量要看尺寸重量算好运费才能定") and "链接里的每个规格" in seller_chat.follow_up_text("quantity", [], url)
+    many = seller_chat.follow_up_text("which_variant", [{"name_zh": f"规格{i}号超长名字" * 3} for i in range(60)], url)
+    assert len(many) <= seller_chat.QUESTION_MAX and "等共 60 个" in many
+
+
 # ---------------------------------------------------------------- 落库那一段(假 db / 假档案)
 
 
@@ -230,6 +243,51 @@ def test_poll_one_waits_then_writes_the_answers_back_and_retires_the_price_card(
     assert chat["status"] == "answered" and chat["answers"]["v1"]["weight_g"] == 350.0
     assert dossier.draft["variants"][0]["source"] == "seller_said" and dossier.draft["variants"][1]["dims_cm"] == [12.0, 8.0, 6.0]
     assert retired == ["卖家回了重量尺寸,按新数重出"] and "v1: 黑" in prompts[0] and "黑的 350 克" in prompts[0]
+
+
+def test_seller_counter_question_gets_exactly_one_fixed_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """老板 10-30:答非所问不追;问「哪个款式/多少件」回一句固定话,一单只一次,等待从追答重新数。"""
+    monkeypatch.setenv("SQH_SELLER_CHAT_WAIT_HOURS", "24")
+    asked = NOW - timedelta(hours=23)
+    draft = {
+        "variants": [{"name_zh": "2000mah", "cost_price_cny": 39}, {"name_zh": "2500mah", "cost_price_cny": 49}],
+        "seller_chat": {"status": "asked", "asked_at": asked.isoformat(), "checked_at": asked.isoformat(), "im_url": "https://air.1688.com/x", "login_id": "湖南来美电子", "question": "您好…", "baseline": []},
+    }
+    dossier, db = FakeDossier(draft), FakeDb()
+    sent: list[dict[str, Any]] = []
+
+    def send(**kw):
+        sent.append(kw)
+        return {"ok": True, "im_url": "https://air.1688.com/x", "login_id": kw["login_id"], "dump": "/d", "messages": [{"self": False, "nick": "卖家", "time": "t2", "text": "你要哪个款?", "images": []}, {"self": True, "nick": "我", "time": "t3", "text": kw["text"], "images": []}]}
+
+    # 1. 答非所问:不追
+    nonsense = [{"self": False, "nick": "卖家", "time": "t1", "text": "1", "images": []}]
+    assert seller_chat.poll_one(db, dossier, now=NOW, read=lambda **kw: nonsense, judge=lambda db, p: {"answers": [], "unclear": True, "seller_question": {"kind": "none", "quote": ""}}, send=send) == "unclear"
+    assert sent == [] and "follow_up" not in dossier.draft["seller_chat"]
+    # 2. 有用的反问:回一句固定话,底账换成发完那一刻,等待重新数
+    dossier.draft["seller_chat"]["checked_at"] = asked.isoformat()
+    asking = [{"self": False, "nick": "卖家", "time": "t2", "text": "你要哪个款?", "images": []}]
+    out = seller_chat.poll_one(db, dossier, now=NOW, read=lambda **kw: asking, judge=lambda db, p: {"answers": [], "seller_question": {"kind": "which_variant", "quote": "你要哪个款?"}}, send=send)
+    assert out == "followed_up" and len(sent) == 1
+    assert sent[0]["login_id"] == "湖南来美电子" and sent[0]["offer_id"] == "643348607768" and sent[0]["text"].startswith("就是这个链接的商品:https://detail.1688.com/offer/643348607768.html") and "2000mah、2500mah" in sent[0]["text"]
+    chat = dossier.draft["seller_chat"]
+    assert chat["status"] == "asked" and chat["follow_up"]["kind"] == "which_variant" and chat["follow_up"]["quote"] == "你要哪个款?"
+    assert [m["text"] for m in chat["baseline"]] == ["你要哪个款?", sent[0]["text"]]  # 旧的反问不会再被当新回复
+    assert not seller_chat.timed_out(chat, now=NOW + timedelta(hours=2))  # 原本 1 小时后就超时,追答后重新数
+    assert seller_chat.timed_out(chat, now=NOW + timedelta(hours=25))
+    # 3. 再反问也不追第二次
+    chat["checked_at"] = asked.isoformat()
+    again = asking + [{"self": False, "nick": "卖家", "time": "t4", "text": "要多少件?", "images": []}]
+    assert seller_chat.poll_one(db, dossier, now=NOW, read=lambda **kw: again, judge=lambda db, p: {"answers": [], "seller_question": {"kind": "quantity", "quote": "要多少件?"}}, send=send) == "unclear"
+    assert len(sent) == 1
+    # 4. 没发成不算追过
+    d2 = FakeDossier({"variants": [{"name_zh": "黑"}], "seller_chat": {"status": "asked", "asked_at": asked.isoformat(), "checked_at": asked.isoformat(), "im_url": "x", "login_id": "a", "baseline": []}})
+
+    def fail(**kw):
+        raise browser.SellerChatError("点了发送没出现")
+
+    assert seller_chat.poll_one(db, d2, now=NOW, read=lambda **kw: asking, judge=lambda db, p: {"answers": [], "seller_question": {"kind": "quantity", "quote": "要多少件?"}}, send=fail) == "unclear"
+    assert "follow_up" not in d2.draft["seller_chat"]
 
 
 def test_poll_one_times_out_after_the_wait_and_the_card_goes_out_as_usual(monkeypatch: pytest.MonkeyPatch) -> None:
