@@ -302,6 +302,13 @@ class FakeFrame:
         return Loc()
 
     def evaluate(self, script: str) -> Any:
+        if script == browser.IM_COUNT_JS:
+            self.count_calls = getattr(self, "count_calls", 0) + 1
+            if getattr(self, "slow_load", 0) and self.count_calls <= self.slow_load:
+                return 0  # 前几次还没拉出来
+            return len(self.messages)
+        if script == browser.IM_EMPTY_JS:
+            return not self.messages and not getattr(self, "slow_load", 0)
         return list(self.messages)
 
     def content(self) -> str:
@@ -426,6 +433,31 @@ def test_browser_downloads_the_sellers_pictures_with_the_login_cookies(im_sessio
     third = msgs[2]["images"]
     assert third[0]["path"] is None and third[1]["path"].endswith("img-2.png") and Path(third[1]["path"]).exists()
     assert "-reply-643348607768" in second[0]["path"] and str(tmp) in second[0]["path"]
+
+
+def test_browser_waits_for_the_chat_history_to_load_before_reading(im_session) -> None:
+    """10-30 实况:她等 1.5 秒就读列表,读到空的,把卖家四条回复全漏了。要等列表拉完并稳定;等不到就报错,不当「没回」。"""
+    sess, page, ctx, store, tmp = im_session
+    original_goto = page.goto
+
+    def goto(url: str, **kw: Any) -> None:
+        original_goto(url, **kw)
+        page.im_frame.slow_load = 3  # 前三次数都是 0
+        page.im_frame.messages = [{"self": False, "nick": "湖南来美电子", "time": "2026-10-30 01:07:12", "text": "1", "images": []}, {"self": False, "nick": "湖南来美电子", "time": "2026-10-30 01:07:34", "text": "我在看这个商品", "images": []}]
+
+    page.goto = goto
+    msgs = sess.read_seller_chat(im_url=browser.im_url("湖南来美电子", "643348607768"), offer_id="643348607768")
+    assert [m["text"] for m in msgs] == ["1", "我在看这个商品"] and page.im_frame.count_calls >= 5
+
+    def goto_never(url: str, **kw: Any) -> None:
+        original_goto(url, **kw)
+        page.im_frame.slow_load = 10_000
+        page.im_frame.messages = []
+
+    page.goto = goto_never
+    with pytest.raises(browser.SellerChatError, match="没拉出来"):
+        sess.read_seller_chat(im_url=browser.im_url("湖南来美电子", "1"), timeout_s=5)
+    assert sess.status == "idle"
 
 
 def test_browser_holds_for_the_boss_when_wangwang_wants_a_login(im_session) -> None:

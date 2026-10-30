@@ -82,6 +82,9 @@ IM_MESSAGES_JS = """() => Array.from(document.querySelectorAll('.message-list .m
     images: images.slice(0, 6)
   };
 })"""
+IM_COUNT_JS = "() => document.querySelectorAll('.message-list .message-item').length"
+IM_EMPTY_JS = "() => !!document.querySelector('.message-list .message-list-empty')"
+MESSAGES_SETTLE_S = 20.0  # 聊天记录是页面开了之后才拉的(10-30 实况:等 1.5 秒读到空列表,把卖家四条回复全漏了)
 REPLY_IMAGES_PER_MESSAGE = 3  # 卖家一条消息里最多下几张
 REPLY_IMAGES_PER_READ = 6  # 一次读聊天最多下几张
 REPLY_IMAGE_MAX_BYTES = 8 * 1024 * 1024
@@ -663,6 +666,26 @@ class BrowserSession(threading.Thread):
             page.wait_for_timeout(500)
         raise SellerChatError("旺旺聊天窗没出来")
 
+    def _wait_messages(self, page: Any, frame: Any, timeout_s: float = MESSAGES_SETTLE_S) -> int:
+        """等消息列表拉完:出现消息(或「暂无消息」的空态)且条数连着两秒不再变。等不到就报错,别把空列表当「没回」。"""
+        deadline = time.monotonic() + timeout_s
+        last, stable = -1, 0
+        while time.monotonic() < deadline:
+            try:
+                count = int(frame.evaluate(IM_COUNT_JS) or 0)
+                empty = bool(frame.evaluate(IM_EMPTY_JS))
+            except Exception:  # noqa: BLE001 —— frame 还在换页
+                count, empty = 0, False
+            if (count > 0 or empty) and count == last:
+                stable += 1
+                if stable >= 2:
+                    return count
+            else:
+                stable = 0
+            last = count
+            page.wait_for_timeout(1000)
+        raise SellerChatError("旺旺的聊天记录没拉出来(等了 %.0f 秒)" % timeout_s)
+
     def _shot(self, page: Any, path: str) -> None:
         try:
             page.screenshot(path=path)
@@ -689,6 +712,10 @@ class BrowserSession(threading.Thread):
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             self._guard_blocked(page, "开旺旺")
             frame = self._im_frame(page, min(45.0, timeout_s))
+            try:
+                self._wait_messages(page, frame)  # 底账要包含已有的历史,不然卖家旧消息会被当成新回复
+            except SellerChatError:
+                pass  # 发问不因历史拉不出来而放弃;发完会再读一次列表
             frame.click(IM_SELECTORS["input"])
             page.keyboard.type(text[:IM_QUESTION_MAX], delay=15)
             page.wait_for_timeout(300)
@@ -723,7 +750,7 @@ class BrowserSession(threading.Thread):
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             self._guard_blocked(page, "开旺旺")
             frame = self._im_frame(page, min(45.0, timeout_s))
-            page.wait_for_timeout(1500)  # 消息列表是后拉的
+            self._wait_messages(page, frame, timeout_s=min(MESSAGES_SETTLE_S, timeout_s))
             self._refresh_login()
             messages = list(frame.evaluate(IM_MESSAGES_JS) or [])
             return self._fetch_reply_images(page, messages, offer_id)
