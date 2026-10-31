@@ -182,3 +182,36 @@ def test_week_digest_carries_search_console_data_when_pulled(seeded) -> None:
         db.execute(delete(SqhGscDaily))
         db.execute(delete(SqhGscDay))
         db.commit()
+
+
+def test_search_console_key_is_read_through_the_console_binding(seeded) -> None:
+    """10-31:钥匙按控制台家规走——密钥管理登记一把 google_search_console,绑到 w.site_ops/google_search_console,她就读得到;
+    不绑读不到(当「没接」),绑错类型也读不到。原来走 SecretManager,白名单里没这一类,登记了照样读不到。"""
+    import json as _json
+
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from backend.app.models.api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
+    from backend.app.modules.agent_series.suqinghe import gsc
+    from backend.app.schemas.api_key_orchestration import ApiKeyBindingCreateRequest, ApiKeyCreateRequest
+    from backend.app.services import api_key_orchestration as keys
+
+    pem = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+    raw = _json.dumps({"type": "service_account", "project_id": "p", "private_key_id": "x", "private_key": pem, "client_email": "sqh@p.iam.gserviceaccount.com", "token_uri": "https://oauth2.googleapis.com/token"})
+    actor = str(seeded["owner"])
+    with without_org_data_isolation(), SessionLocal() as db:
+        try:
+            with pytest.raises(gsc.GscNotConfigured):
+                gsc.credentials(db)
+            key = keys.create_api_key(db, org_id=TRADE_ORG_ID, payload=ApiKeyCreateRequest(name="Search Console 服务账号", url="https://searchconsole.googleapis.com", key_value=raw, key_type="google_search_console"), actor_user_id=actor)
+            with pytest.raises(gsc.GscNotConfigured):  # 登记了没绑 = 还没接
+                gsc.credentials(db)
+            keys.create_api_key_binding(db, org_id=TRADE_ORG_ID, payload=ApiKeyBindingCreateRequest(module_id=gsc.BINDING_MODULE_ID, key_id=key.key_id, key_alias=gsc.BINDING_KEY_ALIAS), actor_user_id=actor)
+            account = gsc.credentials(db)
+            assert account.client_email == "sqh@p.iam.gserviceaccount.com" and "PRIVATE KEY" in account.private_key_pem
+        finally:
+            db.rollback()
+            db.execute(delete(ApiKeyModuleBindingRecord).where(ApiKeyModuleBindingRecord.org_id == TRADE_ORG_ID))
+            db.execute(delete(ApiKeyRecord).where(ApiKeyRecord.org_id == TRADE_ORG_ID))
+            db.commit()

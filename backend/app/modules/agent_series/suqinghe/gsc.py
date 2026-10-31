@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 _X = SKIP_ORG_DATA_ISOLATION
 
 KEY_TYPE = "google_search_console"
+BINDING_MODULE_ID = "w.site_ops"  # 钥匙绑到 W 站点运营模块(和 17TRACK 同一处)
+BINDING_KEY_ALIAS = "google_search_console"
 SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
 API_ROOT = "https://searchconsole.googleapis.com/webmasters/v3"
 ROW_LIMIT = 5000
@@ -58,16 +60,25 @@ class GscError(RuntimeError):
 
 
 def credentials(db: Session) -> ServiceAccount:
+    """钥匙按控制台家规取:密钥管理里登记 + 绑到 w.site_ops / google_search_console(贸易组织)。
+    10-31 修:原来走 SecretManager,它的服务白名单里没有这一类,登记了也读不到。"""
     from ...w_series.logistics import _target_org_id
-    from r_system_v2.core.secret_manager import SecretManager
+    from ....services.api_key_orchestration import (
+        ApiKeyIsolationError,
+        ApiKeyOrchestrationError,
+        resolve_module_api_key_for_injection,
+    )
 
     org_id = _target_org_id(db)
     if not org_id:
         raise GscNotConfigured("贸易组织不存在")
     try:
-        raw = SecretManager(db_session=db).get_key(KEY_TYPE, org_id)
-    except Exception as exc:  # noqa: BLE001 —— 没这把钥匙(或没绑)
+        context = resolve_module_api_key_for_injection(db, org_id=org_id, module_id=BINDING_MODULE_ID, key_alias=BINDING_KEY_ALIAS)
+    except (ApiKeyIsolationError, ApiKeyOrchestrationError) as exc:
         raise GscNotConfigured(f"没有 Search Console 钥匙:{str(exc)[:80]}") from exc
+    if str(context.key_type or "").strip().lower() != KEY_TYPE:
+        raise GscNotConfigured(f"绑在 {BINDING_MODULE_ID}/{BINDING_KEY_ALIAS} 的钥匙类型不对:{context.key_type}")
+    raw = str(context.header_value or "").strip()
     if not raw:
         raise GscNotConfigured("Search Console 钥匙为空")
     try:

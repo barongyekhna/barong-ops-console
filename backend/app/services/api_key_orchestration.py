@@ -76,6 +76,7 @@ K_SERIES_PROVIDER_ALIASES = ("serp", "chatgpt", "claude_opus", "deepseek")
 R_WAREHOUSE_MODULE_ID = "r.warehouse"
 KEEPA_KEY_TYPE = "keepa"
 ANTHROPIC_KEY_TYPE = "anthropic"
+GOOGLE_SEARCH_CONSOLE_KEY_TYPE = "google_search_console"
 # A 系列 JSON 凭据:secret 是一行 JSON,注入时原样给(不套 Bearer),调用方自己 json.loads。
 AMAZON_JSON_KEY_TYPES = frozenset({"amazon_sp_api", "amazon_ads_api"})
 AMAZON_JSON_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
@@ -855,6 +856,12 @@ def _injection_context_from_binding(
         query_param_value = None
     elif key_type in AMAZON_JSON_KEY_TYPES:
         header_name = AMAZON_CREDENTIAL_HEADER
+        header_value = secret_value
+        query_param_name = None
+        query_param_value = None
+    elif key_type == GOOGLE_SEARCH_CONSOLE_KEY_TYPE:
+        # 服务账号 JSON 原样给调用方(它自己签 JWT 换 token),别包成 Bearer。
+        header_name = "X-Google-Service-Account-Json"
         header_value = secret_value
         query_param_name = None
         query_param_value = None
