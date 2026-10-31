@@ -1724,6 +1724,38 @@ MAX_RENDER_SIDE = 1500
 _WEBP_QUALITY = 82
 
 
+def _resize_for_placement(img: Any, placement: str) -> Any:
+    """gallery 定尺 1500×1500,其余图最长边压到 1500。已经是目标尺寸就原样返回。"""
+    from PIL import Image
+
+    if placement == PLACEMENT_GALLERY:
+        if img.size != (GALLERY_TARGET_SIDE, GALLERY_TARGET_SIDE):
+            img = img.resize(
+                (GALLERY_TARGET_SIDE, GALLERY_TARGET_SIDE),
+                Image.LANCZOS,
+            )
+    elif max(img.size) > MAX_RENDER_SIDE:
+        ratio = MAX_RENDER_SIDE / max(img.size)
+        img = img.resize(
+            (max(1, round(img.width * ratio)), max(1, round(img.height * ratio))),
+            Image.LANCZOS,
+        )
+    return img
+
+
+def _resize_base_png(contents: bytes, placement: str) -> bytes:
+    """先放大、后叠字(10-31 家规):底版先无损缩放到最终尺寸(PNG),信息层再叠上去,字永远是成品分辨率。"""
+    from io import BytesIO
+
+    from PIL import Image
+
+    with Image.open(BytesIO(contents)) as img:
+        img = _resize_for_placement(img.convert("RGB"), placement)
+        buffer = BytesIO()
+        img.save(buffer, format="PNG")
+        return buffer.getvalue()
+
+
 def _postprocess_rendered_image(
     contents: bytes,
     placement: str,
@@ -1734,21 +1766,55 @@ def _postprocess_rendered_image(
     from PIL import Image
 
     with Image.open(BytesIO(contents)) as img:
-        img = img.convert("RGB")
-        if placement == PLACEMENT_GALLERY:
-            img = img.resize(
-                (GALLERY_TARGET_SIDE, GALLERY_TARGET_SIDE),
-                Image.LANCZOS,
-            )
-        elif max(img.size) > MAX_RENDER_SIDE:
-            ratio = MAX_RENDER_SIDE / max(img.size)
-            img = img.resize(
-                (max(1, round(img.width * ratio)), max(1, round(img.height * ratio))),
-                Image.LANCZOS,
-            )
+        img = _resize_for_placement(img.convert("RGB"), placement)
         buffer = BytesIO()
         img.save(buffer, format="WEBP", quality=_WEBP_QUALITY, method=6)
         return buffer.getvalue(), "image/webp", img.width, img.height
+
+
+# L0 = 模型(或 Codex 通道)交回来的原图,叠字、缩放之前的那一份,无损 PNG 存一份(10-31 作图家规)。
+# 这是这张图唯一允许再送回生图模型的一层:「在这版基础上改」只送 L0,永不送叠过字/压过 WebP 的成图。
+L0_DIRNAME = "k-render-l0"
+
+
+def _store_l0(root: Path, product_part: str, variant_part: str, stem: str, contents: bytes) -> dict[str, Any]:
+    """把底版原样存成 PNG(不是 PNG 的先无损转 PNG)。返回写进 metadata 的几个键。"""
+    from io import BytesIO
+
+    from PIL import Image
+
+    with Image.open(BytesIO(contents)) as img:
+        width, height = img.size
+        if (img.format or "").upper() == "PNG":
+            png = contents
+        else:
+            buffer = BytesIO()
+            img.convert("RGBA" if "A" in img.getbands() else "RGB").save(buffer, format="PNG")
+            png = buffer.getvalue()
+    object_key = f"images/{product_part}/{variant_part}/{L0_DIRNAME}/{stem}-l0.png"
+    path = write_media_file(root, object_key, png)
+    return {
+        "l0_object_key": object_key,
+        "l0_path": str(path),
+        "l0_sha256": hashlib.sha256(png).hexdigest(),
+        "l0_width": width,
+        "l0_height": height,
+    }
+
+
+def l0_bytes(asset: KProductKnowledgeMediaAsset) -> tuple[str, bytes, str] | None:
+    """一张成图的 L0(文件名, 字节, mime)。老图没存 L0 → None。"""
+    meta = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
+    key = str(meta.get("l0_object_key") or "").strip()
+    if not key:
+        return None
+    path = _media_storage_root_path() / key
+    try:
+        data = path.read_bytes()
+    except OSError:
+        _LOGGER.warning("L0 file missing for asset %s: %s", asset.id, key)
+        return None
+    return (path.name, data, "image/png")
 
 
 def _store_render_asset(
@@ -1766,6 +1832,14 @@ def _store_render_asset(
     plate_meta: dict[str, Any] | None = None,
 ) -> KProductKnowledgeMediaAsset:
     del mime_type, width, height  # superseded by the mandatory post-process
+    variant = _first_variant(db, product)
+    product_part = product.product_key or str(product.id)
+    variant_part = variant.variant_sku if variant is not None else "default"
+    stem = f"{uuid4()}-render-p{int(job['position']):02d}"
+    root = _media_storage_root_path()
+    # ① 先存 L0(模型原图),② 底版先缩放到成品尺寸,③ 再叠信息层,④ 最后才压 WebP。
+    l0_meta = _store_l0(root, product_part, variant_part, stem, contents)
+    contents = _resize_base_png(contents, str(job["placement"]))
     overlay = _decode_overlay_snapshot(
         job.get("overlay_text"),
         asset_role=str(job.get("asset_role") or ""),
@@ -1798,12 +1872,8 @@ def _store_render_asset(
         contents, str(job["placement"])
     )
     content_sha256 = hashlib.sha256(contents).hexdigest()
-    variant = _first_variant(db, product)
-    product_part = product.product_key or str(product.id)
-    variant_part = variant.variant_sku if variant is not None else "default"
-    filename = f"{uuid4()}-render-p{int(job['position']):02d}.webp"
+    filename = f"{stem}.webp"
     object_key = f"images/{product_part}/{variant_part}/k-render/{filename}"
-    root = _media_storage_root_path()
     storage_file = write_media_file(root, object_key, contents)
     thumbnail_path, thumbnail_object_key, _ = ensure_image_derivative(
         root=root,
@@ -1898,6 +1968,7 @@ def _store_render_asset(
             # 这张图是拿哪张实拍当底板、有没有蒙版保护 —— 出问题时能追溯到
             # 是「底板选错」还是「没刷蒙版」。
             **(plate_meta or {}),
+            **l0_meta,
         },
         created_by_user_id=user_id,
         updated_by_user_id=user_id,
@@ -1957,6 +2028,46 @@ def _generate_candidates_with_retry(
     raise AssertionError("unreachable render retry loop")
 
 
+# 生图台账(10-31):每一次真打出去的生图请求记一行(重试的每一次都算,出网就算)。
+# 金额先空着(没有价目就记 NULL,不瞎填 0),等老板看过 4sapi 账单给了单价再补;
+# 张数、成败、耗时现在就能查。台账写不进去绝不影响出图(record_ai_usage 自己吞)。
+IMAGE_LEDGER_PROVIDER = "4sapi_image"
+IMAGE_LEDGER_MODULE = "k.image_render"
+
+
+def _ledgered_generate(generate: Callable[[], list[Any]], *, task: str) -> Callable[[], list[Any]]:
+    from ....services.ai_usage_ledger import record_ai_usage
+    from ...i_series.image_system.constants import IMAGE_MODEL_NAME
+
+    def run() -> list[Any]:
+        started = time.monotonic()
+        try:
+            out = generate()
+        except Exception as exc:
+            record_ai_usage(
+                provider=IMAGE_LEDGER_PROVIDER,
+                model=IMAGE_MODEL_NAME,
+                module=IMAGE_LEDGER_MODULE,
+                task=task,
+                success=False,
+                latency_ms=(time.monotonic() - started) * 1000,
+                error_code=type(exc).__name__,
+            )
+            raise
+        record_ai_usage(
+            provider=IMAGE_LEDGER_PROVIDER,
+            model=IMAGE_MODEL_NAME,
+            module=IMAGE_LEDGER_MODULE,
+            task=task,
+            success=bool(out),
+            latency_ms=(time.monotonic() - started) * 1000,
+            error_code=None if out else "empty_result",
+        )
+        return out
+
+    return run
+
+
 def _process_render_job(job: dict[str, Any]) -> None:
     job_id = job["id"]
     asset_id: UUID | None = None
@@ -1981,7 +2092,20 @@ def _process_render_job(job: dict[str, Any]) -> None:
                     KProductKnowledgeMediaAsset, job["reference_asset_id"]
                 )
                 if ref_asset is not None:
-                    picked = _asset_file_bytes(ref_asset)
+                    ref_meta = (
+                        ref_asset.metadata_json
+                        if isinstance(ref_asset.metadata_json, dict)
+                        else {}
+                    )
+                    if ref_meta.get("render_pipeline") == RENDER_PIPELINE_TAG:
+                        # 「在这版基础上改」:只送这版的 L0(无字原图),永不送叠过字、
+                        # 压过 WebP 的成图(作图家规第一原则 2)。老图没有 L0 就当没点名,
+                        # 走下面的实拍底板。
+                        picked = l0_bytes(ref_asset)
+                        if picked is not None:
+                            plate_meta = {"rework_reference": "l0", "rework_reference_asset_id": str(ref_asset.id)}
+                    else:
+                        picked = _asset_file_bytes(ref_asset)
                     if picked is not None:
                         references = [picked]
             if not references:
@@ -2013,17 +2137,20 @@ def _process_render_job(job: dict[str, Any]) -> None:
             # gate with the explicit I-series org (same as the K worker's
             # request=None generate calls).
             candidates = _generate_candidates_with_retry(
-                lambda: engine.generate_candidates(
-                    event_id=job_id,
-                    source_type=SOURCE_EDIT,
-                    image_prompt_enhanced=prompt,
-                    aspect_ratio=str(job["aspect_ratio"] or "1:1"),
-                    generation_count=1,
-                    request=None,  # type: ignore[arg-type]
-                    user=user,  # type: ignore[arg-type]
-                    reference_image_count=len(references),
-                    reference_images=references,
-                    mask_image=mask_image,
+                _ledgered_generate(
+                    lambda: engine.generate_candidates(
+                        event_id=job_id,
+                        source_type=SOURCE_EDIT,
+                        image_prompt_enhanced=prompt,
+                        aspect_ratio=str(job["aspect_ratio"] or "1:1"),
+                        generation_count=1,
+                        request=None,  # type: ignore[arg-type]
+                        user=user,  # type: ignore[arg-type]
+                        reference_image_count=len(references),
+                        reference_images=references,
+                        mask_image=mask_image,
+                    ),
+                    task=str(job.get("role_label") or job.get("asset_role") or "render"),
                 ),
                 job_id=job_id,
             )
@@ -2559,6 +2686,10 @@ def enqueue_rework_job(
         "conflicts with anything above, THIS revision wins): "
         + extra
     )
+    if use_current_as_reference and reference_override is None and l0_bytes(asset) is None:
+        # 老图没存 L0:成图叠过字、压过 WebP,不能送回模型(作图家规)。退回用实拍底板重出,
+        # prompt 里也就不能说「附的是上一版」。
+        use_current_as_reference = False
     if reference_override is not None:
         prompt += (
             "\nThe attached reference image is a NEW reference supplied by the "
@@ -2568,8 +2699,8 @@ def enqueue_rework_job(
     elif use_current_as_reference:
         prompt += (
             "\nThe attached reference image IS the previous accepted version of "
-            "this exact image — keep its composition, style, and content, and "
-            "apply ONLY the revision above."
+            "this exact image (its clean base, before any text was added) — keep "
+            "its composition, style, and content, and apply ONLY the revision above."
         )
     rework_overlay = (
         meta.get("overlay")

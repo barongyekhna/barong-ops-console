@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 STATUS_ASKED, STATUS_ANSWERED, STATUS_TIMEOUT, STATUS_FAILED = "asked", "answered", "timeout", "failed"
 WEIGHT_WORDS = ("重量", "尺寸", "体积", "多重", "几克", "多少克", "公斤", "kg", "几斤", "长宽高", "装箱", "一箱", "外箱")
 QUESTION_TEMPLATE = "您好,我是跨境卖家,想确认一下:{specs}每个的实际包装重量(克)、包装尺寸(长宽高 cm)、一箱装几个?谢谢。"
+# 10-31 老板拍板的两句(一字不改)。她先看图(photo_check):看到牌子才问 NEUTRAL,全是效果图才问 PHOTOS。
+NEUTRAL_ASK = "能发没有印字、没有 logo 的中性货和中性包装吗？"
+PHOTOS_ASK = "方便发几张产品实拍照片吗？手机随手拍就行，不要效果图。"
+WEIGHT_PART = "{specs}每个的实际包装重量(克)、包装尺寸(长宽高 cm)、一箱装几个?"
+QUESTION_HEAD = "您好,我是跨境卖家,想确认一下:"
 QUESTION_MAX = 480
 PARSE_ASK = (
     "A 1688 supplier replied in Chinese to our question about per-variant package weight, package dimensions and carton quantity. "
@@ -43,7 +48,10 @@ PARSE_ASK = (
     "Also report whether the seller asked us a clarifying question we should answer, in \"seller_question\": "
     '{"kind": "which_variant" | "quantity" | "other" | "none", "quote": "<the seller\'s question verbatim, or empty>"}. '
     "which_variant = they ask which model/spec/style we mean or tell us to pick one; quantity = they ask how many pieces we want; "
-    "other = some other real question; none = no question (greetings, auto-replies, '1', 'looking at it' are none)."
+    "other = some other real question; none = no question (greetings, auto-replies, '1', 'looking at it' are none). "
+    "If our question also asked whether they can ship neutral goods (no printed logo or lettering, plain packaging), report "
+    '"neutral_goods": "yes" | "no" | "not_answered" and quote their words in "neutral_quote"; use not_answered when they did not address it '
+    "or we did not ask. Only weight/size/carton questions belong in answers."
 )
 # 卖家反问有用的问题(老板 10-30 拍板):只认两类,各一句固定话,一单只追答一次,永不发第三句;答非所问的不理。
 FOLLOW_UP_TEMPLATES = {
@@ -77,8 +85,18 @@ def chat_of(draft: Any) -> dict[str, Any]:
     return dict(chat) if isinstance(chat, dict) else {}
 
 
+def chat_topics(chat: dict[str, Any]) -> dict[str, bool]:
+    """这次问了哪几件。老底账(10-31 之前)没有 topics,只问过重量尺寸。"""
+    raw = chat.get("topics") if isinstance(chat.get("topics"), dict) else None
+    if raw is None:
+        return {"weights": True, "neutral": False, "photos": False}
+    return {k: bool(raw.get(k)) for k in ("weights", "neutral", "photos")}
+
+
 def pending(draft: Any) -> bool:
-    return chat_of(draft).get("status") == STATUS_ASKED
+    """价格卡要不要等:只有问了重量尺寸、还在等,才等。只问无标货/实拍图的不挡价格卡。"""
+    chat = chat_of(draft)
+    return chat.get("status") == STATUS_ASKED and chat_topics(chat)["weights"]
 
 
 def day_key(now: datetime) -> str:
@@ -90,20 +108,9 @@ def boss_wants_weight(reason: str | None) -> bool:
     return any(word in text for word in WEIGHT_WORDS)
 
 
-def needs_ask(draft: Any, lines: list[Line], *, now: datetime) -> str | None:
-    """要不要去问:返回理由,None = 不问。严格按老板的口径,自动最多问一次;老板驳回点名重量尺寸才会再问。"""
-    if not enabled():
-        return None
-    chat = chat_of(draft)
-    status = chat.get("status")
-    if status == STATUS_ASKED:
-        return None  # 在等回复
+def _weight_reason(chat: dict[str, Any], lines: list[Line]) -> str | None:
     if chat.get("requested"):
         return "老板驳回价格卡时提到重量尺寸"
-    if status in (STATUS_ANSWERED, STATUS_TIMEOUT, STATUS_FAILED) or chat.get("asked_day") == day_key(now):
-        return None
-    if not lines:
-        return None
     missing = [line.name_zh or line.key for line in lines if line.weight_g is None]
     if missing:
         return f"详情页没有重量尺寸({'、'.join(missing[:3])}{'…' if len(missing) > 3 else ''})"
@@ -115,21 +122,83 @@ def needs_ask(draft: Any, lines: list[Line], *, now: datetime) -> str | None:
     return None
 
 
-def build_question(variants: list[dict[str, Any]]) -> str:
-    """固定模板,不改词。规格太多就只点名前几个,免得超过旺旺 500 字。"""
+def ask_plan(draft: Any, lines: list[Line], *, now: datetime) -> tuple[str, dict[str, bool]] | None:
+    """要不要去问、问哪几件:返回 (理由, topics),None = 不问。
+    重量尺寸严格按老板的口径(自动最多问一次;老板驳回点名重量尺寸才会再问);
+    无标货/实拍图只看 photo_check 的结论,一个品只顺带问这一次。"""
+    from . import photo_check
+
+    if not enabled():
+        return None
+    chat = chat_of(draft)
+    status = chat.get("status")
+    if status == STATUS_ASKED:
+        return None  # 在等回复
+    if not lines:
+        return None
+    requested = bool(chat.get("requested"))
+    if not requested and (status in (STATUS_ANSWERED, STATUS_TIMEOUT, STATUS_FAILED) or chat.get("asked_day") == day_key(now)):
+        return None
+    weight_why = _weight_reason(chat, lines)
+    photo = photo_check.topics(draft) if not chat.get("photo_topics_asked") else {"neutral": False, "photos": False}
+    plan = {"weights": weight_why is not None, "neutral": photo["neutral"], "photos": photo["photos"]}
+    if not any(plan.values()):
+        return None
+    reasons = [weight_why] if weight_why else []
+    if plan["neutral"]:
+        brand = str(((draft or {}).get("photo_audit") or {}).get("brand_text") or "").strip()
+        reasons.append(f"图上产品有牌子{f'({brand[:30]})' if brand else ''},问能不能发无标货")
+    if plan["photos"]:
+        reasons.append("图全是效果图,要几张实拍")
+    return ";".join(reasons), plan
+
+
+def needs_ask(draft: Any, lines: list[Line], *, now: datetime) -> str | None:
+    """要不要去问:返回理由,None = 不问(见 ask_plan)。"""
+    plan = ask_plan(draft, lines, now=now)
+    return plan[0] if plan else None
+
+
+def build_question(variants: list[dict[str, Any]], topics: dict[str, bool] | None = None) -> str:
+    """固定话术,不改词。只问重量尺寸时和 10-29 的原模板一字不差;多件一起问就编号。
+    规格太多就只点名前几个,免得超过旺旺 500 字。"""
+    topics = topics or {"weights": True}
     names = [str(v.get("name_zh") or "").strip() for v in variants if isinstance(v, dict)]
     names = [n for n in names if n]
+    others = [text for key, text in (("neutral", NEUTRAL_ASK), ("photos", PHOTOS_ASK)) if topics.get(key)]
+
+    def compose(specs: str) -> str:
+        parts = ([WEIGHT_PART.format(specs=specs)] if topics.get("weights") else []) + others
+        if len(parts) == 1:
+            return QUESTION_HEAD + parts[0] + "谢谢。"
+        return QUESTION_HEAD + "".join(f"{i}.{part}" for i, part in enumerate(parts, start=1)) + "谢谢。"
+
     specs = ""
-    if names:
+    if names and topics.get("weights"):
         shown: list[str] = []
         for name in names:
             candidate = "、".join([*shown, name])
-            if len(QUESTION_TEMPLATE.format(specs=candidate + " ")) > QUESTION_MAX - 20:
+            if len(compose(candidate + " ")) > QUESTION_MAX - 20:
                 break
             shown.append(name)
         rest = len(names) - len(shown)
         specs = "、".join(shown) + (f" 等共 {len(names)} 个规格" if rest > 0 else "") + " "
-    return QUESTION_TEMPLATE.format(specs=specs)[:QUESTION_MAX]
+    return compose(specs)[:QUESTION_MAX]
+
+
+def topics_text(topics: dict[str, bool]) -> str:
+    parts = [label for key, label in (("weights", "每个规格的重量尺寸和装箱数"), ("neutral", "能不能发无标中性货"), ("photos", "要几张实拍图")) if topics.get(key)]
+    return "、".join(parts) or "重量尺寸"
+
+
+def parse_neutral(data: Any) -> dict[str, str] | None:
+    """抽数模型顺带报的「能不能发无标货」:只认 yes / no。"""
+    if not isinstance(data, dict):
+        return None
+    value = str(data.get("neutral_goods") or "").strip().lower()
+    if value not in ("yes", "no"):
+        return None
+    return {"value": value, "quote": str(data.get("neutral_quote") or "")[:200]}
 
 
 def _image_urls(message: dict[str, Any]) -> tuple[str, ...]:
@@ -296,9 +365,12 @@ def apply_answers(variants: list[dict[str, Any]], answers: dict[str, dict[str, A
 # ---------------------------------------------------------------- 落库
 
 
-def _save_chat(db: Session, dossier: SqhDossier, chat: dict[str, Any], *, variants: list[dict[str, Any]] | None = None, supplier: dict[str, Any] | None = None) -> None:
+def _save_chat(db: Session, dossier: SqhDossier, chat: dict[str, Any], *, variants: list[dict[str, Any]] | None = None, supplier: dict[str, Any] | None = None, neutral: dict[str, Any] | None = None) -> None:
     draft = dict(dossier.draft) if isinstance(dossier.draft, dict) else {}
     draft["seller_chat"] = chat
+    if neutral is not None:
+        # 「货是不是无标」:作图圈牌子只认这里的 yes(卖家口头,标出处);没有 / no = 当有牌子。
+        draft["neutral_goods"] = neutral
     if variants is not None:
         draft["variants"] = variants
     if supplier is not None:
@@ -324,7 +396,7 @@ def _judge(db: Session, prompt: str) -> Any:
     return brain._execute("fast", [{"role": "user", "content": prompt}], timeout=60, usage_label=USAGE_LABEL)
 
 
-def ask(db: Session, dossier: SqhDossier, lines: list[Line], *, why: str, now: datetime | None = None, send: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
+def ask(db: Session, dossier: SqhDossier, lines: list[Line], *, why: str, topics: dict[str, bool] | None = None, now: datetime | None = None, send: Callable[..., dict[str, Any]] | None = None) -> dict[str, Any]:
     """扣一次台账,去旺旺发问。成功后 draft.seller_chat.status=asked。
     拿不到浏览器 → SellerChatUnavailable;台账用完 → RAQuotaExhaustedError;发没发成 → browser.SellerChatError(台账已退)。"""
     from r_system_v2.ra.quota_ledger import PROVIDER_SQH_1688_IM, refund, try_consume
@@ -341,7 +413,8 @@ def ask(db: Session, dossier: SqhDossier, lines: list[Line], *, why: str, now: d
     variants = [v for v in draft.get("variants") or [] if isinstance(v, dict)]
     supplier = dict(draft.get("supplier") or {}) if isinstance(draft.get("supplier"), dict) else {}
     chat = chat_of(draft)
-    question = build_question(variants)
+    topics = {k: bool((topics or {"weights": True}).get(k)) for k in ("weights", "neutral", "photos")}
+    question = build_question(variants, topics)
     try_consume(db, PROVIDER_SQH_1688_IM, amount=1)
     db.commit()
     offer_url = str(draft.get("source_url") or dossier.source_url)
@@ -351,9 +424,9 @@ def ask(db: Session, dossier: SqhDossier, lines: list[Line], *, why: str, now: d
     except Exception as exc:  # noqa: BLE001 —— 没发成不算她问过:退台账、记一笔,让价格卡照旧出
         refund(db, PROVIDER_SQH_1688_IM, amount=1)
         detail = getattr(exc, "detail", {}) or {}
-        chat.update({"status": STATUS_FAILED, "failed_at": now.isoformat(), "reason": str(exc)[:300], "dump": detail.get("dump"), "requested": False})
+        chat.update({"status": STATUS_FAILED, "failed_at": now.isoformat(), "reason": str(exc)[:300], "dump": detail.get("dump"), "requested": False, "topics": topics})
         _save_chat(db, dossier, chat)
-        memory.log_activity(db, f"1688 {dossier.offer_id}:想问卖家重量尺寸没问成({str(exc)[:80]})。", kind="error")
+        memory.log_activity(db, f"1688 {dossier.offer_id}:想问卖家{topics_text(topics)}没问成({str(exc)[:80]})。", kind="error")
         db.commit()
         raise
     if result.get("login_id") and not supplier.get("login_id"):
@@ -365,6 +438,8 @@ def ask(db: Session, dossier: SqhDossier, lines: list[Line], *, why: str, now: d
         "checked_at": now.isoformat(),
         "question": question,
         "why": why,
+        "topics": topics,
+        "photo_topics_asked": bool(chat.get("photo_topics_asked") or topics["neutral"] or topics["photos"]),
         "im_url": result.get("im_url"),
         "login_id": result.get("login_id") or supplier.get("login_id"),
         "dump": result.get("dump"),
@@ -374,7 +449,7 @@ def ask(db: Session, dossier: SqhDossier, lines: list[Line], *, why: str, now: d
         "boss_reason": chat.get("boss_reason"),
     }
     _save_chat(db, dossier, chat, supplier=supplier)
-    memory.log_activity(db, f"1688 {dossier.offer_id}:{why},我在旺旺问了卖家每个规格的重量尺寸和装箱数,等回复(最多等 {seller_chat_wait_hours():g} 小时)。", kind="work")
+    memory.log_activity(db, f"1688 {dossier.offer_id}:{why},我在旺旺问了卖家{topics_text(topics)},等回复(最多等 {seller_chat_wait_hours():g} 小时)。", kind="work")
     db.commit()
     return chat
 
@@ -429,6 +504,22 @@ def _follow_up(db: Session, dossier: SqhDossier, chat: dict[str, Any], question:
     return "followed_up"
 
 
+def _record_side_answers(chat: dict[str, Any], data: Any, replies: list[dict[str, Any]], topics: dict[str, bool], *, now: datetime) -> str:
+    """无标货/实拍图的回答记进 chat:neutral(卖家口头,带原话)、seller_photos(卖家发来的图,本机路径)。返回一句人话,没说到就空。"""
+    said: list[str] = []
+    if topics["neutral"]:
+        neutral = parse_neutral(data)
+        if neutral:
+            chat["neutral"] = {**neutral, "source": SELLER_SAID, "note": "卖家口头", "at": now.isoformat()}
+            said.append("能发无标中性货" if neutral["value"] == "yes" else "发不了无标货")
+    if topics["photos"]:
+        photos = [i.get("path") for m in replies for i in (m.get("images") or []) if isinstance(i, dict) and i.get("path")]
+        if photos:
+            chat["seller_photos"] = list(dict.fromkeys([*(chat.get("seller_photos") or []), *photos]))[:20]
+            said.append(f"发了 {len(photos)} 张图(还没核是不是实拍)")
+    return "、".join(said)
+
+
 def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[..., list[dict[str, Any]]] | None = None, judge: Callable[[Session, str], Any] | None = None, image_reader: Callable[[Session, str, bytes], Any] | None = None, send: Callable[..., dict[str, Any]] | None = None) -> str:
     """看一份档案的旺旺:超时 → timeout;有新回复 → 抽数写回规格、作废旧价格卡;没回 → 记下看过的时间。返回做了什么。"""
     from .brain import parse_json
@@ -438,7 +529,7 @@ def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[
     if timed_out(chat, now=now):
         chat.update({"status": STATUS_TIMEOUT, "checked_at": now.isoformat()})
         _save_chat(db, dossier, chat)
-        memory.log_activity(db, f"1688 {offer}:问卖家重量尺寸,{seller_chat_wait_hours():g} 小时没回,价格卡按详情页的数出。", kind="work")
+        memory.log_activity(db, f"1688 {offer}:问卖家{topics_text(chat_topics(chat))},{seller_chat_wait_hours():g} 小时没回{',价格卡按详情页的数出' if chat_topics(chat)['weights'] else ''}。", kind="work")
         db.commit()
         return "timeout"
     reader = read or (lambda **kw: browser.get().read_seller_chat(**kw))
@@ -459,7 +550,16 @@ def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[
     pictures = sum(len(m.get("images") or []) for m in replies)
     read = read_images(db, replies, listing=listing, reader=image_reader) if pictures else 0
     chat["replies"] = [{**m, "images": [{k: v for k, v in i.items() if k in ("url", "path", "read", "error")} for i in m.get("images") or []]} for m in replies]
+    topics = chat_topics(chat)
     if pictures and read == 0 and not any((m.get("text") or "").strip() for m in replies):
+        side = _record_side_answers(chat, {}, replies, topics, now=now)
+        if side and not topics["weights"]:
+            # 只要了实拍图,卖家发了图:这就是回答
+            chat.update({"status": STATUS_ANSWERED, "answered_at": now.isoformat()})
+            _save_chat(db, dossier, chat)
+            memory.log_activity(db, f"1688 {offer}:卖家回了——{side}。", kind="work")
+            db.commit()
+            return "answered"
         _save_chat(db, dossier, chat)  # 只回了图、一张都没读出字:继续等,不瞎填
         memory.log_activity(db, f"1688 {offer}:卖家回了 {pictures} 张图,一张都没读出字,我再等等。", kind="work")
         db.commit()
@@ -467,21 +567,33 @@ def poll_one(db: Session, dossier: SqhDossier, *, now: datetime, read: Callable[
     result = (judge or _judge)(db, f"{PARSE_ASK}\n\nVariants:\n{listing}\n\nOur question:\n{chat.get('question') or ''}\n\nSeller reply:\n{reply_text(replies)}")
     data = parse_json(result)
     answers = parse_answers(data, variants)
+    side = _record_side_answers(chat, data, replies, topics, now=now)
+    if not topics["weights"]:
+        # 只问了无标货/实拍图:说到其中一件(或发了图)就算回了;没说到就接着等,不追问。
+        if side:
+            chat.update({"status": STATUS_ANSWERED, "answered_at": now.isoformat()})
+            _save_chat(db, dossier, chat, neutral=chat.get("neutral"))
+            memory.log_activity(db, f"1688 {offer}:卖家回了——{side}。", kind="work")
+        else:
+            _save_chat(db, dossier, chat)
+            memory.log_activity(db, f"1688 {offer}:卖家回了话但没说到无标货/实拍图,我再等等。", kind="work")
+        db.commit()
+        return "answered" if side else "unclear"
     if not answers:
         question = parse_question(data)
         if question and not chat.get("follow_up"):
             outcome = _follow_up(db, dossier, chat, question, variants, now=now, send=send)
             if outcome:
                 return outcome
-        _save_chat(db, dossier, chat)  # 回了但没说到数(客套/答非所问):继续等,不追问(老板:这种卖家不合作)
+        _save_chat(db, dossier, chat, neutral=chat.get("neutral"))  # 回了但没说到数(客套/答非所问):继续等,不追问(老板:这种卖家不合作)
         memory.log_activity(db, f"1688 {offer}:卖家回了话{f'和 {pictures} 张图(读出 {read} 张)' if pictures else ''}但没给重量尺寸,我再等等。", kind="work")
         db.commit()
         return "unclear"
     changed = apply_answers(variants, answers, asked_at=str(chat.get("asked_at") or now.isoformat()))
     chat.update({"status": STATUS_ANSWERED, "answered_at": now.isoformat(), "answers": answers})
-    _save_chat(db, dossier, chat, variants=variants)
+    _save_chat(db, dossier, chat, variants=variants, neutral=chat.get("neutral"))
     retired = _retire_price_card(db, dossier, reason="卖家回了重量尺寸,按新数重出")
-    memory.log_activity(db, f"1688 {offer}:卖家回了 {changed} 个规格的重量尺寸{f'(含 {pictures} 张图,读出 {read} 张)' if pictures else ''}(口头说的,没凭证),我按新数重出价格卡{'(旧卡作废)' if retired else ''}。", kind="work")
+    memory.log_activity(db, f"1688 {offer}:卖家回了 {changed} 个规格的重量尺寸{f'(含 {pictures} 张图,读出 {read} 张)' if pictures else ''}(口头说的,没凭证),我按新数重出价格卡{'(旧卡作废)' if retired else ''}{f';另外{side}' if side else ''}。", kind="work")
     db.commit()
     return "answered"
 

@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, copywork, k_ops, market, material, memory, pricing, seller_chat
+from . import cards, copywork, k_ops, market, material, memory, photo_check, pricing, seller_chat
 from .constants import COPY_CARD_KIND, MARKET_CARD_KIND, USAGE_LABEL, image_brief_paused, market_enabled
 from .models import SqhCard, SqhDossier
 
@@ -804,18 +804,38 @@ def _step_price_card(ctx: Ctx) -> str:
     boss_reason = boss_reason or chat.get("boss_reason") or None  # 老板驳回点名重量尺寸 → 问过卖家再出的这张,仍带着他的话
     # B 期(10-29):详情页没有重量尺寸 / 疑似乱填 / 老板点名 → 先去旺旺问卖家,这张卡等回了再出(问不成就照旧出,写明原因)
     seller_note = ""
-    why_ask = seller_chat.needs_ask(draft, lines, now=datetime.now(UTC))
+    # 10-31:问卖家之前她先看图——看到牌子才问无标货,全是效果图才问实拍(photo_check);看图失败不挡价格卡。
+    if seller_chat.enabled() and chat.get("status") != seller_chat.STATUS_ASKED:
+        try:
+            photo_check.ensure(ctx.db, ctx.dossier)
+            ctx.db.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("photo check failed dossier=%s", ctx.dossier.id)
+            ctx.db.rollback()
+        ctx.dossier = ctx.db.get(SqhDossier, ctx.dossier.id, execution_options=SKIP_ORG_DATA_ISOLATION) or ctx.dossier
+        draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
+        chat = seller_chat.chat_of(draft)
+    plan = seller_chat.ask_plan(draft, lines, now=datetime.now(UTC))
+    why_ask, ask_topics = plan if plan else (None, {})
     if why_ask:
         try:
-            seller_chat.ask(ctx.db, ctx.dossier, lines, why=why_ask)
-            return f"{why_ask}:先在旺旺问卖家重量尺寸,回了再出价格卡(最多等 {seller_chat.seller_chat_wait_hours():g} 小时)"
+            seller_chat.ask(ctx.db, ctx.dossier, lines, why=why_ask, topics=ask_topics)
+            if ask_topics.get("weights"):
+                return f"{why_ask}:先在旺旺问卖家重量尺寸,回了再出价格卡(最多等 {seller_chat.seller_chat_wait_hours():g} 小时)"
+            # 只问无标货/实拍图:价格卡不等,照旧往下出
+            ctx.dossier = ctx.db.get(SqhDossier, ctx.dossier.id, execution_options=SKIP_ORG_DATA_ISOLATION) or ctx.dossier
+            draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
+            chat = seller_chat.chat_of(draft)
         except Exception as exc:  # noqa: BLE001 —— 台账用完 / 浏览器没开 / 没发成:价格卡照旧出,写一句
-            seller_note = f"想先问卖家重量尺寸({why_ask}),没问成:{str(exc)[:120]};先按详情页的数算"
+            if ask_topics.get("weights"):
+                seller_note = f"想先问卖家重量尺寸({why_ask}),没问成:{str(exc)[:120]};先按详情页的数算"
             ctx.db.rollback()
             ctx.dossier = ctx.db.get(SqhDossier, ctx.dossier.id, execution_options=SKIP_ORG_DATA_ISOLATION) or ctx.dossier
             draft = ctx.dossier.draft if isinstance(ctx.dossier.draft, dict) else {}
             chat = seller_chat.chat_of(draft)
-    if chat.get("status") == seller_chat.STATUS_ANSWERED:
+    if not seller_chat.chat_topics(chat)["weights"]:
+        pass  # 这次只问了无标货/实拍图,和价格无关
+    elif chat.get("status") == seller_chat.STATUS_ANSWERED:
         seller_note = f"重量尺寸是卖家 {str(chat.get('answered_at') or '')[:10]} 在旺旺口头说的,没有凭证,只当估算、不当认证"
     elif chat.get("status") == seller_chat.STATUS_TIMEOUT:
         seller_note = f"在旺旺问过卖家重量尺寸,{seller_chat.seller_chat_wait_hours():g} 小时没回,按详情页的数算"
