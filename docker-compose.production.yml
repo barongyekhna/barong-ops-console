@@ -231,9 +231,13 @@ services:
 
   k-worker:
     container_name: k-worker
+    # 作图机器 = 后端镜像 + 一层基座 v2 计算库(numpy/opencv-headless/PyYAML/scikit-image),见 backend/Dockerfile.k-worker。
+    # 用 compose 构建时先构建 console_backend,BASE 默认取它的 latest;发版脚本则传当前线上的后端镜像 ID。
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: backend/Dockerfile.k-worker
+      args:
+        BASE: barong-ops-console_console_backend:latest
     restart: unless-stopped
     env_file:
       - .env.production

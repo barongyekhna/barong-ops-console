@@ -1,0 +1,11 @@
+# k-worker 镜像 = 后端镜像 + 一层基座 v2 的计算库。
+# 后端和 k-worker 本来共用 backend/Dockerfile;基座(jiagui-core)只在 k-worker 里跑,所以这四个库只加在这一层,
+# 后端主镜像保持不变(交接 11 第 2 节)。BASE 由发版脚本传当前线上的后端镜像 ID,保证 k-worker 的代码层和后端一模一样。
+ARG BASE=barong-ops-console_console_backend:latest
+FROM ${BASE}
+
+USER root
+COPY backend/requirements-k-worker.txt ./backend/requirements-k-worker.txt
+RUN python -m pip install --no-cache-dir -r backend/requirements-k-worker.txt \
+    && python -c "import numpy, cv2, yaml, skimage; print(numpy.__version__, cv2.__version__, yaml.__version__, skimage.__version__)"
+USER app

@@ -1,0 +1,6 @@
+# k-worker 专用:作图家规基座 v2(jiagui-core)要的计算库。版本和 Mac 端 .venv 一致(交接 10 第 1.2 节,老板 11-02 批「现在装」)。
+# 只装进 k-worker(backend/Dockerfile.k-worker),后端主镜像不装——后端只读注册表里存好的 pack.json。
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+PyYAML==6.0.3
+scikit-image==0.26.0
