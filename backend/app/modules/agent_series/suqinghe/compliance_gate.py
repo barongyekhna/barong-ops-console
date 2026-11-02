@@ -210,6 +210,20 @@ def _field(draft: dict[str, Any], key: str) -> Any:
     return item.get("value") if isinstance(item, dict) else None
 
 
+def _list(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
+
+
+def _texts(value: Any) -> list[str]:
+    """[{"text": ...}] 或 ["..."] → 字符串列表;别的形状(计数、None、字典)→ 空。"""
+    out: list[str] = []
+    for item in _list(value):
+        text = item.get("text") if isinstance(item, dict) else item if isinstance(item, str) else None
+        if isinstance(text, str) and text.strip():
+            out.append(text.strip())
+    return out
+
+
 def dossier_facts(draft: dict[str, Any], capture: dict[str, Any] | None = None, *, name_en: str | None = None) -> str:
     """建档草稿 → 给合规门看的资料:标题、英文名、类目、属性、规格、详情图上读到的字。不含进价、链接、卖家名。"""
     capture = capture or {}
@@ -219,19 +233,21 @@ def dossier_facts(draft: dict[str, Any], capture: dict[str, Any] | None = None, 
         category_text = " / ".join(str(category.get(k) or "") for k in ("path", "name_zh") if category.get(k))
     attrs = [
         f"{a.get('name')}: {a.get('value')}"
-        for a in draft.get("other_attributes") or []
+        for a in _list(draft.get("other_attributes"))
         if isinstance(a, dict) and a.get("name") and a.get("value") not in (None, "")
     ]
     specs = [
-        f"{key}: {item.get('value')}{(' ' + item['unit']) if item.get('unit') else ''}"
-        for key, item in (draft.get("specs") or {}).items()
+        f"{key}: {item.get('value')}{(' ' + str(item['unit'])) if item.get('unit') else ''}"
+        for key, item in (draft.get("specs") if isinstance(draft.get("specs"), dict) else {}).items()
         if isinstance(item, dict) and item.get("value") not in (None, "")
     ]
-    variants = [str(v.get("name_zh") or v.get("name_en") or "") for v in draft.get("variants") or [] if isinstance(v, dict)]
+    variants = [str(v.get("name_zh") or v.get("name_en") or "") for v in _list(draft.get("variants")) if isinstance(v, dict)]
+    # 11-02 热修:线上档案里 image_read.facts 是「读到几条」的计数,不是列表;读到的字在 material.features / material.claims 里
+    # (流水线收卖点素材那一步写的)。每个字段都先看类型再用,读不懂的跳过,不能让一个字段把整步打挂。
     image_read = draft.get("image_read") if isinstance(draft.get("image_read"), dict) else {}
-    facts = [str(f.get("text") or "") for f in image_read.get("facts") or [] if isinstance(f, dict) and f.get("text")]
     material = draft.get("material") if isinstance(draft.get("material"), dict) else {}
-    claims = [str(c.get("text") or c) for c in material.get("claims") or [] if c]
+    facts = _texts(image_read.get("facts")) + _texts(material.get("features"))
+    claims = _texts(material.get("claims"))
     lines = [
         f"中文标题:{_field(draft, 'name_zh') or capture.get('title_zh') or ''}",
         f"英文名:{name_en or _field(draft, 'name_en') or ''}",
@@ -243,7 +259,7 @@ def dossier_facts(draft: dict[str, Any], capture: dict[str, Any] | None = None, 
     ]
     if claims:
         lines.append(f"卖点说法:{';'.join(claims[:20])}")
-    if draft.get("summary_zh"):
+    if isinstance(draft.get("summary_zh"), str) and draft["summary_zh"].strip():
         lines.append(f"她写的档案摘要:{draft['summary_zh']}")
     return "\n".join(lines)
 

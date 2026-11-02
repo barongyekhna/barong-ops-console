@@ -158,3 +158,20 @@ def test_pipeline_runs_the_gate_first_and_holds_on_drop_or_ask() -> None:
         assert next_step(_view(gate=ok, material_done=False)) == "material"
     # 老板驳了「卡住」卡 = 这个品先不做:不补判
     assert next_step(_view(gate=None, stopped=True)) is None
+
+
+def test_dossier_facts_read_the_live_draft_shape_without_crashing() -> None:
+    # 11-02 上线即撞:线上档案 image_read.facts 是计数(int),读到的字在 material.features / claims 里
+    live = {
+        "fields": {"name_zh": {"value": "12v手电钻电池"}, "category": {"value": None}},
+        "image_read": {"facts": 47, "images": 9, "cost_usd": 0.12},
+        "material": {"features": [{"text": "防爆电芯", "confidence": "high"}], "claims": [{"text": "A品动力电芯"}], "hype": 3, "dropped": 2},
+        "other_attributes": None,
+        "specs": [],
+        "variants": None,
+    }
+    facts = g.dossier_facts(live, None, name_en="12V Li-ion Battery Pack")
+    assert "12v手电钻电池" in facts and "防爆电芯" in facts and "A品动力电芯" in facts and "12V Li-ion Battery Pack" in facts
+    # 什么都缺也不炸
+    assert "中文标题" in g.dossier_facts({}, None)
+    assert "中文标题" in g.dossier_facts({"image_read": "x", "material": [], "specs": "y", "other_attributes": 3}, {"title_zh": "备用"})
