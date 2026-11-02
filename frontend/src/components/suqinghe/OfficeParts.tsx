@@ -22,7 +22,7 @@ import {
   reviewCardView,
   usd,
 } from "./card-view";
-import { cardImageUrl, confidenceLabel, familyMeta, familyOf, groupCards, summaryOf, waitedText } from "./card-kinds";
+import { ASK_ONLY_FAMILIES, cardImageUrl, confidenceLabel, familyMeta, familyOf, groupCards, summaryOf, waitedText } from "./card-kinds";
 import { CARD_STATUS_LABEL, GOAL_METRICS, VIA_LABEL, addGoal, controlOffice, decideCard, getDigest, instructOffice, officeErrorMessage, patchGoal, type DigestDetail, type DigestKind, type DigestSummary, type OfficeCard, type OfficeGoal, type OfficeRead } from "./office-api";
 
 /** 场景视图和列表视图共用的零件:审批卡、指挥控件、几个格式化小工具。 */
@@ -268,7 +268,7 @@ export function CardDossier({
         {card.kind === COPY_CARD_KIND ? <CopyCardBody evidence={card.evidence} /> : null}
         {card.kind === MARKET_CARD_KIND ? <MarketCardBody evidence={card.evidence} /> : null}
         {card.kind === DIGEST_CARD_KIND ? <DigestCardBody evidence={card.evidence} /> : null}
-        {familyOf(card.kind) === "dossier" || familyOf(card.kind) === "alert" ? <p className={styles.muted}>{meta.ask}</p> : null}
+        {ASK_ONLY_FAMILIES.includes(familyOf(card.kind)) ? <p className={styles.muted}>{meta.ask}</p> : null}
       </section>
       {card.if_not ? (
         <section className={styles.dossierSection}>

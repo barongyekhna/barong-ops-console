@@ -164,9 +164,11 @@ from ..modules.agent_series.suqinghe.models import (
     SqhDossier,
     SqhGoal,
     SqhMemory,
+    SqhRouteRecord,
     SqhSnapshot,
     SqhState,
 )
+from ..modules.k_series.jiagui.models import JiaguiCoreVersion, JiaguiPack, JiaguiPackCheck
 from ..modules.amz_series.models import (
     AmzAdSearchTerm,
     AmzFxRate,
@@ -280,6 +282,9 @@ __all__ = [
     "KeyHealthCheck",
     "KeyHealthRun",
     "KeyHealthState",
+    "JiaguiCoreVersion",
+    "JiaguiPack",
+    "JiaguiPackCheck",
     "KProductKnowledgeAIEvent",
     "KProductKnowledgeAttribute",
     "KProductKnowledgeKeyword",
@@ -360,6 +365,7 @@ __all__ = [
     "SqhDossier",
     "SqhGoal",
     "SqhMemory",
+    "SqhRouteRecord",
     "SqhSnapshot",
     "SqhState",
 ]

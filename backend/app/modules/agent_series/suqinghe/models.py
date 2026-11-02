@@ -207,3 +207,31 @@ class SqhGscDay(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     pulled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class SqhRouteRecord(Base):
+    """选风格包的记录(M2a,交接 12 第三部分第 5、8 节):一个品判一次一行,record 是整份 jiagui-route/1。
+
+    流水线只认 purpose=pipeline 的最新一行;purpose=replay 是「风格包待生效」卡试算的(装了新包以后结果会不会变),不算数。
+    facts 存的是当时喂给模型的资料原文——试算时原样再判一次,不用回头拼资料。"""
+
+    __tablename__ = "sqh_route_records"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    dossier_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    sku: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False, default="pipeline")
+    replay_for: Mapped[int | None] = mapped_column(BigInteger, nullable=True)  # jiagui_packs.id
+    registry_fp: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    price: Mapped[Any] = mapped_column(_json(), nullable=False, default=dict)
+    facts: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    decision_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    pack_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pack_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    variant: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    missing_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    record: Mapped[Any] = mapped_column(_json(), nullable=False, default=dict)
+    calls: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    card_ref: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    owner_pick: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 两个包同分,老板选的那个
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

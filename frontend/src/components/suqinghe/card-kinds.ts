@@ -8,8 +8,14 @@ import type { OfficeCard } from "./office-api";
 
 export const DOSSIER_CARD_KIND = "create_k_dossier";
 export const BLOCKED_CARD_KIND = "k_blocked";
+/** 独立站合规门(11-02):批 = 同意不做,驳 = 放行 */
+export const GATE_CARD_KIND = "compliance_gate";
+/** 风格包(11-02 M2a):待生效的包、两个包同分要老板选、缺包汇报 */
+export const STYLE_PACK_CARD_KIND = "style_pack";
+export const ROUTE_PICK_CARD_KIND = "route_pick";
+export const ROUTE_MISSING_CARD_KIND = "route_missing";
 
-export type Family = "dossier" | "price" | "copy" | "review" | "pick" | "alert" | "market" | "digest";
+export type Family = "dossier" | "price" | "copy" | "review" | "pick" | "gate" | "style" | "alert" | "market" | "missing" | "digest";
 
 export type FamilyMeta = {
   family: Family;
@@ -28,12 +34,18 @@ export const FAMILIES: Record<Family, FamilyMeta> = {
   copy: { family: "copy", label: "文案", icon: "✍️", ask: "批了锁定这版文案", order: 2, needsDecision: true },
   review: { family: "review", label: "审核", icon: "🖼️", ask: "批了她保存图片、推上独立站草稿", order: 3, needsDecision: true },
   pick: { family: "pick", label: "选品", icon: "🧭", ask: "批了她开 1688 页建档", order: 4, needsDecision: true },
-  alert: { family: "alert", label: "提醒", icon: "🔔", ask: "看情况:批 = 让她再试 / 照办,驳 = 先不做", order: 5, needsDecision: true },
-  market: { family: "market", label: "拆解", icon: "🔍", ask: "给你看的,不用批;驳了她撤掉这份情报重跑关键词", order: 6, needsDecision: false },
-  digest: { family: "digest", label: "看板", icon: "📊", ask: "本周运营看板,给你看的,不用批;看过点「知道了」", order: 7, needsDecision: false },
+  gate: { family: "gate", label: "合规", icon: "⚖️", ask: "批 = 同意她不做这件货;驳 = 她判错了、放行(写一句为什么)", order: 5, needsDecision: true },
+  style: { family: "style", label: "风格包", icon: "🎨", ask: "风格包待生效:批 = 生效,驳 = 不生效;两个包同分:批 = 用排第一的,驳 = 写你要的包名", order: 6, needsDecision: true },
+  alert: { family: "alert", label: "提醒", icon: "🔔", ask: "看情况:批 = 让她再试 / 照办,驳 = 先不做", order: 7, needsDecision: true },
+  market: { family: "market", label: "拆解", icon: "🔍", ask: "给你看的,不用批;驳了她撤掉这份情报重跑关键词", order: 8, needsDecision: false },
+  missing: { family: "missing", label: "缺包", icon: "🧩", ask: "这几个品等风格包做好再上架,给你看的;有话就驳回写一句,她转给桌面", order: 9, needsDecision: false },
+  digest: { family: "digest", label: "看板", icon: "📊", ask: "本周运营看板,给你看的,不用批;看过点「知道了」", order: 10, needsDecision: false },
 };
 
-export const FAMILY_ORDER: Family[] = ["dossier", "price", "copy", "review", "pick", "alert", "market", "digest"];
+export const FAMILY_ORDER: Family[] = ["dossier", "price", "copy", "review", "pick", "gate", "style", "alert", "market", "missing", "digest"];
+
+/** 没有专门正文的家族:卡页正文那一节只写一句「批 / 驳是什么意思」,内容看她的结论和理由。 */
+export const ASK_ONLY_FAMILIES: Family[] = ["dossier", "gate", "style", "alert", "missing"];
 
 export function familyOf(kind: string): Family {
   switch (kind) {
@@ -51,6 +63,13 @@ export function familyOf(kind: string): Family {
       return "market";
     case DIGEST_CARD_KIND:
       return "digest";
+    case GATE_CARD_KIND:
+      return "gate";
+    case STYLE_PACK_CARD_KIND:
+    case ROUTE_PICK_CARD_KIND:
+      return "style";
+    case ROUTE_MISSING_CARD_KIND:
+      return "missing";
     default:
       return "alert";
   }

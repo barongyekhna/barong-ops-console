@@ -2,3 +2,5 @@
 pytest
 pytest-cov
 httpx
+# 测作图家规收包检查(k_series/jiagui/packfile.py)要读 pack.yaml;版本和 k-worker 一致。后端主镜像不装。
+PyYAML==6.0.3

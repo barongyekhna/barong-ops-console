@@ -35,7 +35,7 @@ from ....db.session import SessionLocal
 from ....models.user import User
 from ..common.c19_client import C19Client, ConsoleAuthError
 from ..common.memory_store import MemoryStore
-from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot, seller_chat, digest, gsc
+from . import brain, browser, cards, dossiers, executor, memory, office, picks, pipeline, snapshot, seller_chat, digest, gsc, style_packs
 from .constants import (
     AGENT_USERNAME,
     DIGEST_ALERTS_PER_DAY,
@@ -136,9 +136,11 @@ def should_run_morning(*, now: datetime, last_plan: date | None) -> bool:
     return local.hour >= MORNING_HOUR and last_plan != local.date()
 
 
-def reminder_text(pending: int, *, digest_cards: int = 0) -> str:
+def reminder_text(pending: int, *, digest_cards: int = 0, notes: list[str] | None = None) -> str:
     tail = "其中一张是本周运营看板,看过点「知道了」就行。" if digest_cards else ""
-    return f"老板,今天有 {pending} 张卡等你,在办公室里(右下角我的头像)。不急,你有空再看。{tail}"
+    # 只改进度、自动生效的风格包(老板 10-31:只改进度不用批,通知跟着每天这一条说,不单独发)
+    extra = ("另外:" + ";".join(notes) + ",已自动生效,不用你批。") if notes else ""
+    return f"老板,今天有 {pending} 张卡等你,在办公室里(右下角我的头像)。不急,你有空再看。{tail}{extra}"
 
 
 def decided_text(card: Any, *, changed: bool, decision: str, execution: dict[str, Any] | None = None) -> str:
@@ -537,6 +539,11 @@ class SuqingheWorker:
             return False
         if not self.online and not self.connect():
             return False
+        try:
+            notes = style_packs.progress_notes(db, since=state.last_spoke_date)
+        except Exception:  # noqa: BLE001 —— 附带的一句话,读不到就不说
+            _LOGGER.exception("读风格包进度更新出错")
+            notes = []
         # 先记「今天说过了」再发:宁可漏一条,也不重复刷屏。
         state.last_spoke_date = la_date(now)
         db.add(state)
@@ -546,7 +553,7 @@ class SuqingheWorker:
             cid = self._owner_conversation(str(owner.id))
             if not cid:
                 continue
-            self.client.send_message(cid, text=reminder_text(pending, digest_cards=digest_cards), client_message_id=f"sqh-remind-{uuid.uuid4().hex[:20]}")
+            self.client.send_message(cid, text=reminder_text(pending, digest_cards=digest_cards, notes=notes), client_message_id=f"sqh-remind-{uuid.uuid4().hex[:20]}")
             sent = True
         if sent:
             memory.log_activity(db, f"在 C19 提醒了老板:{pending} 张卡待审。", kind="speak")
@@ -618,6 +625,12 @@ class SuqingheWorker:
             # 第⑥步:早间计划排完后去找货池里挑今天的新品(一天几张卡、攒多了不发,都在 picks 里管)
             if picks.should_pick(now=now, last_plan=office.get_state(db).last_plan_date) and self._pick_attempt_allowed(now):
                 picks.run_picks(db, now=now)
+            # 风格包注册表(M2a):待生效的包——只改进度的自动生效,其余试算后发「风格包待生效」卡。一轮最多一个。
+            try:
+                style_packs.tick(db)
+            except Exception:  # noqa: BLE001 —— 注册表这一步出错不拖垮这一轮
+                db.rollback()
+                _LOGGER.exception("风格包注册表这一步出错")
             # 建进 K 的产品往下推:线程闲着就派下一件(暂停时上面已经 return,不派新活)
             self.pipeline.maybe_start(db)
             # B 期(10-29):问过卖家的档案到点去旺旺看回复(一轮最多一单;浏览器正等老板就跳过)

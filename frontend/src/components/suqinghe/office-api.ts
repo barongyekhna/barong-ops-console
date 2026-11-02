@@ -175,7 +175,7 @@ export function getDigest(kind: DigestKind, periodKey: string) {
 }
 
 /** 档案柜:一个 1688 链接 → 一份 K 档案草稿(后端 /suqinghe/dossiers)。 */
-export type DossierStatus = "queued" | "fetching" | "reading" | "ready" | "blocked" | "failed" | "created" | "rejected" | "needs_human";
+export type DossierStatus = "queued" | "fetching" | "reading" | "ready" | "blocked" | "failed" | "created" | "rejected" | "needs_human" | "dropped" | "gate_ask";
 
 export type DossierSummary = {
   id: number;
@@ -230,6 +230,8 @@ export const DOSSIER_STATUS_LABEL: Record<DossierStatus, string> = {
   created: "已建进K",
   rejected: "已驳回",
   needs_human: "等你过验证",
+  dropped: "合规门不做",
+  gate_ask: "合规门等你定",
 };
 
 /** 她的登录浏览器(10-28):状态、画面、老板的动作。 */

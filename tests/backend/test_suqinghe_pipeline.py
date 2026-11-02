@@ -15,7 +15,7 @@ from sqlalchemy import delete, select
 from backend.app.db.session import SessionLocal
 from backend.app.models.user import User
 from backend.app.modules.agent_series.suqinghe import cards, k_ops, material, pipeline
-from backend.app.modules.agent_series.suqinghe.models import SqhCard, SqhDossier
+from backend.app.modules.agent_series.suqinghe.models import SqhCard, SqhDossier, SqhRouteRecord
 from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeAttribute,
     KProductKnowledgeProduct,
@@ -53,6 +53,7 @@ def built(clean):  # noqa: F811
     with without_org_data_isolation(), SessionLocal() as db:
         db.execute(delete(KProductKnowledgeWorkflowExecution).where(KProductKnowledgeWorkflowExecution.product_id == outcome["k_product_id"]))
         db.execute(delete(SqhCard).where(SqhCard.kind == pipeline.BLOCKED_CARD_KIND))
+        db.execute(delete(SqhRouteRecord).where(SqhRouteRecord.dossier_id == ready.id))
         db.commit()
 
 
@@ -64,6 +65,13 @@ def _pick() -> tuple[int, str] | None:
 def _pipe(dossier_id: int) -> dict[str, Any]:
     with without_org_data_isolation(), SessionLocal() as db:
         return dict((db.get(SqhDossier, dossier_id).draft or {}).get("pipeline") or {})
+
+
+def _route_chosen(dossier_id: int, pack: str = "sunny-pop") -> None:
+    """选包定下来了(M2a):种一份「用」的选包记录。选包本身的流程见 test_jiagui_registry_flow。"""
+    with without_org_data_isolation(), SessionLocal() as db:
+        db.add(SqhRouteRecord(dossier_id=dossier_id, sku="TEST", decision_kind="use", pack_id=pack, pack_version="1.0.1", record={}, registry_fp=""))
+        db.commit()
 
 
 def _decide(ref: str, decision: str, owner_id: int, reason: str | None = None) -> dict[str, Any]:
@@ -513,6 +521,8 @@ def test_copy_is_read_fixed_carded_and_reworked_before_images(built, monkeypatch
         assert _pipe(dossier_id)["copy_approved"]["card_ref"] == ref3
         assert _pick() is None
         monkeypatch.setenv("SQH_IMAGE_BRIEF_PAUSED", "0")
+        assert _pick() is None  # M2a(11-02):风格包还没定下来,作图那一段等着
+        _route_chosen(dossier_id)
         assert _pick() == (dossier_id, "image_brief")
     finally:
         with without_org_data_isolation(), SessionLocal() as db:

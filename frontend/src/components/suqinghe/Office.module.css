@@ -967,6 +967,33 @@
   --family: var(--color-success);
 }
 
+.inboxGroup[data-family="gate"],
+.sheet[data-family="gate"],
+.stamp[data-family="gate"],
+.sheetThumb[data-family="gate"],
+.dossierThumb[data-family="gate"],
+.dossierPage[data-family="gate"] {
+  --family: var(--color-warning);
+}
+
+.inboxGroup[data-family="style"],
+.sheet[data-family="style"],
+.stamp[data-family="style"],
+.sheetThumb[data-family="style"],
+.dossierThumb[data-family="style"],
+.dossierPage[data-family="style"] {
+  --family: var(--color-info);
+}
+
+.inboxGroup[data-family="missing"],
+.sheet[data-family="missing"],
+.stamp[data-family="missing"],
+.sheetThumb[data-family="missing"],
+.dossierThumb[data-family="missing"],
+.dossierPage[data-family="missing"] {
+  --family: var(--color-muted);
+}
+
 .inboxGroup[data-family="alert"],
 .sheet[data-family="alert"],
 .stamp[data-family="alert"],

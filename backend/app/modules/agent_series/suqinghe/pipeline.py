@@ -6,6 +6,10 @@
   → 卖点(K 生成 → 她批)→【价格卡,老板批】→ 文案(K 写)→ 她读稿改稿 →【文案卡,老板批】
   → 作图指令 → 出图(K 自动品牌审查)→【审核卡,老板批】→ 保存图片 → 推上独立站(草稿,P 的上架)→ 回读 Woo
 
+选风格包(M2a,11-02,style_route.py):价格卡发出去以后就判(要用价格判价格带那一题),缺包早知道;
+价格、文案照常往下走,只有作图那一段要等包定下来(用 / 变体;缺包就等包,同分就等老板选)。
+注册表还有待生效的包时先不判(免得一张风格包卡批了又全部重判);注册表变了、价改了一美元以上,还没排图的品重判一遍。
+
 价格卡排在文案前面:K 写文案按变体的包装数量写,颜色变体的主图要变体参考图——变体和售价得先定。
 
 文案三件事(10-27 补完,copywork.py):K 写完她先读一遍(事实对不对得上档案和卖点、没证书的认证、美制单位、夸张词、通不通顺),
@@ -41,7 +45,8 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, compliance_gate, copywork, k_ops, market, material, memory, photo_check, pricing, seller_chat
+from ...k_series.jiagui import registry as jiagui_registry
+from . import cards, compliance_gate, copywork, k_ops, market, material, memory, photo_check, pricing, seller_chat, style_packs, style_route
 from .constants import COPY_CARD_KIND, MARKET_CARD_KIND, USAGE_LABEL, image_brief_paused, market_enabled
 from .models import SqhCard, SqhDossier
 
@@ -74,6 +79,7 @@ STEP_LABELS = {
     "approve_selling_points": "批卖点",
     "price_card": "出价格卡",
     "apply_price": "按批的价改变体、选运费模板",
+    "route": "选风格包",
     "copy": "写文案",
     "copy_check": "读稿改稿",
     "copy_card": "出文案卡",
@@ -135,6 +141,8 @@ class View:
     keywords_rerun: bool = False  # 老板驳了拆解卡:撤掉市场情报,关键词重跑一遍
     seller_pending: bool = False  # 问了卖家重量尺寸还没回(B 期,10-29):价格卡先不出
     gate: str | None = "pass"  # 合规门(11-02):None = 还没判/没判成;drop/ask = 停着等老板;pass/skip/override = 往下走
+    route_due: bool = False  # 该选风格包了(注册表定了、有价、没判过或记录旧了、还没排图)
+    route_hold: bool = False  # 风格包没定下来(缺包 / 同分等老板 / 还没判):作图那一段等着
 
 
 def next_step(view: View) -> str | None:
@@ -158,6 +166,8 @@ def next_step(view: View) -> str | None:
         # 停在风险词 = 正常;停在别处(SERP、两道筛失败,blocked/failed 带错误码)= 重跑那一步
         return "risk_review" if view.execution_step in RISK_STEPS else "keywords_retry"
     if view.sp_approved:
+        if view.route_due:
+            return "route"  # 价格卡发出去就选包:缺包早知道,价格、文案照常往下走
         if not (view.price_applied and view.shipping_set):
             if view.price_card == "pending" or view.seller_pending:
                 return None  # 等老板批价格卡 / 等卖家回重量尺寸
@@ -187,6 +197,8 @@ def _next_after_price(view: View) -> str | None:
         if view.copy_card == "rejected":
             return "copy_rework"
         return "copy_card"  # 没发过 / 作废 / 过期 / 批过的是旧版(文案后来又变了)
+    if view.route_hold:
+        return None  # 风格包没定下来:缺包等包、同分等老板选、注册表还没定
     if view.brief_paused:
         return None  # 作图指令先停(老板拍板),文案批了就停在这
     if view.brief_job in ACTIVE_JOB:
@@ -252,6 +264,7 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
     approved = product.selling_points_approved_json if isinstance(product.selling_points_approved_json, dict) else {}
     candidates = product.selling_points_candidates_json if isinstance(product.selling_points_candidates_json, dict) else {}
     material_version = (draft.get("material") or {}).get("version") if isinstance(draft.get("material"), dict) else None
+    later = _later_view(db, product, pipe, jobs)
     return View(
         material_done=(material_version or 0) >= material.MATERIAL_VERSION,
         stopped=bool(pipe.get("stopped")),
@@ -271,8 +284,43 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
         keywords_rerun=bool(pipe.get("keywords_rerun")),
         seller_pending=seller_chat.pending(draft),
         gate=compliance_gate.state(draft),
-        **_later_view(db, product, pipe, jobs),
+        **later,
+        **_route_view(db, dossier, product, pipe, render_requested=bool(later.get("render_requested"))),
     )
+
+
+def _price_now(db: Session, dossier: SqhDossier, product: Any, pipe: dict[str, Any]) -> dict[str, Any] | None:
+    """选包要的价:定了价用 K 里的;没定就用价格卡上的建议价(卡在等或批了)。都没有 = None。"""
+    if _price_applied(db, product):
+        if (product.product_type or "") == "variable_product":
+            prices = [float(v.price_override) for v in k_ops.variant_rows(db, product.id) if v.price_override is not None]
+        else:
+            prices = [float(product.regular_price)] if product.regular_price is not None else []
+        if prices:
+            return {"low": round(min(prices), 2), "high": round(max(prices), 2), "source": "applied"}
+    ref = (pipe.get("price") or {}).get("card_ref")
+    card = db.scalar(select(SqhCard).where(SqhCard.ref == str(ref)), execution_options=SKIP_ORG_DATA_ISOLATION) if ref else None
+    if card is not None and card.status in {"pending", "approved"}:
+        evidence = card.evidence if isinstance(card.evidence, dict) else {}
+        prices = [float(v["price"]) for v in evidence.get("variants") or [] if isinstance(v, dict) and v.get("include") and v.get("price") is not None]
+        if prices:
+            return {"low": round(min(prices), 2), "high": round(max(prices), 2), "source": "card"}
+    return None
+
+
+def _route_view(db: Session, dossier: SqhDossier, product: Any, pipe: dict[str, Any], *, render_requested: bool) -> dict[str, Any]:
+    if render_requested:
+        return {"route_due": False, "route_hold": False}  # 图已经排了:照记下的包和版本做完,不重判
+    rec = style_route.current(db, dossier.id)
+    hold = style_route.effective_kind(rec) not in style_route.OK_KINDS
+    view = jiagui_registry.view(db)
+    if not view or style_packs.has_pending(db):
+        return {"route_due": False, "route_hold": hold}  # 注册表还没定下来
+    price = _price_now(db, dossier, product, pipe)
+    if price is None:
+        return {"route_due": False, "route_hold": hold}
+    stale = rec is None or rec.registry_fp != jiagui_registry.fingerprint(view) or style_route.price_moved(rec.price if isinstance(rec.price, dict) else None, price)
+    return {"route_due": stale, "route_hold": hold or stale}
 
 
 def _later_view(db: Session, product: Any, pipe: dict[str, Any], jobs: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -927,6 +975,43 @@ def _step_price_card(ctx: Ctx) -> str:
     return f"价格卡 #{card.ref} 发了:{len(included)} 个规格 {price_text}"
 
 
+def _route_facts(ctx: Ctx, price: dict[str, Any]) -> str:
+    """给选包看的资料:档案核过的事实 + 售价 + 老板批过的卖点 + 主关键词。不含进价、1688 链接。"""
+    bullets = _bullets(ctx.product.selling_points_approved_json)
+    keyword = _pipe(ctx.dossier).get("main_keyword") or ctx.product.primary_keyword or ""
+    lines = [
+        _product_brief(ctx.dossier, ctx.product),
+        f"售价:{style_route.price_text(price)}",
+        "老板批过的卖点:" + (";".join(str(b.get("text_zh") or b.get("text")) for b in bullets[:8]) or "(没有)"),
+    ]
+    if keyword:
+        lines.append(f"主关键词(美国买家搜的词):{keyword}")
+    return "\n".join(lines)
+
+
+def _step_route(ctx: Ctx) -> str:
+    """选风格包(M2a):代码画答卷、Opus 填、代码定。同分发卡等老板选;缺包按缺的包合并发卡。"""
+    price = _price_now(ctx.db, ctx.dossier, ctx.product, _pipe(ctx.dossier))
+    view = jiagui_registry.view(ctx.db)
+    if not view or price is None:
+        raise StepError("注册表里没有生效的风格包,或者还没有价,选不了包")
+    facts = _route_facts(ctx, price)
+    sku = ctx.product.sku or ctx.dossier.offer_id
+    dossier_id = ctx.dossier.id
+    result = style_route.judge(ctx.db, facts, view, product_id=sku, price=style_route.price_text(price))
+    if result["status"] != "pass":
+        raise StepError(f"选风格包没判成:{result.get('error')}")
+    row = style_route.save(ctx.db, dossier_id=dossier_id, sku=sku, result=result, facts=facts, price=price)
+    note = f"选风格包:{style_route.headline(row.record, view)}"
+    if row.decision_kind == "ask_owner":
+        card = style_route.raise_pick_card(ctx.db, row=row, view=view, title_hint=f"{sku} {ctx.product.product_name_en or ''}".strip())
+        note += f",卡 #{card.ref} 等老板选"
+    refs = style_route.raise_missing_cards(ctx.db, view=view, dossier_ids=[d.id for d, _ in managed(ctx.db)])
+    if refs:
+        note += ";缺包卡 #" + "、#".join(refs)
+    return note
+
+
 def _step_apply_price(ctx: Ctx) -> str:
     ref = (_pipe(ctx.dossier).get("price") or {}).get("card_ref")
     card = ctx.db.scalar(select(SqhCard).where(SqhCard.ref == str(ref)), execution_options=SKIP_ORG_DATA_ISOLATION) if ref else None
@@ -1535,6 +1620,7 @@ STEPS = {
     "approve_selling_points": _step_approve_selling_points,
     "price_card": _step_price_card,
     "apply_price": _step_apply_price,
+    "route": _step_route,
     "copy": _step_copy,
     "copy_check": _step_copy_check,
     "copy_card": _step_copy_card,

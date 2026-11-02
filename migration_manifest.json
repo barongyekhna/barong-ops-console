@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20261102_02_suqinghe_gate_statuses",
+  "alembic_head": "20261102_03_jiagui_registry",
   "environment": "staging",
-  "expected_alembic_head": "20261102_02_suqinghe_gate_statuses",
+  "expected_alembic_head": "20261102_03_jiagui_registry",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 141,
-  "migration_hash": "a04f68e90746611fc7a4d5821034b39cb292c8508cbff674093eb759b0edbbcc",
+  "migration_count": 142,
+  "migration_hash": "01914eeb6c129fba84d48115b9f9ae749b7bc7a3f03049056f78e3255277fb9d",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -148,9 +148,10 @@
     "20261030_01_suqinghe_digests",
     "20261030_02_suqinghe_gsc",
     "20261102_01_ai_key_budgets",
-    "20261102_02_suqinghe_gate_statuses"
+    "20261102_02_suqinghe_gate_statuses",
+    "20261102_03_jiagui_registry"
   ],
-  "migration_order_checksum": "186361e962a70d42f61a1902d3d7cfe60fbc7867e74cd577608d3a1fbacbae95",
+  "migration_order_checksum": "a9ad2ea7fad3cb578018a99f9d846b706562a55decf166318e046431f8a7ade4",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -1138,6 +1139,13 @@
       "down_revision": "20261102_01_ai_key_budgets",
       "path": "backend/alembic/versions/20261102_02_suqinghe_gate_statuses.py",
       "version": "20261102_02_suqinghe_gate_statuses"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "e154c7d2360046f83e470d57f0f2d11f06cd963f75193a9581a8be705aff0a93",
+      "down_revision": "20261102_02_suqinghe_gate_statuses",
+      "path": "backend/alembic/versions/20261102_03_jiagui_registry.py",
+      "version": "20261102_03_jiagui_registry"
     }
   ]
 }

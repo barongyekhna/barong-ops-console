@@ -36,7 +36,14 @@ test("七个家族:每种 kind 都落到一个家族,要你批的排前、只看
   assert.equal(familyOf("market"), "market");
   for (const kind of ["ops_alert", "product_blocker", "goal", "other", BLOCKED_CARD_KIND, "something_new"]) assert.equal(familyOf(kind), "alert", kind);
   assert.equal(familyOf("ops_digest"), "digest"); // 运营看板周报(10-30):只看不用批,排最后
-  assert.deepEqual(FAMILY_ORDER, ["dossier", "price", "copy", "review", "pick", "alert", "market", "digest"]);
+  // 11-02:合规门卡、风格包(待生效/同分要选)各有一家;缺包汇报只看不用批
+  assert.equal(familyOf("compliance_gate"), "gate");
+  assert.equal(familyOf("style_pack"), "style");
+  assert.equal(familyOf("route_pick"), "style");
+  assert.equal(familyOf("route_missing"), "missing");
+  assert.equal(FAMILIES.missing.needsDecision, false);
+  assert.equal(FAMILIES.gate.needsDecision, true);
+  assert.deepEqual(FAMILY_ORDER, ["dossier", "price", "copy", "review", "pick", "gate", "style", "alert", "market", "missing", "digest"]);
   assert.equal(FAMILIES.digest.needsDecision, false);
   assert.match(familyMeta("ops_digest").ask, /不用批/);
   assert.ok(FAMILY_ORDER.every((f) => FAMILIES[f].label && FAMILIES[f].icon && FAMILIES[f].ask));

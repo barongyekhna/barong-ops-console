@@ -171,7 +171,7 @@ def decide_card(
     elif changed:
         from . import picks, pipeline  # 流水线和选品都要用 cards 建卡,这里晚一点再导
 
-        from . import compliance_gate
+        from . import compliance_gate, style_packs, style_route
 
         if card.kind in pipeline.PIPELINE_CARD_KINDS:
             execution = pipeline.after_decision(db, card, decision=decision)
@@ -179,6 +179,12 @@ def decide_card(
             execution = picks.after_decision(db, card, decision=decision, actor=actor)
         elif card.kind == compliance_gate.GATE_CARD_KIND:
             execution = compliance_gate.after_decision(db, card, decision=decision, actor=actor)
+        elif card.kind == style_packs.PACK_CARD_KIND:
+            execution = style_packs.after_decision(db, card, decision=decision, actor=actor)
+        elif card.kind == style_route.PICK_CARD_KIND:
+            execution = style_route.after_pick(db, card, decision=decision)
+        elif card.kind == style_route.MISSING_CARD_KIND:
+            execution = style_route.after_missing(db, card, decision=decision)
     return DecideOutcome(card=card, changed=changed, execution=execution)
 
 
