@@ -221,13 +221,25 @@ def keys_section(db: Session) -> dict[str, Any]:
 
 
 def ai_section(db: Session) -> dict[str, Any]:
+    """Claude 额度:11-02 起两把钥匙按动态配额分。claude_usd_today / claude_daily_budget_usd 两个老字段保留(前端在读),
+    含义变成「两把合计今天已花 / 今天合计可花」;keys 里是每把各自的本期剩余、今天可花、按现在速度到重置日会剩多少;
+    idle_warnings = 重置日前 5 天还剩三成以上(额度要浪费了,该多花)。"""
     del db
-    from ....services.ai_usage_ledger import claude_daily_budget_usd, claude_spend_today_usd
+    from ....services.ai_usage_ledger import claude_budget_overview
 
-    spent = claude_spend_today_usd()
-    if spent is None:
+    overview = claude_budget_overview()
+    if overview is None:
         return dict(UNREADABLE)
-    return {"claude_usd_today": round(spent, 4), "claude_daily_budget_usd": claude_daily_budget_usd()}
+    return {
+        "claude_usd_today": overview["total_spent_today_usd"],
+        "claude_daily_budget_usd": overview["total_allowance_today_usd"],
+        "mode": overview["mode"],
+        "keys": [
+            {k: v for k, v in s.items() if k in ("key_id", "name", "monthly_usd", "reset_day", "days_left", "remaining_usd", "spent_today_usd", "allowance_today_usd", "headroom_today_usd", "projected_leftover_usd", "idle_warning")}
+            for s in overview.get("keys", [])
+        ],
+        "idle_warnings": overview.get("idle_warnings", []),
+    }
 
 
 def approvals_section(db: Session) -> dict[str, Any]:

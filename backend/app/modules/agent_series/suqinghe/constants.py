@@ -136,8 +136,23 @@ def _env_float(name: str, default: float) -> float:
 
 
 def daily_claude_budget_usd() -> float:
-    """她自己每天最多花多少 Claude(全局 $6.4 总闸之外再加一道)。超了改用 bulk 档。"""
-    return max(0.0, _env_float("SQH_DAILY_CLAUDE_USD", 2.0))
+    """她自己每天最多花多少 Claude。超了改用 bulk 档。
+
+    11-02 老板定:按比例,不写死——「原来每天 6.5,苏青禾占 2,意味着苏青禾占总台账的 30%,我们可以依据动态配额,
+    保证苏青禾还是这个比例就行」。= 两把钥匙今天总可花额度 × SQH_CLAUDE_SHARE_PCT(默认 30%)。
+    额度表读不到、或还没登记额度(legacy)时,退回 SQH_DAILY_CLAUDE_USD(默认 2)保底。
+    """
+    floor = max(0.0, _env_float("SQH_DAILY_CLAUDE_USD", 2.0))
+    share = max(0.0, min(100.0, _env_float("SQH_CLAUDE_SHARE_PCT", 30.0)))
+    try:
+        from ....services.ai_usage_ledger import claude_budget_overview
+
+        overview = claude_budget_overview()
+    except Exception:  # noqa: BLE001
+        overview = None
+    if not overview or overview.get("mode") != "dynamic":
+        return floor
+    return round(float(overview.get("total_allowance_today_usd") or 0) * share / 100, 2)
 
 
 def loop_seconds() -> float:

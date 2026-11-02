@@ -737,6 +737,20 @@ def create_api_key_binding(
     _enable_key_runtime(key, actor_user_id=actor_user_id)
     db.add(key)
 
+    # 11-02:给模块绑第二把同别名的钥匙 = 换钥匙。先把同(组织, 模块, 别名)下其他生效绑定停掉,
+    # 不然两条同时生效,这个模块所有调用都会崩(resolve 用 scalar)。
+    for other in db.scalars(
+        select(ApiKeyModuleBindingRecord).where(
+            ApiKeyModuleBindingRecord.org_id == org_id,
+            ApiKeyModuleBindingRecord.module_id == payload.module_id,
+            ApiKeyModuleBindingRecord.key_alias == binding_alias,
+            ApiKeyModuleBindingRecord.status == "active",
+            ApiKeyModuleBindingRecord.key_id != payload.key_id,
+        )
+    ).all():
+        other.status = "disabled"
+        other.updated_by_user_id = actor_user_id
+        db.add(other)
     existing = db.scalar(
         select(ApiKeyModuleBindingRecord).where(
             ApiKeyModuleBindingRecord.org_id == org_id,
@@ -810,13 +824,17 @@ def resolve_module_api_key_for_injection(
     key_alias: str = "default",
 ) -> ApiKeyInjectionContext:
     normalized_alias = key_alias.strip().lower().replace(" ", "_") or "default"
+    # 11-02:同一(组织, 模块, 别名)万一有两条生效绑定(以前的 create 不挡),取最近改的那条,别让 scalar() 抛 MultipleResultsFound 把模块打挂。
     binding = db.scalar(
-        select(ApiKeyModuleBindingRecord).where(
+        select(ApiKeyModuleBindingRecord)
+        .where(
             ApiKeyModuleBindingRecord.org_id == org_id,
             ApiKeyModuleBindingRecord.module_id == module_id,
             ApiKeyModuleBindingRecord.key_alias == normalized_alias,
             ApiKeyModuleBindingRecord.status == "active",
         )
+        .order_by(ApiKeyModuleBindingRecord.updated_at.desc(), ApiKeyModuleBindingRecord.id.desc())
+        .limit(1)
     )
     if binding is None:
         raise ApiKeyIsolationError("api_key_not_bound_to_module")
@@ -830,6 +848,29 @@ def resolve_module_api_key_for_injection(
         key=key,
         record_usage=True,
     )
+
+
+def claude_keys_for_org(db: Session, *, org_id: str) -> list[ApiKeyInjectionContext]:
+    """这个组织里登记过、而且绑过至少一个模块的 Claude 官方钥匙,每把一份注入上下文(解了密的头)。
+    给路由按动态配额在钥匙之间切换用(11-02):只在同一组织里、只认用户绑过的钥匙,不猜。不记 last_used。"""
+    rows = db.execute(
+        select(ApiKeyModuleBindingRecord, ApiKeyRecord)
+        .join(ApiKeyRecord, ApiKeyRecord.key_id == ApiKeyModuleBindingRecord.key_id)
+        .where(
+            ApiKeyModuleBindingRecord.org_id == org_id,
+            ApiKeyModuleBindingRecord.status == "active",
+            ApiKeyRecord.org_id == org_id,
+            ApiKeyRecord.status == "active",
+            ApiKeyRecord.deleted_at.is_(None),
+        )
+        .order_by(ApiKeyRecord.created_at, ApiKeyModuleBindingRecord.id)
+    ).all()
+    out: dict[str, ApiKeyInjectionContext] = {}
+    for binding, key in rows:
+        if key.key_id in out or _key_type_for_record(key) != ANTHROPIC_KEY_TYPE:
+            continue
+        out[key.key_id] = _injection_context_from_binding(binding=binding, key=key, record_usage=False)
+    return list(out.values())
 
 
 def _injection_context_from_binding(

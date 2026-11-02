@@ -145,6 +145,10 @@ def issues_in(snapshot: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], set[
     if isinstance(ops, dict) and isinstance(ops.get("findings"), list):
         readable.add("ops")
         live.update({f"ops:{f['code']}": {} for f in ops["findings"] if isinstance(f, dict) and f.get("code") and f.get("severity") == "warn"})
+    ai = snapshot.get("ai")  # 11-02 两把钥匙动态配额:重置日前 5 天还剩三成以上 → budget:<钥匙 id>,提醒老板额度要浪费了
+    if isinstance(ai, dict) and isinstance(ai.get("idle_warnings"), list):
+        readable.add("budget")
+        live.update({f"budget:{w['key_id']}": {"name": w.get("name")} for w in ai["idle_warnings"] if isinstance(w, dict) and w.get("key_id")})
     return live, readable
 
 

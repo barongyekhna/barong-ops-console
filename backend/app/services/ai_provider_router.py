@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import json
 import os
 from dataclasses import dataclass
@@ -17,7 +19,8 @@ from ..models.organization import OrganizationRecord
 from ..models.user import User
 from . import anthropic_messages
 from .ai_roles import DEGRADE_MODEL, DEGRADE_PROVIDER, is_role, resolve_role
-from .ai_usage_ledger import claude_budget_exhausted, record_ai_usage, usage_from_response
+from .ai_usage_ledger import claude_budget_exhausted, pick_claude_key, record_ai_usage, usage_from_response
+from .api_key_orchestration import claude_keys_for_org
 from .event_collector import emit_event
 from .module_execution_gate import (
     ModuleExecutionContext,
@@ -559,9 +562,6 @@ class AIExecutionRouter:
                 status_code=500,
             )
         degraded = False
-        if canonical_provider == "claude" and claude_budget_exhausted():
-            # 家规(10-21):Claude 当天额度用完,降级给 DeepSeek 照常干活,并标明是降级做的。
-            canonical_provider, model_override, effort, degraded = DEGRADE_PROVIDER, DEGRADE_MODEL, None, True
         org_record = self._resolve_org(org)
         context = execution_context or require_module_execution_ready(
             self.db,
@@ -574,6 +574,15 @@ class AIExecutionRouter:
             },
         )
         self._validate_context_org(context=context, org_record=org_record)
+        chosen_key: ModuleExecutionKey | None = None
+        if canonical_provider == "claude":
+            # 11-02:两把 Claude 钥匙按动态配额分。模块绑的那把是首选;它今天没剩了就换同组织里另一把登记过额度的;
+            # 两把都没剩才降级给 DeepSeek(家规 10-21:降级照常干活,并标明)。模块根本没绑 Claude 钥匙 → 下面照旧报钥匙缺失,不降级。
+            bound = self._find_key(context, "claude")
+            if bound is not None:
+                chosen_key = self._choose_claude_key(org_id=org_record.org_id, bound=bound)
+                if chosen_key is None:
+                    canonical_provider, model_override, effort, degraded = DEGRADE_PROVIDER, DEGRADE_MODEL, None, True
         if degraded and self._find_key(context, canonical_provider) is None:
             # 调用方预先备好的上下文里只有 Claude 钥匙:为降级单独取一把 DeepSeek 钥匙。
             # 取不到就当场报错(模块没绑 DeepSeek),绝不拿 Claude 钥匙去打 DeepSeek。
@@ -586,7 +595,7 @@ class AIExecutionRouter:
                 key_requirements={canonical_provider: provider_key_alias(canonical_provider)},
             )
             self._validate_context_org(context=context, org_record=org_record)
-        key = self._key_for_provider(context, canonical_provider)
+        key = chosen_key or self._key_for_provider(context, canonical_provider)
         if degraded:
             self._emit_degraded_event(org_id=org_record.org_id, task_type=task_type, module_id=module_id)
         # 墙钟总预算在这里起算,贯穿模型降级链与 provider fallback。
@@ -706,6 +715,7 @@ class AIExecutionRouter:
                         degraded=degraded,
                         latency_ms=latency_ms,
                         org_ref=org_record.org_id,
+                        key_id=key.key_id,
                     )
                     self._emit_execution_event(
                         provider=provider,
@@ -787,6 +797,7 @@ class AIExecutionRouter:
                     latency_ms=latency_ms,
                     org_ref=org_record.org_id,
                     error_code=last_error.code if last_error else None,
+                    key_id=key.key_id,
                 )
                 self._emit_execution_event(
                     provider=provider,
@@ -911,6 +922,34 @@ class AIExecutionRouter:
             except ProviderConfigError:
                 continue
         return None
+
+    def _choose_claude_key(self, *, org_id: str, bound: ModuleExecutionKey) -> ModuleExecutionKey | None:
+        """在「模块绑的那把 + 同组织里其他登记了额度的 Claude 钥匙」里挑今天还剩得多的;都没剩 → None(降级)。
+        备选钥匙读不出来(表没建、库抖)就只看绑的那把,绝不因为挑钥匙把调用搞挂。"""
+        if claude_budget_exhausted():
+            return None
+        alternates: dict[str, ModuleExecutionKey] = {}
+        try:
+            for alt in claude_keys_for_org(self.db, org_id=org_id):
+                if alt.key_id != bound.key_id:
+                    alternates[alt.key_id] = ModuleExecutionKey(
+                        step_name=bound.step_name,
+                        key_alias=bound.key_alias,
+                        key_id=alt.key_id,
+                        name=alt.name,
+                        url=alt.url,
+                        header_name=alt.header_name,
+                        header_value=alt.header_value,
+                    )
+        except Exception:  # noqa: BLE001
+            logging.getLogger(__name__).warning("alternate claude keys unavailable; using bound key only", exc_info=True)
+        picked = pick_claude_key([bound.key_id, *alternates], preferred=bound.key_id)
+        if picked is None:
+            # 总闸说还能用 Claude,挑钥匙却挑不出来(额度表读不到、或绑的这把今天到顶而有余的那把没绑进这个组织):
+            # 用绑的那把,最多是这一天花超一点,不降级。真用完由上面的总闸管。
+            logging.getLogger(__name__).info("claude key pick returned none while budget not exhausted; keeping bound key %s", bound.key_id)
+            return bound
+        return alternates.get(picked, bound)
 
     def _key_for_provider(
         self,
