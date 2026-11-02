@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
 from ...f_series.enrichment.models import FCategoryCandidate
-from . import amazon_signals, cards, dossiers, memory, office, pricing, scoring
+from . import amazon_signals, cards, compliance_gate, dossiers, memory, office, pricing, scoring
 from .constants import CANDIDATE_CARD_KIND, FACTORY_BRIEF, USAGE_LABEL, pick_min_score, picks_max_pending, picks_per_day, weight_class_kg
 from .models import SqhCard, SqhDossier
 
@@ -451,6 +451,7 @@ def run_picks(
     amazon: AmazonFn | None = None,
     keepa: KeepaFn | None = None,
     rows: list[FCategoryCandidate] | None = None,
+    gate: compliance_gate.GateFn | None = None,
 ) -> dict[str, Any]:
     """挑一轮:初筛(她)→ 取数据(谷歌购物/亚马逊/Keepa)→ 评分卡 → 红线否决、过线的发卡。返回 {"cards": [refs], "skipped": 原因 | None, "scored": [...]}。
 
@@ -475,6 +476,8 @@ def run_picks(
             db.commit()
             return {"cards": [], "skipped": "pool_empty"}
     by_id = {str(row.id): row for row in rows}
+    if gate is None and judge is None:
+        gate = compliance_gate.judge  # 真跑才过合规门;注入假判断的测试不传 gate 就不过门
     judge = judge or _default_judge
     shopping = shopping or _default_shopping
     amazon = amazon or _default_amazon
@@ -513,6 +516,21 @@ def run_picks(
         if len(refs) >= quota:
             break
         row = by_id[pick.f_candidate_id]
+        if gate is not None:
+            # 合规门(11-02):1688 来的一律过门;不过的不取数据、不发卡,在 F 候选上标红挡住自动链路(老板在 F 页面仍能手动放行)
+            _set_activity(db, "thinking", f"过合规门:{row.title[:30]}")
+            db.commit()
+            verdict = gate(db, compliance_gate.candidate_facts(row))
+            if verdict.get("status") in compliance_gate.WAITING:
+                row = db.get(FCategoryCandidate, row.id, execution_options=_X) or row
+                compliance_gate.flag_candidate(row, verdict)
+                db.add(row)
+                scored.append({"f_candidate_id": pick.f_candidate_id, "total": None, "vetoed": [f"合规门:{compliance_gate.headline(verdict)}"]})
+                memory.log_activity(db, f"合规门不做:{row.title[:30]}——{compliance_gate.headline(verdict)}", kind="pick")
+                db.commit()
+                continue
+            if verdict.get("status") == "error":
+                memory.log_activity(db, f"合规门没判成({str(verdict.get('error') or '')[:60]}):{row.title[:30]},建档时再判。", kind="pick")
         _set_activity(db, "thinking", f"给候选打分:{row.title[:30]}")
         db.commit()
         competitors = shopping(db, pick.us_query) if pick.us_query else {"query": "", "n": 0}

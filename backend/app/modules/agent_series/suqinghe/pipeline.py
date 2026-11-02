@@ -41,7 +41,7 @@ from sqlalchemy.orm import Session
 
 from ....models.user import User
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION, without_org_data_isolation
-from . import cards, copywork, k_ops, market, material, memory, photo_check, pricing, seller_chat
+from . import cards, compliance_gate, copywork, k_ops, market, material, memory, photo_check, pricing, seller_chat
 from .constants import COPY_CARD_KIND, MARKET_CARD_KIND, USAGE_LABEL, image_brief_paused, market_enabled
 from .models import SqhCard, SqhDossier
 
@@ -64,6 +64,7 @@ RISK_STEPS = {"risk_term_manual_review", "risk_term_review_manual"}
 JUDGE_TIMEOUT_SECONDS = 120.0
 
 STEP_LABELS = {
+    "compliance_gate": "过合规门",
     "material": "收卖点素材",
     "market": "拆解同类商品页",
     "keywords": "跑关键词",
@@ -133,12 +134,17 @@ class View:
     market_done: bool = False  # 竞品拆解做过了(done / skipped / 老板驳了);开关关着时视为做过
     keywords_rerun: bool = False  # 老板驳了拆解卡:撤掉市场情报,关键词重跑一遍
     seller_pending: bool = False  # 问了卖家重量尺寸还没回(B 期,10-29):价格卡先不出
+    gate: str | None = "pass"  # 合规门(11-02):None = 还没判/没判成;drop/ask = 停着等老板;pass/skip/override = 往下走
 
 
 def next_step(view: View) -> str | None:
     """None = 现在没她的事(在等 K 跑完、等老板,或者这个品停了)。"""
     if view.stopped or view.blocked_step:
         return None
+    if view.gate is None:
+        return "compliance_gate"  # 合规门上线前建进 K 的品、建档时没判成的品:先补判
+    if view.gate in compliance_gate.WAITING:
+        return None  # 合规门不做 / 要老板定:等合规卡
     if not view.material_done:
         return "material"
     if view.execution_status is None:
@@ -264,6 +270,7 @@ def build_view(db: Session, dossier: SqhDossier, product: Any) -> View:
         market_done=(not market_enabled()) or str((pipe.get("market") or {}).get("status") or "") in {"done", "skipped", "rejected"},
         keywords_rerun=bool(pipe.get("keywords_rerun")),
         seller_pending=seller_chat.pending(draft),
+        gate=compliance_gate.state(draft),
         **_later_view(db, product, pipe, jobs),
     )
 
@@ -566,6 +573,29 @@ def _actor(db: Session, dossier: SqhDossier) -> User:
     if user is None or not user.is_active:
         raise StepError("找不到批这件事的老板账号(或者已停用),没法替他在 K 里操作。")
     return user
+
+
+def _step_compliance_gate(ctx: Ctx) -> str:
+    """补过合规门(11-02):合规门上线前建进 K 的品、建档时没判成的品。drop / ask 发合规卡,这个品停在这。"""
+    draft = dict(ctx.dossier.draft) if isinstance(ctx.dossier.draft, dict) else {}
+    capture = ctx.dossier.capture if isinstance(ctx.dossier.capture, dict) else {}
+    facts = compliance_gate.dossier_facts(draft, capture, name_en=getattr(ctx.product, "product_name_en", None))
+    dossier_id = ctx.dossier.id
+    result = compliance_gate.judge(ctx.db, facts)
+    if result["status"] == "error":
+        raise StepError(f"合规门没判成:{result.get('error')}")
+    dossier = ctx.db.get(SqhDossier, dossier_id, execution_options=SKIP_ORG_DATA_ISOLATION)
+    draft = dict(dossier.draft) if isinstance(dossier.draft, dict) else {}
+    draft["compliance_gate"] = result
+    dossier.draft = draft
+    ctx.db.add(dossier)
+    ctx.db.flush()
+    if result["status"] in compliance_gate.WAITING:
+        sku = getattr(ctx.product, "sku", None) or dossier.offer_id
+        card = compliance_gate.raise_card(ctx.db, dossier=dossier, gate=result, stage="pipeline", title_hint=f"{sku} {getattr(ctx.product, 'product_name_en', '') or ''}".strip())
+        verb = "不做" if result["status"] == "drop" else "要老板定"
+        return f"合规门{verb}({compliance_gate.headline(result)}),先停着,卡 #{card.ref}"
+    return "合规门过了"
 
 
 def _step_material(ctx: Ctx) -> str:
@@ -1495,6 +1525,7 @@ def _step_readback(ctx: Ctx) -> str:
 JOB_TYPES = {"selling_points": "selling_points", "copy": "marketing_copy", "image_brief": "image_brief"}
 
 STEPS = {
+    "compliance_gate": _step_compliance_gate,
     "material": _step_material,
     "market": _step_market,
     "keywords": lambda ctx: _step_keywords(ctx, retry=False),

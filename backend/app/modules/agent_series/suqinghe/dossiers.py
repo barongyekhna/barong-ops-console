@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ....services.data_isolation import SKIP_ORG_DATA_ISOLATION
-from . import browser, cards, memory, office
+from . import browser, cards, compliance_gate, memory, office
 from .constants import (
     DOSSIER_ACTIVE_STATUSES,
     DOSSIER_CARD_KIND,
@@ -98,6 +98,21 @@ def enqueue(db: Session, *, url: str, actor_user_id: str | None, channel: str) -
     )
     if existing is not None:
         return existing, False, _queue_position(db, existing) if existing.status == "queued" else 0
+    dropped = db.scalar(
+        select(SqhDossier)
+        .where(SqhDossier.offer_id == offer_id, SqhDossier.status == compliance_gate.DOSSIER_DROPPED)
+        .order_by(SqhDossier.id.desc())
+        .limit(1),
+        execution_options=_X,
+    )
+    if dropped is not None and dropped.card_ref:
+        card_status = db.scalar(select(SqhCard.status).where(SqhCard.ref == dropped.card_ref), execution_options=_X)
+        if card_status == "pending":
+            gate = compliance_gate.record(dropped.draft) or {}
+            raise DossierError(
+                f"这件货合规门不做({compliance_gate.headline(gate)}),卡 #{dropped.card_ref} 还在等你;"
+                "判错了就在那张卡上点「驳」放行,我接着建档。"
+            )
     dossier = SqhDossier(
         source_url=f"https://detail.1688.com/offer/{offer_id}.html",
         offer_id=offer_id,
@@ -128,6 +143,8 @@ def redo(db: Session, *, dossier_id: int, actor: Any) -> tuple[SqhDossier, bool,
         raise DossierError("这份还在整理中,等它做完再说。")
     if old.status == "created":
         raise DossierError("这份已经建进 K 了,不能重做;要改去 K 里改。")
+    if old.status in (compliance_gate.DOSSIER_DROPPED, compliance_gate.DOSSIER_GATE_ASK):
+        raise DossierError(f"这份被合规门挡着,去卡 #{old.card_ref} 处理(驳 = 放行)。")
     if old.card_ref in building_refs(db, [old]):  # 卡批了、worker 正在建:这时驳卡驳不动,档案却会被标驳回、没人去建
         raise DossierError("这份已经批了,正在建进 K;建完要改去 K 里改。")
     if old.status == "ready" and old.card_ref:
@@ -143,7 +160,7 @@ def redo(db: Session, *, dossier_id: int, actor: Any) -> tuple[SqhDossier, bool,
 
 def queue_reply(position: int, *, created: bool, status: str) -> str:
     if not created:
-        labels = {"queued": "已经在排队了", "fetching": "正在打开页面", "reading": "正在读详情图", "ready": "已经整理好了,在办公室收件筐等你批", "needs_human": "被 1688 要验证了,页面在办公室的浏览器里等你过一下"}
+        labels = {"queued": "已经在排队了", "fetching": "正在打开页面", "reading": "正在读详情图", "ready": "已经整理好了,在办公室收件筐等你批", "needs_human": "被 1688 要验证了,页面在办公室的浏览器里等你过一下", "gate_ask": "过合规门时拿不准,收件筐里有张合规卡等你定"}
         return f"这个链接{labels.get(status, '在处理中')}。"
     eta = max(1, position) * MINUTES_PER_DOSSIER
     return f"收到，排在第 {position} 个，大概 {eta} 分钟后整理好，放在办公室收件筐里。"
@@ -195,6 +212,7 @@ FetchFn = Callable[[str], Any]
 ReadFn = Callable[[Session, dict[str, Any]], dict[str, Any]]
 BuildFn = Callable[[Session, dict[str, Any], dict[str, Any]], dict[str, Any]]
 SpentFn = Callable[[datetime | None], "float | None"]
+GateFn = Callable[[Session, str], dict[str, Any]]
 
 
 def _ledger_spent(since: datetime | None) -> float | None:
@@ -275,6 +293,7 @@ def process_next(
     read: ReadFn | None = None,
     build: BuildFn | None = None,
     spent: SpentFn | None = None,
+    gate: GateFn | None = None,
 ) -> SqhDossier | None:
     """处理一单排队的档案。没有可做的(或被节流)返回 None。
 
@@ -299,6 +318,7 @@ def process_next(
         d_fetch, d_read, d_build = _defaults()
         fetch, read, build = fetch or d_fetch, read or d_read, build or d_build
         spent = spent or _ledger_spent
+        gate = gate or compliance_gate.judge  # 真跑才过门;注入假抓取的测试不传 gate 就不过门
 
     dossier.status = "fetching"
     dossier.fetched_at = now
@@ -335,13 +355,27 @@ def process_next(
             _set_activity(db, "working", "1688 拦了我,今天先不碰")
             db.commit()
             return dossier
-        return _complete(db, dossier, capture, read=read, build=build, spent=spent, cost_since=cost_since)
+        return _complete(db, dossier, capture, read=read, build=build, spent=spent, cost_since=cost_since, gate=gate)
     except Exception as exc:  # noqa: BLE001 —— 一单失败不拖垮 worker,但要落库、写流水
         return _fail(db, dossier.id, exc)
 
 
-def _complete(db: Session, dossier: SqhDossier, capture: dict[str, Any], *, read: ReadFn, build: BuildFn, spent: SpentFn | None, cost_since: datetime) -> SqhDossier:
-    """页面拿到了之后的半段:读详情图 → 建草稿 → ready → 建档卡。被拦后老板过了验证也走这里。"""
+def _complete(
+    db: Session,
+    dossier: SqhDossier,
+    capture: dict[str, Any],
+    *,
+    read: ReadFn,
+    build: BuildFn,
+    spent: SpentFn | None,
+    cost_since: datetime,
+    gate: GateFn | None = None,
+) -> SqhDossier:
+    """页面拿到了之后的半段:读详情图 → 建草稿 → 过合规门 → ready + 建档卡(或 dropped / gate_ask + 合规卡)。被拦后老板过了验证也走这里。
+
+    ``gate`` 不传 = 这里不过门(注入假抓取的测试);真跑时 process_next / resume_human 会给。没判成的(额度、接口)照常发建档卡,
+    建进 K 以后流水线第一步会补判(pipeline 的 compliance_gate 步)。
+    """
     dossier.status = "reading"
     dossier.capture = {**(dossier.capture or {}), **capture}
     _set_activity(db, "thinking", f"在读 1688 详情图:{dossier.offer_id}")
@@ -353,19 +387,61 @@ def _complete(db: Session, dossier: SqhDossier, capture: dict[str, Any], *, read
     dossier = db.get(SqhDossier, dossier.id, execution_options=_X)
     dossier.draft = draft
     dossier.flagged_count = int(draft.get("flagged_count") or 0)
-    # 花费记台账实数(读图 + 英文名,整单从开始到现在);台账读不到才用读图那边的数。
+    db.add(dossier)
+    db.commit()  # 出网前放掉事务(合规门要调模型)
+
+    if gate is not None:
+        _set_activity(db, "thinking", f"在过合规门:{dossier.offer_id}")
+        db.commit()
+        result = gate(db, compliance_gate.dossier_facts(draft, dossier.capture))
+        dossier = db.get(SqhDossier, dossier.id, execution_options=_X)
+        draft = {**(dossier.draft if isinstance(dossier.draft, dict) else draft), "compliance_gate": result}
+        dossier.draft = draft
+    # 花费记台账实数(读图 + 英文名 + 合规门,整单从开始到现在);台账读不到才用读图那边的数。
     real_cost = spent(cost_since) if spent else None
     dossier.cost_usd = round(float(real_cost if real_cost is not None else image_read.get("cost_usd") or 0), 4)
+    title = _title(dossier)
+    if compliance_gate.state(draft) in compliance_gate.WAITING:
+        result = compliance_gate.record(draft) or {}
+        dossier.status = compliance_gate.DOSSIER_DROPPED if result.get("status") == "drop" else compliance_gate.DOSSIER_GATE_ASK
+        card = compliance_gate.raise_card(db, dossier=dossier, gate=result, stage="dossier", title_hint=title)
+        dossier.card_ref = card.ref
+        db.add(dossier)
+        verb = "不做" if result.get("status") == "drop" else "要老板定"
+        memory.log_activity(db, f"{dossier.offer_id}:合规门{verb}({compliance_gate.headline(result)}),卡 #{card.ref}。", kind="dossier")
+        _set_activity(db, "working", f"档案 #{dossier.id} 合规门{verb}")
+        db.commit()
+        return dossier
+    issue_dossier_card(db, dossier)
+    _set_activity(db, "working", f"档案 #{dossier.id} 好了,等老板批")
+    db.commit()
+    return dossier
+
+
+def _title(dossier: SqhDossier) -> str:
+    draft = dossier.draft if isinstance(dossier.draft, dict) else {}
+    capture = dossier.capture if isinstance(dossier.capture, dict) else {}
+    return str((draft.get("fields", {}).get("name_zh", {}) or {}).get("value") or capture.get("title_zh") or dossier.offer_id)
+
+
+def issue_dossier_card(db: Session, dossier: SqhDossier) -> SqhCard:
+    """档案 → ready + 「建 K 档案」卡。合规门放行(或老板在合规卡上放行)之后走这里。"""
+    draft = dossier.draft if isinstance(dossier.draft, dict) else {}
+    gate = compliance_gate.record(draft)
+    gate_note = ""
+    if gate is not None and gate.get("status") == "error":
+        gate_note = f" 合规门这次没判成({str(gate.get('error') or '')[:60]}),建进 K 之后我第一步先补判。"
+    elif compliance_gate.state(draft) == "override":
+        gate_note = " 合规门本来不让做,老板放行了。"
     dossier.status = "ready"
-    title = (draft.get("fields", {}).get("name_zh", {}) or {}).get("value") or capture.get("title_zh") or dossier.offer_id
     card, _ = cards.create_card(
         db,
         dedupe_key=f"dossier:{dossier.offer_id}:{dossier.id}",
         kind=DOSSIER_CARD_KIND,
-        title=f"建 K 档案:{str(title)[:30]}",
+        title=f"建 K 档案:{_title(dossier)[:30]}",
         conclusion=(
             f"{draft.get('summary_zh', '')} 批了我就建进 K(先建成单品草稿,不上架);"
-            "售价得老板定,标红的几项也请过目。"
+            "售价得老板定,标红的几项也请过目。" + gate_note
         ),
         why=f"1688 offer {dossier.offer_id},{reading_text(draft.get('image_read') or {})},花了 ${dossier.cost_usd}。",
         if_not="不批就停在草稿,不会进 K。",
@@ -376,9 +452,7 @@ def _complete(db: Session, dossier: SqhDossier, capture: dict[str, Any], *, read
     dossier.card_ref = card.ref
     db.add(dossier)
     memory.log_activity(db, f"{dossier.offer_id} 的 K 档案草稿好了,标红 {dossier.flagged_count} 项,卡 #{card.ref} 等老板批。", kind="dossier")
-    _set_activity(db, "working", f"档案 #{dossier.id} 好了,等老板批")
-    db.commit()
-    return dossier
+    return card
 
 
 def _fail(db: Session, dossier_id: int, exc: BaseException) -> SqhDossier:
@@ -405,6 +479,7 @@ def resume_human(
     read: ReadFn | None = None,
     build: BuildFn | None = None,
     spent: SpentFn | None = None,
+    gate: GateFn | None = None,
 ) -> SqhDossier | None:
     """浏览器线程说页面恢复了(或等不到人了):接着把那份 needs_human 的档案做完。worker 的快循环每几秒问一次。
     ``event`` 不传就从 browser 线程取;测试直接传。"""
@@ -431,6 +506,7 @@ def resume_human(
         _, d_read, d_build = _defaults()
         read, build = read or d_read, build or d_build
         spent = spent or _ledger_spent
+        gate = gate or compliance_gate.judge
     from .sourcing_1688 import capture_from_render, offer_url
 
     cost_since = datetime.now(UTC)
@@ -453,7 +529,7 @@ def resume_human(
             memory.log_activity(db, f"1688 {dossier.offer_id} 过了验证还是拿不到页面:{dossier.error[:60]}", kind="error")
             db.commit()
             return dossier
-        return _complete(db, dossier, capture, read=read, build=build, spent=spent, cost_since=cost_since)
+        return _complete(db, dossier, capture, read=read, build=build, spent=spent, cost_since=cost_since, gate=gate)
     except Exception as exc:  # noqa: BLE001
         return _fail(db, dossier.id, exc)
 

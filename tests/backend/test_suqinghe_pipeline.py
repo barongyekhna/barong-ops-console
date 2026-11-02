@@ -45,6 +45,10 @@ def built(clean):  # noqa: F811
         db.commit()
     outcome = _build_approved()
     assert outcome and outcome["ok"], outcome
+    with without_org_data_isolation(), SessionLocal() as db:  # 合规门(11-02)过了的品;门本身的流程见 test_suqinghe_compliance_gate_flow
+        dossier = db.get(SqhDossier, ready.id)
+        dossier.draft = {**(dossier.draft or {}), "compliance_gate": {"version": 1, "source": "1688", "status": "pass", "hits": [], "outside": None}}
+        db.commit()
     yield ready.id, outcome["k_product_id"], clean["owner"]
     with without_org_data_isolation(), SessionLocal() as db:
         db.execute(delete(KProductKnowledgeWorkflowExecution).where(KProductKnowledgeWorkflowExecution.product_id == outcome["k_product_id"]))

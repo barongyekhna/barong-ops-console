@@ -34,7 +34,7 @@ OFFICE_STATES = ("working", "thinking", "raised", "night", "offline")
 # needs_human(10-28):1688 要验证,页面在她的登录浏览器里留着,等老板过滑块/扫码;过了她自己接着做。
 DOSSIER_STATUSES = ("queued", "fetching", "reading", "ready", "blocked", "failed", "created", "rejected", "needs_human")
 # 还在处理中的档案:同一个 offer 再交一次,不重复排队。
-DOSSIER_ACTIVE_STATUSES = ("queued", "fetching", "reading", "ready", "needs_human")
+DOSSIER_ACTIVE_STATUSES = ("queued", "fetching", "reading", "ready", "needs_human", "gate_ask")  # gate_ask:合规门清单外、等老板定(11-02)
 DOSSIER_CARD_KIND = "create_k_dossier"
 # 早间计划出的卡(brain.PLAN_FORMAT 里的 kind 加上 plan)。只有这几种按「快照里那件事」去重、对账(cards.settle_issues);
 # 档案卡按档案号管,K 流水线的卡(pipeline.py)按产品和步骤管。
