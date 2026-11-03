@@ -49,6 +49,7 @@ from ....services.module_execution_gate import (
     ModuleExecutionKey,
     require_module_execution_ready,
 )
+from . import brand_allow
 from .constants import MODULE_KEY
 from .models import KProductKnowledgeMediaAsset, KProductKnowledgeProduct
 
@@ -262,7 +263,8 @@ def _normalized_terms(product: KProductKnowledgeProduct) -> list[str]:
         cleaned = str(term or "").strip()
         if len(cleaned) >= 2 and cleaned.lower() not in SITE_BRAND_WHITELIST:
             out.append(cleaned)
-    return out
+    # 源头黑名单(R 搬过来时亚马逊的 brand 字段)里,老板放行过的普通词不算(11-03:亚马逊同款牌子叫 Panda 也不该挡我们的 panda)
+    return brand_allow.strip_covered(out)
 
 
 def normalized_brand_terms(product: KProductKnowledgeProduct) -> list[str]:
@@ -414,6 +416,11 @@ _TEXT_AUDIT_INSTRUCTION = (
     "IP67, Li-ion, mAh, ABS, TPU, silicone — these are industry-standard terms, "
     "not brands. "
     f'"{SITE_BRAND}" and its variants are the site\'s own brand and are ALLOWED. '
+    "A common English word (animal, fruit, color, shape, material) that describes "
+    "THIS product's own look or function is NOT a third-party brand, even if a "
+    "company in an unrelated category uses it as a mark — a trademark only covers "
+    "its registered goods (e.g. 'panda' on a panda-shaped shower is not Panda "
+    "Express). Flag a word only when it names another seller's brand or model. "
     "Return ONLY JSON: {\"violations\": [{\"surface\": \"<surface id>\", "
     "\"term\": \"<the brand term>\", \"evidence\": \"<short quote>\"}]} — empty "
     "array if fully clean. Be strict: when a token looks like a brand, flag it."
@@ -424,9 +431,12 @@ def ai_text_violations(
     key,
     surfaces: list[tuple[str, str]],
     own_words: set[str] | None = None,
+    allowed: frozenset[str] | None = None,
 ) -> list[dict[str, Any]]:
     if not surfaces:
         return []
+    # 11-03 放行词表(老板确认不是别人牌子的普通词,如 panda):告诉审查器,也在回答里兜底滤掉
+    allowed = brand_allow.allowed_words() if allowed is None else allowed
     listing = "\n".join(
         f"[{surface}] {text_value}" for surface, text_value in surfaces
     )
@@ -443,6 +453,12 @@ def ai_text_violations(
             "Any phrase built out of them — on its own or combined with generic "
             "nouns like pump, unit, set, head, kit — is a DESCRIPTION of this "
             "product, not a trademark. Never flag those."
+        )
+    if allowed:
+        instruction += (
+            "\nOWNER-APPROVED NON-BRAND WORDS (the store owner confirmed these are not "
+            "third-party brands when used on our products; never flag them or phrases "
+            "built from them): " + ", ".join(sorted(allowed)) + "."
         )
     reply = _chat_completion(
         key,
@@ -461,6 +477,8 @@ def ai_text_violations(
             continue
         term = str(item.get("term") or "").strip()
         if _is_generic_non_brand(term):
+            continue
+        if brand_allow.is_covered(term, allowed):
             continue
         out.append(
             {
@@ -1166,7 +1184,7 @@ def set_brand_finding_ignored(
         trail[fingerprint] = {
             "by": str(getattr(user, "username", "") or "unknown"),
             "by_user_id": str(getattr(user, "id", "") or ""),
-            "at": _now().isoformat(),
+            "at": datetime.now(UTC).isoformat(),
             "reason": reason.strip(),
         }
     else:
@@ -1188,6 +1206,47 @@ def set_brand_finding_ignored(
     flag_modified(product, "brand_audit_json")
     db.add(product)
     return audit
+
+
+def release_allowed_findings(
+    db: Session,
+    *,
+    term: str,
+    user: User | None = None,
+    reason: str = "",
+) -> list[str]:
+    """老板把一个词放进放行词表后(11-03):已经审过的商品里,文字发现的词被它盖住的,一并放行(留痕),不用等重跑。
+
+    只动文字发现,图片发现不动;返回放行过的商品 SKU(或 id)。调用方 commit。
+    """
+    allowed = frozenset({brand_allow.normalize(term)})
+    released: list[str] = []
+    products = db.scalars(
+        select(KProductKnowledgeProduct).where(KProductKnowledgeProduct.brand_audit_json.is_not(None))
+    ).all()
+    for product in products:
+        audit = product.brand_audit_json if isinstance(product.brand_audit_json, dict) else {}
+        ignored = set(audit.get("ignored_findings") or [])
+        hit = False
+        for violation in audit.get("text_violations") or []:
+            if not isinstance(violation, dict) or not brand_allow.is_covered(violation.get("term"), allowed):
+                continue
+            fingerprint = brand_finding_fingerprint("text", violation)
+            if fingerprint in ignored:
+                continue
+            set_brand_finding_ignored(
+                db,
+                product=product,
+                fingerprint=fingerprint,
+                ignored=True,
+                user=user,
+                reason=reason or f"放行词表:「{term}」老板确认不是别人的牌子",
+            )
+            ignored.add(fingerprint)
+            hit = True
+        if hit:
+            released.append(str(product.sku or product.id))
+    return released
 
 
 # --- 主入口 -------------------------------------------------------------------

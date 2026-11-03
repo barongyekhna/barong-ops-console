@@ -223,6 +223,10 @@ def parse_summary(result: Any, *, domains: list[str]) -> dict[str, Any]:
     comp_domains = [d for d in dict.fromkeys([*comp_domains, *domains]) if d]
     # 只按品牌名过滤;店的域名词干("store"、"outdoor")太像普通词,会把正常关键词误杀,不拿它当黑名单
     banned = {b.lower() for b in brands} | set(BRAND_TERMS)
+    # 11-03 放行词表:别家页面的牌子正好是老板放行过的普通词(比如也叫 Panda),不能因此把我们带 panda 的关键词全滤掉
+    from ...k_series.product_knowledge import brand_allow
+
+    banned = {b for b in banned if not brand_allow.is_covered(b)}
     kw_in = data.get("keywords") if isinstance(data.get("keywords"), dict) else {}
     keywords = {cluster: _keywords(kw_in.get(cluster), banned) for cluster in ("category", "attribute", "scene", "question")}
     return {

@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20261103_01_suqinghe_gsc_pages",
+  "alembic_head": "20261103_02_k_brand_allow_terms",
   "environment": "staging",
-  "expected_alembic_head": "20261103_01_suqinghe_gsc_pages",
+  "expected_alembic_head": "20261103_02_k_brand_allow_terms",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 143,
-  "migration_hash": "26ea720371598c1316f8bbe65eae1442ad65a6a8ff2fafa3af4000957fb412d8",
+  "migration_count": 144,
+  "migration_hash": "b4b747c484935527b059ef723c85f49b09079fbfcc002f1e192e56c0a8fd6f93",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -150,9 +150,10 @@
     "20261102_01_ai_key_budgets",
     "20261102_02_suqinghe_gate_statuses",
     "20261102_03_jiagui_registry",
-    "20261103_01_suqinghe_gsc_pages"
+    "20261103_01_suqinghe_gsc_pages",
+    "20261103_02_k_brand_allow_terms"
   ],
-  "migration_order_checksum": "26744d87a7ac061a19f92ee1ddeb714891d42ac641439bca8bed9613933b53f2",
+  "migration_order_checksum": "c33c7e19a3bdd903a5a06a60048e2b1e44a7b86b76510513259eff24009db7b3",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -1154,6 +1155,13 @@
       "down_revision": "20261102_03_jiagui_registry",
       "path": "backend/alembic/versions/20261103_01_suqinghe_gsc_pages.py",
       "version": "20261103_01_suqinghe_gsc_pages"
+    },
+    {
+      "applied_at": "1970-01-01T00:00:00Z",
+      "checksum": "e9bd0600a18df8194cd19666f52944567598acb8910b64a2099d11a27f0077a0",
+      "down_revision": "20261103_01_suqinghe_gsc_pages",
+      "path": "backend/alembic/versions/20261103_02_k_brand_allow_terms.py",
+      "version": "20261103_02_k_brand_allow_terms"
     }
   ]
 }

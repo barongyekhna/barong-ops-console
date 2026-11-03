@@ -3152,6 +3152,67 @@ class BrandAuditIgnoreRequest(BaseModel):
     asset_id: str | None = None
     # 放行理由。留痕用，不做强制——但空理由会原样记进台账。
     reason: str = ""
+    # 11-03:同时把这个词放进全站放行词表(所有商品、所有品牌检查都认),只有老板能用;
+    # 填的是要放行的那个词(比如发现是「panda pump」,放行词填「panda」)
+    allow_term: str | None = Field(default=None, max_length=120)
+
+
+class BrandAllowTermRequest(BaseModel):
+    term: str = Field(min_length=1, max_length=120)
+    note: str = Field(default="", max_length=2000)
+
+
+def _brand_allow_owner(user: User) -> None:
+    from ....core.roles import is_owner_role
+
+    if not is_owner_role(user.role or ""):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="放行词表只有老板能改")
+
+
+@router.get("/brand-allow-terms")
+def product_knowledge_brand_allow_terms(
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> dict[str, Any]:
+    """全站放行词表(老板确认不是别人牌子的普通词,如 panda)。"""
+    from ....core.roles import is_owner_role
+    from .brand_allow import list_terms
+
+    return {"terms": list_terms(db), "can_edit": is_owner_role(user.role or "")}
+
+
+@router.post("/brand-allow-terms")
+def product_knowledge_brand_allow_add(
+    payload: BrandAllowTermRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> dict[str, Any]:
+    from .brand_allow import BrandAllowError, add_term, list_terms
+    from .brand_guard import release_allowed_findings
+
+    _brand_allow_owner(user)
+    try:
+        row = add_term(db, term=payload.term, note=payload.note, user_id=_user_uuid(user))
+    except BrandAllowError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    released = release_allowed_findings(db, term=row["term"], user=user, reason=payload.note.strip())
+    db.commit()
+    return {"term": row, "terms": list_terms(db), "released": released}
+
+
+@router.delete("/brand-allow-terms/{term}")
+def product_knowledge_brand_allow_remove(
+    term: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> dict[str, Any]:
+    from .brand_allow import list_terms, remove_term
+
+    _brand_allow_owner(user)
+    if not remove_term(db, term=term):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="放行词表里没有这个词")
+    db.commit()
+    return {"terms": list_terms(db)}
 
 
 @router.post("/products/{product_id}/brand-audit/ignore")
@@ -3203,6 +3264,20 @@ def product_knowledge_brand_audit_ignore(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="只能忽略当前审查结论里已存在的发现；请先重跑品牌审查。",
             )
+    allowed_row = None
+    if payload.allow_term and payload.ignored:
+        from .brand_allow import BrandAllowError, add_term
+
+        _brand_allow_owner(user)
+        try:
+            allowed_row = add_term(
+                db,
+                term=payload.allow_term,
+                note=(payload.reason or "").strip() or f"品牌审查里放行「{payload.term or payload.allow_term}」时点了「所有商品都放行」",
+                user_id=_user_uuid(user),
+            )
+        except BrandAllowError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     audit = set_brand_finding_ignored(
         db,
         product=product,
@@ -3211,8 +3286,14 @@ def product_knowledge_brand_audit_ignore(
         user=user,
         reason=payload.reason,
     )
+    released: list[str] = []
+    if allowed_row is not None:
+        from .brand_guard import release_allowed_findings
+
+        released = release_allowed_findings(db, term=allowed_row["term"], user=user, reason=(payload.reason or "").strip())
+        audit = product.brand_audit_json  # 同一会话里是同一个对象,release 已经把它改过
     db.commit()
-    return {"brand_audit_json": audit, "fingerprint": fingerprint}
+    return {"brand_audit_json": audit, "fingerprint": fingerprint, "allowed_term": allowed_row, "released": released}
 
 
 class OperatingModelUpdateRequest(BaseModel):

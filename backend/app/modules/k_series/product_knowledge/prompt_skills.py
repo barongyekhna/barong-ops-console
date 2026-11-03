@@ -213,7 +213,12 @@ def claude_keyword_review_instruction() -> str:
         "通过/拒绝, so state plainly 为什么这个词有风险 (e.g. 「包含无依据的加热功效声称，"
         "且带竞品品牌词」). Flag trademark, competitor, "
         "regulated, medical/legal/safety, exaggerated, adult, weapon, and unsupported "
-        "claim terms. Return only valid JSON with final_keywords, high_value_keywords, "
+        "claim terms. A trademark/competitor term means another seller's brand or model "
+        "name used to refer to THEIR goods (DeWalt, Makita, Coleman, Stanley). A common "
+        "English word (animal, fruit, color, shape, material) that describes THIS "
+        "product's own look or function is NOT a trademark term, even if some company in "
+        "an unrelated category uses it as a brand — a mark only covers its registered goods "
+        "(e.g. 'panda' for a panda-shaped shower is not Panda Express). Return only valid JSON with final_keywords, high_value_keywords, "
         "low_value_keywords, and risk_keywords. Do not include markdown or prose outside "
         "the JSON object."
     )

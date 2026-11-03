@@ -402,10 +402,19 @@ def _entity_token_is_technical(value: str) -> bool:
     )
 
 
+def _entity_token_is_owner_allowed(value: str) -> bool:
+    """老板放行过的普通词(11-03 放行词表,如 panda 造型的 panda):大写开头/全大写也不当成别人的牌子。"""
+    from .brand_allow import allowed_words  # noqa: PLC0415 —— brand_allow 反过来要读本文件的黑名单
+
+    normalized = re.sub(r"[^a-z0-9]+", "", value.casefold())
+    return bool(normalized) and normalized in {re.sub(r"[^a-z0-9]+", "", word) for word in allowed_words() if " " not in word}
+
+
 def _entity_atom_is_generic(value: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]+", "", value.casefold())
     return bool(
-        _entity_token_is_technical(value)
+        _entity_token_is_owner_allowed(value)
+        or _entity_token_is_technical(value)
         or normalized in _GENERIC_COMPARISON_TOKENS
         or normalized in _COMPARISON_SCAFFOLD_TOKENS
         or normalized in _GENERIC_ENTITY_TOKENS
@@ -416,6 +425,13 @@ def _entity_phrase_is_generic(value: str) -> bool:
     tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9&'’./-]*", value)
     if not tokens:
         return False
+    # 11-03:带老板放行词的短语(Panda Outdoor Shower)是在描述我们自己的商品,和 brand_allow.is_covered 同一口径;
+    # 旁边带着真竞品牌子的照样不算
+    if any(_entity_token_is_owner_allowed(_entity_word_stem(token)) for token in tokens):
+        from .brand_allow import contains_hard_brand  # noqa: PLC0415
+
+        if not contains_hard_brand(value):
+            return True
     for token in tokens:
         stem = _entity_word_stem(token)
         if _entity_atom_is_generic(stem):
@@ -435,7 +451,7 @@ def _looks_distinctive_proper_name(value: str) -> bool:
     words = re.findall(r"[A-Za-z0-9][A-Za-z0-9&'’./-]*", value)
     for word in words:
         stem = _entity_word_stem(word)
-        if _entity_token_is_technical(stem):
+        if _entity_token_is_technical(stem) or _entity_token_is_owner_allowed(stem):
             continue
         letters = re.sub(r"[^A-Za-z]+", "", stem)
         if len(letters) >= 3 and letters.isupper():

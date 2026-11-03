@@ -79,17 +79,17 @@ def test_main_keyword_must_be_a_short_plain_category_phrase() -> None:
 def test_risk_terms_default_to_reject_unless_explicitly_approved() -> None:
     terms = ["DeWalt compatible battery", "12v drill battery pack", "battery for milwaukee m12"]
     result = {"decisions": [{"term": "12V Drill Battery Pack", "decision": "approve", "reason": "参数对得上"}, {"term": "DeWalt compatible battery", "decision": "maybe"}]}
-    decisions = pipeline.fill_risk_decisions(result, terms)
+    decisions = pipeline.fill_risk_decisions(result, terms, allowed=frozenset())
     assert [(d["term"], d["decision"]) for d in decisions] == [
         ("DeWalt compatible battery", "reject"),
         ("12v drill battery pack", "approve"),
         ("battery for milwaukee m12", "reject"),  # 没判到 → 默认不用
     ]
     assert all(d["reason"].startswith("苏青禾:") for d in decisions)
-    assert [d["decision"] for d in pipeline.fill_risk_decisions({"content": "看不懂"}, terms)] == ["reject"] * 3
+    assert [d["decision"] for d in pipeline.fill_risk_decisions({"content": "看不懂"}, terms, allowed=frozenset())] == ["reject"] * 3
     # K 说是别人的商标:模型说留也不留
     branded = pipeline.fill_risk_decisions(
-        {"decisions": [{"term": "12v drill battery pack", "decision": "approve"}]}, ["12v drill battery pack"], {"12v drill battery pack": "含竞品品牌词"}
+        {"decisions": [{"term": "12v drill battery pack", "decision": "approve"}]}, ["12v drill battery pack"], {"12v drill battery pack": "含竞品品牌词"}, allowed=frozenset()
     )
     assert branded[0]["decision"] == "reject" and "商标" in branded[0]["reason"]
 

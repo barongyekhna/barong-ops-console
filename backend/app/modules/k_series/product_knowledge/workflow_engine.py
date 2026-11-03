@@ -522,6 +522,10 @@ class KProductKnowledgeWorkflowEngine:
                 execution=execution,
                 rejected_terms=rejected_terms,
             )
+        approved_terms = [d["term"] for d in decisions if d["decision"] == "approve"]
+        if approved_terms:
+            # 11-03:风险词一标出来就从关键词里删了,批了「留」也加不回去——批了的放回 final_keywords
+            self._restore_approved_terms_to_keyword_flow(execution=execution, approved_terms=approved_terms)
         execution.risk_approval_log_json = {
             "approved": True,
             "reviewed_at": reviewed_at,
@@ -1973,6 +1977,21 @@ class KProductKnowledgeWorkflowEngine:
         row.confirmed_by_user_id = _user_uuid(user)
         row.confirmed_at = _now()
         row.updated_by_user_id = _user_uuid(user)
+
+    def _restore_approved_terms_to_keyword_flow(
+        self,
+        *,
+        execution: KProductKnowledgeWorkflowExecution,
+        approved_terms: list[str],
+    ) -> None:
+        claude = dict(execution.claude_filter_result_json or {})
+        final = _safe_string_list(claude.get("final_keywords"))
+        have = {_normalize_key(keyword) for keyword in final}
+        added = [term for term in approved_terms if term.strip() and _normalize_key(term) not in have]
+        if not added:
+            return
+        claude["final_keywords"] = _dedupe_strings([*final, *added])
+        execution.claude_filter_result_json = claude
 
     def _remove_rejected_terms_from_keyword_flow(
         self,
@@ -4240,6 +4259,8 @@ def _normalize_claude_result(provider_output: dict[str, Any]) -> dict[str, Any]:
         or provider_output.get("unsafe_keywords")
         or provider_output.get("trademark_keywords")
     )
+    # 11-03:只因「像别人的牌子」被标风险、而这个词是老板放行过的(k_brand_allow_terms,如 panda 造型的 panda)→ 不算风险,留在关键词里
+    risk_keywords = [item for item in risk_keywords if not _allow_listed_brand_flag(item)]
     risk_keys = {_normalize_key(item["term"]) for item in risk_keywords}
     final = [keyword for keyword in final if _normalize_key(keyword) not in risk_keys]
     if not high_value and final:
@@ -4250,6 +4271,13 @@ def _normalize_claude_result(provider_output: dict[str, Any]) -> dict[str, Any]:
         "low_value_keywords": low_value,
         "risk_keywords": risk_keywords,
     }
+
+
+def _allow_listed_brand_flag(item: dict[str, Any]) -> bool:
+    from . import brand_allow  # noqa: PLC0415
+
+    reason = item.get("reason") or item.get("risk_reason")
+    return brand_allow.reason_says_brand(reason) and brand_allow.is_covered(item.get("term"))
 
 
 def _normalize_risk_keywords(value: Any) -> list[dict[str, Any]]:

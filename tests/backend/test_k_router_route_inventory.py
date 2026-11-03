@@ -38,7 +38,7 @@ def _registered() -> set[tuple[str, str]]:
 
 def test_route_count_is_pinned() -> None:
     """路由总数的基准。改了要有意识地改这个数字。"""
-    assert len(_registered()) == 84, sorted(_registered())
+    assert len(_registered()) == 87, sorted(_registered())
 
 
 def test_every_dual_path_alias_is_still_registered() -> None:
@@ -70,11 +70,13 @@ def test_route_inventory_matches_the_snapshot() -> None:
 
 
 EXPECTED_ROUTES: tuple[tuple[str, str], ...] = (
+    ('DELETE', '/k/brand-allow-terms/{term}'),
     ('DELETE', '/k/keywords/{keyword_id}'),
     ('DELETE', '/k/media/{asset_id}'),
     ('DELETE', '/k/products/{product_id}'),
     ('DELETE', '/k/risk/{risk_id}'),
     ('DELETE', '/k/risks/{risk_id}'),
+    ('GET', '/k/brand-allow-terms'),
     ('GET', '/k/categories/search'),
     ('GET', '/k/keywords/{product_id}'),
     ('GET', '/k/media'),
@@ -108,6 +110,7 @@ EXPECTED_ROUTES: tuple[tuple[str, str], ...] = (
     ('PUT', '/k/products/{product_id}/variants'),
     ('PATCH', '/k/risk/{risk_id}'),
     ('PATCH', '/k/risks/{risk_id}'),
+    ('POST', '/k/brand-allow-terms'),
     ('POST', '/k/keyword-research/start'),
     ('POST', '/k/keywords'),
     ('POST', '/k/media'),

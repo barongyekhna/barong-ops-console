@@ -520,25 +520,44 @@ _RISK_ASK = (
     "下面是 K 的 AI 从搜索结果里筛出来的「风险关键词」,每个都要定:approve(留着用)或 reject(不用)。\n"
     "规矩(和老板以前人工审的一致——以前几乎全驳,只留商品自己的叫法和资料里有依据的参数):\n"
     "- 默认 reject。三条同时满足才 approve:①说的就是这件商品,商品资料里有依据(参数、功能对得上);"
-    "②不带任何品牌、商标、店名、别人的型号;③不带医疗、杀虫/驱虫功效、安全认证、"
+    "②不带别人家的品牌、商标、店名、型号——指拿来指代别人家商品的牌子(DeWalt、Makita、Coleman、Stanley 这类);"
+    "普通英文词(动物、水果、颜色、形状、材质)用来描述这件商品自己的样子和功能不算别人的牌子,商标只管它注册的那一类商品"
+    "(熊猫造型的淋浴器叫 panda shower 不算蹭餐馆 Panda Express);下面「老板放行过的词」一律不算别人的牌子;③不带医疗、杀虫/驱虫功效、安全认证、"
     "「最好/第一/专家推荐/测试认可/年份榜单」这类没法证实的说法,也不暗示带了没有的配件或功能。\n"
     "- 拿不准就 reject。\n"
     'Reply JSON only: {"decisions": [{"term": "原样抄", "decision": "approve|reject", "reason": "一句中文"}]}'
 )
 
 
-# K 给的风险原因里带这些字 = 别人的牌子。不管模型怎么说一律不用(用了就是蹭商标,GMC 那次就是 Misrepresentation)
-_TRADEMARK_MARKERS = ("商标", "品牌", "侵权", "竞品", "trademark", "brand")
+# K 给的风险原因里说「是别人的牌子」:模型说留也不留(用了就是蹭商标,GMC 那次就是 Misrepresentation)——
+# 但老板放行过的词(k_brand_allow_terms,11-03 起)不算;原因里是「非品牌词 / not a brand」这种否定说法也不算(原来按字一刀切,连这种都挡)。
+def reason_says_brand(reason: Any) -> bool:
+    from ...k_series.product_knowledge.brand_allow import reason_says_brand as _says
+
+    return _says(reason)
 
 
-def fill_risk_decisions(result: Any, terms: list[str], reasons: dict[str, str] | None = None) -> list[dict[str, Any]]:
+def risk_prompt_extra(terms: list[str], reasons: dict[str, str], allowed: frozenset[str]) -> str:
+    listing = "\n".join(f"- {term}(K 的风险原因:{reasons.get(term, '')})" for term in terms)
+    extra = f"风险词:\n{listing}"
+    if allowed:
+        extra += "\n\n老板放行过的词(用在我们商品上不是别人的牌子):" + "、".join(sorted(allowed))
+    return extra
+
+
+def fill_risk_decisions(
+    result: Any, terms: list[str], reasons: dict[str, str] | None = None, *, allowed: frozenset[str] | None = None
+) -> list[dict[str, Any]]:
     """模型的判断 → K 要的 decisions。每个风险词都得有;没判到、判得不对的一律 reject(默认不用)。
 
-    ``reasons`` = K 自己给每个风险词的原因;原因里说是商标/品牌的,模型说留也不留。
+    ``reasons`` = K 自己给每个风险词的原因;原因里说是商标/品牌的,模型说留也不留——除非这个词是老板放行过的
+    (``allowed``,默认读 k_brand_allow_terms)。带同品类真竞品牌子(brand_allow.HARD_BRANDS)的,不管怎样都不留。
     """
+    from ...k_series.product_knowledge import brand_allow
     from .brain import parse_json
 
     reasons = reasons or {}
+    allowed = brand_allow.allowed_words() if allowed is None else allowed
     data = parse_json(result)
     given: dict[str, dict[str, Any]] = {}
     if isinstance(data, dict):
@@ -550,9 +569,10 @@ def fill_risk_decisions(result: Any, terms: list[str], reasons: dict[str, str] |
         item = given.get(" ".join(term.lower().split())) or {}
         approve = item.get("decision") == "approve"
         reason = str(item.get("reason") or "").strip() or ("资料有依据,留着" if approve else "她没判到,按默认不用")
-        k_reason = str(reasons.get(term) or "").lower()
-        if approve and any(marker in k_reason for marker in _TRADEMARK_MARKERS):
-            approve, reason = False, "K 说这是别人的商标/品牌,一律不用"
+        if approve and brand_allow.contains_hard_brand(term):
+            approve, reason = False, "带同品类竞品的牌子,一律不用"
+        elif approve and reason_says_brand(reasons.get(term)) and not brand_allow.is_covered(term, allowed):
+            approve, reason = False, "K 说这是别人的商标/品牌,一律不用(老板放行过的词除外)"
         out.append({"term": term, "decision": "approve" if approve else "reject", "reason": f"苏青禾:{reason}"[:1000]})
     return out
 
@@ -805,9 +825,11 @@ def _step_risk_review(ctx: Ctx) -> str:
     reasons = {str(t.get("term")).strip(): str(t.get("reason") or "") for t in raw_terms if isinstance(t, dict)}
     decisions: list[dict[str, Any]] = []
     if terms:
-        listing = "\n".join(f"- {term}(K 的风险原因:{reasons.get(term, '')})" for term in terms)
-        result = _judge(ctx.db, _RISK_ASK, _product_brief(ctx.dossier, ctx.product), f"风险词:\n{listing}")
-        decisions = fill_risk_decisions(result, terms, reasons)
+        from ...k_series.product_knowledge import brand_allow
+
+        allowed = brand_allow.allowed_words(ctx.db)
+        result = _judge(ctx.db, _RISK_ASK, _product_brief(ctx.dossier, ctx.product), risk_prompt_extra(terms, reasons, allowed))
+        decisions = fill_risk_decisions(result, terms, reasons, allowed=allowed)
     ctx.hands.review_risk(ctx.product.id, execution_id=execution.id, decisions=decisions)
     kept = [d["term"] for d in decisions if d["decision"] == "approve"]
     _save_pipe(ctx.dossier, risk={"decisions": decisions, "at": datetime.now(UTC).isoformat()})

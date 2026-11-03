@@ -1033,3 +1033,20 @@ class KProductKnowledgeReviewItem(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
         DateTime(timezone=True),
         nullable=True,
     )
+
+
+class KBrandAllowTerm(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
+    """放行词表(11-03 老板定):老板确认「用在我们商品上不是别人的牌子」的普通词,全站共用。
+
+    老板原话:「不能因为有一家公司叫panda，就不让我用这个词形容我的产品了。我的产品是真实的panda造型的……
+    他的panda商标只限餐饮类和我一点关系都没有」。所有品牌/商标检查(K 风险词、品牌审查、社媒审查、FAQ、
+    SEO、苏青禾)先查这张表;只有老板能加删,AI 不往里加。不带 org_id:独立站一个,全站共用。
+    """
+
+    __tablename__ = "k_brand_allow_terms"
+    __table_args__ = (UniqueConstraint("term", name="uq_k_brand_allow_terms_term"),)
+
+    # 归一化后的词:小写、空白压成一个(brand_allow.normalize)
+    term: Mapped[str] = mapped_column(String(120), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
