@@ -350,7 +350,12 @@ def run_gsc_pull(db, *, now: datetime | None = None) -> dict[str, Any]:
         db.commit()
         return {"configured": None, "error": str(exc)[:200]}
     if out.get("configured") and (out.get("pulled") or out.get("failed")):
-        note = f"Search Console 拉了 {out['pulled']} 天({out['rows']} 行)" + (f",{out['failed']} 天没拉成" if out.get("failed") else "") + (f";台账用完先停:{out['stopped']}" if out.get("stopped") else "")
+        note = (
+            f"Search Console 拉了 {out['pulled']} 天({out['rows']} 个页面行)"
+            + (f",{out['failed']} 天没拉成" if out.get("failed") else "")
+            + (f",还差 {out['remaining']} 天" if out.get("remaining") else "")
+            + (f";台账用完先停:{out['stopped']}" if out.get("stopped") else "")
+        )
         memory.log_activity(db, note[:500], kind="work")
         db.commit()
     return out
@@ -392,7 +397,8 @@ class SuqingheWorker:
         self.owner_conversations: dict[str, str] = {}
         self._morning_day: date | None = None
         self._weekly_day: date | None = None
-        self._gsc_day: date | None = None  # Search Console 一天拉一次(第二期)
+        self._gsc_last: datetime | None = None  # Search Console 一天拉一次(第二期);补历史没补完隔 10 分钟再来一批
+        self._gsc_more = False
         self._weekly_attempts = 0
         self._weekly_last: datetime | None = None
         self._morning_attempts = 0
@@ -615,10 +621,10 @@ class SuqingheWorker:
             # 运营看板(10-30):周一 07:00 后把上周合成一张卡;错过了哪天补哪天
             if should_run_weekly(now, exists=digest.exists(db, kind=digest.WEEK, period_key=digest.previous_week_key(now))) and self._weekly_attempt_allowed(now):
                 run_weekly(db, now=now)
-            # 看板第二期:Search Console 一天拉一次(08:00 LA 后);没配钥匙就什么都不做
-            if gsc.should_pull(now, last_attempt_day=self._gsc_day):
-                self._gsc_day = la_date(now)
-                run_gsc_pull(db, now=now)
+            # 看板第二期:Search Console 一天拉一次(08:00 LA 后),补历史没补完隔 10 分钟再一批;没配钥匙就什么都不做
+            if gsc.should_pull(now, last_attempt_at=self._gsc_last, more=self._gsc_more):
+                self._gsc_last = now
+                self._gsc_more = gsc.has_more(run_gsc_pull(db, now=now))
             handle_dictations(db)
             # 1688 → K 档案:一轮最多一单,节流在 dossiers.process_next 里。
             dossiers.process_next(db, now=now)

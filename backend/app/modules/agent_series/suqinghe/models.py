@@ -182,14 +182,13 @@ class SqhDigest(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
-class SqhGscDaily(Base):
-    """Search Console 搜索表现(10-30,看板第二期):一天 × 一个搜索词 × 一个落地页一行。只读谷歌给的数,不改写。"""
+class SqhGscPage(Base):
+    """Search Console 一天 × 一个落地页的表现(11-03 改:站小,按天的搜索词谷歌全部匿名,「词×页」永远是空;按页不匿名)。只读谷歌给的数。"""
 
-    __tablename__ = "sqh_gsc_daily"
+    __tablename__ = "sqh_gsc_pages"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    query: Mapped[str] = mapped_column(String(300), nullable=False)
     page: Mapped[str] = mapped_column(String(1000), nullable=False)
     clicks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     impressions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -197,8 +196,26 @@ class SqhGscDaily(Base):
     position: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=0)
 
 
+class SqhGscQuery(Base):
+    """搜索词按窗口拉(11-03):截止 window_end 的近 window_days 天,一个词一行。词的匿名门槛按窗口算,窗口越长露出来的词越多。"""
+
+    __tablename__ = "sqh_gsc_queries"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    window_end: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    window_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    query: Mapped[str] = mapped_column(String(300), nullable=False)
+    clicks: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    impressions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ctr: Mapped[float] = mapped_column(Numeric(8, 5), nullable=False, default=0)
+    position: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=0)
+
+
 class SqhGscDay(Base):
-    """哪几天拉过了(一天没有任何展现也要记,不然天天重拉):rows 行数、status ok/failed、error。"""
+    """哪几天拉过了(一天没有任何展现也要记,不然天天重拉):rows = 页面行数、status ok/failed、error。
+
+    11-03 起这一行还存当天全站合计(clicks/impressions/ctr/position,含被匿名的词——比按页加起来准),
+    fmt=2 才算新口径拉过(旧的 fmt=1 只拉了「词×页」,自动重拉);window_rows = 截止这天的 28 天搜索词窗口拉到几行(None = 没拉)。"""
 
     __tablename__ = "sqh_gsc_days"
 
@@ -207,6 +224,12 @@ class SqhGscDay(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ok")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     pulled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    fmt: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    clicks: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    impressions: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    ctr: Mapped[float] = mapped_column(Numeric(8, 5), nullable=False, default=0, server_default="0")
+    position: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False, default=0, server_default="0")
+    window_rows: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class SqhRouteRecord(Base):

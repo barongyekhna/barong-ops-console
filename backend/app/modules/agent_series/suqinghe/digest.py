@@ -541,7 +541,10 @@ def sections(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def search_sections(search: Any, *, kind: str, prev_label: str) -> list[dict[str, Any]]:
-    """「搜索(Search Console)」+「搜索缺口」两节。没接钥匙就一行说明;接了没拉到就说到哪天。"""
+    """「搜索(Search Console)」+「搜索缺口」两节。没接钥匙就一行说明;接了没拉到就说到哪天。
+    11-03:站小,谷歌把搜索词全部匿名——词那一行如实说「谷歌没给」,页面榜照常;缺口按近 28 天算。"""
+    from .gsc import QUICK_WIN_MIN_IMPRESSIONS, page_label
+
     if not isinstance(search, dict) or "error" in search:
         return [{"heading": "搜索(Search Console)", "rows": [["状态", "读不到", None]]}]
     if not search.get("configured"):
@@ -552,15 +555,23 @@ def search_sections(search: Any, *, kind: str, prev_label: str) -> list[dict[str
         ["点击 / 展现", f"{search.get('clicks', 0)} / {search.get('impressions', 0)}", (f"{_delta(search.get('clicks'), search.get('prev_clicks'))} {prev_label}" if _delta(search.get("clicks"), search.get("prev_clicks")) else None)],
         ["点击率 / 平均位次", f"{round(float(search.get('ctr') or 0) * 100, 1)}% / {search.get('position', 0)}", None],
     ]
+    if search.get("top_pages"):
+        rows.append(["页面(点击 / 展现)", "、".join(f"{p.get('label') or page_label(p['page'])} {p['clicks']}/{p['impressions']}" for p in search["top_pages"][:5]), None])
+    qw = search.get("query_window") or {}
     if search.get("top_queries"):
-        rows.append(["点击最多的词", "、".join(f"{q['query']} {q['clicks']}" for q in search["top_queries"][:5]), None])
+        rows.append([f"点击最多的词(近 {qw.get('days', 28)} 天)", "、".join(f"{q['query']} {q['clicks']}/{q['impressions']}" for q in search["top_queries"][:5]), None])
+    elif search.get("queries_hidden"):
+        rows.append(["搜索词", f"谷歌没给:近 {qw.get('days', 28)} 天每个词搜的人都太少,谷歌全部隐藏(量上来自动就有)", None])
     out = [{"heading": "搜索(Search Console)", "rows": rows}]
     g = search.get("gaps") or {}
+    gw = search.get("gap_window") or {}
     gap_rows: list[list[Any]] = []
+    if g.get("quick_win_pages"):
+        gap_rows.append(["差一步的页(排 8–20,展现够)", "、".join(f"{page_label(x['page'])}(第 {x['position']:g},{x['impressions']} 展现)" for x in g["quick_win_pages"][:5]), "补内容/内链把它推进前十"])
     if g.get("quick_wins"):
         gap_rows.append(["差一步的词(排 8–20,展现够)", "、".join(f"{x['query']}(第 {x['position']:g},{x['impressions']} 展现)" for x in g["quick_wins"][:5]), "值得补内容/内链把它推进前十"])
     if g.get("low_ctr_pages"):
-        gap_rows.append(["有展现没点击的页", "、".join(f"{x['page'].split('/')[-2] or x['page'].split('/')[-1] or x['page']}({x['impressions']} 展现,点击率 {round(x['ctr'] * 100, 1)}%)" for x in g["low_ctr_pages"][:5]), "标题和描述该改"])
+        gap_rows.append(["有展现没点击的页", "、".join(f"{page_label(x['page'])}({x['impressions']} 展现,点击率 {round(x['ctr'] * 100, 1)}%)" for x in g["low_ctr_pages"][:5]), "标题和描述该改"])
     far_product = [x for x in g.get("far_queries") or [] if x.get("has_product")]
     far_none = [x for x in g.get("far_queries") or [] if not x.get("has_product")]
     if far_product:
@@ -570,7 +581,10 @@ def search_sections(search: Any, *, kind: str, prev_label: str) -> list[dict[str
     if g.get("new_queries"):
         gap_rows.append(["本期新出现的词", "、".join(f"{x['query']}({x['impressions']})" for x in g["new_queries"][:5]), None])
     if search.get("last_day"):
-        out.append({"heading": "搜索缺口", "rows": gap_rows or [["这一期", "没有够门槛的缺口(展现太少)", None]]})
+        scope = f"近 28 天({gw.get('from')}~{gw.get('to')})全站展现 {gw.get('impressions', 0)} 次" if gw else "近 28 天"
+        if gap_rows:
+            gap_rows.insert(0, ["按哪段算", scope, None])
+        out.append({"heading": "搜索缺口", "rows": gap_rows or [["这一期", f"没有够门槛的缺口:{scope};一页或一个词要 ≥{QUICK_WIN_MIN_IMPRESSIONS} 次展现才看", None]]})
     return out
 
 

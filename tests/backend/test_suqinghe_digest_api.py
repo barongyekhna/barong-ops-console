@@ -151,37 +151,60 @@ def test_backfill_fills_missing_periods_only(seeded) -> None:
 
 
 def test_week_digest_carries_search_console_data_when_pulled(seeded) -> None:
-    """看板第二期:拉过的 Search Console 数据进周报的「搜索」和「搜索缺口」两节;没拉过(没钥匙)就写「还没接」。"""
+    """看板第二期:拉过的 Search Console 数据进周报的「搜索」和「搜索缺口」两节;没拉过(没钥匙)就写「还没接」。
+    11-03 改按「页」存:全站合计记在天的那一行(含被匿名的词),页面榜按页合计,缺口按近 28 天算;
+    词窗口拉过但谷歌一个词都没给 → 「搜索词」一行说谷歌没给;词窗口有词 → 点击最多的词 + 差一步/排得远的词。"""
     from backend.app.modules.agent_series.suqinghe import gsc
-    from backend.app.modules.agent_series.suqinghe.models import SqhGscDaily, SqhGscDay
+    from backend.app.modules.agent_series.suqinghe.models import SqhGscDay, SqhGscPage, SqhGscQuery
+
+    def wipe(db) -> None:
+        for model in (SqhGscPage, SqhGscQuery, SqhGscDay):
+            db.execute(delete(model))
+        db.commit()
 
     monday, sunday = digest.week_days(LAST_WEEK)
     with without_org_data_isolation(), SessionLocal() as db:
-        db.execute(delete(SqhGscDaily))
-        db.execute(delete(SqhGscDay))
-        db.commit()
+        wipe(db)
         before = digest.build_and_save(db, kind=digest.WEEK, period_key=LAST_WEEK, now=NOW)
         search_before = before.payload["search"]
         assert search_before.get("configured") is False or search_before.get("last_day") is None  # 测试库没钥匙 / 没拉过
         for offset in range(7):
             day = monday + timedelta(days=offset)
-            gsc.save_day(db, day, [
-                {"query": "camping lantern", "page": "https://barongyekhna.com/product/lantern/", "clicks": 2, "impressions": 60, "ctr": 0.033, "position": 9.0},
-                {"query": "tent pole repair", "page": "https://barongyekhna.com/blog/poles/", "clicks": 0, "impressions": 20, "ctr": 0.0, "position": 28.0},
-            ])
+            gsc.save_day(db, day, {
+                "site": {"clicks": 3, "impressions": 90, "ctr": 0.0333, "position": 10.0},  # 比两页加起来多:有被匿名的词落在别的页上
+                "pages": [
+                    {"page": "https://barongyekhna.com/product/lantern/", "clicks": 2, "impressions": 60, "ctr": 0.033, "position": 9.0},
+                    {"page": "https://barongyekhna.com/blog/poles/", "clicks": 0, "impressions": 20, "ctr": 0.0, "position": 28.0},
+                ],
+            })
+        gsc.save_window(db, sunday, [])  # 截止周日的 28 天窗口:谷歌一个词都没给
         db.commit()
         assert gsc.pulled_days(db) >= {monday, sunday}
         row = digest.build_and_save(db, kind=digest.WEEK, period_key=LAST_WEEK, now=NOW)
         db.commit()
         search = row.payload["search"]
-        assert search["configured"] and search["covered_days"] == 7 and search["clicks"] == 14 and search["impressions"] == 560
-        assert [x["query"] for x in search["gaps"]["quick_wins"]] == ["camping lantern"] and [x["query"] for x in search["gaps"]["far_queries"]] == ["tent pole repair"]
-        headings = [s["heading"] for s in row.payload["sections"]]
-        assert "搜索(Search Console)" in headings and "搜索缺口" in headings
-        assert "谷歌搜索 14 点击 560 展现" in row.headline
-        db.execute(delete(SqhGscDaily))
-        db.execute(delete(SqhGscDay))
+        assert search["configured"] and search["covered_days"] == 7 and search["clicks"] == 21 and search["impressions"] == 630  # 全站合计,不是按页加
+        assert [(p["label"], p["clicks"], p["impressions"]) for p in search["top_pages"]] == [("lantern", 14, 420), ("poles", 0, 140)]
+        assert search["queries_hidden"] is True and search["top_queries"] == [] and search["query_window"]["rows"] == 0
+        assert [x["page"] for x in search["gaps"]["quick_win_pages"]] == ["https://barongyekhna.com/product/lantern/"]  # 28 天 420 展现、排 9
+        assert search["gap_window"]["impressions"] == 630
+        sections = {s["heading"]: s for s in row.payload["sections"]}
+        assert "搜索(Search Console)" in sections and "搜索缺口" in sections
+        assert {r[0]: r[1] for r in sections["搜索(Search Console)"]["rows"]}["搜索词"].startswith("谷歌没给")
+        assert "谷歌搜索 21 点击 630 展现" in row.headline
+
+        # 量上来以后谷歌开始给词:同一窗重拉,词进周报
+        gsc.save_window(db, sunday, [
+            {"query": "camping lantern", "clicks": 8, "impressions": 300, "ctr": 0.0267, "position": 9.0},
+            {"query": "tent pole repair", "clicks": 0, "impressions": 40, "ctr": 0.0, "position": 28.0},
+        ])
         db.commit()
+        search = digest.build_and_save(db, kind=digest.WEEK, period_key=LAST_WEEK, now=NOW).payload["search"]
+        db.commit()
+        assert search["queries_hidden"] is False and [q["query"] for q in search["top_queries"]] == ["camping lantern", "tent pole repair"]
+        assert [x["query"] for x in search["gaps"]["quick_wins"]] == ["camping lantern"] and [x["query"] for x in search["gaps"]["far_queries"]] == ["tent pole repair"]
+        assert search["gaps"]["new_queries"] == []  # 只有一窗,不比
+        wipe(db)
 
 
 def test_search_console_key_is_read_through_the_console_binding(seeded) -> None:

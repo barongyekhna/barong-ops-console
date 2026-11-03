@@ -1,5 +1,6 @@
-"""Search Console 接入(10-30,看板第二期)的纯逻辑:服务账号钥匙解析 + RS256 JWT、换 token、该拉哪几天、拉数落库与台账、
-按词按页聚合、缺口门槛、看板分节;钥匙类型注册/别名/校验;key_health 探针(假 transport)。unit,不连库(落库用假 db)、不出网。"""
+"""Search Console 接入(10-30,看板第二期;11-03 改按「页」存)的纯逻辑:服务账号钥匙解析 + RS256 JWT、换 token、
+每天两次请求(全站合计 + 按页)+ 28 天搜索词窗口、该拉哪几天/补历史隔 10 分钟一批、拉数落库与台账、按页按词合计、缺口门槛、看板分节;
+钥匙类型注册/别名/校验;key_health 探针(假 transport)。unit,不连库(落库用假 db)、不出网。"""
 
 from __future__ import annotations
 
@@ -71,11 +72,13 @@ def test_fetch_access_token_posts_a_jwt_bearer_grant(keypair) -> None:
         gsa.fetch_access_token(account, scope=gsc.SCOPE, transport=httpx.MockTransport(lambda r: httpx.Response(401, json={"error": "invalid_grant", "error_description": "Invalid JWT"})))
 
 
-def test_query_day_calls_search_analytics_with_the_site_encoded(keypair, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_query_day_asks_for_site_totals_and_pages_and_the_window_asks_for_queries(keypair, monkeypatch: pytest.MonkeyPatch) -> None:
+    """11-03:按天的搜索词被谷歌全部匿名,一天改问两样——全站合计(维度空)和按页;搜索词按 28 天一窗去要。"""
     pem, _ = keypair
     account = gsa.parse_service_account(_secret(pem))
     gsc._token_cache.clear()
     calls: list[httpx.Request] = []
+    bodies: list[dict[str, Any]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request)
@@ -84,27 +87,56 @@ def test_query_day_calls_search_analytics_with_the_site_encoded(keypair, monkeyp
         assert request.url.path in ("/webmasters/v3/sites/sc-domain%3Abarongyekhna.com/searchAnalytics/query", "/webmasters/v3/sites/sc-domain:barongyekhna.com/searchAnalytics/query")  # httpx 会把 %3A 还原成冒号
         assert request.headers["authorization"] == "Bearer tok"
         body = json.loads(request.content)
-        assert body["startDate"] == body["endDate"] and body["startDate"] in ("2026-10-27", "2026-10-26")
-        assert {k: v for k, v in body.items() if k not in ("startDate", "endDate")} == {"dimensions": ["query", "page"], "rowLimit": 5000, "type": "web", "dataState": "final"}
-        return httpx.Response(200, json={"rows": [{"keys": ["camping lantern", "https://barongyekhna.com/product/lantern/"], "clicks": 3, "impressions": 120, "ctr": 0.025, "position": 9.4}]})
+        bodies.append(body)
+        assert {k: v for k, v in body.items() if k not in ("startDate", "endDate", "dimensions")} == {"rowLimit": 5000, "type": "web", "dataState": "final"}
+        if body["dimensions"] == []:
+            return httpx.Response(200, json={"rows": [{"clicks": 2, "impressions": 15, "ctr": 0.1333, "position": 2.27}]})
+        if body["dimensions"] == ["page"]:
+            return httpx.Response(200, json={"rows": [{"keys": ["https://barongyekhna.com/"], "clicks": 2, "impressions": 9, "ctr": 0.222, "position": 3.0}, {"keys": ["https://barongyekhna.com/how-to-use-arctic-i/"], "clicks": 0, "impressions": 6, "ctr": 0.0, "position": 6.8}]})
+        assert body["dimensions"] == ["query"]
+        return httpx.Response(200, json={})  # 站小:谷歌一个词都不给,连 rows 都没有
 
-    rows = gsc.query_day(account, date(2026, 10, 27), site="sc-domain:barongyekhna.com", transport=httpx.MockTransport(handler))
-    assert rows == [{"query": "camping lantern", "page": "https://barongyekhna.com/product/lantern/", "clicks": 3, "impressions": 120, "ctr": 0.025, "position": 9.4}]
-    gsc.query_day(account, date(2026, 10, 26), site="sc-domain:barongyekhna.com", transport=httpx.MockTransport(handler))
+    day = date(2026, 10, 27)
+    got = gsc.query_day(account, day, site="sc-domain:barongyekhna.com", transport=httpx.MockTransport(handler))
+    assert got["site"] == {"clicks": 2, "impressions": 15, "ctr": 0.1333, "position": 2.27}
+    assert got["pages"] == [
+        {"page": "https://barongyekhna.com/", "clicks": 2, "impressions": 9, "ctr": 0.222, "position": 3.0},
+        {"page": "https://barongyekhna.com/how-to-use-arctic-i/", "clicks": 0, "impressions": 6, "ctr": 0.0, "position": 6.8},
+    ]
+    assert [(b["startDate"], b["endDate"], b["dimensions"]) for b in bodies] == [("2026-10-27", "2026-10-27", []), ("2026-10-27", "2026-10-27", ["page"])]
+    assert gsc.query_window(account, day, site="sc-domain:barongyekhna.com", transport=httpx.MockTransport(handler)) == []
+    assert (bodies[-1]["startDate"], bodies[-1]["endDate"]) == ("2026-09-30", "2026-10-27")  # 截止那天往回共 28 天
     assert sum(1 for c in calls if c.url.host == "oauth2.googleapis.com") == 1  # token 缓存住了
+    with pytest.raises(gsc.GscError, match="searchAnalytics 403"):
+        gsc.query(account, start=day, end=day, dimensions=["page"], site="sc-domain:barongyekhna.com", transport=httpx.MockTransport(lambda r: httpx.Response(403, json={"error": "denied"})))
     gsc._token_cache.clear()
+
+
+def test_page_label_is_the_last_path_segment_or_home() -> None:
+    assert gsc.page_label("https://barongyekhna.com/") == "首页"
+    assert gsc.page_label("https://barongyekhna.com/2026/01/16/10-common-mistakes-how-to-fix-them/") == "10-common-mistakes-how-to-fix-them"
+    assert gsc.page_label("https://barongyekhna.com/product/lantern") == "lantern"
 
 
 # ---------------------------------------------------------------- 节律 / 拉数 / 台账
 
 
-def test_days_due_and_should_pull_follow_the_lag_and_backfill() -> None:
+def test_days_due_and_should_pull_follow_the_lag_backfill_and_backlog() -> None:
     now = datetime(2026, 10, 30, 16, 0, tzinfo=UTC)  # LA 10-30 09:00
     due = gsc.days_due(now, have=set(), lag=3, backfill=5)
     assert due == [date(2026, 10, 27) - timedelta(days=n) for n in range(5)]  # 最新在前
     assert gsc.days_due(now, have={date(2026, 10, 27), date(2026, 10, 25)}, lag=3, backfill=5) == [date(2026, 10, 26), date(2026, 10, 24), date(2026, 10, 23)]
-    assert not gsc.should_pull(datetime(2026, 10, 30, 14, 30, tzinfo=UTC), last_attempt_day=None)  # LA 07:30,还没到 8 点
-    assert gsc.should_pull(now, last_attempt_day=None) and not gsc.should_pull(now, last_attempt_day=date(2026, 10, 30))
+    assert not gsc.should_pull(datetime(2026, 10, 30, 14, 30, tzinfo=UTC), last_attempt_at=None)  # LA 07:30,还没到 8 点
+    assert gsc.should_pull(now, last_attempt_at=None)
+    assert gsc.should_pull(now, last_attempt_at=now - timedelta(days=1))  # 昨天拉过,今天照拉
+    earlier = now - timedelta(minutes=5)
+    assert not gsc.should_pull(now, last_attempt_at=earlier) and not gsc.should_pull(now, last_attempt_at=earlier, more=True)  # 补历史也要隔 10 分钟
+    assert gsc.should_pull(now, last_attempt_at=now - timedelta(minutes=10), more=True)
+    assert not gsc.should_pull(now, last_attempt_at=now - timedelta(minutes=10), more=False)  # 补完了:一天一次
+    full = {"configured": True, "pulled": 10, "failed": 0, "stopped": None, "remaining": 80}
+    assert gsc.has_more(full)
+    for change in ({"remaining": 0}, {"failed": 1}, {"stopped": "预算已用完"}, {"pulled": 0}, {"configured": False}):
+        assert not gsc.has_more({**full, **change})  # 出错/台账停/没拉到:等明天,不 10 分钟一轮地撞
 
 
 class FakeDb:
@@ -126,7 +158,7 @@ class FakeDb:
         pass
 
     def scalars(self, *a: Any, **k: Any) -> list[Any]:
-        return [d for d, m in self.marks.items() if m.status == "ok"]
+        return [d for d, m in self.marks.items() if m.status == "ok" and (m.fmt or 1) >= gsc.FMT]
 
     def flush(self) -> None:
         pass
@@ -135,36 +167,60 @@ class FakeDb:
         self.commits += 1
 
 
-def test_pull_due_consumes_the_ledger_per_day_refunds_failures_and_stops_when_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pull_due_consumes_the_ledger_per_request_refunds_failures_and_stops_when_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
     import r_system_v2.ra.quota_ledger as ql
 
-    ledger: list[str] = []
-    budget = {"left": 3}
+    ledger: list[int] = []
+    budget = {"left": 7}
 
     def consume(db, provider, *, amount=1):
-        if budget["left"] <= 0:
-            raise ql.RAQuotaExhaustedError(provider, used=30, budget=30)
-        budget["left"] -= 1
-        ledger.append("+")
+        if budget["left"] < amount:
+            raise ql.RAQuotaExhaustedError(provider, used=300, budget=300)
+        budget["left"] -= amount
+        ledger.append(amount)
 
     monkeypatch.setattr(ql, "try_consume", consume)
-    monkeypatch.setattr(ql, "refund", lambda db, provider, *, amount=1: ledger.append("-"))
+    monkeypatch.setattr(ql, "refund", lambda db, provider, *, amount=1: ledger.append(-amount))
     monkeypatch.setenv("SQH_GSC_LAG_DAYS", "3")
     monkeypatch.setenv("SQH_GSC_BACKFILL_DAYS", "10")
     db = FakeDb()
+    old = gsc.SqhGscDay(day=date(2026, 10, 24), rows=0, status="ok", fmt=1)  # 旧口径拉过的天:不算,重拉
+    db.marks[old.day] = old
     now = datetime(2026, 10, 30, 16, 0, tzinfo=UTC)
+    windows: list[date] = []
 
-    def fetch(day: date) -> list[dict[str, Any]]:
+    def fetch(day: date) -> dict[str, Any]:
         if day == date(2026, 10, 26):
             raise RuntimeError("boom")
-        return [{"query": "q", "page": "p", "clicks": 1, "impressions": 10, "ctr": 0.1, "position": 5.0}] if day == date(2026, 10, 27) else []
+        if day == date(2026, 10, 27):
+            return {"site": {"clicks": 2, "impressions": 15, "ctr": 0.1333, "position": 2.3}, "pages": [{"page": "https://x/", "clicks": 2, "impressions": 9, "ctr": 0.22, "position": 3.0}]}
+        return {"site": None, "pages": []}
 
-    out = gsc.pull_due(db, now=now, fetch=fetch)
+    def fetch_window(end: date) -> list[dict[str, Any]]:
+        windows.append(end)
+        return []
+
+    out = gsc.pull_due(db, now=now, fetch=fetch, fetch_window=fetch_window)
     assert out["configured"] and out["pulled"] == 2 and out["failed"] == 1 and out["rows"] == 1 and out["days"] == ["2026-10-27", "2026-10-25"]
     assert out["stopped"] and "预算已用完" in out["stopped"]
-    assert ledger == ["+", "+", "-", "+"]  # 失败那天退了一次
+    assert ledger == [2, 2, -2, 2]  # 一天两次请求扣 2;失败那天退 2;第四天只剩 1 次额度,停
+    assert windows == []  # 台账停了,词窗口不拉
+    latest = db.marks[date(2026, 10, 27)]
+    assert (latest.fmt, latest.clicks, latest.impressions, latest.rows, latest.window_rows) == (2, 2, 15, 1, None)  # 全站合计记在天的那一行
     assert db.marks[date(2026, 10, 26)].status == "failed" and "boom" in db.marks[date(2026, 10, 26)].error
-    assert db.marks[date(2026, 10, 25)].rows == 0 and db.marks[date(2026, 10, 25)].status == "ok"  # 没展现的天也记,不重拉
+    assert db.marks[date(2026, 10, 25)].rows == 0 and db.marks[date(2026, 10, 25)].status == "ok" and db.marks[date(2026, 10, 25)].impressions == 0  # 没展现的天也记,不重拉
+    assert out["remaining"] == 8 and not gsc.has_more(out)
+    pages = [r for r in db.rows if isinstance(r, gsc.SqhGscPage)]
+    assert [(p.day, p.page, p.impressions) for p in pages] == [(date(2026, 10, 27), "https://x/", 9)]
+
+    budget["left"] = 100
+    ledger.clear()
+    out = gsc.pull_due(db, now=now, fetch=fetch, fetch_window=fetch_window)
+    assert out["pulled"] == 7 and out["failed"] == 1 and windows == [date(2026, 10, 27)]  # 最新那天的 28 天词窗口拉一次
+    assert out["window"] == {"end": "2026-10-27", "rows": 0} and latest.window_rows == 0  # 0 = 拉了,谷歌一个词都没给
+    assert ledger[-1] == 1 and old.fmt == 2  # 词窗口扣 1;旧口径那天重拉成新口径
+    gsc.pull_due(db, now=now, fetch=fetch, fetch_window=fetch_window)
+    assert windows == [date(2026, 10, 27)]  # 同一窗不重拉
 
 
 def test_pull_due_without_a_key_is_not_an_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,38 +232,59 @@ def test_pull_due_without_a_key_is_not_an_error(monkeypatch: pytest.MonkeyPatch)
 # ---------------------------------------------------------------- 聚合 / 缺口 / 分节
 
 
-def _r(query: str, page: str, clicks: int, impressions: int, position: float) -> Any:
+def _r(page: str, clicks: int, impressions: int, position: float, query: str = "") -> Any:
     return SimpleNamespace(query=query, page=page, clicks=clicks, impressions=impressions, ctr=clicks / impressions if impressions else 0, position=position)
 
 
-def test_aggregate_weights_position_by_impressions_and_gaps_apply_the_thresholds() -> None:
-    rows = [
-        _r("camping lantern", "https://x/lantern/", 4, 200, 9.0),
-        _r("camping lantern", "https://x/blog/lanterns/", 0, 100, 15.0),
-        _r("12v drill battery", "https://x/battery/", 0, 150, 7.5),
-        _r("portable shower pump", "https://x/shower/", 0, 60, 24.0),
-        _r("tent pole repair", "https://x/blog/poles/", 1, 40, 31.0),
-        _r("rare phrase", "https://x/a/", 0, 5, 50.0),
-    ]
-    cur = gsc.aggregate(rows)
-    assert cur["clicks"] == 5 and cur["impressions"] == 555
-    assert cur["queries"]["camping lantern"] == {"clicks": 4, "impressions": 300, "ctr": 0.0133, "position": 11.0}  # (9*200+15*100)/300
-    assert cur["pages"]["https://x/battery/"]["ctr"] == 0.0
-    prev = gsc.aggregate([_r("camping lantern", "https://x/lantern/", 2, 100, 12.0)])
-    g = gsc.gaps(cur, prev, product_terms=["12V Drill Battery Pack", "Camping Shower Pump"])
-    assert [x["query"] for x in g["quick_wins"]] == ["camping lantern"]  # 排 11、展现 300
-    assert [x["page"] for x in g["low_ctr_pages"]] == ["https://x/battery/", "https://x/blog/lanterns/"]  # 展现≥100 且 ctr<1%
-    far = {x["query"]: x["has_product"] for x in g["far_queries"]}
-    assert far == {"portable shower pump": True, "tent pole repair": False}  # 排 24/31,展现 60/40;rare phrase 展现不够
-    assert [x["query"] for x in g["new_queries"]] == ["12v drill battery", "portable shower pump", "tent pole repair"]  # 上期没有且展现≥10
-    search = {"configured": True, "day_from": "2026-10-19", "day_to": "2026-10-25", "covered_days": 7, "last_day": "2026-10-25", "clicks": 5, "impressions": 555, "ctr": 0.009, "position": 14.2, "prev_clicks": 2, "prev_impressions": 100, "top_queries": [{"query": "camping lantern", "clicks": 4}], "gaps": g}
+def test_group_weights_position_by_impressions_and_gaps_apply_the_thresholds() -> None:
+    pages = gsc.group([
+        _r("https://x/lantern/", 4, 200, 9.0),
+        _r("https://x/lantern/", 0, 100, 15.0),
+        _r("https://x/battery/", 0, 150, 7.5),
+        _r("https://x/blog/poles/", 1, 40, 31.0),
+    ], "page")
+    assert pages["https://x/lantern/"] == {"clicks": 4, "impressions": 300, "ctr": 0.0133, "position": 11.0}  # (9*200+15*100)/300
+    assert gsc.total([_r("a", 4, 200, 9.0), _r("b", 0, 100, 15.0)]) == {"clicks": 4, "impressions": 300, "ctr": 0.0133, "position": 11.0}
+    assert gsc.total([]) == {"clicks": 0, "impressions": 0, "ctr": 0.0, "position": 0.0}
+    queries = gsc.group([
+        _r("", 4, 300, 11.0, query="camping lantern"),
+        _r("", 0, 150, 7.5, query="12v drill battery"),
+        _r("", 0, 60, 24.0, query="portable shower pump"),
+        _r("", 1, 40, 31.0, query="tent pole repair"),
+        _r("", 0, 5, 50.0, query="rare phrase"),
+    ], "query")
+    prev = gsc.group([_r("", 2, 100, 12.0, query="camping lantern")], "query")
+    g = gsc.gaps(pages, queries, prev, product_terms=["12V Drill Battery Pack", "Camping Shower Pump"])
+    assert [x["page"] for x in g["quick_win_pages"]] == ["https://x/lantern/"]  # 排 11、展现 300;battery 排 7.5 已在前十
+    assert [x["query"] for x in g["quick_wins"]] == ["camping lantern"]
+    assert [x["page"] for x in g["low_ctr_pages"]] == ["https://x/battery/"]  # 展现≥100 且 ctr<1%;lantern 1.33% 不算
+    assert {x["query"]: x["has_product"] for x in g["far_queries"]} == {"portable shower pump": True, "tent pole repair": False}  # 排 24/31;rare phrase 展现不够
+    assert [x["query"] for x in g["new_queries"]] == ["12v drill battery", "portable shower pump", "tent pole repair"]  # 上一窗没有且展现≥10
+    assert gsc.gaps(pages, queries, None)["new_queries"] == []  # 没有上一窗:不比,免得第一周全是「新词」
+    assert gsc.gaps({}, {}, None) == {"quick_win_pages": [], "quick_wins": [], "low_ctr_pages": [], "far_queries": [], "new_queries": []}
+
+    search = {
+        "configured": True, "day_from": "2026-10-19", "day_to": "2026-10-25", "covered_days": 7, "last_day": "2026-10-25",
+        "clicks": 5, "impressions": 555, "ctr": 0.009, "position": 14.2, "prev_clicks": 2, "prev_impressions": 100,
+        "top_pages": [{"page": "https://x/lantern/", "label": "lantern", "clicks": 4, "impressions": 300}, {"page": "https://x/", "clicks": 1, "impressions": 20}],
+        "top_queries": [{"query": "camping lantern", "clicks": 4, "impressions": 300}], "query_window": {"end": "2026-10-25", "days": 28, "rows": 5},
+        "gap_window": {"from": "2026-09-28", "to": "2026-10-25", "impressions": 900}, "gaps": g,
+    }
     sections = digest.search_sections(search, kind="week", prev_label="比上周")
     assert [s["heading"] for s in sections] == ["搜索(Search Console)", "搜索缺口"]
     rows_by = {r[0]: r for r in sections[0]["rows"]}
     assert rows_by["点击 / 展现"][1] == "5 / 555" and rows_by["点击 / 展现"][2] == "+150% 比上周"
+    assert rows_by["页面(点击 / 展现)"][1] == "lantern 4/300、首页 1/20"
+    assert rows_by["点击最多的词(近 28 天)"][1] == "camping lantern 4/300"
     labels = [r[0] for r in sections[1]["rows"]]
-    assert labels == ["差一步的词(排 8–20,展现够)", "有展现没点击的页", "有需求、我们有品但排得远", "有需求、我们没对应品/内容", "本期新出现的词"]
-    assert "喂内容台选题 / 选品池" in sections[1]["rows"][3][2]
+    assert labels == ["按哪段算", "差一步的页(排 8–20,展现够)", "差一步的词(排 8–20,展现够)", "有展现没点击的页", "有需求、我们有品但排得远", "有需求、我们没对应品/内容", "本期新出现的词"]
+    assert sections[1]["rows"][0][1] == "近 28 天(2026-09-28~2026-10-25)全站展现 900 次"
+    assert "喂内容台选题 / 选品池" in sections[1]["rows"][5][2]
+
+    hidden = {**search, "top_queries": [], "queries_hidden": True, "gaps": gsc.gaps({}, {}, None), "gap_window": {"from": "2026-10-04", "to": "2026-10-31", "impressions": 40}}
+    sections = digest.search_sections(hidden, kind="week", prev_label="比上周")
+    assert {r[0]: r[1] for r in sections[0]["rows"]}["搜索词"].startswith("谷歌没给:近 28 天每个词搜的人都太少")  # 说清楚是谷歌藏了,不是没拉
+    assert sections[1]["rows"] == [["这一期", "没有够门槛的缺口:近 28 天(2026-10-04~2026-10-31)全站展现 40 次;一页或一个词要 ≥50 次展现才看", None]]
     assert digest.search_sections({"configured": False, "reason": "x"}, kind="day", prev_label="")[0]["rows"][0][1].startswith("还没接")
     assert digest.search_sections({"error": "读不到"}, kind="day", prev_label="")[0]["rows"] == [["状态", "读不到", None]]
 
